@@ -1,0 +1,30 @@
+{% load static %}
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Fliegerlager-Abrechnung{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'billing/app.css' %}">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="{% url 'camp-list' %}">Fliegerlager-Abrechnung</a>
+      <nav>
+        {% if user.is_authenticated %}
+          <span>{{ user.email|default:user.username }}</span>
+          <form method="post" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button type="submit">Abmelden</button>
+          </form>
+        {% endif %}
+      </nav>
+    </header>
+    <main class="page">
+      {% for message in messages %}
+        <div class="message {{ message.tags }}">{{ message }}</div>
+      {% endfor %}
+      {% block content %}{% endblock %}
+    </main>
+  </body>
+</html>

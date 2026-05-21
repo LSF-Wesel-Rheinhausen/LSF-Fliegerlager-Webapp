@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="toolbar">
+    <h1>Lager</h1>
+    <a class="button" href="{% url 'camp-create' %}">Lager anlegen</a>
+  </div>
+  <table>
+    <thead>
+      <tr><th>Name</th><th>Jahr</th><th>Zeitraum</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      {% for camp in camps %}
+        <tr>
+          <td><a href="{% url 'camp-detail' camp.pk %}">{{ camp.name }}</a></td>
+          <td>{{ camp.year }}</td>
+          <td>{{ camp.starts_on|default:"" }} - {{ camp.ends_on|default:"" }}</td>
+          <td>{% if camp.is_active %}Aktiv{% else %}Archiv{% endif %}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="4">Noch keine Lager vorhanden.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}

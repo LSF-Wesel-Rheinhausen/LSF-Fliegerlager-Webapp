@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Ersteinrichtung{% endblock %}
+{% block content %}
+  <section class="panel narrow">
+    <h1>Ersteinrichtung</h1>
+    <p class="hint">Lege den ersten Admin-Benutzer für diese Installation an.</p>
+    <form method="post" class="form-grid">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="form-actions">
+        <button type="submit">Admin anlegen</button>
+      </div>
+    </form>
+  </section>
+{% endblock %}

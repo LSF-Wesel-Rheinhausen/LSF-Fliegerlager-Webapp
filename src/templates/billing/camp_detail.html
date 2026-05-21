@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1>{{ camp.name }} {{ camp.year }}</h1>
+      <p>{{ camp.notes }}</p>
+    </div>
+    <div class="actions">
+      <a class="button" href="{% url 'participant-create' camp.pk %}">Teilnehmer</a>
+      <a class="button" href="{% url 'price-rule-create' camp.pk %}">Preisregel</a>
+      <a class="button" href="{% url 'expense-create' camp.pk %}">Auslage</a>
+      <a class="button" href="{% url 'participant-import' camp.pk %}">Import</a>
+    </div>
+  </div>
+
+  <section class="metrics">
+    <div><span>Soll</span><strong>{{ totals.due }} EUR</strong></div>
+    <div><span>Gezahlt</span><strong>{{ totals.paid }} EUR</strong></div>
+    <div><span>Vorgestreckt</span><strong>{{ totals.advanced }} EUR</strong></div>
+    <div><span>Offen</span><strong>{{ totals.balance }} EUR</strong></div>
+  </section>
+
+  <div class="exportbar">
+    <a href="{% url 'export-settlements-csv' camp.pk %}">CSV Abrechnung</a>
+    <a href="{% url 'export-workbook' camp.pk %}">Excel</a>
+    <a href="{% url 'export-drinks-csv' camp.pk %}">CSV Getränke</a>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Teilnehmer</th><th>Status</th><th>Nächte</th><th>Soll</th><th>Gezahlt</th><th>Vorgestreckt</th><th>Offen</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for result in settlements %}
+        <tr>
+          <td><a href="{% url 'participant-detail' result.participant.pk %}">{{ result.participant.full_name }}</a></td>
+          <td>{{ result.participant.get_status_display }}</td>
+          <td>{{ result.participant.actual_nights }}</td>
+          <td>{{ result.total_due }}</td>
+          <td>{{ result.total_paid }}</td>
+          <td>{{ result.total_advanced }}</td>
+          <td class="{% if result.balance > 0 %}negative{% else %}positive{% endif %}">{{ result.balance }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="7">Noch keine Teilnehmer vorhanden.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}

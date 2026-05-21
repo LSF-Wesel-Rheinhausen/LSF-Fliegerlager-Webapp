@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="toolbar">
+    <h1>Teilnehmerimport</h1>
+    <a class="button" href="{% url 'camp-detail' camp.pk %}">Zurück</a>
+  </div>
+
+  <section class="panel">
+    <form method="post" enctype="multipart/form-data" class="stack">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <button type="submit">Vorschau</button>
+    </form>
+  </section>
+
+  {% if rows %}
+    <table>
+      <thead><tr><th>Zeile</th><th>Name</th><th>E-Mail</th><th>Nächte</th><th>Validierung</th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td>{{ row.row_number }}</td>
+            <td>{{ row.data.first_name }} {{ row.data.last_name }}</td>
+            <td>{{ row.data.email }}</td>
+            <td>{{ row.data.actual_nights }}</td>
+            <td>{% if row.valid %}OK{% else %}{{ row.errors|join:", " }}{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="rows" value="{{ signed_rows }}">
+      <button type="submit" name="confirm" value="1">Gültige Zeilen importieren</button>
+    </form>
+  {% endif %}
+{% endblock %}

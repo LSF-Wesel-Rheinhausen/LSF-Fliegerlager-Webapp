@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+  <section class="panel">
+    <h1>{{ title }}</h1>
+    <form method="post" class="form-grid">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="form-actions">
+        <button type="submit">Speichern</button>
+      </div>
+    </form>
+  </section>
+{% endblock %}

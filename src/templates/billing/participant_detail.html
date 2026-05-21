@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1>{{ participant.full_name }}</h1>
+      <p>{{ participant.camp }} · {{ participant.get_status_display }}</p>
+    </div>
+    <div class="actions">
+      <a class="button" href="{% url 'charge-create' participant.pk %}">Kosten</a>
+      <a class="button" href="{% url 'payment-create' participant.pk %}">Zahlung</a>
+      <a class="button" href="{% url 'export-participant-pdf' participant.pk %}">PDF</a>
+      <form method="post" action="{% url 'pin-reset' participant.pk %}">
+        {% csrf_token %}
+        <button type="submit">PIN zurücksetzen</button>
+      </form>
+    </div>
+  </div>
+
+  <section class="metrics">
+    <div><span>Soll</span><strong>{{ settlement.total_due }} EUR</strong></div>
+    <div><span>Gezahlt</span><strong>{{ settlement.total_paid }} EUR</strong></div>
+    <div><span>Vorgestreckt</span><strong>{{ settlement.total_advanced }} EUR</strong></div>
+    <div><span>Offen</span><strong>{{ settlement.balance }} EUR</strong></div>
+  </section>
+
+  <table>
+    <thead><tr><th>Position</th><th>Menge</th><th>Einzelpreis</th><th>Summe</th></tr></thead>
+    <tbody>
+      {% for line in settlement.lines %}
+        <tr><td>{{ line.label }}</td><td>{{ line.quantity }}</td><td>{{ line.unit_price }}</td><td>{{ line.total }}</td></tr>
+      {% empty %}
+        <tr><td colspan="4">Keine Positionen vorhanden.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}
