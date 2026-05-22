@@ -4,30 +4,25 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}Fliegerlager-Abrechnung{% endblock %}</title>
+    <title>{% block title %}Kiosk{% endblock %}</title>
     <link rel="stylesheet" href="{% static 'billing/app.css' %}">
   </head>
-  <body>
-    <header class="topbar">
-      <a class="brand" href="{% url 'camp-list' %}">
+  <body class="kiosk-shell">
+    <header class="topbar kiosk-topbar">
+      <a class="brand" href="{% url 'kiosk-login' %}">
         <img src="{% static 'billing/logo.jpg' %}" alt="Luftsportfreunde Wesel-Rheinhausen e.V.">
-        <span>Fliegerlager-Abrechnung</span>
+        <span>Kiosk</span>
       </a>
-      <nav>
-        {% if user.is_authenticated %}
-          <span>{{ user.email|default:user.username }}</span>
-          <form method="post" action="{% url 'logout' %}">
-            {% csrf_token %}
-            <button class="button-secondary" type="submit">Abmelden</button>
-          </form>
-        {% endif %}
+      <nav class="kiosk-nav">
+        {% block kiosk_nav %}{% endblock %}
       </nav>
     </header>
-    <main class="page">
+    <main class="page kiosk-page">
       {% for message in messages %}
         <div class="message {{ message.tags }}">{{ message }}</div>
       {% endfor %}
       {% block content %}{% endblock %}
     </main>
+    {% block scripts %}{% endblock %}
   </body>
 </html>

@@ -7,28 +7,35 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
 from django.core.signing import BadSignature, Signer
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse
 
 from .exporters import camp_settlement_csv, camp_workbook_response, drink_entries_csv, participant_pdf_response
 from .forms import (
     CampForm,
+    CampFlatRateSettingsForm,
     ChargeForm,
+    DrinkBookingForm,
     ExpenseForm,
     FirstAdminSetupForm,
+    KioskLoginForm,
+    KioskPinSetupForm,
+    MealBookingForm,
     ParticipantForm,
     ParticipantImportForm,
+    ParticipantPinForm,
     PaymentForm,
     PriceRuleForm,
 )
 from .importers import preview_participants, rows_from_payload, rows_to_payload, save_participants
-from .models import Camp, Participant
+from .models import Camp, Charge, MealSignup, Participant, PriceRule
 from .permissions import admin_required, editor_required
 from .roles import bootstrap_default_roles
-from .services import calculate_camp_settlements, calculate_participant_settlement
+from .services import calculate_camp_settlements, calculate_participant_settlement, participant_kiosk_summary
 
 
 signer = Signer()
 User = get_user_model()
+KIOSK_PARTICIPANT_SESSION_KEY = "kiosk_participant_id"
+KIOSK_PIN_SETUP_SESSION_KEY = "kiosk_pin_setup_participant_id"
 
 
 class FirstLaunchLoginView(LoginView):
@@ -70,17 +77,35 @@ def camp_create(request):
     return render(request, "billing/form.html", {"form": form, "title": "Lager anlegen"})
 
 
+@admin_required
+def camp_edit(request, camp_id):
+    camp = get_object_or_404(Camp, pk=camp_id)
+    form = CampForm(request.POST or None, instance=camp)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Lager wurde gespeichert.")
+        return redirect("camp-detail", camp_id=camp.pk)
+    return render(request, "billing/form.html", {"form": form, "title": "Lager bearbeiten", "camp": camp})
+
+
 @editor_required
 def camp_detail(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
     settlements = calculate_camp_settlements(camp)
     totals = {
+        "gross": sum(result.total_gross for result in settlements),
+        "subsidy": sum(result.total_subsidy for result in settlements),
         "due": sum(result.total_due for result in settlements),
         "paid": sum(result.total_paid for result in settlements),
         "advanced": sum(result.total_advanced for result in settlements),
         "balance": sum(result.balance for result in settlements),
     }
-    return render(request, "billing/camp_detail.html", {"camp": camp, "settlements": settlements, "totals": totals})
+    price_rules = camp.price_rules.all()
+    return render(
+        request,
+        "billing/camp_detail.html",
+        {"camp": camp, "settlements": settlements, "totals": totals, "price_rules": price_rules},
+    )
 
 
 @editor_required
@@ -140,6 +165,18 @@ def pin_reset(request, participant_id):
 
 
 @admin_required
+def pin_set(request, participant_id):
+    participant = get_object_or_404(Participant, pk=participant_id)
+    form = ParticipantPinForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        participant.pin.set_pin(form.cleaned_data["pin"], changed_by=request.user)
+        participant.pin.save()
+        messages.success(request, "Teilnehmer-PIN wurde gesetzt.")
+        return redirect("participant-detail", participant_id=participant.pk)
+    return render(request, "billing/form.html", {"form": form, "title": "Teilnehmer-PIN setzen"})
+
+
+@admin_required
 def price_rule_create(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
     form = PriceRuleForm(request.POST or None)
@@ -150,6 +187,37 @@ def price_rule_create(request, camp_id):
         messages.success(request, "Preisregel wurde gespeichert.")
         return redirect("camp-detail", camp_id=camp.pk)
     return render(request, "billing/form.html", {"form": form, "title": "Preisregel anlegen"})
+
+
+@admin_required
+def price_rules_manage(request, camp_id):
+    camp = get_object_or_404(Camp, pk=camp_id)
+    form = CampFlatRateSettingsForm(request.POST or None, camp=camp)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Lagerpauschalen wurden gespeichert.")
+        return redirect("price-rules-manage", camp_id=camp.pk)
+    grouped_rules = {
+        "drinks": camp.price_rules.filter(kind=PriceRule.Kind.DRINK),
+        "meals": camp.price_rules.filter(kind=PriceRule.Kind.MEAL),
+        "other": camp.price_rules.filter(kind__in=[PriceRule.Kind.NIGHT, PriceRule.Kind.OTHER]),
+    }
+    return render(
+        request,
+        "billing/price_rules_manage.html",
+        {"camp": camp, "form": form, "grouped_rules": grouped_rules},
+    )
+
+
+@admin_required
+def price_rule_edit(request, price_rule_id):
+    rule = get_object_or_404(PriceRule.objects.select_related("camp"), pk=price_rule_id)
+    form = PriceRuleForm(request.POST or None, instance=rule)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Preisregel wurde gespeichert.")
+        return redirect("camp-detail", camp_id=rule.camp.pk)
+    return render(request, "billing/form.html", {"form": form, "title": "Preisregel bearbeiten", "camp": rule.camp})
 
 
 @editor_required
@@ -218,3 +286,122 @@ def export_workbook(request, camp_id):
 @editor_required
 def export_participant_pdf(request, participant_id):
     return participant_pdf_response(get_object_or_404(Participant, pk=participant_id))
+
+
+def _kiosk_participant_from_session(request, session_key):
+    participant_id = request.session.get(session_key)
+    if not participant_id:
+        return None
+    return Participant.objects.select_related("camp").filter(pk=participant_id, camp__is_active=True).first()
+
+
+def kiosk_login(request):
+    if request.session.get(KIOSK_PARTICIPANT_SESSION_KEY):
+        return redirect("kiosk-home")
+
+    form = KioskLoginForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        request.session[KIOSK_PARTICIPANT_SESSION_KEY] = form.cleaned_data["participant"].pk
+        messages.success(request, "Du bist im Kiosk angemeldet.")
+        return redirect("kiosk-home")
+    if request.method == "POST" and getattr(form, "missing_pin_participant", None) is not None:
+        request.session[KIOSK_PIN_SETUP_SESSION_KEY] = form.missing_pin_participant.pk
+        messages.info(request, "Für diesen Teilnehmer ist noch kein PIN gesetzt. Bitte lege jetzt einen neuen PIN fest.")
+        return redirect("kiosk-pin-setup")
+
+    return render(request, "billing/kiosk_login.html", {"form": form})
+
+
+def kiosk_logout(request):
+    request.session.pop(KIOSK_PARTICIPANT_SESSION_KEY, None)
+    request.session.pop(KIOSK_PIN_SETUP_SESSION_KEY, None)
+    messages.success(request, "Du wurdest vom Kiosk abgemeldet.")
+    return redirect("kiosk-login")
+
+
+def _kiosk_participant(request):
+    return _kiosk_participant_from_session(request, KIOSK_PARTICIPANT_SESSION_KEY)
+
+
+def kiosk_pin_setup(request):
+    participant = _kiosk_participant_from_session(request, KIOSK_PIN_SETUP_SESSION_KEY)
+    if participant is None:
+        return redirect("kiosk-login")
+    if not participant.pin.must_set_pin and participant.pin.pin_hash:
+        return redirect("kiosk-home")
+
+    form = KioskPinSetupForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        participant.pin.set_pin(form.cleaned_data["pin"])
+        participant.pin.save()
+        request.session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+        request.session.pop(KIOSK_PIN_SETUP_SESSION_KEY, None)
+        messages.success(request, "PIN wurde gesetzt. Du bist jetzt im Kiosk angemeldet.")
+        return redirect("kiosk-home")
+
+    return render(request, "billing/kiosk_pin_setup.html", {"form": form, "participant": participant})
+
+
+def kiosk_home(request):
+    participant = _kiosk_participant(request)
+    if participant is None:
+        return redirect("kiosk-login")
+
+    drink_form = DrinkBookingForm(camp=participant.camp, prefix="drink")
+    meal_form = MealBookingForm(camp=participant.camp, prefix="meal")
+    if request.method == "POST":
+        if request.POST.get("action") == "drink":
+            drink_form = DrinkBookingForm(request.POST, camp=participant.camp, prefix="drink")
+            if drink_form.is_valid():
+                price_rule = drink_form.cleaned_data["price_rule"]
+                Charge.objects.create(
+                    participant=participant,
+                    kind=Charge.Kind.DRINK,
+                    description=price_rule.name,
+                    quantity=drink_form.cleaned_data["quantity"],
+                    unit_price=price_rule.unit_price,
+                    foerderfaehig=price_rule.foerderfaehig,
+                )
+                messages.success(request, "Getränk wurde gebucht.")
+                return redirect("kiosk-home")
+        elif request.POST.get("action") == "meal":
+            meal_form = MealBookingForm(request.POST, camp=participant.camp, prefix="meal")
+            if meal_form.is_valid():
+                price_rule = meal_form.cleaned_data["price_rule"]
+                meal_display = dict(MealSignup.Meal.choices).get(meal_form.cleaned_data["meal"], meal_form.cleaned_data["meal"])
+                MealSignup.objects.update_or_create(
+                    participant=participant,
+                    meal_date=meal_form.cleaned_data["meal_date"],
+                    meal=meal_form.cleaned_data["meal"],
+                    defaults={
+                        "variant": meal_form.cleaned_data["variant"],
+                        "foerderfaehig": price_rule.foerderfaehig,
+                    },
+                )
+                Charge.objects.update_or_create(
+                    participant=participant,
+                    kind=Charge.Kind.FOOD,
+                    occurred_on=meal_form.cleaned_data["meal_date"],
+                    description=f"{price_rule.name} {meal_display}",
+                    defaults={
+                        "quantity": 1,
+                        "unit_price": price_rule.unit_price,
+                        "foerderfaehig": price_rule.foerderfaehig,
+                    },
+                )
+                messages.success(request, "Essensanmeldung wurde gespeichert.")
+                return redirect("kiosk-home")
+
+    recent_drinks = participant.charges.filter(kind=Charge.Kind.DRINK).order_by("-created_at")[:8]
+    meal_signups = participant.meal_signups.order_by("meal_date", "meal")
+    context = {
+        "participant": participant,
+        "summary": participant_kiosk_summary(participant),
+        "drink_form": drink_form,
+        "meal_form": meal_form,
+        "recent_drinks": recent_drinks,
+        "meal_signups": meal_signups,
+        "drink_rules": PriceRule.objects.filter(camp=participant.camp, kind=PriceRule.Kind.DRINK).order_by("name"),
+        "meal_rules": PriceRule.objects.filter(camp=participant.camp, kind=PriceRule.Kind.MEAL).order_by("name"),
+    }
+    return render(request, "billing/kiosk_home.html", context)

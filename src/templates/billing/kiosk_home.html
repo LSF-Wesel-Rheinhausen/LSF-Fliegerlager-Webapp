@@ -1,0 +1,208 @@
+{% extends "billing/kiosk_base.html" %}
+{% block title %}Kiosk{% endblock %}
+{% block kiosk_nav %}
+  <a class="button button-secondary" href="{% url 'kiosk-logout' %}">Abmelden</a>
+{% endblock %}
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1>{{ participant.full_name }}</h1>
+      <p>{{ participant.camp }} · {{ participant.get_status_display }}</p>
+    </div>
+  </div>
+
+  <section class="metrics">
+    <div><span>Brutto</span><strong>{{ summary.total_gross }} EUR</strong></div>
+    <div><span>Förderung</span><strong>{{ summary.total_subsidy }} EUR</strong></div>
+    <div><span>Soll</span><strong>{{ summary.total_due }} EUR</strong></div>
+    <div><span>Gezahlt</span><strong>{{ summary.total_paid }} EUR</strong></div>
+    <div><span>Vorgestreckt</span><strong>{{ summary.total_advanced }} EUR</strong></div>
+    <div><span>Offen</span><strong>{{ summary.balance }} EUR</strong></div>
+  </section>
+
+  <div class="kiosk-grid">
+    <section class="panel">
+      <h2>Getränk buchen</h2>
+      <p class="hint">Getränke aus dem Lager-Preisprofil</p>
+      <p class="hint">
+        {% for rule in drink_rules %}
+          {{ rule.name }} {{ rule.unit_price }} EUR{% if not forloop.last %} · {% endif %}
+        {% empty %}
+          Keine Getränkepreise im Lager hinterlegt.
+        {% endfor %}
+      </p>
+      <form method="post" class="form-grid kiosk-drink-form" data-kiosk-stepper>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="drink">
+        <p>
+          <label for="{{ drink_form.price_rule.id_for_label }}">{{ drink_form.price_rule.label }}</label>
+          {{ drink_form.price_rule }}
+          {% for error in drink_form.price_rule.errors %}
+            <span class="helptext error">{{ error }}</span>
+          {% endfor %}
+        </p>
+        <div class="kiosk-stepper-field">
+          <label for="{{ drink_form.quantity.id_for_label }}">{{ drink_form.quantity.label }}</label>
+          <div class="kiosk-stepper" data-stepper>
+            <button type="button" class="kiosk-stepper-button" data-stepper-decrement aria-label="Menge verringern">−</button>
+            {{ drink_form.quantity }}
+            <button type="button" class="kiosk-stepper-button" data-stepper-increment aria-label="Menge erhöhen">+</button>
+          </div>
+          {% for error in drink_form.quantity.errors %}
+            <span class="helptext error">{{ error }}</span>
+          {% endfor %}
+        </div>
+        <div class="form-actions">
+          <button type="submit">Buchen</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Essen anmelden</h2>
+      <p class="hint">
+        {% for rule in meal_rules %}
+          {{ rule.name }} {{ rule.unit_price }} EUR{% if not forloop.last %} · {% endif %}
+        {% empty %}
+          Keine Essenspreise im Lager hinterlegt.
+        {% endfor %}
+      </p>
+      <form method="post" class="form-grid">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="meal">
+        <p>
+          <label for="{{ meal_form.price_rule.id_for_label }}">{{ meal_form.price_rule.label }}</label>
+          {{ meal_form.price_rule }}
+          {% for error in meal_form.price_rule.errors %}
+            <span class="helptext error">{{ error }}</span>
+          {% endfor %}
+        </p>
+        <p>
+          <label for="{{ meal_form.meal_date.id_for_label }}">{{ meal_form.meal_date.label }}</label>
+          {{ meal_form.meal_date }}
+          {% for error in meal_form.meal_date.errors %}
+            <span class="helptext error">{{ error }}</span>
+          {% endfor %}
+        </p>
+        <p>
+          <label for="{{ meal_form.meal.id_for_label }}">{{ meal_form.meal.label }}</label>
+          {{ meal_form.meal }}
+          {% for error in meal_form.meal.errors %}
+            <span class="helptext error">{{ error }}</span>
+          {% endfor %}
+        </p>
+        <p>
+          <label for="{{ meal_form.variant.id_for_label }}">{{ meal_form.variant.label }}</label>
+          {{ meal_form.variant }}
+          {% for error in meal_form.variant.errors %}
+            <span class="helptext error">{{ error }}</span>
+          {% endfor %}
+        </p>
+        <div class="form-actions">
+          <button type="submit">Speichern</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <div class="kiosk-grid">
+    <section>
+      <h2>Letzte Getränke</h2>
+      <table>
+        <thead><tr><th>Zeit</th><th>Getränk</th><th>Menge</th><th>Einzelpreis</th><th>Summe</th></tr></thead>
+        <tbody>
+          {% for entry in recent_drinks %}
+            <tr>
+              <td>{{ entry.created_at }}</td>
+              <td>{{ entry.description }}</td>
+              <td>{{ entry.quantity }}</td>
+              <td>{{ entry.unit_price }}</td>
+              <td>{{ entry.total }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5">Noch keine Getränke gebucht.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Essensanmeldungen</h2>
+      <table>
+        <thead><tr><th>Datum</th><th>Mahlzeit</th><th>Variante</th></tr></thead>
+        <tbody>
+          {% for signup in meal_signups %}
+            <tr>
+              <td>{{ signup.meal_date }}</td>
+              <td>{{ signup.get_meal_display }}</td>
+              <td>{{ signup.get_variant_display }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3">Noch keine Essensanmeldungen vorhanden.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </div>
+{% endblock %}
+{% block scripts %}
+  <script>
+    (() => {
+      const logoutUrl = "{% url 'kiosk-logout' %}";
+      const timeoutMs = 2 * 60 * 1000;
+      let timeoutId;
+
+      const resetTimeout = () => {
+        window.clearTimeout(timeoutId);
+        timeoutId = window.setTimeout(() => {
+          window.location.href = logoutUrl;
+        }, timeoutMs);
+      };
+
+      ["pointerdown", "keydown", "touchstart", "mousemove", "scroll"].forEach((eventName) => {
+        window.addEventListener(eventName, resetTimeout, { passive: true });
+      });
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) {
+          resetTimeout();
+        }
+      });
+      resetTimeout();
+    })();
+
+    document.querySelectorAll("[data-kiosk-stepper]").forEach((form) => {
+      const quantityInput = form.querySelector('input[name$="-quantity"]');
+      const decrementButton = form.querySelector("[data-stepper-decrement]");
+      const incrementButton = form.querySelector("[data-stepper-increment]");
+
+      if (!quantityInput || !decrementButton || !incrementButton) {
+        return;
+      }
+
+      const clampQuantity = () => {
+        const min = Number(quantityInput.min || "1");
+        const max = Number(quantityInput.max || "99");
+        const parsed = Number(quantityInput.value || min);
+        const nextValue = Number.isFinite(parsed) ? parsed : min;
+        quantityInput.value = String(Math.min(max, Math.max(min, nextValue)));
+      };
+
+      decrementButton.addEventListener("click", () => {
+        clampQuantity();
+        quantityInput.stepDown();
+        clampQuantity();
+        quantityInput.focus();
+      });
+
+      incrementButton.addEventListener("click", () => {
+        clampQuantity();
+        quantityInput.stepUp();
+        clampQuantity();
+        quantityInput.focus();
+      });
+
+      quantityInput.addEventListener("change", clampQuantity);
+      clampQuantity();
+    });
+  </script>
+{% endblock %}

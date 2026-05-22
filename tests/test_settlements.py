@@ -81,3 +81,65 @@ def test_settlement_allows_overpayment():
 
     assert result.balance == Decimal("-5.00")
     assert result.is_overpaid is True
+
+
+@pytest.mark.django_db
+def test_settlement_applies_subsidy_factor_for_youth_group_members():
+    camp = Camp.objects.create(name="Fliegerlager", year=2025, foerdersatz=Decimal("0.5000"))
+    participant = Participant.objects.create(
+        camp=camp,
+        first_name="Mia",
+        last_name="Muster",
+        is_youth_group=True,
+        hilfssatz=Decimal("0.5000"),
+        berufssatz=Decimal("0.3300"),
+    )
+    PriceRule.objects.create(
+        camp=camp,
+        kind=PriceRule.Kind.CAMP_FLAT,
+        name="Lagerpauschale",
+        unit_price=Decimal("100.00"),
+        is_default=True,
+        foerderfaehig=True,
+    )
+
+    result = calculate_participant_settlement(participant)
+
+    assert result.total_gross == Decimal("100.00")
+    assert result.total_subsidy == Decimal("8.25")
+    assert result.total_due == Decimal("91.75")
+
+
+@pytest.mark.django_db
+def test_settlement_selects_matching_camp_flat_rate_for_companion_and_duration():
+    camp = Camp.objects.create(name="Fliegerlager", year=2025)
+    participant = Participant.objects.create(
+        camp=camp,
+        first_name="Bea",
+        last_name="Begleitung",
+        is_companion=True,
+        actual_nights=10,
+    )
+    PriceRule.objects.create(
+        camp=camp,
+        kind=PriceRule.Kind.CAMP_FLAT,
+        name="Teilnehmer 2 Wochen",
+        unit_price=Decimal("300.00"),
+        camp_flat_role=PriceRule.CampFlatRole.PARTICIPANT,
+        camp_flat_duration=PriceRule.CampFlatDuration.TWO_WEEKS,
+        is_default=True,
+    )
+    PriceRule.objects.create(
+        camp=camp,
+        kind=PriceRule.Kind.CAMP_FLAT,
+        name="Begleitperson 2 Wochen",
+        unit_price=Decimal("180.00"),
+        camp_flat_role=PriceRule.CampFlatRole.COMPANION,
+        camp_flat_duration=PriceRule.CampFlatDuration.TWO_WEEKS,
+        is_default=True,
+    )
+
+    result = calculate_participant_settlement(participant)
+
+    assert [line.label for line in result.lines] == ["Begleitperson 2 Wochen"]
+    assert result.total_due == Decimal("180.00")

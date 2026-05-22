@@ -57,3 +57,4 @@ Pull requests should include a summary, rationale, test results, and linked issu
 ## Agent-Specific Instructions
 
 Before editing, inspect the current tree. Keep changes narrowly scoped, avoid unrelated restructuring, and update this guide when build tools, tests, or conventions change.
+Always start with the TODO.md file before doing anythin else. clear it after it is implemented. Treat it as user input.

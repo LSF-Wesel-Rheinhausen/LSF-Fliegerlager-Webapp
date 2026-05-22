@@ -19,6 +19,8 @@ PARTICIPANT_COLUMNS = [
     "is_child",
     "is_youth_group",
     "is_companion",
+    "hilfssatz",
+    "berufssatz",
     "booked_nights",
     "actual_nights",
     "notes",
@@ -54,6 +56,16 @@ def parse_int(value, field_name, errors):
         return 0
 
 
+def parse_decimal(value, field_name, errors, default="1"):
+    if value in (None, ""):
+        return Decimal(default)
+    try:
+        return Decimal(str(value).replace(",", "."))
+    except (InvalidOperation, ValueError):
+        errors.append(f"{field_name}: keine gültige Zahl")
+        return Decimal(default)
+
+
 def normalize_row(raw, row_number):
     errors = []
     data = {column: raw.get(column, "") for column in PARTICIPANT_COLUMNS}
@@ -62,6 +74,8 @@ def normalize_row(raw, row_number):
             errors.append(f"{column}: Pflichtfeld fehlt")
     for column in ["booked_nights", "actual_nights"]:
         data[column] = parse_int(data.get(column), column, errors)
+    for column in ["hilfssatz", "berufssatz"]:
+        data[column] = parse_decimal(data.get(column), column, errors)
     for column in ["is_child", "is_youth_group", "is_companion"]:
         data[column] = parse_bool(data.get(column))
     return ImportRow(row_number=row_number, data=data, errors=errors)

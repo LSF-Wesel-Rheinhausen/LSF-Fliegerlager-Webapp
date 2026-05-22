@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import check_password, make_password
-from django.core.validators import MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 
@@ -21,6 +21,13 @@ class Camp(TimeStampedModel):
     starts_on = models.DateField(null=True, blank=True)
     ends_on = models.DateField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
+    foerdersatz = models.DecimalField(
+        max_digits=6,
+        decimal_places=4,
+        default=Decimal("0.5000"),
+        validators=[MinValueValidator(Decimal("0")), MaxValueValidator(Decimal("1"))],
+        help_text="0 bis 1, zum Beispiel 0,5000 fuer 50 Prozent.",
+    )
     notes = models.TextField(blank=True)
 
     class Meta:
@@ -49,6 +56,20 @@ class Participant(TimeStampedModel):
     is_child = models.BooleanField(default=False)
     is_youth_group = models.BooleanField(default=False)
     is_companion = models.BooleanField(default=False)
+    hilfssatz = models.DecimalField(
+        max_digits=6,
+        decimal_places=4,
+        default=Decimal("1.0000"),
+        validators=[MinValueValidator(Decimal("0")), MaxValueValidator(Decimal("1"))],
+        help_text="0 bis 1, zum Beispiel 0,5000.",
+    )
+    berufssatz = models.DecimalField(
+        max_digits=6,
+        decimal_places=4,
+        default=Decimal("1.0000"),
+        validators=[MinValueValidator(Decimal("0")), MaxValueValidator(Decimal("1"))],
+        help_text="0 bis 1, zum Beispiel 0,3300.",
+    )
     booked_nights = models.PositiveIntegerField(default=0)
     actual_nights = models.PositiveIntegerField(default=0)
     notes = models.TextField(blank=True)
@@ -106,12 +127,23 @@ class PriceRule(TimeStampedModel):
         DRINK = "drink", "Getränk"
         OTHER = "other", "Sonstiges"
 
+    class CampFlatDuration(models.TextChoices):
+        ONE_WEEK = "1w", "1 Woche"
+        TWO_WEEKS = "2w", "2 Wochen"
+
+    class CampFlatRole(models.TextChoices):
+        PARTICIPANT = "participant", "Teilnehmer"
+        COMPANION = "companion", "Begleitperson"
+
     camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="price_rules")
     kind = models.CharField(max_length=20, choices=Kind.choices)
     name = models.CharField(max_length=120)
     unit_price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal("0"))])
+    camp_flat_duration = models.CharField(max_length=2, choices=CampFlatDuration.choices, blank=True)
+    camp_flat_role = models.CharField(max_length=20, choices=CampFlatRole.choices, blank=True)
     applies_to_children = models.BooleanField(default=True)
     applies_to_adults = models.BooleanField(default=True)
+    foerderfaehig = models.BooleanField(default=True)
     is_default = models.BooleanField(default=False)
 
     class Meta:
@@ -133,6 +165,7 @@ class Charge(TimeStampedModel):
     description = models.CharField(max_length=180)
     quantity = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("1.00"))
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
+    foerderfaehig = models.BooleanField(default=True)
     occurred_on = models.DateField(null=True, blank=True)
 
     class Meta:
@@ -199,6 +232,7 @@ class MealSignup(TimeStampedModel):
     meal_date = models.DateField()
     meal = models.CharField(max_length=20, choices=Meal.choices)
     variant = models.CharField(max_length=20, choices=Variant.choices)
+    foerderfaehig = models.BooleanField(default=True)
 
     class Meta:
         ordering = ["meal_date", "meal", "participant"]
@@ -221,6 +255,7 @@ class DrinkEntry(TimeStampedModel):
     drink = models.CharField(max_length=20, choices=Drink.choices)
     quantity = models.PositiveIntegerField(default=1)
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
+    foerderfaehig = models.BooleanField(default=True)
     booked_at = models.DateTimeField(default=timezone.now)
 
     class Meta:

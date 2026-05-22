@@ -23,7 +23,7 @@
             <td>{{ row.data.first_name }} {{ row.data.last_name }}</td>
             <td>{{ row.data.email }}</td>
             <td>{{ row.data.actual_nights }}</td>
-            <td>{% if row.valid %}OK{% else %}{{ row.errors|join:", " }}{% endif %}</td>
+            <td>{% if row.valid %}In Ordnung{% else %}{{ row.errors|join:", " }}{% endif %}</td>
           </tr>
         {% endfor %}
       </tbody>

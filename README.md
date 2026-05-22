@@ -7,8 +7,9 @@ Web-App zur Verwaltung und Abrechnung eines Vereins-Fliegerlagers. Die Anwendung
 - Lager/Jahre mit Preisen und Abrechnungsregeln verwalten
 - Vereinsnutzer mit E-Mail-/Passwort-Login und Rollen `Admin` und `Bearbeiter`
 - Teilnehmer, Zahlungen, Kostenpositionen und vorgestreckte Beträge pflegen
-- Server-seitige Abrechnung je Teilnehmer und Gesamtauswertung je Lager
-- Vorbereitung für Teilnehmer-Kiosk: PINs, Essensanmeldungen und Getränkebuchungen im Datenmodell und in Services
+- Server-seitige Abrechnung je Teilnehmer und Gesamtauswertung je Lager, inklusive Förderlogik über Lager-, Hilfs- und Berufssatz
+- Übersichtliche Preisverwaltung mit Lagerpauschalen für 1/2 Wochen und Teilnehmer/Begleitpersonen sowie Preisregeln für Getränke und Essen
+- Teilnehmer-Kiosk: PIN-Login, PIN-Ersteinrichtung, Essensanmeldungen und Getränkebuchungen mit Tablet-/Mobilbedienung
 - CSV-/Excel-Import mit Vorschau und Validierung
 - CSV-, Excel- und PDF-Export für Abrechnungen
 
@@ -18,6 +19,7 @@ Web-App zur Verwaltung und Abrechnung eines Vereins-Fliegerlagers. Die Anwendung
 python -m venv .venv
 . .venv/bin/activate
 pip install -r requirements-dev.txt
+npm install
 python src/manage.py migrate
 python src/manage.py runserver
 ```
@@ -36,10 +38,32 @@ Danach läuft die App unter `http://localhost:8000`.
 ## Tests
 
 ```bash
-pytest
+.venv/bin/python -m pytest
+.venv/bin/python src/manage.py check
 ```
 
-To run the test suite automatically before each commit, enable the project Git hooks once:
+Playwright-End-to-End-Tests:
+
+```bash
+npx playwright install-deps
+npx playwright install
+npm run test:e2e
+```
+
+Interaktive E2E-Prüfung:
+
+```bash
+npm run test:e2e:headed
+npm run test:e2e:ui
+```
+
+Lokaler Sammellauf:
+
+```bash
+npm run test:local
+```
+
+Um die Tests automatisch vor jedem Commit auszuführen, aktiviere die Projekt-Hooks einmalig:
 
 ```bash
 git config core.hooksPath .githooks
@@ -53,3 +77,13 @@ Die Rollen werden über Django-Gruppen abgebildet:
 - `Bearbeiter`: Teilnehmer, Zahlungen, Kosten und Abrechnungen bearbeiten
 
 Superuser haben automatisch vollen Zugriff.
+
+## Roadmap
+
+- Installierbare Webapp/PWA: Web App Manifest, App-Icons, Theme-/Hintergrundfarben, Service Worker für Shell-/Asset-Caching und Installationshinweise für iOS, Android und Desktop.
+- Teilnehmer-Kiosk: PWA-Ausbau, Offline-Hinweise und weitere Tablet-Optimierungen.
+- Getränke-/Essens-Workflow: Tages-/Mahlzeitenübersichten, Storno-/Korrekturflüsse und optionale Schnellerfassung.
+- Persistierte Abrechnungsläufe: berechnete Abrechnungen speichern, Verlauf/Versionierung und Nachvollziehbarkeit von Zeitpunkt und Bearbeiter.
+- Mehr Tests: View-/Permission-Integrationstests, Exporttests für CSV/XLSX/PDF, Import-Edge-Cases und zusätzliche Settlement-Regressionsfälle.
+- UI-Ausbau: Bearbeiten-/Löschen-Flows, bessere Leerzustände, Druck-/PDF-Ansichten und Dashboard-Auswertungen.
+- Deployment und Betrieb: Produktionscheckliste, Backup-/Restore-Dokumentation, Monitoring/Healthcheck und sichere Env-Konfiguration.

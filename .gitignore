@@ -8,3 +8,8 @@ __pycache__/
 htmlcov/
 staticfiles/
 media/
+node_modules/
+playwright-report/
+test-results/
+.test-local-logs/
+tmp/

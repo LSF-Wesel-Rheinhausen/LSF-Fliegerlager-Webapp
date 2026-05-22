@@ -1,0 +1,17 @@
+{
+  "name": "fliegerlager-abrechnung",
+  "private": true,
+  "scripts": {
+    "start:e2e": "bash scripts/start-e2e.sh",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ui": "playwright test --ui",
+    "test:local": "bash scripts/test-local.sh",
+    "codex:setup": "bash scripts/codex-setup.sh",
+    "codex:start": "bash scripts/codex-start.sh",
+    "codex:cleanup": "bash scripts/codex-cleanup.sh"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
+  }
+}

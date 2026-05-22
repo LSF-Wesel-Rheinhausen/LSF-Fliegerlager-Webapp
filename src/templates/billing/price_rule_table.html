@@ -1,0 +1,26 @@
+<table>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Art</th>
+      <th>Preis</th>
+      <th>Förderfähig</th>
+      <th>Standard</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for rule in rules %}
+      <tr>
+        <td>{{ rule.name }}</td>
+        <td>{{ rule.get_kind_display }}</td>
+        <td>{{ rule.unit_price }} EUR</td>
+        <td>{% if rule.foerderfaehig %}Ja{% else %}Nein{% endif %}</td>
+        <td>{% if rule.is_default %}Ja{% else %}Nein{% endif %}</td>
+        <td><a href="{% url 'price-rule-edit' rule.pk %}">Bearbeiten</a></td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="6">{{ empty_text }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>

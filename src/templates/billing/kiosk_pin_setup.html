@@ -1,0 +1,18 @@
+{% extends "billing/kiosk_base.html" %}
+{% block title %}Kiosk-PIN setzen{% endblock %}
+{% block kiosk_nav %}
+  <a class="button button-secondary" href="{% url 'kiosk-logout' %}">Abmelden</a>
+{% endblock %}
+{% block content %}
+  <section class="panel narrow">
+    <h1>PIN festlegen</h1>
+    <p class="hint">Für {{ participant.full_name }} wurde noch kein PIN gesetzt. Lege jetzt einen neuen PIN fest.</p>
+    <form method="post" class="form-grid">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="form-actions">
+        <button type="submit">PIN speichern</button>
+      </div>
+    </form>
+  </section>
+{% endblock %}

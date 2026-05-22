@@ -14,6 +14,9 @@ class SettlementLine:
     label: str
     quantity: Decimal
     unit_price: Decimal
+    gross_total: Decimal
+    subsidy_rate: Decimal
+    subsidy_amount: Decimal
     total: Decimal
     source: str
 
@@ -22,6 +25,8 @@ class SettlementLine:
 class SettlementResult:
     participant: Participant
     lines: list[SettlementLine]
+    total_gross: Decimal
+    total_subsidy: Decimal
     total_due: Decimal
     total_paid: Decimal
     total_advanced: Decimal
@@ -36,6 +41,10 @@ def money(value):
     return (value or ZERO).quantize(Decimal("0.01"))
 
 
+def rate(value):
+    return (value or ZERO).quantize(Decimal("0.0001"))
+
+
 def _rule_applies(rule, participant):
     if participant.is_child and not rule.applies_to_children:
         return False
@@ -44,8 +53,55 @@ def _rule_applies(rule, participant):
     return True
 
 
+def participant_camp_flat_duration(participant):
+    nights = participant.actual_nights or participant.booked_nights or 0
+    if nights > 7:
+        return PriceRule.CampFlatDuration.TWO_WEEKS
+    return PriceRule.CampFlatDuration.ONE_WEEK
+
+
+def participant_camp_flat_role(participant):
+    if participant.is_companion:
+        return PriceRule.CampFlatRole.COMPANION
+    return PriceRule.CampFlatRole.PARTICIPANT
+
+
+def participant_subsidy_rate(participant):
+    if not participant.is_youth_group:
+        return ZERO
+    raw_rate = participant.camp.foerdersatz * participant.hilfssatz * participant.berufssatz
+    return min(rate(raw_rate), Decimal("1.0000"))
+
+
+def build_settlement_line(label, quantity, unit_price, source, eligible, participant):
+    gross_total = money(quantity * unit_price)
+    subsidy_rate = participant_subsidy_rate(participant) if eligible else ZERO
+    subsidy_amount = money(gross_total * subsidy_rate)
+    total = money(gross_total - subsidy_amount)
+    return SettlementLine(
+        label=label,
+        quantity=quantity,
+        unit_price=money(unit_price),
+        gross_total=gross_total,
+        subsidy_rate=subsidy_rate,
+        subsidy_amount=subsidy_amount,
+        total=total,
+        source=source,
+    )
+
+
 def default_charge_lines(participant):
-    rules = PriceRule.objects.filter(camp=participant.camp, is_default=True)
+    default_rules = PriceRule.objects.filter(camp=participant.camp, is_default=True)
+    rules = list(default_rules.filter(kind=PriceRule.Kind.NIGHT))
+    camp_flat_rules = default_rules.filter(kind=PriceRule.Kind.CAMP_FLAT)
+    matching_camp_flat_rules = camp_flat_rules.filter(
+        camp_flat_duration=participant_camp_flat_duration(participant),
+        camp_flat_role=participant_camp_flat_role(participant),
+    )
+    if matching_camp_flat_rules.exists():
+        rules.extend(matching_camp_flat_rules)
+    else:
+        rules.extend(camp_flat_rules.filter(camp_flat_duration="", camp_flat_role=""))
     lines = []
     for rule in rules:
         if not _rule_applies(rule, participant):
@@ -54,12 +110,13 @@ def default_charge_lines(participant):
         if rule.kind == PriceRule.Kind.NIGHT:
             quantity = Decimal(participant.actual_nights or participant.booked_nights or 0)
         lines.append(
-            SettlementLine(
+            build_settlement_line(
                 label=rule.name,
                 quantity=quantity,
-                unit_price=money(rule.unit_price),
-                total=money(quantity * rule.unit_price),
+                unit_price=rule.unit_price,
                 source=f"price_rule:{rule.pk}",
+                eligible=rule.foerderfaehig,
+                participant=participant,
             )
         )
     return lines
@@ -67,12 +124,13 @@ def default_charge_lines(participant):
 
 def manual_charge_lines(participant):
     return [
-        SettlementLine(
+        build_settlement_line(
             label=charge.description,
             quantity=money(charge.quantity),
-            unit_price=money(charge.unit_price),
-            total=money(charge.total),
+            unit_price=charge.unit_price,
             source=f"charge:{charge.pk}",
+            eligible=charge.foerderfaehig,
+            participant=participant,
         )
         for charge in participant.charges.all()
     ]
@@ -82,20 +140,21 @@ def drink_charge_lines(participant):
     lines = []
     entries = (
         DrinkEntry.objects.filter(participant=participant)
-        .values("drink", "unit_price")
+        .values("drink", "unit_price", "foerderfaehig")
         .annotate(quantity_sum=Sum("quantity"))
-        .order_by("drink")
+        .order_by("drink", "foerderfaehig")
     )
     for entry in entries:
         quantity = Decimal(entry["quantity_sum"] or 0)
         unit_price = money(entry["unit_price"])
         lines.append(
-            SettlementLine(
+            build_settlement_line(
                 label=f"Getränke: {dict(DrinkEntry.Drink.choices).get(entry['drink'], entry['drink'])}",
                 quantity=quantity,
                 unit_price=unit_price,
-                total=money(quantity * unit_price),
                 source=f"drink:{entry['drink']}",
+                eligible=entry["foerderfaehig"],
+                participant=participant,
             )
         )
     return lines
@@ -108,6 +167,8 @@ def calculate_participant_settlement(participant):
         .get(pk=participant.pk)
     )
     lines = default_charge_lines(participant) + manual_charge_lines(participant) + drink_charge_lines(participant)
+    total_gross = money(sum((line.gross_total for line in lines), ZERO))
+    total_subsidy = money(sum((line.subsidy_amount for line in lines), ZERO))
     total_due = money(sum((line.total for line in lines), ZERO))
     total_paid = money(participant.payments.aggregate(total=Sum("amount"))["total"])
     total_advanced = money(
@@ -117,6 +178,8 @@ def calculate_participant_settlement(participant):
     return SettlementResult(
         participant=participant,
         lines=lines,
+        total_gross=total_gross,
+        total_subsidy=total_subsidy,
         total_due=total_due,
         total_paid=total_paid,
         total_advanced=total_advanced,
@@ -133,9 +196,27 @@ def participant_kiosk_summary(participant):
     result = calculate_participant_settlement(participant)
     return {
         "participant": participant.full_name,
+        "total_gross": result.total_gross,
+        "total_subsidy": result.total_subsidy,
         "total_due": result.total_due,
         "total_paid": result.total_paid,
         "total_advanced": result.total_advanced,
         "balance": result.balance,
-        "lines": [{"label": line.label, "quantity": line.quantity, "total": line.total} for line in result.lines],
+        "lines": [
+            {
+                "label": line.label,
+                "quantity": line.quantity,
+                "gross_total": line.gross_total,
+                "subsidy_amount": line.subsidy_amount,
+                "total": line.total,
+            }
+            for line in result.lines
+        ],
     }
+
+
+def default_drink_price(camp):
+    rule = PriceRule.objects.filter(camp=camp, kind=PriceRule.Kind.DRINK, is_default=True).order_by("name").first()
+    if rule is None:
+        rule = PriceRule.objects.filter(camp=camp, kind=PriceRule.Kind.DRINK).order_by("name").first()
+    return money(rule.unit_price if rule else ZERO)

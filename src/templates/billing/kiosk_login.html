@@ -1,0 +1,15 @@
+{% extends "billing/kiosk_base.html" %}
+{% block title %}Kiosk-Login{% endblock %}
+{% block content %}
+  <section class="panel narrow">
+    <h1>Kiosk</h1>
+    <p class="hint">Melde dich mit deinem Namen und deiner PIN an.</p>
+    <form method="post" class="form-grid">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="form-actions">
+        <button type="submit">Anmelden</button>
+      </div>
+    </form>
+  </section>
+{% endblock %}
