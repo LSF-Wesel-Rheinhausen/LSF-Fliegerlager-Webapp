@@ -6,10 +6,10 @@
   --muted: #697386;
   --line: #dce2ea;
   --line-strong: #c5ceda;
-  --accent: #0f766e;
-  --accent-dark: #115e59;
-  --accent-soft: #e5f4f2;
-  --focus: #f59e0b;
+  --accent: #005ca9;
+  --accent-dark: #004983;
+  --accent-soft: #e8f1fb;
+  --focus: #7ab6f0;
   --danger: #b42318;
   --danger-soft: #fef3f2;
   --ok: #067647;
@@ -40,12 +40,17 @@ a:hover {
   text-decoration: underline;
 }
 
+::selection {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 3px solid rgba(245, 158, 11, 0.36);
+  outline: 3px solid rgba(0, 92, 169, 0.36);
   outline-offset: 2px;
 }
 
@@ -206,7 +211,7 @@ tbody tr:last-child td {
 }
 
 tbody tr:hover {
-  background: #f9fbfb;
+  background: #f3f8fe;
 }
 
 .panel {
@@ -384,7 +389,7 @@ textarea {
 }
 
 .kiosk-shell {
-  background: linear-gradient(180deg, #f7fafb 0%, #f6f7f9 100%);
+  background: linear-gradient(180deg, #f1f7ff 0%, #f6f7f9 100%);
 }
 
 .kiosk-topbar {
@@ -395,6 +400,45 @@ textarea {
   min-height: 36px;
 }
 
+.kiosk-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.kiosk-timer {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid rgba(0, 92, 169, 0.2);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.kiosk-timer__value {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+.kiosk-timer.is-urgent {
+  border-color: rgba(245, 158, 11, 0.35);
+  background: #fff6df;
+  color: #92400e;
+}
+
+.kiosk-timer.is-critical {
+  border-color: rgba(180, 35, 24, 0.35);
+  background: #fef3f2;
+  color: var(--danger);
+}
+
 .kiosk-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -402,32 +446,58 @@ textarea {
   margin-top: 20px;
 }
 
-.kiosk-stepper-field {
+.drink-card-grid {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin: 10px 0 14px;
+}
+
+.drink-card {
+  display: grid;
+  justify-items: start;
   gap: 6px;
-  margin: 0 0 16px;
+  min-height: 104px;
+  padding: 16px 16px 15px;
+  border: 1px solid rgba(0, 92, 169, 0.18);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #edf4fd 100%);
+  color: var(--text);
+  box-shadow: 0 10px 24px rgba(0, 92, 169, 0.08);
+  text-align: left;
 }
 
-.kiosk-stepper {
-  display: grid;
-  grid-template-columns: 56px minmax(0, 1fr) 56px;
-  gap: 8px;
-  align-items: stretch;
+.drink-card:hover {
+  background: linear-gradient(180deg, #ffffff 0%, #dbeafe 100%);
+  border-color: rgba(0, 92, 169, 0.34);
+  color: var(--accent-dark);
+  transform: translateY(-1px);
 }
 
-.kiosk-stepper-button {
-  min-height: 52px;
-  padding: 0;
-  border-radius: 8px;
-  font-size: 24px;
-  line-height: 1;
-  touch-action: manipulation;
+.drink-card__title {
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.15;
 }
 
-.kiosk-stepper input {
-  min-height: 52px;
-  font-size: 18px;
-  text-align: center;
+.drink-card__price {
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.05;
+  color: var(--accent-dark);
+  font-variant-numeric: tabular-nums;
+}
+
+.drink-card__meta {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(0, 92, 169, 0.1);
+  color: var(--accent-dark);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .message {
@@ -475,6 +545,14 @@ textarea {
     align-items: stretch;
   }
 
+  .kiosk-header-actions {
+    justify-content: stretch;
+  }
+
+  .kiosk-timer {
+    justify-content: space-between;
+  }
+
   button,
   .button,
   .exportbar a {
@@ -493,14 +571,12 @@ textarea {
     grid-template-columns: 1fr;
   }
 
-  .kiosk-stepper {
-    grid-template-columns: 48px minmax(0, 1fr) 48px;
-    gap: 6px;
+  .drink-card-grid {
+    grid-template-columns: 1fr;
   }
 
-  .kiosk-stepper-button,
-  .kiosk-stepper input {
-    min-height: 48px;
+  .drink-card {
+    min-height: 92px;
   }
 
   table {

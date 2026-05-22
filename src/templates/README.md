@@ -12,4 +12,4 @@ Servergerenderte Django-Templates.
 - `billing/participant_detail.html`: Teilnehmerdetail und Einzelabrechnung.
 - `billing/form.html`: Generisches Formularlayout fuer CRUD-Aktionen.
 - `billing/import_preview.html`: Importformular und Vorschautabelle.
-- `billing/kiosk_base.html`, `billing/kiosk_login.html`, `billing/kiosk_pin_setup.html`, `billing/kiosk_home.html`: Kiosk-Layout, PIN-Flows und mobile Buchungsoberflaeche.
+- `billing/kiosk_base.html`, `billing/kiosk_login.html`, `billing/kiosk_pin_setup.html`, `billing/kiosk_home.html`: Kiosk-Layout mit sichtbarem Auto-Logout-Timer, PIN-Flows und mobiler Buchungsoberflaeche mit grossen Getraenke-Tasten.

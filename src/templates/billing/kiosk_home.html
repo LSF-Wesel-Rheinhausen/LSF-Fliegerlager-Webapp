@@ -1,4 +1,5 @@
 {% extends "billing/kiosk_base.html" %}
+{% load billing_format %}
 {% block title %}Kiosk{% endblock %}
 {% block kiosk_nav %}
   <a class="button button-secondary" href="{% url 'kiosk-logout' %}">Abmelden</a>
@@ -12,49 +13,39 @@
   </div>
 
   <section class="metrics" aria-label="Kiosk-Abrechnungsübersicht">
-    <article class="metric"><span>Brutto</span><strong>{{ summary.total_gross }} EUR</strong></article>
-    <article class="metric"><span>Förderung</span><strong>{{ summary.total_subsidy }} EUR</strong></article>
-    <article class="metric"><span>Soll</span><strong>{{ summary.total_due }} EUR</strong></article>
-    <article class="metric"><span>Gezahlt</span><strong>{{ summary.total_paid }} EUR</strong></article>
-    <article class="metric"><span>Vorgestreckt</span><strong>{{ summary.total_advanced }} EUR</strong></article>
-    <article class="metric"><span>Offen</span><strong>{{ summary.balance }} EUR</strong></article>
+    <article class="metric"><span>Brutto</span><strong>{{ summary.total_gross|money_eur }}</strong></article>
+    <article class="metric"><span>Förderung</span><strong>{{ summary.total_subsidy|money_eur }}</strong></article>
+    <article class="metric"><span>Soll</span><strong>{{ summary.total_due|money_eur }}</strong></article>
+    <article class="metric"><span>Gezahlt</span><strong>{{ summary.total_paid|money_eur }}</strong></article>
+    <article class="metric"><span>Vorgestreckt</span><strong>{{ summary.total_advanced|money_eur }}</strong></article>
+    <article class="metric"><span>Offen</span><strong>{{ summary.balance|money_eur }}</strong></article>
   </section>
 
   <div class="kiosk-grid">
     <section class="panel">
       <h2>Getränk buchen</h2>
-      <p class="hint">Getränke aus dem Lager-Preisprofil</p>
-      <p class="hint">
-        {% for rule in drink_rules %}
-          {{ rule.name }} {{ rule.unit_price }} EUR{% if not forloop.last %} · {% endif %}
-        {% empty %}
-          Keine Getränkepreise im Lager hinterlegt.
-        {% endfor %}
-      </p>
-      <form method="post" class="form-grid kiosk-drink-form" data-kiosk-stepper>
+      <p class="hint">Tippe auf ein Getränk. Es wird direkt mit 1 Stück gebucht.</p>
+      <form method="post" class="stack kiosk-drink-form">
         {% csrf_token %}
         <input type="hidden" name="action" value="drink">
-        <p>
-          <label for="{{ drink_form.price_rule.id_for_label }}">{{ drink_form.price_rule.label }}</label>
-          {{ drink_form.price_rule }}
-          {% for error in drink_form.price_rule.errors %}
-            <span class="helptext error">{{ error }}</span>
-          {% endfor %}
-        </p>
-        <div class="kiosk-stepper-field">
-          <label for="{{ drink_form.quantity.id_for_label }}">{{ drink_form.quantity.label }}</label>
-          <div class="kiosk-stepper" data-stepper>
-            <button type="button" class="kiosk-stepper-button" data-stepper-decrement aria-label="Menge verringern">−</button>
-            {{ drink_form.quantity }}
-            <button type="button" class="kiosk-stepper-button" data-stepper-increment aria-label="Menge erhöhen">+</button>
-          </div>
-          {% for error in drink_form.quantity.errors %}
-            <span class="helptext error">{{ error }}</span>
+        {{ drink_form.quantity.as_hidden }}
+        <div class="drink-card-grid" role="group" aria-label="Getränke auswählen">
+          {% for rule in drink_rules %}
+            <button type="submit" class="drink-card" name="drink-price_rule" value="{{ rule.pk }}">
+              <span class="drink-card__title">{{ rule.name }}</span>
+              <span class="drink-card__price">{{ rule.unit_price|money_eur }}</span>
+              <span class="drink-card__meta">1x tippen</span>
+            </button>
+          {% empty %}
+            <p class="hint">Keine Getränkepreise im Lager hinterlegt.</p>
           {% endfor %}
         </div>
-        <div class="form-actions">
-          <button type="submit">Buchen</button>
-        </div>
+        {% for error in drink_form.price_rule.errors %}
+          <span class="helptext error">{{ error }}</span>
+        {% endfor %}
+        {% for error in drink_form.quantity.errors %}
+          <span class="helptext error">{{ error }}</span>
+        {% endfor %}
       </form>
     </section>
 
@@ -62,7 +53,7 @@
       <h2>Essen anmelden</h2>
       <p class="hint">
         {% for rule in meal_rules %}
-          {{ rule.name }} {{ rule.unit_price }} EUR{% if not forloop.last %} · {% endif %}
+          {{ rule.name }} {{ rule.unit_price|money_eur }}{% if not forloop.last %} · {% endif %}
         {% empty %}
           Keine Essenspreise im Lager hinterlegt.
         {% endfor %}
@@ -116,8 +107,8 @@
               <td>{{ entry.created_at }}</td>
               <td>{{ entry.description }}</td>
               <td>{{ entry.quantity }}</td>
-              <td>{{ entry.unit_price }}</td>
-              <td>{{ entry.total }}</td>
+              <td>{{ entry.unit_price|money_eur }}</td>
+              <td>{{ entry.total|money_eur }}</td>
             </tr>
           {% empty %}
             <tr><td colspan="5">Noch keine Getränke gebucht.</td></tr>
@@ -144,42 +135,4 @@
       </table>
     </section>
   </div>
-{% endblock %}
-{% block scripts %}
-  <script>
-    document.querySelectorAll("[data-kiosk-stepper]").forEach((form) => {
-      const quantityInput = form.querySelector('input[name$="-quantity"]');
-      const decrementButton = form.querySelector("[data-stepper-decrement]");
-      const incrementButton = form.querySelector("[data-stepper-increment]");
-
-      if (!quantityInput || !decrementButton || !incrementButton) {
-        return;
-      }
-
-      const clampQuantity = () => {
-        const min = Number(quantityInput.min || "1");
-        const max = Number(quantityInput.max || "99");
-        const parsed = Number(quantityInput.value || min);
-        const nextValue = Number.isFinite(parsed) ? parsed : min;
-        quantityInput.value = String(Math.min(max, Math.max(min, nextValue)));
-      };
-
-      decrementButton.addEventListener("click", () => {
-        clampQuantity();
-        quantityInput.stepDown();
-        clampQuantity();
-        quantityInput.focus();
-      });
-
-      incrementButton.addEventListener("click", () => {
-        clampQuantity();
-        quantityInput.stepUp();
-        clampQuantity();
-        quantityInput.focus();
-      });
-
-      quantityInput.addEventListener("change", clampQuantity);
-      clampQuantity();
-    });
-  </script>
 {% endblock %}
