@@ -24,5 +24,5 @@ Diese Datei gibt spaeteren Chats einen schnellen Einstieg in die Projektstruktur
 - `src/config/`: Django-Projektkonfiguration, URL-Routing, ASGI/WSGI.
 - `src/billing/`: Domain-App fuer Lager, Teilnehmer, Abrechnung, Importe, Exporte und Rollen.
 - `src/static/billing/`: Stylesheet und Vereinslogo.
-- `src/templates/`: Servergerenderte Django-Templates inklusive Kiosk und Preisverwaltung.
+- `src/templates/`: Servergerenderte Django-Templates inklusive Kiosk, Preisverwaltung, Preisregel-Overlays und gespeicherter Abrechnungslauf-Ansicht.
 - `tests/`: Pytest-Tests und Playwright-E2E-Tests.

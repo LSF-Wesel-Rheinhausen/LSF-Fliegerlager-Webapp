@@ -8,7 +8,7 @@
   <div class="toolbar">
     <div>
       <h1>{{ participant.full_name }}</h1>
-      <p>{{ participant.camp }} · {{ participant.get_status_display }}</p>
+      <p>{{ participant.camp }} · {{ participant.get_status_display }} · {{ participant.overnight_category.name|default:"ohne Kategorie" }}</p>
     </div>
   </div>
 
@@ -20,6 +20,62 @@
     <article class="metric"><span>Vorgestreckt</span><strong>{{ summary.total_advanced|money_eur }}</strong></article>
     <article class="metric"><span>Offen</span><strong>{{ summary.balance|money_eur }}</strong></article>
   </section>
+
+  <div class="kiosk-grid">
+    <section class="panel">
+      <h2>Aufenthalt anpassen</h2>
+      <p class="hint">Hier kannst du deine tatsaechliche An- und Abreise sowie deine Uebernachtungskategorie anpassen.</p>
+      <form method="post" class="form-grid">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="stay">
+        <p>
+          <label for="{{ stay_form.overnight_category.id_for_label }}">{{ stay_form.overnight_category.label }}</label>
+          {{ stay_form.overnight_category }}
+          {% for error in stay_form.overnight_category.errors %}
+            <span class="helptext error">{{ error }}</span>
+          {% endfor %}
+        </p>
+        <p>
+          <label for="{{ stay_form.arrival_date.id_for_label }}">{{ stay_form.arrival_date.label }}</label>
+          {{ stay_form.arrival_date }}
+          {% for error in stay_form.arrival_date.errors %}
+            <span class="helptext error">{{ error }}</span>
+          {% endfor %}
+        </p>
+        <p>
+          <label for="{{ stay_form.departure_date.id_for_label }}">{{ stay_form.departure_date.label }}</label>
+          {{ stay_form.departure_date }}
+          {% for error in stay_form.departure_date.errors %}
+            <span class="helptext error">{{ error }}</span>
+          {% endfor %}
+        </p>
+        <div class="form-actions">
+          <button type="submit">Aufenthalt speichern</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Begleiter oder Kind hinzufuegen</h2>
+      <p class="hint">Jede Zusatzperson wird als eigener Eintrag gespeichert und mit dir verknuepft.</p>
+      <form method="post" class="form-grid">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="linked-participant">
+        {% for field in linked_form %}
+          <p>
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% for error in field.errors %}
+              <span class="helptext error">{{ error }}</span>
+            {% endfor %}
+          </p>
+        {% endfor %}
+        <div class="form-actions">
+          <button type="submit">Zusatzperson speichern</button>
+        </div>
+      </form>
+    </section>
+  </div>
 
   <div class="kiosk-grid">
     <section class="panel">
@@ -97,6 +153,25 @@
   </div>
 
   <div class="kiosk-grid">
+    <section>
+      <h2>Verknuepfte Zusatzpersonen</h2>
+      <table>
+        <thead><tr><th>Name</th><th>Typ</th><th>Kategorie</th><th>Naechte</th></tr></thead>
+        <tbody>
+          {% for linked in linked_participants %}
+            <tr>
+              <td>{{ linked.full_name }}</td>
+              <td>{% if linked.is_child %}Kind{% elif linked.is_companion %}Begleitperson{% else %}-{% endif %}</td>
+              <td>{{ linked.overnight_category.name|default:"-" }}</td>
+              <td>{{ linked.effective_nights }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4">Noch keine Zusatzpersonen erfasst.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
     <section>
       <h2>Letzte Getränke</h2>
       <table>

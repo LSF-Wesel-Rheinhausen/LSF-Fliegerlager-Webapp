@@ -1,0 +1,60 @@
+<section id="prices-camp-flat" class="panel stack">
+  <div class="toolbar compact-toolbar">
+    <div>
+      <p class="eyebrow">Abrechnung</p>
+      <h2>Lagerpauschalen</h2>
+      <p>Diese Regeln gelten jeweils für genau eine Uebernachtungskategorie.</p>
+    </div>
+    <a class="button"
+       href="{% url 'price-rule-create' camp.pk %}?kind=camp_flat"
+       data-price-rule-overlay-url="{% url 'price-rule-create' camp.pk %}?kind=camp_flat">Lagerpauschale anlegen</a>
+  </div>
+  {% include "billing/price_rule_table.html" with rules=grouped_rules.camp_flat empty_text="Noch keine Lagerpauschalen vorhanden." %}
+</section>
+
+<section id="prices-drinks" class="panel stack">
+  <div class="toolbar compact-toolbar">
+    <div>
+      <p class="eyebrow">Kiosk</p>
+      <h2>Getränke</h2>
+      <p>Diese Preise erscheinen im Kiosk unter Getränke.</p>
+    </div>
+    <a class="button"
+       href="{% url 'price-rule-create' camp.pk %}?kind=drink"
+       data-price-rule-overlay-url="{% url 'price-rule-create' camp.pk %}?kind=drink">Getränk anlegen</a>
+  </div>
+  {% include "billing/price_rule_table.html" with rules=grouped_rules.drinks empty_text="Noch keine Getränkepreise vorhanden." %}
+</section>
+
+<section id="prices-meals" class="panel stack">
+  <div class="toolbar compact-toolbar">
+    <div>
+      <p class="eyebrow">Kiosk</p>
+      <h2>Essen</h2>
+      <p>Diese Preise erscheinen im Kiosk unter Essen.</p>
+    </div>
+    <a class="button"
+       href="{% url 'price-rule-create' camp.pk %}?kind=meal"
+       data-price-rule-overlay-url="{% url 'price-rule-create' camp.pk %}?kind=meal">Essen anlegen</a>
+  </div>
+  {% include "billing/price_rule_table.html" with rules=grouped_rules.meals empty_text="Noch keine Essenspreise vorhanden." %}
+</section>
+
+<section id="prices-other" class="panel stack">
+  <div class="toolbar compact-toolbar">
+    <div>
+      <p class="eyebrow">Abrechnung</p>
+      <h2>Weitere Standardpreise</h2>
+      <p>Übernachtungen und sonstige Preisregeln.</p>
+    </div>
+    <div class="actions">
+      <a class="button button-secondary"
+         href="{% url 'price-rule-create' camp.pk %}?kind=night"
+         data-price-rule-overlay-url="{% url 'price-rule-create' camp.pk %}?kind=night">Übernachtung anlegen</a>
+      <a class="button"
+         href="{% url 'price-rule-create' camp.pk %}?kind=other"
+         data-price-rule-overlay-url="{% url 'price-rule-create' camp.pk %}?kind=other">Sonstigen Preis anlegen</a>
+    </div>
+  </div>
+  {% include "billing/price_rule_table.html" with rules=grouped_rules.other empty_text="Noch keine weiteren Preisregeln vorhanden." %}
+</section>

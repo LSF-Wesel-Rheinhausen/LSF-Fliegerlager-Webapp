@@ -7,7 +7,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from openpyxl import load_workbook
 
-from .models import Participant
+from .models import OvernightCategory, Participant
 
 XLSX_MAGIC = b"PK\x03\x04"
 REQUIRED_PARTICIPANT_COLUMNS = ["first_name", "last_name"]
@@ -132,6 +132,11 @@ def rows_from_payload(payload):
 
 def save_participants(camp, rows):
     created = []
+    default_category, _ = OvernightCategory.objects.get_or_create(
+        camp=camp,
+        name="Bestand",
+        defaults={"description": "Automatisch fuer importierte Bestandsdaten angelegt."},
+    )
     with transaction.atomic():
         for row in rows:
             if not row.valid:
@@ -142,6 +147,9 @@ def save_participants(camp, rows):
                 last_name=row.data["last_name"],
                 defaults={
                     field: row.data[field] for field in PARTICIPANT_COLUMNS if field not in {"first_name", "last_name"}
+                }
+                | {
+                    "overnight_category": default_category,
                 },
             )
             created.append(participant)

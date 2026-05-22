@@ -3,9 +3,9 @@ from decimal import Decimal
 
 import pytest
 from django.urls import reverse
-from tests.factories import CampFactory, ParticipantFactory, PriceRuleFactory, UserFactory
+from tests.factories import CampFactory, OvernightCategoryFactory, ParticipantFactory, PriceRuleFactory, UserFactory
 
-from billing.models import Charge, MealSignup, PriceRule
+from billing.models import Charge, MealSignup, Participant, PriceRule
 from billing.views import KIOSK_PARTICIPANT_SESSION_KEY, KIOSK_PIN_SETUP_SESSION_KEY
 
 
@@ -56,7 +56,7 @@ def test_kiosk_login_rejects_invalid_pin_for_existing_pin(client):
 
 
 @pytest.mark.django_db
-def test_kiosk_home_hides_normal_admin_header_and_renders_stepper_controls(client):
+def test_kiosk_home_hides_normal_admin_header_and_renders_drink_cards_and_timer(client):
     user = UserFactory(username="admin", email="admin@example.test")
     client.force_login(user)
 
@@ -78,11 +78,13 @@ def test_kiosk_home_hides_normal_admin_header_and_renders_stepper_controls(clien
     assert response.status_code == 200
     assert b"admin@example.test" not in response.content
     assert b'action="/logout/"' not in response.content
-    assert b"data-kiosk-stepper" in response.content
-    assert b"data-stepper-increment" in response.content
-    assert b"data-stepper-decrement" in response.content
-    assert b'inputmode="numeric"' in response.content
-    assert b"2 * 60 * 1000" in response.content
+    assert b"data-kiosk-countdown-root" in response.content
+    assert b"data-kiosk-countdown" in response.content
+    assert b"02:00" in response.content
+    assert b"data-timeout-ms=\"120000\"" in response.content
+    assert b"drink-card" in response.content
+    assert b"1x tippen" in response.content
+    assert b"2,50 \xe2\x82\xac" in response.content
     assert reverse("kiosk-logout").encode() in response.content
     assert "Förderung anwenden".encode() not in response.content
 
@@ -97,7 +99,8 @@ def test_kiosk_pin_setup_uses_inactivity_logout_timer(client):
     response = client.get(reverse("kiosk-pin-setup"))
 
     assert response.status_code == 200
-    assert b"2 * 60 * 1000" in response.content
+    assert b"data-kiosk-countdown-root" in response.content
+    assert b"02:00" in response.content
     assert reverse("kiosk-logout").encode() in response.content
 
 
@@ -172,3 +175,66 @@ def test_kiosk_meal_signup_updates_existing_signup_and_creates_charge(client):
     charge = Charge.objects.get(participant=participant, kind=Charge.Kind.FOOD)
     assert charge.description == "Mittagessen Abendessen"
     assert charge.unit_price == Decimal("7.00")
+
+
+@pytest.mark.django_db
+def test_kiosk_can_update_own_stay_dates_and_category(client):
+    camp = CampFactory()
+    old_category = OvernightCategoryFactory(camp=camp, name="Teilnehmer 1 Woche")
+    new_category = OvernightCategoryFactory(camp=camp, name="Teilnehmer 2 Wochen")
+    participant = ParticipantFactory(
+        camp=camp,
+        overnight_category=old_category,
+        arrival_date=date(2025, 7, 1),
+        departure_date=date(2025, 7, 4),
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "stay",
+            "stay-overnight_category": new_category.pk,
+            "stay-arrival_date": "2025-07-01",
+            "stay-departure_date": "2025-07-10",
+        },
+    )
+
+    assert response.status_code == 302
+    participant.refresh_from_db()
+    assert participant.overnight_category == new_category
+    assert participant.actual_nights == 9
+
+
+@pytest.mark.django_db
+def test_kiosk_can_add_linked_child_entry(client):
+    camp = CampFactory()
+    category = OvernightCategoryFactory(camp=camp, name="Kind 1 Woche")
+    participant = ParticipantFactory(camp=camp, overnight_category=category, first_name="Ada", last_name="Lovelace")
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "linked-participant",
+            "linked-first_name": "Theo",
+            "linked-last_name": "Lovelace",
+            "linked-participant_type": "child",
+            "linked-overnight_category": category.pk,
+            "linked-arrival_date": "2025-07-01",
+            "linked-departure_date": "2025-07-05",
+            "linked-notes": "",
+        },
+    )
+
+    assert response.status_code == 302
+    linked = Participant.objects.exclude(pk=participant.pk).get()
+    assert linked.primary_participant == participant
+    assert linked.is_child is True
+    assert linked.is_companion is False
+    assert linked.overnight_category == category
+    assert linked.actual_nights == 4

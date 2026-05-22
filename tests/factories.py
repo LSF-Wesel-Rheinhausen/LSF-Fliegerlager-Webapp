@@ -5,7 +5,7 @@ import factory
 from django.contrib.auth.models import Group, User
 from django.utils import timezone
 
-from billing.models import Camp, Charge, DrinkEntry, Expense, Participant, Payment, PriceRule
+from billing.models import Camp, Charge, DrinkEntry, Expense, OvernightCategory, Participant, Payment, PriceRule
 
 
 class UserFactory(factory.django.DjangoModelFactory):
@@ -49,6 +49,10 @@ class ParticipantFactory(factory.django.DjangoModelFactory):
         model = Participant
 
     camp = factory.SubFactory(CampFactory)
+    overnight_category = factory.SubFactory(
+        "tests.factories.OvernightCategoryFactory",
+        camp=factory.SelfAttribute("..camp"),
+    )
     first_name = factory.Sequence(lambda n: f"Teilnehmer{n}")
     last_name = "Muster"
 
@@ -61,6 +65,14 @@ class PriceRuleFactory(factory.django.DjangoModelFactory):
     kind = PriceRule.Kind.OTHER
     name = "Preisregel"
     unit_price = Decimal("10.00")
+
+
+class OvernightCategoryFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = OvernightCategory
+
+    camp = factory.SubFactory(CampFactory)
+    name = factory.Sequence(lambda n: f"Kategorie {n}")
 
 
 class ChargeFactory(factory.django.DjangoModelFactory):

@@ -36,6 +36,18 @@
       </section>
 
       <section>
+        <h2>Git-Workflow pro Arbeitspaket</h2>
+        <ol>
+          <li>GitHub-Zugang mit <code>gh auth status</code> prüfen und bei Bedarf mit <code>gh auth login -h github.com</code> reparieren.</li>
+          <li>Immer zuerst einen frischen Feature-Branch von <code>master</code> anlegen.</li>
+          <li><strong>Push 1</strong> vor Start der eigentlichen Umsetzung ausführen: Branch sofort mit <code>git push -u origin &lt;feature-branch&gt;</code> remote absichern.</li>
+          <li>Implementierung, Tests, Coverage-Arbeit und Review-Fixes ausschließlich auf diesem Branch durchführen.</li>
+          <li><strong>Push 2</strong> nach Abschluss ausführen: final committen, relevante Checks erfolgreich abschließen und denselben Branch erneut pushen.</li>
+        </ol>
+        <p>Direktes Arbeiten oder Pushen auf <code>master</code> ist nicht der Standardprozess.</p>
+      </section>
+
+      <section>
         <h2>Django-ORM und Transaktionen</h2>
         <ul>
           <li>Iterierte ForeignKey- und OneToOne-Daten mit <code>select_related()</code> laden.</li>

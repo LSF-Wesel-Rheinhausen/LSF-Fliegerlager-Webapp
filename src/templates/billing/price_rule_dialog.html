@@ -1,0 +1,83 @@
+<section class="price-rule-dialog-shell">
+  <div class="price-rule-dialog-header">
+    <div>
+      <p class="eyebrow">{{ form.category_label }}</p>
+      <h2>{{ title }}</h2>
+      <p>{{ camp.name }} {{ camp.year }}</p>
+    </div>
+    {% if overlay_mode %}
+      <button type="button" class="button button-secondary" data-price-rule-close>Schließen</button>
+    {% else %}
+      <a class="button button-secondary" href="{{ cancel_url }}">Zurück</a>
+    {% endif %}
+  </div>
+
+  <form method="post" action="{{ form_action }}" class="price-rule-form stack">
+    {% csrf_token %}
+    {% if overlay_mode %}
+      <input type="hidden" name="overlay" value="1">
+    {% endif %}
+    {% if form.active_kind %}
+      <input type="hidden" name="kind" value="{{ form.active_kind }}">
+    {% endif %}
+
+    {% if form.non_field_errors %}
+      {{ form.non_field_errors }}
+    {% endif %}
+
+    {% for hidden in form.hidden_fields %}
+      {{ hidden }}
+    {% endfor %}
+
+    <div class="price-rule-form-intro">
+      <p>Pflichtfelder zuerst, zusätzliche Schalter nur bei Bedarf.</p>
+    </div>
+
+    <div class="price-rule-field-grid">
+      {% for field in form.basic_fields %}
+        <div class="price-rule-field{% if field.field.widget.input_type == 'checkbox' %} price-rule-checkbox{% endif %}">
+          {{ field.label_tag }}
+          {{ field }}
+          {% if field.help_text %}
+            <span class="helptext">{{ field.help_text }}</span>
+          {% endif %}
+          {% for error in field.errors %}
+            <span class="helptext error">{{ error }}</span>
+          {% endfor %}
+        </div>
+      {% endfor %}
+    </div>
+
+    {% if form.advanced_fields %}
+      <details class="price-rule-advanced" {% if not form.advanced_collapsed %}open{% endif %}>
+        <summary>
+          <span>Weitere Optionen</span>
+          <small>nur falls abweichende Regeln gelten</small>
+        </summary>
+        <div class="price-rule-field-grid price-rule-field-grid--compact">
+          {% for field in form.advanced_fields %}
+            <div class="price-rule-field price-rule-checkbox">
+              {{ field.label_tag }}
+              {{ field }}
+              {% if field.help_text %}
+                <span class="helptext">{{ field.help_text }}</span>
+              {% endif %}
+              {% for error in field.errors %}
+                <span class="helptext error">{{ error }}</span>
+              {% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+      </details>
+    {% endif %}
+
+    <div class="form-actions price-rule-form-actions">
+      {% if overlay_mode %}
+        <button type="button" class="button button-secondary" data-price-rule-close>Abbrechen</button>
+      {% else %}
+        <a class="button button-secondary" href="{{ cancel_url }}">Abbrechen</a>
+      {% endif %}
+      <button type="submit">{{ submit_label }}</button>
+    </div>
+  </form>
+</section>

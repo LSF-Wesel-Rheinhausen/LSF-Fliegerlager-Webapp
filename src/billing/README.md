@@ -2,10 +2,10 @@
 
 Domain-App fuer die Fliegerlager-Abrechnung.
 
-- `models.py`: Datenmodell fuer Lager, Teilnehmer, Preisregeln, Lagerpauschalen, Kosten, Zahlungen, Auslagen, Kiosk-Vorbereitung und Abrechnungen.
-- `services.py`: Rechenlogik fuer Teilnehmer- und Lagerabrechnungen, Foerderung, automatische Lagerpauschalen-Auswahl und Kiosk-Zusammenfassung.
-- `forms.py`: Django-Formulare mit deutschen Labels fuer Weboberflaeche, Preisverwaltung, Kiosk, Login und Ersteinrichtung.
-- `views.py`: Servergerenderte Views fuer Setup, Login-Weiterleitung, Lager, Preisverwaltung, Kiosk, Teilnehmer, Imports und Exports.
+- `models.py`: Datenmodell fuer Lager, Teilnehmer, Uebernachtungskategorien, Preisregeln, Kosten, Zahlungen, Auslagen, Kiosk-Vorbereitung und Abrechnungen.
+- `services.py`: Rechenlogik fuer Teilnehmer- und Lagerabrechnungen, Foerderung, kategoriebasierte Lagerpauschalen und Kiosk-Zusammenfassung.
+- `forms.py`: Django-Formulare mit deutschen Labels fuer Weboberflaeche, Preisverwaltung, Kiosk, Aufenthaltsaenderungen, Zusatzpersonen und Ersteinrichtung.
+- `views.py`: Servergerenderte Views fuer Setup, Login-Weiterleitung, Lager, Preisverwaltung, Kiosk, Teilnehmer, Kategorien, Imports, Exports und Lager-Loeschung.
 - `urls.py`: URL-Routing der Billing-App.
 - `permissions.py`: Rollenpruefung fuer `Admin` und `Bearbeiter`.
 - `roles.py`: Gemeinsame Rollenanlage fuer Websetup und Management-Command.

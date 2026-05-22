@@ -1,9 +1,10 @@
 from dataclasses import dataclass
 from decimal import Decimal
 
+from django.db import transaction
 from django.db.models import Sum
 
-from .models import DrinkEntry, Expense, Participant, PriceRule
+from .models import DrinkEntry, Expense, Participant, PriceRule, Settlement, SettlementRun
 
 ZERO = Decimal("0.00")
 
@@ -52,8 +53,12 @@ def _rule_applies(rule, participant):
     return True
 
 
+def participant_nights(participant):
+    return participant.effective_nights
+
+
 def participant_camp_flat_duration(participant):
-    nights = participant.actual_nights or participant.booked_nights or 0
+    nights = participant_nights(participant)
     if nights > 7:
         return PriceRule.CampFlatDuration.TWO_WEEKS
     return PriceRule.CampFlatDuration.ONE_WEEK
@@ -93,21 +98,25 @@ def default_charge_lines(participant):
     default_rules = PriceRule.objects.filter(camp=participant.camp, is_default=True)
     rules = list(default_rules.filter(kind=PriceRule.Kind.NIGHT))
     camp_flat_rules = default_rules.filter(kind=PriceRule.Kind.CAMP_FLAT)
-    matching_camp_flat_rules = camp_flat_rules.filter(
-        camp_flat_duration=participant_camp_flat_duration(participant),
-        camp_flat_role=participant_camp_flat_role(participant),
-    )
+    matching_camp_flat_rules = PriceRule.objects.none()
+    if participant.overnight_category_id:
+        matching_camp_flat_rules = camp_flat_rules.filter(overnight_category=participant.overnight_category)
+    if not matching_camp_flat_rules.exists():
+        matching_camp_flat_rules = camp_flat_rules.filter(
+            camp_flat_duration=participant_camp_flat_duration(participant),
+            camp_flat_role=participant_camp_flat_role(participant),
+        )
     if matching_camp_flat_rules.exists():
         rules.extend(matching_camp_flat_rules)
     else:
-        rules.extend(camp_flat_rules.filter(camp_flat_duration="", camp_flat_role=""))
+        rules.extend(camp_flat_rules.filter(overnight_category__isnull=True, camp_flat_duration="", camp_flat_role=""))
     lines = []
     for rule in rules:
         if not _rule_applies(rule, participant):
             continue
         quantity = Decimal("1.00")
         if rule.kind == PriceRule.Kind.NIGHT:
-            quantity = Decimal(participant.actual_nights or participant.booked_nights or 0)
+            quantity = Decimal(participant_nights(participant))
         lines.append(
             build_settlement_line(
                 label=rule.name,
@@ -161,7 +170,7 @@ def drink_charge_lines(participant):
 
 def calculate_participant_settlement(participant):
     participant = (
-        Participant.objects.select_related("camp")
+        Participant.objects.select_related("camp", "overnight_category", "primary_participant")
         .prefetch_related("charges", "payments", "expenses", "drink_entries")
         .get(pk=participant.pk)
     )
@@ -189,6 +198,73 @@ def calculate_participant_settlement(participant):
 def calculate_camp_settlements(camp):
     participants = Participant.objects.filter(camp=camp).order_by("last_name", "first_name")
     return [calculate_participant_settlement(participant) for participant in participants]
+
+
+def settlement_result_data(result: SettlementResult) -> dict[str, object]:
+    return {
+        "participant": {
+            "id": result.participant.pk,
+            "first_name": result.participant.first_name,
+            "last_name": result.participant.last_name,
+            "status": result.participant.status,
+        },
+        "totals": {
+            "gross": str(result.total_gross),
+            "subsidy": str(result.total_subsidy),
+            "due": str(result.total_due),
+            "paid": str(result.total_paid),
+            "advanced": str(result.total_advanced),
+            "balance": str(result.balance),
+        },
+        "lines": [
+            {
+                "label": line.label,
+                "quantity": str(line.quantity),
+                "unit_price": str(line.unit_price),
+                "gross_total": str(line.gross_total),
+                "subsidy_rate": str(line.subsidy_rate),
+                "subsidy_amount": str(line.subsidy_amount),
+                "total": str(line.total),
+                "source": line.source,
+            }
+            for line in result.lines
+        ],
+    }
+
+
+def create_settlement_run(camp, calculated_by=None) -> SettlementRun:
+    with transaction.atomic():
+        results = calculate_camp_settlements(camp)
+        run = SettlementRun.objects.create(
+            camp=camp,
+            created_by=calculated_by if getattr(calculated_by, "is_authenticated", False) else None,
+            participant_count=len(results),
+            total_gross=money(sum((result.total_gross for result in results), ZERO)),
+            total_subsidy=money(sum((result.total_subsidy for result in results), ZERO)),
+            total_due=money(sum((result.total_due for result in results), ZERO)),
+            total_paid=money(sum((result.total_paid for result in results), ZERO)),
+            total_advanced=money(sum((result.total_advanced for result in results), ZERO)),
+            balance=money(sum((result.balance for result in results), ZERO)),
+            data={"source": "live_calculation"},
+        )
+        Settlement.objects.bulk_create(
+            [
+                Settlement(
+                    run=run,
+                    participant=result.participant,
+                    calculated_by=run.created_by,
+                    total_gross=result.total_gross,
+                    total_subsidy=result.total_subsidy,
+                    total_due=result.total_due,
+                    total_paid=result.total_paid,
+                    total_advanced=result.total_advanced,
+                    balance=result.balance,
+                    data=settlement_result_data(result),
+                )
+                for result in results
+            ]
+        )
+    return run
 
 
 def participant_kiosk_summary(participant):

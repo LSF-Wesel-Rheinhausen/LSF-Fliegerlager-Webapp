@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+  <section class="panel stack narrow">
+    <h1>{{ title }}</h1>
+    <p>Du bist dabei, <strong>{{ object_name }}</strong> dauerhaft zu loeschen.</p>
+    <p class="helptext error">{{ warning }}</p>
+    <form method="post" class="form-actions">
+      {% csrf_token %}
+      <a class="button button-secondary" href="{{ cancel_url }}">Abbrechen</a>
+      <button type="submit">Endgueltig loeschen</button>
+    </form>
+  </section>
+{% endblock %}

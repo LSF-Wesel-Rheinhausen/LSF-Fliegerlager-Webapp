@@ -2,32 +2,37 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+from django.urls import reverse
 from tests.factories import (
     CampFactory,
     ChargeFactory,
-    DrinkEntryFactory,
     ExpenseFactory,
+    OvernightCategoryFactory,
     ParticipantFactory,
     PaymentFactory,
     PriceRuleFactory,
+    SuperUserFactory,
 )
 
-from billing.models import Charge, PriceRule
-from billing.services import calculate_participant_settlement
+from billing.models import Charge, PriceRule, Settlement, SettlementRun
+from billing.services import calculate_participant_settlement, create_settlement_run, participant_camp_flat_duration
 
 
 @pytest.mark.django_db
 def test_settlement_calculates_due_paid_advanced_and_balance():
     camp = CampFactory()
+    category = OvernightCategoryFactory(camp=camp, name="Teilnehmer 1 Woche")
     participant = ParticipantFactory(
         camp=camp,
+        overnight_category=category,
         first_name="Ada",
         last_name="Lovelace",
-        booked_nights=2,
-        actual_nights=3,
+        arrival_date=date(2025, 7, 1),
+        departure_date=date(2025, 7, 4),
     )
     PriceRuleFactory(
         camp=camp,
+        overnight_category=category,
         kind=PriceRule.Kind.CAMP_FLAT,
         name="Lagerpauschale",
         unit_price=Decimal("50.00"),
@@ -47,9 +52,11 @@ def test_settlement_calculates_due_paid_advanced_and_balance():
         quantity=Decimal("2"),
         unit_price=Decimal("7.50"),
     )
-    DrinkEntryFactory(
+    ChargeFactory(
         participant=participant,
-        quantity=3,
+        kind=Charge.Kind.DRINK,
+        description="Getränk",
+        quantity=Decimal("3"),
         unit_price=Decimal("1.50"),
     )
     PaymentFactory(participant=participant, amount=Decimal("40.00"), paid_on=date(2025, 7, 1))
@@ -90,8 +97,10 @@ def test_settlement_allows_overpayment():
 @pytest.mark.django_db
 def test_settlement_applies_subsidy_factor_for_youth_group_members():
     camp = CampFactory(foerdersatz=Decimal("0.5000"))
+    category = OvernightCategoryFactory(camp=camp, name="Jugend")
     participant = ParticipantFactory(
         camp=camp,
+        overnight_category=category,
         first_name="Mia",
         last_name="Muster",
         is_youth_group=True,
@@ -100,6 +109,7 @@ def test_settlement_applies_subsidy_factor_for_youth_group_members():
     )
     PriceRuleFactory(
         camp=camp,
+        overnight_category=category,
         kind=PriceRule.Kind.CAMP_FLAT,
         name="Lagerpauschale",
         unit_price=Decimal("100.00"),
@@ -115,10 +125,13 @@ def test_settlement_applies_subsidy_factor_for_youth_group_members():
 
 
 @pytest.mark.django_db
-def test_settlement_selects_matching_camp_flat_rate_for_companion_and_duration():
+def test_settlement_prefers_selected_overnight_category_for_camp_flat_rule():
     camp = CampFactory()
+    participant_category = OvernightCategoryFactory(camp=camp, name="Begleitperson 2 Wochen")
+    other_category = OvernightCategoryFactory(camp=camp, name="Teilnehmer 2 Wochen")
     participant = ParticipantFactory(
         camp=camp,
+        overnight_category=participant_category,
         first_name="Bea",
         last_name="Begleitung",
         is_companion=True,
@@ -126,20 +139,18 @@ def test_settlement_selects_matching_camp_flat_rate_for_companion_and_duration()
     )
     PriceRuleFactory(
         camp=camp,
+        overnight_category=other_category,
         kind=PriceRule.Kind.CAMP_FLAT,
         name="Teilnehmer 2 Wochen",
         unit_price=Decimal("300.00"),
-        camp_flat_role=PriceRule.CampFlatRole.PARTICIPANT,
-        camp_flat_duration=PriceRule.CampFlatDuration.TWO_WEEKS,
         is_default=True,
     )
     PriceRuleFactory(
         camp=camp,
+        overnight_category=participant_category,
         kind=PriceRule.Kind.CAMP_FLAT,
         name="Begleitperson 2 Wochen",
         unit_price=Decimal("180.00"),
-        camp_flat_role=PriceRule.CampFlatRole.COMPANION,
-        camp_flat_duration=PriceRule.CampFlatDuration.TWO_WEEKS,
         is_default=True,
     )
 
@@ -150,22 +161,92 @@ def test_settlement_selects_matching_camp_flat_rate_for_companion_and_duration()
 
 
 @pytest.mark.django_db
-def test_participant_camp_flat_duration():
-    from billing.services import participant_camp_flat_duration
-    from billing.models import PriceRule
-    
-    # Test with 5 nights (should be ONE_WEEK)
+def test_participant_camp_flat_duration_uses_date_based_nights_first():
     camp = CampFactory()
-    participant = ParticipantFactory(camp=camp, actual_nights=5)
-    result = participant_camp_flat_duration(participant)
-    assert result == PriceRule.CampFlatDuration.ONE_WEEK
-    
-    # Test with 10 nights (should be TWO_WEEKS)
-    participant = ParticipantFactory(camp=camp, actual_nights=10)
-    result = participant_camp_flat_duration(participant)
-    assert result == PriceRule.CampFlatDuration.TWO_WEEKS
-    
-    # Test with booked_nights
+    participant = ParticipantFactory(
+        camp=camp,
+        arrival_date=date(2025, 7, 1),
+        departure_date=date(2025, 7, 6),
+        actual_nights=10,
+    )
+    assert participant_camp_flat_duration(participant) == PriceRule.CampFlatDuration.ONE_WEEK
+
+    participant = ParticipantFactory(
+        camp=camp,
+        arrival_date=date(2025, 7, 1),
+        departure_date=date(2025, 7, 11),
+    )
+    assert participant_camp_flat_duration(participant) == PriceRule.CampFlatDuration.TWO_WEEKS
+
     participant = ParticipantFactory(camp=camp, booked_nights=3)
-    result = participant_camp_flat_duration(participant)
-    assert result == PriceRule.CampFlatDuration.ONE_WEEK
+    assert participant_camp_flat_duration(participant) == PriceRule.CampFlatDuration.ONE_WEEK
+
+
+@pytest.mark.django_db
+def test_create_settlement_run_persists_snapshot_and_settlements():
+    camp = CampFactory()
+    user = SuperUserFactory(username="admin", email="admin@example.test")
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.OTHER,
+        name="Werkstatt",
+        unit_price=Decimal("15.00"),
+        foerderfaehig=True,
+        is_default=True,
+    )
+    ChargeFactory(
+        participant=participant,
+        kind=Charge.Kind.OTHER,
+        description="Werkstatt",
+        quantity=Decimal("1"),
+        unit_price=Decimal("15.00"),
+    )
+    PaymentFactory(participant=participant, amount=Decimal("5.00"), paid_on=date(2025, 7, 1))
+
+    run = create_settlement_run(camp, user)
+
+    settlement = Settlement.objects.get(run=run, participant=participant)
+
+    assert SettlementRun.objects.count() == 1
+    assert run.camp == camp
+    assert run.created_by == user
+    assert run.participant_count == 1
+    assert run.total_due == Decimal("15.00")
+    assert run.total_paid == Decimal("5.00")
+    assert run.balance == Decimal("10.00")
+    assert run.data == {"source": "live_calculation"}
+    assert settlement.total_due == Decimal("15.00")
+    assert settlement.total_paid == Decimal("5.00")
+    assert settlement.balance == Decimal("10.00")
+    assert settlement.data["participant"]["first_name"] == "Ada"
+    assert settlement.data["totals"]["due"] == "15.00"
+    assert settlement.data["lines"][0]["label"] == "Werkstatt"
+
+
+@pytest.mark.django_db
+def test_saved_settlement_run_can_be_exported_as_csv(client):
+    user = SuperUserFactory(username="admin", email="admin@example.test")
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    ChargeFactory(
+        participant=participant,
+        kind=Charge.Kind.OTHER,
+        description="Werkstatt",
+        quantity=Decimal("1"),
+        unit_price=Decimal("15.00"),
+    )
+    client.force_login(user)
+
+    create_response = client.post(reverse("settlement-run-create", args=[camp.pk]))
+    run = SettlementRun.objects.get()
+
+    export_response = client.get(reverse("export-settlement-run-csv", args=[run.pk]))
+    content = export_response.content.decode()
+
+    assert create_response.status_code == 302
+    assert create_response.url == reverse("settlement-run-detail", args=[run.pk])
+    assert export_response.status_code == 200
+    assert export_response["Content-Disposition"] == f'attachment; filename="abrechnungslauf-{camp.year}-{run.pk}.csv"'
+    assert "Nachname,Vorname,Brutto,Förderung,Soll,Gezahlt,Vorgestreckt,Offen" in content
+    assert "Lovelace,Ada,15.00,0.00,15.00,0.00,0.00,15.00" in content

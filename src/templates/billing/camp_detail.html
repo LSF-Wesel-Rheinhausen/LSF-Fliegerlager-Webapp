@@ -11,6 +11,7 @@
       <a class="button" href="{% url 'price-rules-manage' camp.pk %}">Preise verwalten</a>
       <a class="button" href="{% url 'expense-create' camp.pk %}">Auslage erfassen</a>
       <a class="button" href="{% url 'participant-import' camp.pk %}">Teilnehmer importieren</a>
+      <a class="button button-secondary" href="{% url 'camp-delete' camp.pk %}">Lager löschen</a>
     </div>
   </div>
 
@@ -32,15 +33,79 @@
   <section class="panel stack">
     <div class="toolbar compact-toolbar">
       <div>
+        <h2>Abrechnungsläufe</h2>
+        <p>Die Kennzahlen oben sind eine Live-Vorschau. Ein gespeicherter Lauf hält den aktuellen Stand dauerhaft fest.</p>
+      </div>
+      <form class="inline-form" method="post" action="{% url 'settlement-run-create' camp.pk %}">
+        {% csrf_token %}
+        <button type="submit">Aktuelle Abrechnung speichern</button>
+      </form>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Erstellt am</th><th>Teilnehmer</th><th>Soll</th><th>Offen</th><th>Erstellt von</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for run in settlement_runs %}
+          <tr>
+            <td>{{ run.created_at|date:"d.m.Y H:i" }}</td>
+            <td>{{ run.participant_count }}</td>
+            <td>{{ run.total_due }} EUR</td>
+            <td class="{% if run.balance > 0 %}negative{% else %}positive{% endif %}">{{ run.balance }} EUR</td>
+            <td>{% if run.created_by %}{{ run.created_by.username }}{% else %}-{% endif %}</td>
+            <td>
+              <a href="{% url 'settlement-run-detail' run.pk %}">Ansehen</a>
+              ·
+              <a href="{% url 'export-settlement-run-csv' run.pk %}">CSV</a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6">Noch kein Abrechnungslauf gespeichert.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel stack">
+    <div class="toolbar compact-toolbar">
+      <div>
+        <h2>Uebernachtungskategorien</h2>
+        <p>Jede Person wird genau einer Kategorie zugeordnet.</p>
+      </div>
+      <a class="button" href="{% url 'price-rules-manage' camp.pk %}">Kategorien pflegen</a>
+    </div>
+    <table>
+      <thead>
+        <tr><th>Name</th><th>Beschreibung</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        {% for category in overnight_categories %}
+          <tr>
+            <td>{{ category.name }}</td>
+            <td>{{ category.description|default:"-" }}</td>
+            <td>{% if category.is_active %}Aktiv{% else %}Inaktiv{% endif %}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="3">Noch keine Uebernachtungskategorien vorhanden.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel stack">
+    <div class="toolbar compact-toolbar">
+      <div>
         <h2>Preisregeln</h2>
-        <p>Lagerpauschalen werden automatisch nach 1/2 Wochen und Teilnehmer/Begleitperson ausgewählt.</p>
+        <p>Lagerpauschalen und Standardpreise greifen direkt ueber die ausgewaehlten Uebernachtungskategorien und Aufenthaltsdaten.</p>
       </div>
       <a class="button" href="{% url 'price-rules-manage' camp.pk %}">Preise verwalten</a>
     </div>
     <table>
       <thead>
         <tr>
-          <th>Art</th><th>Name</th><th>Preis</th><th>Lagerpauschale</th><th>Förderfähig</th><th>Standard</th><th></th>
+          <th>Art</th><th>Name</th><th>Kategorie</th><th>Preis</th><th>Förderfähig</th><th>Standard</th><th></th>
         </tr>
       </thead>
       <tbody>
@@ -48,14 +113,8 @@
           <tr>
             <td>{{ rule.get_kind_display }}</td>
             <td>{{ rule.name }}</td>
+            <td>{{ rule.overnight_category.name|default:"-" }}</td>
             <td>{{ rule.unit_price }} EUR</td>
-            <td>
-              {% if rule.kind == "camp_flat" %}
-                {{ rule.get_camp_flat_duration_display }} · {{ rule.get_camp_flat_role_display }}
-              {% else %}
-                -
-              {% endif %}
-            </td>
             <td>{% if rule.foerderfaehig %}Ja{% else %}Nein{% endif %}</td>
             <td>{% if rule.is_default %}Ja{% else %}Nein{% endif %}</td>
             <td><a href="{% url 'price-rule-edit' rule.pk %}">Bearbeiten</a></td>
@@ -78,7 +137,7 @@
         <tr>
           <td><a href="{% url 'participant-detail' result.participant.pk %}">{{ result.participant.full_name }}</a></td>
           <td>{{ result.participant.get_status_display }}</td>
-          <td>{{ result.participant.actual_nights }}</td>
+          <td>{{ result.participant.effective_nights }}</td>
           <td>{{ result.total_due }}</td>
           <td>{{ result.total_paid }}</td>
           <td>{{ result.total_advanced }}</td>

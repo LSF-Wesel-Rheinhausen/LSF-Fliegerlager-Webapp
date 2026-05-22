@@ -8,19 +8,30 @@ from django.contrib.auth.views import LoginView
 from django.core.exceptions import ValidationError
 from django.core.signing import BadSignature, Signer
 from django.db import transaction
+from django.http import HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
+from django.urls import reverse
 
-from .exporters import camp_settlement_csv, camp_workbook_response, drink_entries_csv, participant_pdf_response
+from .exporters import (
+    camp_settlement_csv,
+    camp_workbook_response,
+    drink_entries_csv,
+    participant_pdf_response,
+    settlement_run_csv,
+)
 from .forms import (
-    CampFlatRateSettingsForm,
     CampForm,
     ChargeForm,
     DrinkBookingForm,
     ExpenseForm,
     FirstAdminSetupForm,
+    KioskLinkedParticipantForm,
     KioskLoginForm,
     KioskPinSetupForm,
+    KioskStayForm,
     MealBookingForm,
+    OvernightCategoryForm,
     ParticipantForm,
     ParticipantImportForm,
     ParticipantPinForm,
@@ -28,15 +39,27 @@ from .forms import (
     PriceRuleForm,
 )
 from .importers import preview_participants, rows_from_payload, rows_to_payload, save_participants
-from .models import Camp, Charge, MealSignup, Participant, PriceRule
+from .models import Camp, Charge, MealSignup, OvernightCategory, Participant, PriceRule, SettlementRun
 from .permissions import admin_required, editor_required
 from .roles import bootstrap_default_roles
-from .services import calculate_camp_settlements, calculate_participant_settlement, participant_kiosk_summary
+from .services import (
+    calculate_camp_settlements,
+    calculate_participant_settlement,
+    create_settlement_run,
+    participant_kiosk_summary,
+)
 
 signer = Signer()
 User = get_user_model()
 KIOSK_PARTICIPANT_SESSION_KEY = "kiosk_participant_id"
 KIOSK_PIN_SETUP_SESSION_KEY = "kiosk_pin_setup_participant_id"
+PRICE_RULE_SECTION_IDS = {
+    PriceRule.Kind.CAMP_FLAT: "prices-camp-flat",
+    PriceRule.Kind.DRINK: "prices-drinks",
+    PriceRule.Kind.MEAL: "prices-meals",
+    PriceRule.Kind.NIGHT: "prices-other",
+    PriceRule.Kind.OTHER: "prices-other",
+}
 
 
 class FirstLaunchLoginView(LoginView):
@@ -44,6 +67,75 @@ class FirstLaunchLoginView(LoginView):
         if not User.objects.exists():
             return redirect("setup")
         return super().dispatch(request, *args, **kwargs)
+
+
+def _price_rule_is_overlay(request):
+    return request.GET.get("overlay") == "1" or request.POST.get("overlay") == "1"
+
+
+def _price_rule_kind_from_request(request):
+    requested_kind = request.GET.get("kind") or request.POST.get("kind") or ""
+    if not requested_kind:
+        return ""
+    valid_kinds = {choice for choice, _label in PriceRule.Kind.choices}
+    if requested_kind not in valid_kinds:
+        return None
+    return requested_kind
+
+
+def _price_rule_grouped_rules(camp):
+    return {
+        "camp_flat": camp.price_rules.filter(kind=PriceRule.Kind.CAMP_FLAT).select_related("overnight_category"),
+        "drinks": camp.price_rules.filter(kind=PriceRule.Kind.DRINK).select_related("overnight_category"),
+        "meals": camp.price_rules.filter(kind=PriceRule.Kind.MEAL).select_related("overnight_category"),
+        "other": camp.price_rules.filter(kind__in=[PriceRule.Kind.NIGHT, PriceRule.Kind.OTHER]).select_related(
+            "overnight_category"
+        ),
+    }
+
+
+def _price_rule_manage_context(camp):
+    return {
+        "camp": camp,
+        "grouped_rules": _price_rule_grouped_rules(camp),
+        "overnight_categories": camp.overnight_categories.order_by("name"),
+    }
+
+
+def _price_rule_manage_url(camp, kind):
+    url = reverse("price-rules-manage", kwargs={"camp_id": camp.pk})
+    section_id = PRICE_RULE_SECTION_IDS.get(kind)
+    return f"{url}#{section_id}" if section_id else url
+
+
+def _render_price_rule_form(request, *, camp, form, title, submit_label, cancel_url, overlay_mode):
+    context = {
+        "camp": camp,
+        "form": form,
+        "title": title,
+        "submit_label": submit_label,
+        "cancel_url": cancel_url,
+        "form_action": request.get_full_path(),
+        "overlay_mode": overlay_mode,
+    }
+    template_name = "billing/price_rule_dialog.html" if overlay_mode else "billing/price_rule_form.html"
+    return render(request, template_name, context)
+
+
+def _price_rule_overlay_success_response(request, *, camp, kind, message):
+    sections_html = render_to_string(
+        "billing/price_rule_sections.html",
+        _price_rule_manage_context(camp),
+        request=request,
+    )
+    return JsonResponse(
+        {
+            "success": True,
+            "message": message,
+            "sections_html": sections_html,
+            "section_id": PRICE_RULE_SECTION_IDS.get(kind, ""),
+        }
+    )
 
 
 def setup_first_admin(request):
@@ -91,9 +183,36 @@ def camp_edit(request, camp_id):
     return render(request, "billing/form.html", {"form": form, "title": "Lager bearbeiten", "camp": camp})
 
 
+@admin_required
+def camp_delete(request, camp_id):
+    camp = get_object_or_404(Camp, pk=camp_id)
+    if request.method == "POST":
+        camp_name = str(camp)
+        with transaction.atomic():
+            camp.participants.all().delete()
+            camp.price_rules.all().delete()
+            camp.overnight_categories.all().delete()
+            camp.delete()
+        messages.success(request, f"{camp_name} wurde gelöscht.")
+        return redirect("camp-list")
+    return render(
+        request,
+        "billing/confirm_delete.html",
+        {
+            "title": "Lager löschen",
+            "object_name": str(camp),
+            "cancel_url": reverse("camp-detail", kwargs={"camp_id": camp.pk}),
+            "warning": (
+                "Teilnehmer, Preise, Auslagen, Abrechnungsläufe und alle weiteren "
+                "Lagerdaten werden dauerhaft entfernt."
+            ),
+        },
+    )
+
+
 @editor_required
 def camp_detail(request, camp_id):
-    camp = get_object_or_404(Camp, pk=camp_id)
+    camp = get_object_or_404(Camp.objects.prefetch_related("overnight_categories"), pk=camp_id)
     settlements = calculate_camp_settlements(camp)
     totals = {
         "gross": sum(result.total_gross for result in settlements),
@@ -103,18 +222,46 @@ def camp_detail(request, camp_id):
         "advanced": sum(result.total_advanced for result in settlements),
         "balance": sum(result.balance for result in settlements),
     }
-    price_rules = camp.price_rules.all()
+    price_rules = camp.price_rules.select_related("overnight_category")
+    settlement_runs = camp.settlement_runs.select_related("created_by")[:5]
     return render(
         request,
         "billing/camp_detail.html",
-        {"camp": camp, "settlements": settlements, "totals": totals, "price_rules": price_rules},
+        {
+            "camp": camp,
+            "settlements": settlements,
+            "totals": totals,
+            "price_rules": price_rules,
+            "overnight_categories": camp.overnight_categories.order_by("name"),
+            "settlement_runs": settlement_runs,
+        },
     )
+
+
+@editor_required
+def settlement_run_create(request, camp_id):
+    camp = get_object_or_404(Camp, pk=camp_id)
+    if request.method != "POST":
+        return redirect("camp-detail", camp_id=camp.pk)
+    run = create_settlement_run(camp, request.user)
+    messages.success(request, "Abrechnungslauf wurde gespeichert.")
+    return redirect("settlement-run-detail", run_id=run.pk)
+
+
+@editor_required
+def settlement_run_detail(request, run_id):
+    run = get_object_or_404(SettlementRun.objects.select_related("camp", "created_by"), pk=run_id)
+    settlements = run.settlements.select_related("participant").order_by(
+        "participant__last_name",
+        "participant__first_name",
+    )
+    return render(request, "billing/settlement_run_detail.html", {"run": run, "settlements": settlements})
 
 
 @editor_required
 def participant_create(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
-    form = ParticipantForm(request.POST or None)
+    form = ParticipantForm(request.POST or None, camp=camp)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
             participant = form.save(commit=False)
@@ -127,7 +274,12 @@ def participant_create(request, camp_id):
 
 @editor_required
 def participant_detail(request, participant_id):
-    participant = get_object_or_404(Participant.objects.select_related("camp"), pk=participant_id)
+    participant = get_object_or_404(
+        Participant.objects.select_related("camp", "overnight_category", "primary_participant").prefetch_related(
+            "linked_participants__overnight_category"
+        ),
+        pk=participant_id,
+    )
     settlement = calculate_participant_settlement(participant)
     return render(request, "billing/participant_detail.html", {"participant": participant, "settlement": settlement})
 
@@ -187,48 +339,105 @@ def pin_set(request, participant_id):
 @admin_required
 def price_rule_create(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
-    form = PriceRuleForm(request.POST or None)
+    requested_kind = _price_rule_kind_from_request(request)
+    overlay_mode = _price_rule_is_overlay(request)
+    if requested_kind is None:
+        return HttpResponseBadRequest("Ungültige Preisart.")
+
+    form = PriceRuleForm(request.POST or None, fixed_kind=requested_kind or None, camp=camp)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
             rule = form.save(commit=False)
             rule.camp = camp
             rule.save()
-        messages.success(request, "Preisregel wurde gespeichert.")
-        return redirect("camp-detail", camp_id=camp.pk)
-    return render(request, "billing/form.html", {"form": form, "title": "Preisregel anlegen"})
+        success_message = "Preisregel wurde gespeichert."
+        if overlay_mode:
+            return _price_rule_overlay_success_response(
+                request,
+                camp=camp,
+                kind=rule.kind,
+                message=success_message,
+            )
+        messages.success(request, success_message)
+        return redirect(_price_rule_manage_url(camp, rule.kind))
+    return _render_price_rule_form(
+        request,
+        camp=camp,
+        form=form,
+        title=f"{form.category_label} anlegen",
+        submit_label="Preis speichern",
+        cancel_url=reverse("price-rules-manage", kwargs={"camp_id": camp.pk}),
+        overlay_mode=overlay_mode,
+    )
 
 
 @admin_required
 def price_rules_manage(request, camp_id):
-    camp = get_object_or_404(Camp, pk=camp_id)
-    form = CampFlatRateSettingsForm(request.POST or None, camp=camp)
-    if request.method == "POST" and form.is_valid():
-        with transaction.atomic():
-            form.save()
-        messages.success(request, "Lagerpauschalen wurden gespeichert.")
-        return redirect("price-rules-manage", camp_id=camp.pk)
-    grouped_rules = {
-        "drinks": camp.price_rules.filter(kind=PriceRule.Kind.DRINK),
-        "meals": camp.price_rules.filter(kind=PriceRule.Kind.MEAL),
-        "other": camp.price_rules.filter(kind__in=[PriceRule.Kind.NIGHT, PriceRule.Kind.OTHER]),
-    }
-    return render(
-        request,
-        "billing/price_rules_manage.html",
-        {"camp": camp, "form": form, "grouped_rules": grouped_rules},
-    )
+    camp = get_object_or_404(Camp.objects.prefetch_related("overnight_categories"), pk=camp_id)
+    return render(request, "billing/price_rules_manage.html", _price_rule_manage_context(camp))
 
 
 @admin_required
 def price_rule_edit(request, price_rule_id):
     rule = get_object_or_404(PriceRule.objects.select_related("camp"), pk=price_rule_id)
-    form = PriceRuleForm(request.POST or None, instance=rule)
+    overlay_mode = _price_rule_is_overlay(request)
+    form = PriceRuleForm(request.POST or None, instance=rule, fixed_kind=rule.kind, camp=rule.camp)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
             form.save()
-        messages.success(request, "Preisregel wurde gespeichert.")
-        return redirect("camp-detail", camp_id=rule.camp.pk)
-    return render(request, "billing/form.html", {"form": form, "title": "Preisregel bearbeiten", "camp": rule.camp})
+        success_message = "Preisregel wurde gespeichert."
+        if overlay_mode:
+            return _price_rule_overlay_success_response(
+                request,
+                camp=rule.camp,
+                kind=rule.kind,
+                message=success_message,
+            )
+        messages.success(request, success_message)
+        return redirect(_price_rule_manage_url(rule.camp, rule.kind))
+    return _render_price_rule_form(
+        request,
+        camp=rule.camp,
+        form=form,
+        title=f"{form.category_label} bearbeiten",
+        submit_label="Änderungen speichern",
+        cancel_url=reverse("price-rules-manage", kwargs={"camp_id": rule.camp.pk}),
+        overlay_mode=overlay_mode,
+    )
+
+
+@admin_required
+def overnight_category_create(request, camp_id):
+    camp = get_object_or_404(Camp, pk=camp_id)
+    form = OvernightCategoryForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            category = form.save(commit=False)
+            category.camp = camp
+            category.save()
+        messages.success(request, "Uebernachtungskategorie wurde gespeichert.")
+        return redirect("price-rules-manage", camp_id=camp.pk)
+    return render(
+        request,
+        "billing/form.html",
+        {"form": form, "title": "Uebernachtungskategorie anlegen", "camp": camp},
+    )
+
+
+@admin_required
+def overnight_category_edit(request, category_id):
+    category = get_object_or_404(OvernightCategory.objects.select_related("camp"), pk=category_id)
+    form = OvernightCategoryForm(request.POST or None, instance=category)
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            form.save()
+        messages.success(request, "Uebernachtungskategorie wurde gespeichert.")
+        return redirect("price-rules-manage", camp_id=category.camp.pk)
+    return render(
+        request,
+        "billing/form.html",
+        {"form": form, "title": "Uebernachtungskategorie bearbeiten", "camp": category.camp},
+    )
 
 
 @editor_required
@@ -290,6 +499,11 @@ def export_settlements_csv(request, camp_id):
 
 
 @editor_required
+def export_settlement_run_csv(request, run_id):
+    return settlement_run_csv(get_object_or_404(SettlementRun.objects.select_related("camp"), pk=run_id))
+
+
+@editor_required
 def export_drinks_csv(request, camp_id):
     return drink_entries_csv(get_object_or_404(Camp, pk=camp_id))
 
@@ -308,7 +522,12 @@ def _kiosk_participant_from_session(request, session_key):
     participant_id = request.session.get(session_key)
     if not participant_id:
         return None
-    return Participant.objects.select_related("camp").filter(pk=participant_id, camp__is_active=True).first()
+    return (
+        Participant.objects.select_related("camp", "overnight_category", "primary_participant")
+        .prefetch_related("linked_participants__overnight_category")
+        .filter(pk=participant_id, camp__is_active=True)
+        .first()
+    )
 
 
 def kiosk_login(request):
@@ -373,6 +592,8 @@ def kiosk_home(request):
 
     drink_form = DrinkBookingForm(camp=participant.camp, prefix="drink")
     meal_form = MealBookingForm(camp=participant.camp, prefix="meal")
+    stay_form = KioskStayForm(instance=participant, camp=participant.camp, prefix="stay")
+    linked_form = KioskLinkedParticipantForm(camp=participant.camp, prefix="linked")
     if request.method == "POST":
         if request.POST.get("action") == "drink":
             drink_form = DrinkBookingForm(request.POST, camp=participant.camp, prefix="drink")
@@ -420,6 +641,27 @@ def kiosk_home(request):
                     )
                 messages.success(request, "Essensanmeldung wurde gespeichert.")
                 return redirect("kiosk-home")
+        elif request.POST.get("action") == "stay":
+            stay_form = KioskStayForm(request.POST, instance=participant, camp=participant.camp, prefix="stay")
+            if stay_form.is_valid():
+                with transaction.atomic():
+                    stay_form.save()
+                messages.success(request, "Dein Aufenthalt wurde aktualisiert.")
+                return redirect("kiosk-home")
+        elif request.POST.get("action") == "linked-participant":
+            linked_form = KioskLinkedParticipantForm(request.POST, camp=participant.camp, prefix="linked")
+            if linked_form.is_valid():
+                with transaction.atomic():
+                    linked_participant = linked_form.save(commit=False)
+                    linked_participant.camp = participant.camp
+                    linked_participant.primary_participant = participant
+                    linked_participant.status = Participant.Status.REGISTERED
+                    linked_participant.is_youth_group = participant.is_youth_group
+                    linked_participant.hilfssatz = participant.hilfssatz
+                    linked_participant.berufssatz = participant.berufssatz
+                    linked_participant.save()
+                messages.success(request, "Zusatzperson wurde angelegt.")
+                return redirect("kiosk-home")
 
     recent_drinks = participant.charges.filter(kind=Charge.Kind.DRINK).order_by("-created_at")[:8]
     meal_signups = participant.meal_signups.order_by("meal_date", "meal")
@@ -428,6 +670,12 @@ def kiosk_home(request):
         "summary": participant_kiosk_summary(participant),
         "drink_form": drink_form,
         "meal_form": meal_form,
+        "stay_form": stay_form,
+        "linked_form": linked_form,
+        "linked_participants": participant.linked_participants.select_related("overnight_category").order_by(
+            "last_name",
+            "first_name",
+        ),
         "recent_drinks": recent_drinks,
         "meal_signups": meal_signups,
         "drink_rules": PriceRule.objects.filter(camp=participant.camp, kind=PriceRule.Kind.DRINK).order_by("name"),

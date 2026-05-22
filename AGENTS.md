@@ -90,6 +90,16 @@ Use Conventional Commits:
 - `docs: update kiosk setup guide`
 - `chore: add pre-commit configuration`
 
+Branch and push workflow for every new work package:
+
+- Never implement directly on `master` and never push directly to `master`.
+- Start every work package by creating a fresh feature branch from `master`, for example `feat/coverage-hardening` or `fix/kiosk-settlement-review`.
+- Before implementation begins, verify GitHub authentication with `gh auth status`. If authentication is invalid, repair it with `gh auth login -h github.com` before any remote action.
+- `Push 1` is mandatory before implementation starts: inspect the local state, create the feature branch, commit any intentional preparation state if needed, and immediately run `git push -u origin <feature-branch>`.
+- Perform implementation, tests, review fixes, coverage work, security review, and ORM/performance fixes only on that feature branch.
+- `Push 2` is mandatory after the package is complete: run the relevant checks, create the final commit on the same branch, and push that branch again to `origin`.
+- Before `Push 2`, confirm that tests are green, coverage goals are met when applicable, and `git status` is clean except for the changes you intentionally commit.
+
 Pull requests should include a clear summary, rationale, test results, and linked issues when available. Include screenshots or sample output for visible UI changes, generated reports, or modified exports. CI must pass before review.
 
 ## 6. AI & Agent-Specific Instructions

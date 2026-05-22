@@ -95,18 +95,29 @@ async function createCamp(page) {
   await page.getByRole("link", { name: "Lager anlegen" }).click();
   await expect(page.getByRole("heading", { name: "Lager anlegen" })).toBeVisible();
   const suffix = Date.now().toString();
-  await page.getByLabel("Name").fill(`Sommerlager ${suffix}`);
+  const name = `Sommerlager ${suffix}`;
+  await page.getByLabel("Name").fill(name);
   await page.getByLabel("Jahr").fill("2026");
   await page.getByRole("button", { name: "Speichern" }).click();
-  await expect(page.getByRole("heading", { name: `Sommerlager ${suffix} 2026` })).toBeVisible();
+  await expect(page.getByRole("heading", { name: `${name} 2026` })).toBeVisible();
+  return { name };
+}
+
+async function deleteCurrentCamp(page, campName) {
+  await page.getByRole("link", { name: "Lager löschen" }).click();
+  await expect(page.getByRole("heading", { name: "Lager löschen" })).toBeVisible();
+  await expect(page.getByText(campName)).toBeVisible();
+  await page.getByRole("button", { name: "Endgueltig loeschen" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("heading", { name: "Lager" })).toBeVisible();
 }
 
 test("Admin completes setup, login, camp workflow and logout", async ({ page }) => {
   await setupFirstAdmin(page);
-  await createCamp(page);
+  const camp = await createCamp(page);
 
   await expect(page.getByRole("link", { name: "Teilnehmer anlegen" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Preisregel anlegen" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Preise verwalten" }).first()).toBeVisible();
   await expect(page.getByRole("link", { name: "Auslage erfassen" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Teilnehmer importieren" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Abrechnung als CSV herunterladen" })).toBeVisible();
@@ -114,6 +125,7 @@ test("Admin completes setup, login, camp workflow and logout", async ({ page }) 
   await expect(page.getByRole("link", { name: "Getränke als CSV herunterladen" })).toBeVisible();
 
   await assertNoUnexpectedOverflow(page);
+  await deleteCurrentCamp(page, camp.name);
   await logout(page);
   await expect(page).toHaveURL(/\/login\/?$/);
   await loginAsAdmin(page);
@@ -123,11 +135,14 @@ for (const viewport of VIEWPORTS) {
   test(`Layout has no unexpected overflow at ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await setupFirstAdmin(page);
-    await createCamp(page);
+    const camp = await createCamp(page);
     await assertNoUnexpectedOverflow(page);
 
     await page.getByRole("link", { name: "Teilnehmer anlegen" }).click();
     await expect(page.getByRole("heading", { name: "Teilnehmer anlegen" })).toBeVisible();
     await assertNoUnexpectedOverflow(page);
+    await page.goto("/");
+    await page.getByRole("link", { name: camp.name }).click();
+    await deleteCurrentCamp(page, camp.name);
   });
 }

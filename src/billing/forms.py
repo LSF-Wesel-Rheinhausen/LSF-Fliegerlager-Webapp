@@ -1,9 +1,18 @@
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
-from django.db import transaction
 
-from .models import Camp, Charge, Expense, MealSignup, Participant, ParticipantPin, Payment, PriceRule
+from .models import (
+    Camp,
+    Charge,
+    Expense,
+    MealSignup,
+    OvernightCategory,
+    Participant,
+    ParticipantPin,
+    Payment,
+    PriceRule,
+)
 
 
 class EmailOrUsernameAuthenticationForm(AuthenticationForm):
@@ -52,6 +61,25 @@ class CampForm(forms.ModelForm):
 
 
 class ParticipantForm(forms.ModelForm):
+    def __init__(self, *args, camp=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.camp = camp or getattr(self.instance, "camp", None)
+        category_queryset = OvernightCategory.objects.none()
+        participant_queryset = Participant.objects.none()
+        if self.camp is not None:
+            category_queryset = OvernightCategory.objects.filter(camp=self.camp, is_active=True).order_by("name")
+            participant_queryset = Participant.objects.filter(camp=self.camp).order_by("last_name", "first_name")
+            if self.instance.pk:
+                participant_queryset = participant_queryset.exclude(pk=self.instance.pk)
+        self.fields["overnight_category"].queryset = category_queryset
+        self.fields["overnight_category"].required = True
+        self.fields["primary_participant"].queryset = participant_queryset
+
+    def clean(self):
+        if self.camp is not None:
+            self.instance.camp = self.camp
+        return super().clean()
+
     class Meta:
         model = Participant
         fields = [
@@ -63,10 +91,12 @@ class ParticipantForm(forms.ModelForm):
             "is_child",
             "is_youth_group",
             "is_companion",
+            "primary_participant",
+            "overnight_category",
+            "arrival_date",
+            "departure_date",
             "hilfssatz",
             "berufssatz",
-            "booked_nights",
-            "actual_nights",
             "notes",
         ]
         labels = {
@@ -78,25 +108,39 @@ class ParticipantForm(forms.ModelForm):
             "is_child": "Kind",
             "is_youth_group": "Jugendgruppe",
             "is_companion": "Begleitperson",
+            "primary_participant": "Hauptperson",
+            "overnight_category": "Uebernachtungskategorie",
+            "arrival_date": "Anreise",
+            "departure_date": "Abreise",
             "hilfssatz": "Hilfssatz",
             "berufssatz": "Berufssatz",
-            "booked_nights": "Gebuchte Nächte",
-            "actual_nights": "Tatsächliche Nächte",
             "notes": "Notizen",
         }
         widgets = {
+            "arrival_date": forms.DateInput(attrs={"type": "date"}),
+            "departure_date": forms.DateInput(attrs={"type": "date"}),
             "hilfssatz": forms.NumberInput(attrs={"step": "0.0001", "min": "0", "max": "1"}),
             "berufssatz": forms.NumberInput(attrs={"step": "0.0001", "min": "0", "max": "1"}),
         }
 
 
 class PriceRuleForm(forms.ModelForm):
+    compact_kinds = {PriceRule.Kind.DRINK, PriceRule.Kind.MEAL}
+    supported_overlay_kinds = {
+        PriceRule.Kind.CAMP_FLAT,
+        PriceRule.Kind.NIGHT,
+        PriceRule.Kind.MEAL,
+        PriceRule.Kind.DRINK,
+        PriceRule.Kind.OTHER,
+    }
+
     class Meta:
         model = PriceRule
         fields = [
             "kind",
             "name",
             "unit_price",
+            "overnight_category",
             "camp_flat_duration",
             "camp_flat_role",
             "applies_to_children",
@@ -108,8 +152,9 @@ class PriceRuleForm(forms.ModelForm):
             "kind": "Art",
             "name": "Name",
             "unit_price": "Einzelpreis",
-            "camp_flat_duration": "Lagerpauschale für",
-            "camp_flat_role": "Personengruppe",
+            "overnight_category": "Uebernachtungskategorie",
+            "camp_flat_duration": "Alte Dauerzuordnung",
+            "camp_flat_role": "Alte Rollenzuordnung",
             "applies_to_children": "Gilt für Kinder",
             "applies_to_adults": "Gilt für Erwachsene",
             "foerderfaehig": "Förderfähig",
@@ -121,130 +166,104 @@ class PriceRuleForm(forms.ModelForm):
             "camp_flat_role": forms.RadioSelect,
         }
 
+    def __init__(self, *args, fixed_kind=None, camp=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        instance_kind = getattr(self.instance, "kind", "")
+        self.fixed_kind = fixed_kind or instance_kind or ""
+        self.camp = camp or getattr(self.instance, "camp", None)
+
+        category_queryset = OvernightCategory.objects.none()
+        if self.camp is not None:
+            category_queryset = OvernightCategory.objects.filter(camp=self.camp, is_active=True).order_by("name")
+        self.fields["overnight_category"].queryset = category_queryset
+
+        if self.fixed_kind:
+            self.fields.pop("kind", None)
+            self.initial["kind"] = self.fixed_kind
+
+        if self.active_kind != PriceRule.Kind.CAMP_FLAT:
+            self.fields.pop("overnight_category", None)
+            self.fields.pop("camp_flat_duration", None)
+            self.fields.pop("camp_flat_role", None)
+
+        if not self.is_bound and not self.instance.pk and self.active_kind in self.compact_kinds:
+            self.fields["applies_to_children"].initial = True
+            self.fields["applies_to_adults"].initial = True
+            self.fields["is_default"].initial = False
+
+    @property
+    def active_kind(self):
+        return self.fixed_kind or self.initial.get("kind") or getattr(self.instance, "kind", "")
+
+    @property
+    def is_compact(self):
+        return self.active_kind in self.compact_kinds
+
+    @property
+    def category_label(self):
+        if not self.active_kind:
+            return "Preisregel"
+        return PriceRule.Kind(self.active_kind).label
+
+    @property
+    def basic_fields(self):
+        if self.active_kind == PriceRule.Kind.CAMP_FLAT:
+            names = ["name", "overnight_category", "unit_price", "foerderfaehig"]
+        elif self.is_compact:
+            names = ["name", "unit_price", "foerderfaehig"]
+        else:
+            names = [
+                "name",
+                "unit_price",
+                "foerderfaehig",
+                "is_default",
+                "applies_to_children",
+                "applies_to_adults",
+            ]
+        return [self[name] for name in names if name in self.fields]
+
+    @property
+    def advanced_fields(self):
+        if not self.is_compact:
+            return []
+        names = ["is_default", "applies_to_children", "applies_to_adults"]
+        return [self[name] for name in names if name in self.fields]
+
+    @property
+    def advanced_collapsed(self):
+        return self.is_compact
+
     def clean(self):
         cleaned_data = super().clean()
-        kind = cleaned_data.get("kind")
+        kind = self.fixed_kind or cleaned_data.get("kind")
+        cleaned_data["kind"] = kind
         if kind == PriceRule.Kind.CAMP_FLAT:
-            if not cleaned_data.get("camp_flat_duration"):
-                self.add_error("camp_flat_duration", "Bitte 1 Woche oder 2 Wochen auswählen.")
-            if not cleaned_data.get("camp_flat_role"):
-                self.add_error("camp_flat_role", "Bitte Teilnehmer oder Begleitperson auswählen.")
+            if not cleaned_data.get("overnight_category"):
+                self.add_error("overnight_category", "Bitte eine Uebernachtungskategorie auswählen.")
         else:
+            cleaned_data["overnight_category"] = None
             cleaned_data["camp_flat_duration"] = ""
             cleaned_data["camp_flat_role"] = ""
         return cleaned_data
 
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        if self.fixed_kind:
+            instance.kind = self.fixed_kind
+        if commit:
+            instance.save()
+        return instance
 
-class CampFlatRateSettingsForm(forms.Form):
-    participant_1w_price = forms.DecimalField(label="Teilnehmer 1 Woche", min_value=0, max_digits=10, decimal_places=2)
-    participant_1w_foerderfaehig = forms.BooleanField(label="Förderfähig", required=False)
-    participant_2w_price = forms.DecimalField(label="Teilnehmer 2 Wochen", min_value=0, max_digits=10, decimal_places=2)
-    participant_2w_foerderfaehig = forms.BooleanField(label="Förderfähig", required=False)
-    companion_1w_price = forms.DecimalField(label="Begleitperson 1 Woche", min_value=0, max_digits=10, decimal_places=2)
-    companion_1w_foerderfaehig = forms.BooleanField(label="Förderfähig", required=False)
-    companion_2w_price = forms.DecimalField(
-        label="Begleitperson 2 Wochen",
-        min_value=0,
-        max_digits=10,
-        decimal_places=2,
-    )
-    companion_2w_foerderfaehig = forms.BooleanField(label="Förderfähig", required=False)
 
-    variants = [
-        (
-            "participant_1w",
-            "Teilnehmer",
-            PriceRule.CampFlatRole.PARTICIPANT,
-            "1 Woche",
-            PriceRule.CampFlatDuration.ONE_WEEK,
-        ),
-        (
-            "participant_2w",
-            "Teilnehmer",
-            PriceRule.CampFlatRole.PARTICIPANT,
-            "2 Wochen",
-            PriceRule.CampFlatDuration.TWO_WEEKS,
-        ),
-        (
-            "companion_1w",
-            "Begleitperson",
-            PriceRule.CampFlatRole.COMPANION,
-            "1 Woche",
-            PriceRule.CampFlatDuration.ONE_WEEK,
-        ),
-        (
-            "companion_2w",
-            "Begleitperson",
-            PriceRule.CampFlatRole.COMPANION,
-            "2 Wochen",
-            PriceRule.CampFlatDuration.TWO_WEEKS,
-        ),
-    ]
-
-    def __init__(self, *args, camp=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.camp = camp
-        if camp is None or self.is_bound:
-            return
-        rules = {
-            (rule.camp_flat_role, rule.camp_flat_duration): rule
-            for rule in PriceRule.objects.filter(camp=camp, kind=PriceRule.Kind.CAMP_FLAT)
+class OvernightCategoryForm(forms.ModelForm):
+    class Meta:
+        model = OvernightCategory
+        fields = ["name", "description", "is_active"]
+        labels = {
+            "name": "Name",
+            "description": "Beschreibung",
+            "is_active": "Aktiv",
         }
-        for prefix, _role_label, role, _duration_label, duration in self.variants:
-            rule = rules.get((role, duration))
-            if rule is not None:
-                self.fields[f"{prefix}_price"].initial = rule.unit_price
-                self.fields[f"{prefix}_foerderfaehig"].initial = rule.foerderfaehig
-            else:
-                self.fields[f"{prefix}_price"].initial = 0
-                self.fields[f"{prefix}_foerderfaehig"].initial = True
-
-    def rows(self):
-        return [
-            {
-                "role": role_label,
-                "duration": duration_label,
-                "price": self[f"{prefix}_price"],
-                "foerderfaehig": self[f"{prefix}_foerderfaehig"],
-            }
-            for prefix, role_label, _role, duration_label, _duration in self.variants
-        ]
-
-    def save(self):
-        if self.camp is None:
-            raise ValueError("CampFlatRateSettingsForm.save() requires camp.")
-        with transaction.atomic():
-            for prefix, role_label, role, duration_label, duration in self.variants:
-                rule = (
-                    PriceRule.objects.filter(
-                        camp=self.camp,
-                        kind=PriceRule.Kind.CAMP_FLAT,
-                        camp_flat_role=role,
-                        camp_flat_duration=duration,
-                    )
-                    .order_by("pk")
-                    .first()
-                )
-                if rule is None:
-                    rule = PriceRule(
-                        camp=self.camp,
-                        kind=PriceRule.Kind.CAMP_FLAT,
-                        camp_flat_role=role,
-                        camp_flat_duration=duration,
-                    )
-                rule.name = f"Lagerpauschale {role_label} {duration_label}"
-                rule.unit_price = self.cleaned_data[f"{prefix}_price"]
-                rule.applies_to_children = True
-                rule.applies_to_adults = True
-                rule.foerderfaehig = self.cleaned_data[f"{prefix}_foerderfaehig"]
-                rule.is_default = True
-                rule.save()
-                PriceRule.objects.filter(
-                    camp=self.camp,
-                    kind=PriceRule.Kind.CAMP_FLAT,
-                    camp_flat_role=role,
-                    camp_flat_duration=duration,
-                ).exclude(pk=rule.pk).update(is_default=False)
 
 
 class ChargeForm(forms.ModelForm):
@@ -344,6 +363,87 @@ class KioskPinSetupForm(forms.Form):
         if pin and pin_repeat and pin != pin_repeat:
             raise forms.ValidationError("Die PINs stimmen nicht überein.", code="pin_mismatch")
         return cleaned_data
+
+
+class KioskStayForm(forms.ModelForm):
+    class Meta:
+        model = Participant
+        fields = ["overnight_category", "arrival_date", "departure_date"]
+        labels = {
+            "overnight_category": "Uebernachtungskategorie",
+            "arrival_date": "Anreise",
+            "departure_date": "Abreise",
+        }
+        widgets = {
+            "arrival_date": forms.DateInput(attrs={"type": "date"}),
+            "departure_date": forms.DateInput(attrs={"type": "date"}),
+        }
+
+    def __init__(self, *args, camp=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        resolved_camp = camp or getattr(self.instance, "camp", None)
+        self.fields["overnight_category"].queryset = OvernightCategory.objects.filter(
+            camp=resolved_camp,
+            is_active=True,
+        ).order_by("name")
+        self.fields["overnight_category"].required = True
+
+
+class KioskLinkedParticipantForm(forms.ModelForm):
+    participant_type = forms.ChoiceField(
+        label="Typ",
+        choices=[
+            ("companion", "Begleitperson"),
+            ("child", "Kind"),
+        ],
+    )
+
+    class Meta:
+        model = Participant
+        fields = [
+            "first_name",
+            "last_name",
+            "participant_type",
+            "overnight_category",
+            "arrival_date",
+            "departure_date",
+            "notes",
+        ]
+        labels = {
+            "first_name": "Vorname",
+            "last_name": "Nachname",
+            "overnight_category": "Uebernachtungskategorie",
+            "arrival_date": "Anreise",
+            "departure_date": "Abreise",
+            "notes": "Notiz",
+        }
+        widgets = {
+            "arrival_date": forms.DateInput(attrs={"type": "date"}),
+            "departure_date": forms.DateInput(attrs={"type": "date"}),
+        }
+
+    def __init__(self, *args, camp=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.camp = camp or getattr(self.instance, "camp", None)
+        self.fields["overnight_category"].queryset = OvernightCategory.objects.filter(
+            camp=self.camp,
+            is_active=True,
+        ).order_by("name")
+        self.fields["overnight_category"].required = True
+
+    def clean(self):
+        if self.camp is not None:
+            self.instance.camp = self.camp
+        return super().clean()
+
+    def save(self, commit=True):
+        participant = super().save(commit=False)
+        participant_type = self.cleaned_data["participant_type"]
+        participant.is_companion = participant_type == "companion"
+        participant.is_child = participant_type == "child"
+        if commit:
+            participant.save()
+        return participant
 
 
 class DrinkBookingForm(forms.Form):

@@ -8,8 +8,10 @@ Web-App zur Verwaltung und Abrechnung eines Vereins-Fliegerlagers. Die Anwendung
 - Vereinsnutzer mit E-Mail-/Passwort-Login und Rollen `Admin` und `Bearbeiter`
 - Teilnehmer, Zahlungen, Kostenpositionen und vorgestreckte Beträge pflegen
 - Server-seitige Abrechnung je Teilnehmer und Gesamtauswertung je Lager, inklusive Förderlogik über Lager-, Hilfs- und Berufssatz
-- Übersichtliche Preisverwaltung mit Lagerpauschalen für 1/2 Wochen und Teilnehmer/Begleitpersonen sowie Preisregeln für Getränke und Essen
-- Teilnehmer-Kiosk: PIN-Login, PIN-Ersteinrichtung, sichtbarer Auto-Logout-Timer, große Getränketasten (Ein-Tap-Buchung) und Essensanmeldungen mit Tablet-/Mobilbedienung
+- Gespeicherte Abrechnungsläufe mit Snapshot pro Lauf, Detailansicht und CSV-Export für nachvollziehbare Stände
+- Übersichtliche Preisverwaltung mit Uebernachtungskategorien pro Lager, kategoriespezifischen Lagerpauschalen und Overlay-Formularen fuer Getraenke, Essen, Uebernachtungen und sonstige Preise
+- Teilnehmer-Kiosk: PIN-Login, PIN-Ersteinrichtung, sichtbarer Auto-Logout-Timer, grosse Getraenketasten, Aufenthaltsanpassung per An-/Abreise und das Anlegen von Begleitern oder Kindern als eigene Eintraege
+- Lager koennen mit separater Bestaetigungsseite vollstaendig geloescht werden
 - CSV-/Excel-Import mit Vorschau und Validierung
 - CSV-, Excel- und PDF-Export für Abrechnungen
 
@@ -74,6 +76,18 @@ Um zusätzlich den älteren Projekt-Hook zu aktivieren:
 git config core.hooksPath .githooks
 ```
 
+## Git-Workflow
+
+Für jedes neue Arbeitspaket gilt derselbe Ablauf:
+
+1. GitHub-Authentifizierung mit `gh auth status` prüfen und bei Bedarf mit `gh auth login -h github.com` reparieren.
+2. Von `master` einen frischen Feature-Branch anlegen.
+3. Vor Beginn der eigentlichen Umsetzung `Push 1` ausführen: `git push -u origin <feature-branch>`.
+4. Umsetzung, Tests, Review-Fixes und Coverage-Arbeit ausschließlich auf diesem Branch erledigen.
+5. Nach Abschluss `Push 2` ausführen: final committen, validieren und denselben Branch erneut nach `origin` pushen.
+
+Direktes Arbeiten oder Pushen auf `master` ist nicht der Standardprozess.
+
 ## Rollen
 
 Die Rollen werden über Django-Gruppen abgebildet:
@@ -99,7 +113,7 @@ Beitrags- und Agentenregeln stehen in [`CONTRIBUTING.md`](CONTRIBUTING.md) und [
 - Installierbare Webapp/PWA: Web App Manifest, App-Icons, Theme-/Hintergrundfarben, Service Worker für Shell-/Asset-Caching und Installationshinweise für iOS, Android und Desktop.
 - Teilnehmer-Kiosk: PWA-Ausbau, Offline-Hinweise und weitere Tablet-Optimierungen.
 - Getränke-/Essens-Workflow: Tages-/Mahlzeitenübersichten, Storno-/Korrekturflüsse und optionale Schnellerfassung.
-- Persistierte Abrechnungsläufe: berechnete Abrechnungen speichern, Verlauf/Versionierung und Nachvollziehbarkeit von Zeitpunkt und Bearbeiter.
-- Mehr Tests: View-/Permission-Integrationstests, Exporttests für CSV/XLSX/PDF, Import-Edge-Cases und zusätzliche Settlement-Regressionsfälle.
+- Persistierte Abrechnungsläufe: Vergleich mehrerer gespeicherter Läufe, gezielte Lösch-/Archivierungsregeln und klarere Verlaufsnavigation.
+- Mehr Tests: zusätzliche View-/Permission-Integrationstests, weitere Exporttests für XLSX/PDF, Import-Edge-Cases und zusätzliche Settlement-Regressionsfälle.
 - UI-Ausbau: Bearbeiten-/Löschen-Flows, bessere Leerzustände, Druck-/PDF-Ansichten und Dashboard-Auswertungen.
 - Deployment und Betrieb: Produktionscheckliste, Backup-/Restore-Dokumentation, Monitoring/Healthcheck und sichere Env-Konfiguration.

@@ -42,6 +42,32 @@ def camp_settlement_csv(camp):
     )
 
 
+def settlement_run_csv(run):
+    rows = []
+    settlements = run.settlements.select_related("participant").order_by(
+        "participant__last_name",
+        "participant__first_name",
+    )
+    for settlement in settlements:
+        rows.append(
+            [
+                settlement.participant.last_name,
+                settlement.participant.first_name,
+                settlement.total_gross,
+                settlement.total_subsidy,
+                settlement.total_due,
+                settlement.total_paid,
+                settlement.total_advanced,
+                settlement.balance,
+            ]
+        )
+    return csv_response(
+        f"abrechnungslauf-{run.camp.year}-{run.pk}.csv",
+        rows,
+        ["Nachname", "Vorname", "Brutto", "Förderung", "Soll", "Gezahlt", "Vorgestreckt", "Offen"],
+    )
+
+
 def drink_entries_csv(camp):
     rows = []
     legacy_entries = DrinkEntry.objects.filter(participant__camp=camp).select_related("participant")

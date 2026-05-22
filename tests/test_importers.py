@@ -5,7 +5,7 @@ from django.core.exceptions import ValidationError
 from tests.factories import CampFactory
 
 from billing.importers import preview_participants, save_participants
-from billing.models import Participant
+from billing.models import OvernightCategory, Participant
 
 
 def test_csv_preview_validates_required_fields_and_numbers():
@@ -31,6 +31,7 @@ def test_save_participants_upserts_valid_rows():
 
     assert Participant.objects.count() == 1
     assert Participant.objects.get().email == "ada@example.org"
+    assert OvernightCategory.objects.filter(camp=camp, name="Bestand").exists() is True
 
 
 def test_xlsx_preview_rejects_invalid_magic_number():

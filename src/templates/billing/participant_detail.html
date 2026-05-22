@@ -26,6 +26,38 @@
     <article class="metric"><span>Offen</span><strong>{{ settlement.balance }} EUR</strong></article>
   </section>
 
+  <section class="panel stack">
+    <h2>Aufenthalt</h2>
+    <table>
+      <tbody>
+        <tr><th>Uebernachtungskategorie</th><td>{{ participant.overnight_category.name|default:"-" }}</td></tr>
+        <tr><th>Anreise</th><td>{{ participant.arrival_date|default:"-" }}</td></tr>
+        <tr><th>Abreise</th><td>{{ participant.departure_date|default:"-" }}</td></tr>
+        <tr><th>Naechte</th><td>{{ participant.effective_nights }}</td></tr>
+        <tr><th>Hauptperson</th><td>{% if participant.primary_participant %}<a href="{% url 'participant-detail' participant.primary_participant.pk %}">{{ participant.primary_participant.full_name }}</a>{% else %}-{% endif %}</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  {% if participant.linked_participants.all %}
+    <section class="panel stack">
+      <h2>Zugeordnete Begleiter und Kinder</h2>
+      <table>
+        <thead><tr><th>Name</th><th>Typ</th><th>Kategorie</th><th>Naechte</th></tr></thead>
+        <tbody>
+          {% for linked in participant.linked_participants.all %}
+            <tr>
+              <td><a href="{% url 'participant-detail' linked.pk %}">{{ linked.full_name }}</a></td>
+              <td>{% if linked.is_child %}Kind{% elif linked.is_companion %}Begleitperson{% else %}-{% endif %}</td>
+              <td>{{ linked.overnight_category.name|default:"-" }}</td>
+              <td>{{ linked.effective_nights }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  {% endif %}
+
   <table>
     <thead><tr><th>Position</th><th>Menge</th><th>Einzelpreis</th><th>Förderung</th><th>Summe</th></tr></thead>
     <tbody>
