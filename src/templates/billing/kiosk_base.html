@@ -23,6 +23,32 @@
       {% endfor %}
       {% block content %}{% endblock %}
     </main>
+    {% if kiosk_autologout %}
+      <script>
+        (() => {
+          const logoutUrl = "{% url 'kiosk-logout' %}";
+          const timeoutMs = 2 * 60 * 1000;
+          let timeoutId;
+
+          const resetTimeout = () => {
+            window.clearTimeout(timeoutId);
+            timeoutId = window.setTimeout(() => {
+              window.location.href = logoutUrl;
+            }, timeoutMs);
+          };
+
+          ["pointerdown", "keydown", "touchstart", "mousemove", "scroll"].forEach((eventName) => {
+            window.addEventListener(eventName, resetTimeout, { passive: true });
+          });
+          document.addEventListener("visibilitychange", () => {
+            if (!document.hidden) {
+              resetTimeout();
+            }
+          });
+          resetTimeout();
+        })();
+      </script>
+    {% endif %}
     {% block scripts %}{% endblock %}
   </body>
 </html>

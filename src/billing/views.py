@@ -359,7 +359,11 @@ def kiosk_pin_setup(request):
         messages.success(request, "PIN wurde gesetzt. Du bist jetzt im Kiosk angemeldet.")
         return redirect("kiosk-home")
 
-    return render(request, "billing/kiosk_pin_setup.html", {"form": form, "participant": participant})
+    return render(
+        request,
+        "billing/kiosk_pin_setup.html",
+        {"form": form, "participant": participant, "kiosk_autologout": True},
+    )
 
 
 def kiosk_home(request):
@@ -428,5 +432,6 @@ def kiosk_home(request):
         "meal_signups": meal_signups,
         "drink_rules": PriceRule.objects.filter(camp=participant.camp, kind=PriceRule.Kind.DRINK).order_by("name"),
         "meal_rules": PriceRule.objects.filter(camp=participant.camp, kind=PriceRule.Kind.MEAL).order_by("name"),
+        "kiosk_autologout": True,
     }
     return render(request, "billing/kiosk_home.html", context)

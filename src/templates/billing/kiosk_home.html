@@ -147,29 +147,6 @@
 {% endblock %}
 {% block scripts %}
   <script>
-    (() => {
-      const logoutUrl = "{% url 'kiosk-logout' %}";
-      const timeoutMs = 2 * 60 * 1000;
-      let timeoutId;
-
-      const resetTimeout = () => {
-        window.clearTimeout(timeoutId);
-        timeoutId = window.setTimeout(() => {
-          window.location.href = logoutUrl;
-        }, timeoutMs);
-      };
-
-      ["pointerdown", "keydown", "touchstart", "mousemove", "scroll"].forEach((eventName) => {
-        window.addEventListener(eventName, resetTimeout, { passive: true });
-      });
-      document.addEventListener("visibilitychange", () => {
-        if (!document.hidden) {
-          resetTimeout();
-        }
-      });
-      resetTimeout();
-    })();
-
     document.querySelectorAll("[data-kiosk-stepper]").forEach((form) => {
       const quantityInput = form.querySelector('input[name$="-quantity"]');
       const decrementButton = form.querySelector("[data-stepper-decrement]");

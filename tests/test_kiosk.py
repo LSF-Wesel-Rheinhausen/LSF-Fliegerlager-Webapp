@@ -82,7 +82,23 @@ def test_kiosk_home_hides_normal_admin_header_and_renders_stepper_controls(clien
     assert b"data-stepper-increment" in response.content
     assert b"data-stepper-decrement" in response.content
     assert b'inputmode="numeric"' in response.content
+    assert b"2 * 60 * 1000" in response.content
+    assert reverse("kiosk-logout").encode() in response.content
     assert "Förderung anwenden".encode() not in response.content
+
+
+@pytest.mark.django_db
+def test_kiosk_pin_setup_uses_inactivity_logout_timer(client):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    session = client.session
+    session[KIOSK_PIN_SETUP_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.get(reverse("kiosk-pin-setup"))
+
+    assert response.status_code == 200
+    assert b"2 * 60 * 1000" in response.content
+    assert reverse("kiosk-logout").encode() in response.content
 
 
 @pytest.mark.django_db
