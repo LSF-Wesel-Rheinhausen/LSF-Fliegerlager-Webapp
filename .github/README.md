@@ -1,7 +1,74 @@
-# `.github`
+# LSF Fliegerlager Webapp
 
-GitHub-spezifische Projektdateien.
+Web-App zur Verwaltung und Abrechnung des Vereins-Fliegerlagers der Luftsportfreunde Wesel-Rheinhausen e.V.
 
-- `workflows/ci.yml`: CI-Workflow fuer Python-Setup, Node-Setup, Django-Check, Pytest und Playwright-E2E.
+Die Anwendung ist eine Django-App mit Teilnehmerverwaltung, Preisregeln, Förderlogik, Kiosk-Modus, Import/Export und Abrechnungsauswertung.
 
-Der Workflow installiert Playwright-Browser in CI mit `npx playwright install --with-deps`, damit die benoetigten Linux-Bibliotheken vorhanden sind.
+## Funktionen
+
+- Lager/Jahre mit Preisen und Abrechnungsregeln verwalten
+- Rollen für `Admin` und `Bearbeiter`
+- Teilnehmer, Zahlungen, Kostenpositionen und vorgestreckte Beträge pflegen
+- Preisverwaltung für Lagerpauschalen, Getränke, Essen und sonstige Regeln
+- Lagerpauschalen automatisch nach 1/2 Wochen und Teilnehmer/Begleitperson berechnen
+- Förderung über Lager-Fördersatz, Hilfssatz und Berufssatz berücksichtigen
+- Kiosk mit PIN-Login, PIN-Ersteinrichtung, Getränke- und Essensbuchung
+- automatische Kiosk-Abmeldung nach Inaktivität
+- CSV-/XLSX-Import mit Vorschau und Validierung
+- CSV-, Excel- und PDF-Export für Abrechnungen
+
+## Dokumentation
+
+- [`README.md`](../README.md): Setup, Tests, Rollen und Roadmap
+- [`docs/README.md`](../docs/README.md): zentrale Projektdokumentation
+- [`docs/index.html`](../docs/index.html): HTML-Gesamtübersicht
+- [`docs/architecture.html`](../docs/architecture.html): Architektur, Datenfluss und Abrechnungslogik
+- [`docs/operations.html`](../docs/operations.html): Setup, Betrieb, Tests und typische Admin-Abläufe
+- [`FILES.md`](../FILES.md): schnelle Dateiübersicht
+- [`src/billing/README.md`](../src/billing/README.md): Domain-App und zentrale Module
+- [`tests/README.md`](../tests/README.md): Teststruktur
+
+## Lokale Entwicklung
+
+```bash
+python -m venv .venv
+. .venv/bin/activate
+pip install -r requirements-dev.txt
+npm install
+python src/manage.py migrate
+python src/manage.py runserver
+```
+
+Beim ersten Aufruf der Weboberfläche führt die App durch die Ersteinrichtung und legt den ersten Admin-Benutzer an.
+
+## Docker
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+Danach läuft die App unter `http://localhost:8000`.
+
+## Tests
+
+```bash
+.venv/bin/python src/manage.py check
+.venv/bin/python -m pytest
+```
+
+End-to-End-Tests:
+
+```bash
+npm run test:e2e
+```
+
+Lokaler Sammellauf:
+
+```bash
+npm run test:local
+```
+
+## CI
+
+Der GitHub-Actions-Workflow liegt in [`workflows/ci.yml`](workflows/ci.yml). Er führt Python-Setup, Node-Setup, Django-Check, Pytest und Playwright-E2E aus.
