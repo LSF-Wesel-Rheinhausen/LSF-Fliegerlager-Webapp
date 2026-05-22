@@ -147,3 +147,25 @@ def test_settlement_selects_matching_camp_flat_rate_for_companion_and_duration()
 
     assert [line.label for line in result.lines] == ["Begleitperson 2 Wochen"]
     assert result.total_due == Decimal("180.00")
+
+
+@pytest.mark.django_db
+def test_participant_camp_flat_duration():
+    from billing.services import participant_camp_flat_duration
+    from billing.models import PriceRule
+    
+    # Test with 5 nights (should be ONE_WEEK)
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, actual_nights=5)
+    result = participant_camp_flat_duration(participant)
+    assert result == PriceRule.CampFlatDuration.ONE_WEEK
+    
+    # Test with 10 nights (should be TWO_WEEKS)
+    participant = ParticipantFactory(camp=camp, actual_nights=10)
+    result = participant_camp_flat_duration(participant)
+    assert result == PriceRule.CampFlatDuration.TWO_WEEKS
+    
+    # Test with booked_nights
+    participant = ParticipantFactory(camp=camp, booked_nights=3)
+    result = participant_camp_flat_duration(participant)
+    assert result == PriceRule.CampFlatDuration.ONE_WEEK
