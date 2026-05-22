@@ -13,9 +13,23 @@
         <img src="{% static 'billing/logo.jpg' %}" alt="Luftsportfreunde Wesel-Rheinhausen e.V.">
         <span>Kiosk</span>
       </a>
-      <nav class="kiosk-nav">
-        {% block kiosk_nav %}{% endblock %}
-      </nav>
+      <div class="kiosk-header-actions">
+        {% if kiosk_autologout %}
+          <div
+            class="kiosk-timer"
+            aria-live="polite"
+            aria-atomic="true"
+            data-kiosk-countdown-root
+            data-timeout-ms="120000"
+          >
+            <span class="kiosk-timer__label">Abmeldung in</span>
+            <strong class="kiosk-timer__value" data-kiosk-countdown>02:00</strong>
+          </div>
+        {% endif %}
+        <nav class="kiosk-nav">
+          {% block kiosk_nav %}{% endblock %}
+        </nav>
+      </div>
     </header>
     <main class="page kiosk-page">
       {% for message in messages %}
@@ -27,14 +41,40 @@
       <script>
         (() => {
           const logoutUrl = "{% url 'kiosk-logout' %}";
-          const timeoutMs = 2 * 60 * 1000;
+          const timerRoot = document.querySelector("[data-kiosk-countdown-root]");
+          const timerValue = document.querySelector("[data-kiosk-countdown]");
+          const timeoutMs = Number(timerRoot?.dataset.timeoutMs || "120000");
+          let deadline = Date.now() + timeoutMs;
           let timeoutId;
+          let intervalId;
+
+          const formatRemaining = (remainingMs) => {
+            const totalSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+            const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
+            const seconds = String(totalSeconds % 60).padStart(2, "0");
+            return `${minutes}:${seconds}`;
+          };
+
+          const updateTimer = () => {
+            if (!timerRoot || !timerValue) {
+              return;
+            }
+
+            const remainingMs = deadline - Date.now();
+            timerValue.textContent = formatRemaining(remainingMs);
+            timerRoot.classList.toggle("is-urgent", remainingMs <= 30000);
+            timerRoot.classList.toggle("is-critical", remainingMs <= 10000);
+          };
 
           const resetTimeout = () => {
             window.clearTimeout(timeoutId);
+            window.clearInterval(intervalId);
+            deadline = Date.now() + timeoutMs;
             timeoutId = window.setTimeout(() => {
               window.location.href = logoutUrl;
             }, timeoutMs);
+            updateTimer();
+            intervalId = window.setInterval(updateTimer, 1000);
           };
 
           ["pointerdown", "keydown", "touchstart", "mousemove", "scroll"].forEach((eventName) => {
