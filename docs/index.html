@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Fliegerlager-Webapp Dokumentation</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f7f9;
+        --panel: #ffffff;
+        --text: #20252d;
+        --muted: #647084;
+        --line: #dce2ea;
+        --accent: #0f766e;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 16px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      main {
+        width: min(980px, calc(100vw - 32px));
+        margin: 40px auto;
+      }
+      section {
+        margin: 18px 0;
+        padding: 24px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+      h1, h2 {
+        margin: 0 0 12px;
+        line-height: 1.2;
+      }
+      p {
+        margin: 0 0 12px;
+      }
+      a {
+        color: var(--accent);
+      }
+      ul, ol {
+        margin: 0;
+        padding-left: 22px;
+      }
+      li + li {
+        margin-top: 6px;
+      }
+      code {
+        padding: 2px 5px;
+        border-radius: 4px;
+        background: #eef2f6;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Fliegerlager-Webapp</h1>
+      <p class="muted">Zentrale Projektdokumentation für Verwaltung, Kiosk und Abrechnung.</p>
+
+      <section>
+        <h2>Überblick</h2>
+        <p>Die Anwendung ist eine Django-Webapp zur Verwaltung und Abrechnung eines Vereins-Fliegerlagers. Sie unterstützt Lager, Teilnehmer, Preisregeln, Förderlogik, Zahlungen, Auslagen, Import/Export und einen Kiosk-Modus für Teilnehmer.</p>
+        <ol>
+          <li>Admin legt Lager und Lager-Fördersatz an.</li>
+          <li>Teilnehmer werden manuell oder per CSV/XLSX importiert.</li>
+          <li>Preisregeln werden gepflegt, inklusive Lagerpauschalen für 1/2 Wochen und Teilnehmer/Begleitpersonen.</li>
+          <li>Teilnehmer buchen Getränke und Essen im Kiosk per PIN.</li>
+          <li>Die Abrechnung berechnet Brutto, Förderung, Soll, Zahlungen, Auslagen und offenen Saldo.</li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>Wichtige Funktionen</h2>
+        <div class="grid">
+          <div>
+            <h3>Admin</h3>
+            <p>Lager, Rollen, Teilnehmer-PINs, Preisregeln, Fördersatz und Exporte.</p>
+          </div>
+          <div>
+            <h3>Kiosk</h3>
+            <p>PIN-Login, PIN-Ersteinrichtung, Getränke, Essen und automatische Abmeldung.</p>
+          </div>
+          <div>
+            <h3>Abrechnung</h3>
+            <p>Automatische Lagerpauschalen, Förderlogik, Zahlungen und vorgestreckte Beträge.</p>
+          </div>
+          <div>
+            <h3>Import/Export</h3>
+            <p>Teilnehmerimport per CSV/XLSX und Export als CSV, Excel oder PDF.</p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Detaildokumente</h2>
+        <ul>
+          <li><a href="../README.md">README.md</a> - Setup, Tests, Rollen und Roadmap.</li>
+          <li><a href="../FILES.md">FILES.md</a> - schnelle Dateiübersicht.</li>
+          <li><a href="../src/billing/README.md">src/billing/README.md</a> - Domain-App.</li>
+          <li><a href="../src/config/README.md">src/config/README.md</a> - Django-Konfiguration.</li>
+          <li><a href="../src/templates/README.md">src/templates/README.md</a> - Templates.</li>
+          <li><a href="../src/static/billing/README.md">src/static/billing/README.md</a> - CSS und Assets.</li>
+          <li><a href="../scripts/README.md">scripts/README.md</a> - lokale Hilfsskripte.</li>
+          <li><a href="../tests/README.md">tests/README.md</a> - Teststruktur.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>HTML-Seiten</h2>
+        <ul>
+          <li><a href="architecture.html">Architektur und Datenfluss</a></li>
+          <li><a href="operations.html">Betrieb und Admin-Abläufe</a></li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>

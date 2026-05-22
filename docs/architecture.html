@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Architektur und Datenfluss</title>
+    <style>
+      body { margin: 0; background: #f6f7f9; color: #20252d; font: 16px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      main { width: min(980px, calc(100vw - 32px)); margin: 40px auto; }
+      section { margin: 18px 0; padding: 24px; background: #fff; border: 1px solid #dce2ea; border-radius: 8px; }
+      h1, h2 { margin: 0 0 12px; line-height: 1.2; }
+      a { color: #0f766e; }
+      code { padding: 2px 5px; border-radius: 4px; background: #eef2f6; }
+      li + li { margin-top: 6px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Architektur und Datenfluss</h1>
+      <p><a href="index.html">Zurück zur Übersicht</a></p>
+
+      <section>
+        <h2>Technischer Aufbau</h2>
+        <ul>
+          <li>Django-Projekt: <code>src/config/</code></li>
+          <li>Domain-App: <code>src/billing/</code></li>
+          <li>Templates: <code>src/templates/</code></li>
+          <li>Statische Assets: <code>src/static/</code></li>
+          <li>Automatisierte Tests: <code>tests/</code></li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Domain-Modell</h2>
+        <p><code>Camp</code> hält Lagerdaten und den generellen Lager-Fördersatz. <code>Participant</code> hält Teilnehmerdaten inklusive Hilfssatz, Berufssatz, Nächten und Begleitstatus.</p>
+        <p><code>PriceRule</code> bildet Preisregeln ab. Für Lagerpauschalen gibt es strukturierte Felder für Dauer (<code>1w</code>/<code>2w</code>) und Rolle (<code>participant</code>/<code>companion</code>).</p>
+        <p><code>Charge</code>, <code>Payment</code> und <code>Expense</code> bilden Kosten, Zahlungen und vorgestreckte Beträge ab. <code>ParticipantPin</code> schützt den Kiosk-Zugang.</p>
+      </section>
+
+      <section>
+        <h2>Abrechnungslogik</h2>
+        <p>Die zentrale Logik liegt in <code>src/billing/services.py</code>. Views und Exporte greifen auf dieselben Services zu, damit die Ergebnisse konsistent bleiben.</p>
+        <ul>
+          <li>Lagerpauschale: Auswahl nach Begleitstatus und tatsächlichen bzw. gebuchten Nächten.</li>
+          <li>Förderung: nur für Jugendgruppenmitglieder; Berechnung über <code>Lager-Fördersatz * Hilfssatz * Berufssatz</code>.</li>
+          <li>Gesamtbetrag: Brutto minus Förderung, danach Abzug von Zahlungen und vorgestreckten Beträgen.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Kiosk-Datenfluss</h2>
+        <ol>
+          <li>Teilnehmer meldet sich mit PIN an oder legt beim ersten Mal eine PIN an.</li>
+          <li>Getränke und Essen werden aus den Preisregeln des aktiven Lagers geladen.</li>
+          <li>Buchungen werden als Kostenpositionen gespeichert.</li>
+          <li>Die Kiosk-Zusammenfassung wird aus der normalen Abrechnung berechnet.</li>
+        </ol>
+      </section>
+    </main>
+  </body>
+</html>

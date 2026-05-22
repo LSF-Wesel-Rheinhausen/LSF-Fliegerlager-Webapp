@@ -78,6 +78,14 @@ Die Rollen werden über Django-Gruppen abgebildet:
 
 Superuser haben automatisch vollen Zugriff.
 
+## Dokumentation
+
+Die zentrale Projektdokumentation liegt in [`docs/README.md`](docs/README.md). Zusätzlich gibt es statische HTML-Seiten, die direkt im Browser geöffnet werden können:
+
+- [`docs/index.html`](docs/index.html): Gesamtübersicht
+- [`docs/architecture.html`](docs/architecture.html): Architektur, Datenfluss und Abrechnungslogik
+- [`docs/operations.html`](docs/operations.html): Setup, Betrieb, Tests und typische Admin-Abläufe
+
 ## Roadmap
 
 - Installierbare Webapp/PWA: Web App Manifest, App-Icons, Theme-/Hintergrundfarben, Service Worker für Shell-/Asset-Caching und Installationshinweise für iOS, Android und Desktop.

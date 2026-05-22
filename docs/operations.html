@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Betrieb und Admin-Abläufe</title>
+    <style>
+      body { margin: 0; background: #f6f7f9; color: #20252d; font: 16px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      main { width: min(980px, calc(100vw - 32px)); margin: 40px auto; }
+      section { margin: 18px 0; padding: 24px; background: #fff; border: 1px solid #dce2ea; border-radius: 8px; }
+      h1, h2 { margin: 0 0 12px; line-height: 1.2; }
+      a { color: #0f766e; }
+      code, pre { border-radius: 4px; background: #eef2f6; }
+      code { padding: 2px 5px; }
+      pre { padding: 14px; overflow-x: auto; }
+      li + li { margin-top: 6px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Betrieb und Admin-Abläufe</h1>
+      <p><a href="index.html">Zurück zur Übersicht</a></p>
+
+      <section>
+        <h2>Lokaler Start</h2>
+        <pre><code>python -m venv .venv
+. .venv/bin/activate
+pip install -r requirements-dev.txt
+npm install
+python src/manage.py migrate
+python src/manage.py runserver</code></pre>
+        <p>Beim ersten Aufruf führt die App durch die Ersteinrichtung und legt den ersten Admin an.</p>
+      </section>
+
+      <section>
+        <h2>Docker</h2>
+        <pre><code>cp .env.example .env
+docker compose up --build</code></pre>
+        <p>Danach läuft die App unter <code>http://localhost:8000</code>.</p>
+      </section>
+
+      <section>
+        <h2>Typischer Admin-Ablauf</h2>
+        <ol>
+          <li>Lager anlegen und Lager-Fördersatz pflegen.</li>
+          <li>Preisverwaltung öffnen und Lagerpauschalen für Teilnehmer/Begleiter und 1/2 Wochen eintragen.</li>
+          <li>Getränke- und Essenspreise als Preisregeln anlegen.</li>
+          <li>Teilnehmer importieren oder manuell anlegen.</li>
+          <li>PINs setzen oder Teilnehmer im Kiosk ihre PIN beim ersten Login setzen lassen.</li>
+          <li>Während des Lagers Kiosk für Buchungen nutzen.</li>
+          <li>Abrechnung prüfen und Exporte erzeugen.</li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>Tests</h2>
+        <pre><code>.venv/bin/python src/manage.py check
+.venv/bin/python -m pytest
+npm run test:e2e
+npm run test:local</code></pre>
+        <p>Die Tests decken Authentifizierung, Rollen, Import, Abrechnung, Kiosk und Preisverwaltung ab.</p>
+      </section>
+
+      <section>
+        <h2>Weitere Erklärungen</h2>
+        <ul>
+          <li><a href="../README.md">README.md</a></li>
+          <li><a href="../src/billing/README.md">Billing-App</a></li>
+          <li><a href="../tests/README.md">Tests</a></li>
+          <li><a href="../scripts/README.md">Skripte</a></li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>
