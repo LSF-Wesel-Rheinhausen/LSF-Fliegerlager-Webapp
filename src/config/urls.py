@@ -5,7 +5,6 @@ from django.urls import include, path
 from billing.forms import EmailOrUsernameAuthenticationForm
 from billing.views import FirstLaunchLoginView
 
-
 urlpatterns = [
     path("admin/", admin.site.urls),
     path(

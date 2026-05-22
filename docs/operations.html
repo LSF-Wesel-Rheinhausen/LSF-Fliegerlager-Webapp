@@ -19,13 +19,18 @@
   <body>
     <main>
       <h1>Betrieb und Admin-Abläufe</h1>
-      <p><a href="index.html">Zurück zur Übersicht</a></p>
+      <p>
+        <a href="index.html">Übersicht</a> ·
+        <a href="architecture.html">Architektur</a> ·
+        <a href="development.html">Entwicklung</a>
+      </p>
 
       <section>
         <h2>Lokaler Start</h2>
         <pre><code>python -m venv .venv
 . .venv/bin/activate
 pip install -r requirements-dev.txt
+pre-commit install
 npm install
 python src/manage.py migrate
 python src/manage.py runserver</code></pre>
@@ -56,9 +61,24 @@ docker compose up --build</code></pre>
         <h2>Tests</h2>
         <pre><code>.venv/bin/python src/manage.py check
 .venv/bin/python -m pytest
+.venv/bin/python -m ruff check .
+.venv/bin/python -m ruff format --check .
 npm run test:e2e
 npm run test:local</code></pre>
         <p>Die Tests decken Authentifizierung, Rollen, Import, Abrechnung, Kiosk und Preisverwaltung ab.</p>
+      </section>
+
+      <section>
+        <h2>Qualitäts- und Sicherheitsregeln</h2>
+        <ul>
+          <li>Ruff erzwingt Linting und Formatierung.</li>
+          <li>pre-commit führt lokale Checks und Secret-Scanning aus.</li>
+          <li>Neue Python-Funktionen sollen Type Hints nutzen.</li>
+          <li><code>.env</code>-Dateien und echte Secrets dürfen nicht ins Repository.</li>
+          <li>Abrechnungs- und Kiosk-Operationen sollen transaktional und ORM-effizient umgesetzt werden.</li>
+          <li>Templates sollen semantisches HTML, mobile-first CSS und barrierearme Formulare nutzen.</li>
+          <li>Dynamisches Verhalten soll mit modernem Vanilla JavaScript oder bewusst ausgewählten leichten Tools umgesetzt werden.</li>
+        </ul>
       </section>
 
       <section>
@@ -68,6 +88,8 @@ npm run test:local</code></pre>
           <li><a href="../src/billing/README.md">Billing-App</a></li>
           <li><a href="../tests/README.md">Tests</a></li>
           <li><a href="../scripts/README.md">Skripte</a></li>
+          <li><a href="../CONTRIBUTING.md">Contribution Guidelines</a></li>
+          <li><a href="../AGENTS.md">Agent Guidelines</a></li>
         </ul>
       </section>
     </main>

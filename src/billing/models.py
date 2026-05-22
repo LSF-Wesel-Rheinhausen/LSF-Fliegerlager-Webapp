@@ -77,7 +77,10 @@ class Participant(TimeStampedModel):
     class Meta:
         ordering = ["last_name", "first_name"]
         constraints = [
-            models.UniqueConstraint(fields=["camp", "first_name", "last_name"], name="unique_participant_name_per_camp"),
+            models.UniqueConstraint(
+                fields=["camp", "first_name", "last_name"],
+                name="unique_participant_name_per_camp",
+            ),
         ]
 
     @property

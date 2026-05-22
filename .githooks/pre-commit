@@ -6,6 +6,15 @@ cd "$repo_root"
 
 echo "Running test suite before commit..."
 
+if [ -x ".venv/bin/pre-commit" ]; then
+  ".venv/bin/pre-commit" run --all-files
+elif command -v pre-commit >/dev/null 2>&1; then
+  pre-commit run --all-files
+else
+  echo "pre-commit is not installed. Run: pip install -r requirements-dev.txt && pre-commit install" >&2
+  exit 1
+fi
+
 if [ -x ".venv/bin/python" ] && ".venv/bin/python" -c "import pytest" >/dev/null 2>&1; then
   ".venv/bin/python" -m pytest
 elif command -v pytest >/dev/null 2>&1; then

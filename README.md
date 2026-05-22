@@ -19,6 +19,7 @@ Web-App zur Verwaltung und Abrechnung eines Vereins-Fliegerlagers. Die Anwendung
 python -m venv .venv
 . .venv/bin/activate
 pip install -r requirements-dev.txt
+pre-commit install
 npm install
 python src/manage.py migrate
 python src/manage.py runserver
@@ -40,6 +41,8 @@ Danach läuft die App unter `http://localhost:8000`.
 ```bash
 .venv/bin/python -m pytest
 .venv/bin/python src/manage.py check
+.venv/bin/python -m ruff check .
+.venv/bin/python -m ruff format --check .
 ```
 
 Playwright-End-to-End-Tests:
@@ -63,7 +66,9 @@ Lokaler Sammellauf:
 npm run test:local
 ```
 
-Um die Tests automatisch vor jedem Commit auszuführen, aktiviere die Projekt-Hooks einmalig:
+Die Python-Toolchain nutzt Ruff für Linting/Formatierung, mypy für statische Typprüfung und pre-commit für lokale Qualitäts- und Secret-Checks. `.env`-Dateien dürfen nicht committed werden; `.env.example` enthält nur sichere Platzhalter.
+
+Um zusätzlich den älteren Projekt-Hook zu aktivieren:
 
 ```bash
 git config core.hooksPath .githooks
@@ -85,6 +90,9 @@ Die zentrale Projektdokumentation liegt in [`docs/README.md`](docs/README.md). Z
 - [`docs/index.html`](docs/index.html): Gesamtübersicht
 - [`docs/architecture.html`](docs/architecture.html): Architektur, Datenfluss und Abrechnungslogik
 - [`docs/operations.html`](docs/operations.html): Setup, Betrieb, Tests und typische Admin-Abläufe
+- [`docs/development.html`](docs/development.html): Entwicklung, Qualität, Security und UI-Konventionen
+
+Beitrags- und Agentenregeln stehen in [`CONTRIBUTING.md`](CONTRIBUTING.md) und [`AGENTS.md`](AGENTS.md).
 
 ## Roadmap
 

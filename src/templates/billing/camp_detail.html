@@ -14,20 +14,20 @@
     </div>
   </div>
 
-  <section class="metrics">
-    <div><span>Brutto</span><strong>{{ totals.gross }} EUR</strong></div>
-    <div><span>Förderung</span><strong>{{ totals.subsidy }} EUR</strong></div>
-    <div><span>Soll</span><strong>{{ totals.due }} EUR</strong></div>
-    <div><span>Gezahlt</span><strong>{{ totals.paid }} EUR</strong></div>
-    <div><span>Vorgestreckt</span><strong>{{ totals.advanced }} EUR</strong></div>
-    <div><span>Offen</span><strong>{{ totals.balance }} EUR</strong></div>
+  <section class="metrics" aria-label="Lagerkennzahlen">
+    <article class="metric"><span>Brutto</span><strong>{{ totals.gross }} EUR</strong></article>
+    <article class="metric"><span>Förderung</span><strong>{{ totals.subsidy }} EUR</strong></article>
+    <article class="metric"><span>Soll</span><strong>{{ totals.due }} EUR</strong></article>
+    <article class="metric"><span>Gezahlt</span><strong>{{ totals.paid }} EUR</strong></article>
+    <article class="metric"><span>Vorgestreckt</span><strong>{{ totals.advanced }} EUR</strong></article>
+    <article class="metric"><span>Offen</span><strong>{{ totals.balance }} EUR</strong></article>
   </section>
 
-  <div class="exportbar">
+  <nav class="exportbar" aria-label="Exporte">
     <a href="{% url 'export-settlements-csv' camp.pk %}">Abrechnung als CSV herunterladen</a>
     <a href="{% url 'export-workbook' camp.pk %}">Arbeitsmappe herunterladen</a>
     <a href="{% url 'export-drinks-csv' camp.pk %}">Getränke als CSV herunterladen</a>
-  </div>
+  </nav>
 
   <section class="panel stack">
     <div class="toolbar compact-toolbar">

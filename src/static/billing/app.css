@@ -335,7 +335,7 @@ textarea {
   margin: 20px 0;
 }
 
-.metrics div {
+.metric {
   background: #ffffff;
   border: 1px solid var(--line);
   border-radius: var(--radius);

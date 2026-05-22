@@ -1,16 +1,16 @@
 from decimal import Decimal
 
 import pytest
-from django.contrib.auth.models import User
 from django.urls import reverse
+from tests.factories import CampFactory, SuperUserFactory
 
-from billing.models import Camp, PriceRule
+from billing.models import PriceRule
 
 
 @pytest.mark.django_db
 def test_admin_can_manage_camp_flat_rates_without_dropdowns(client):
-    user = User.objects.create_superuser(username="admin", email="admin@example.test", password="test")
-    camp = Camp.objects.create(name="Fliegerlager", year=2025)
+    user = SuperUserFactory(username="admin", email="admin@example.test")
+    camp = CampFactory()
     client.force_login(user)
 
     response = client.post(
@@ -39,8 +39,8 @@ def test_admin_can_manage_camp_flat_rates_without_dropdowns(client):
 
 @pytest.mark.django_db
 def test_price_rule_manage_page_shows_camp_flat_matrix(client):
-    user = User.objects.create_superuser(username="admin", email="admin@example.test", password="test")
-    camp = Camp.objects.create(name="Fliegerlager", year=2025)
+    user = SuperUserFactory(username="admin", email="admin@example.test")
+    camp = CampFactory()
     client.force_login(user)
 
     response = client.get(reverse("price-rules-manage", args=[camp.pk]))

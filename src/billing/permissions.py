@@ -1,7 +1,6 @@
 from django.contrib.auth.decorators import user_passes_test
 from django.core.exceptions import PermissionDenied
 
-
 ADMIN_GROUP = "Admin"
 EDITOR_GROUP = "Bearbeiter"
 

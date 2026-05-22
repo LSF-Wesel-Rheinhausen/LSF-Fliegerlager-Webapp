@@ -2,53 +2,58 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
-from django.utils import timezone
+from tests.factories import (
+    CampFactory,
+    ChargeFactory,
+    DrinkEntryFactory,
+    ExpenseFactory,
+    ParticipantFactory,
+    PaymentFactory,
+    PriceRuleFactory,
+)
 
-from billing.models import Camp, Charge, DrinkEntry, Expense, Participant, Payment, PriceRule
+from billing.models import Charge, PriceRule
 from billing.services import calculate_participant_settlement
 
 
 @pytest.mark.django_db
 def test_settlement_calculates_due_paid_advanced_and_balance():
-    camp = Camp.objects.create(name="Fliegerlager", year=2025)
-    participant = Participant.objects.create(
+    camp = CampFactory()
+    participant = ParticipantFactory(
         camp=camp,
         first_name="Ada",
         last_name="Lovelace",
         booked_nights=2,
         actual_nights=3,
     )
-    PriceRule.objects.create(
+    PriceRuleFactory(
         camp=camp,
         kind=PriceRule.Kind.CAMP_FLAT,
         name="Lagerpauschale",
         unit_price=Decimal("50.00"),
         is_default=True,
     )
-    PriceRule.objects.create(
+    PriceRuleFactory(
         camp=camp,
         kind=PriceRule.Kind.NIGHT,
         name="Übernachtung",
         unit_price=Decimal("10.00"),
         is_default=True,
     )
-    Charge.objects.create(
+    ChargeFactory(
         participant=participant,
         kind=Charge.Kind.FOOD,
         description="Verpflegung",
         quantity=Decimal("2"),
         unit_price=Decimal("7.50"),
     )
-    DrinkEntry.objects.create(
+    DrinkEntryFactory(
         participant=participant,
-        drink=DrinkEntry.Drink.WATER,
         quantity=3,
         unit_price=Decimal("1.50"),
-        booked_at=timezone.datetime(2025, 7, 1, 12, 0, tzinfo=timezone.get_current_timezone()),
     )
-    Payment.objects.create(participant=participant, amount=Decimal("40.00"), paid_on=date(2025, 7, 1))
-    Expense.objects.create(
-        camp=camp,
+    PaymentFactory(participant=participant, amount=Decimal("40.00"), paid_on=date(2025, 7, 1))
+    ExpenseFactory(
         participant=participant,
         category="Einkauf",
         description="Brötchen",
@@ -66,16 +71,15 @@ def test_settlement_calculates_due_paid_advanced_and_balance():
 
 @pytest.mark.django_db
 def test_settlement_allows_overpayment():
-    camp = Camp.objects.create(name="Fliegerlager", year=2025)
-    participant = Participant.objects.create(camp=camp, first_name="Grace", last_name="Hopper")
-    Charge.objects.create(
+    participant = ParticipantFactory(first_name="Grace", last_name="Hopper")
+    ChargeFactory(
         participant=participant,
         kind=Charge.Kind.OTHER,
         description="Sonstiges",
         quantity=Decimal("1"),
         unit_price=Decimal("5.00"),
     )
-    Payment.objects.create(participant=participant, amount=Decimal("10.00"), paid_on=date(2025, 7, 1))
+    PaymentFactory(participant=participant, amount=Decimal("10.00"), paid_on=date(2025, 7, 1))
 
     result = calculate_participant_settlement(participant)
 
@@ -85,8 +89,8 @@ def test_settlement_allows_overpayment():
 
 @pytest.mark.django_db
 def test_settlement_applies_subsidy_factor_for_youth_group_members():
-    camp = Camp.objects.create(name="Fliegerlager", year=2025, foerdersatz=Decimal("0.5000"))
-    participant = Participant.objects.create(
+    camp = CampFactory(foerdersatz=Decimal("0.5000"))
+    participant = ParticipantFactory(
         camp=camp,
         first_name="Mia",
         last_name="Muster",
@@ -94,7 +98,7 @@ def test_settlement_applies_subsidy_factor_for_youth_group_members():
         hilfssatz=Decimal("0.5000"),
         berufssatz=Decimal("0.3300"),
     )
-    PriceRule.objects.create(
+    PriceRuleFactory(
         camp=camp,
         kind=PriceRule.Kind.CAMP_FLAT,
         name="Lagerpauschale",
@@ -112,15 +116,15 @@ def test_settlement_applies_subsidy_factor_for_youth_group_members():
 
 @pytest.mark.django_db
 def test_settlement_selects_matching_camp_flat_rate_for_companion_and_duration():
-    camp = Camp.objects.create(name="Fliegerlager", year=2025)
-    participant = Participant.objects.create(
+    camp = CampFactory()
+    participant = ParticipantFactory(
         camp=camp,
         first_name="Bea",
         last_name="Begleitung",
         is_companion=True,
         actual_nights=10,
     )
-    PriceRule.objects.create(
+    PriceRuleFactory(
         camp=camp,
         kind=PriceRule.Kind.CAMP_FLAT,
         name="Teilnehmer 2 Wochen",
@@ -129,7 +133,7 @@ def test_settlement_selects_matching_camp_flat_rate_for_companion_and_duration()
         camp_flat_duration=PriceRule.CampFlatDuration.TWO_WEEKS,
         is_default=True,
     )
-    PriceRule.objects.create(
+    PriceRuleFactory(
         camp=camp,
         kind=PriceRule.Kind.CAMP_FLAT,
         name="Begleitperson 2 Wochen",

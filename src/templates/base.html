@@ -25,7 +25,7 @@
     </header>
     <main class="page">
       {% for message in messages %}
-        <div class="message {{ message.tags }}">{{ message }}</div>
+        <section class="message {{ message.tags }}" role="status">{{ message }}</section>
       {% endfor %}
       {% block content %}{% endblock %}
     </main>

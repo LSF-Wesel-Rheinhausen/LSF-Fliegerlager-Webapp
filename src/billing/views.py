@@ -5,13 +5,15 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
+from django.core.exceptions import ValidationError
 from django.core.signing import BadSignature, Signer
+from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 
 from .exporters import camp_settlement_csv, camp_workbook_response, drink_entries_csv, participant_pdf_response
 from .forms import (
-    CampForm,
     CampFlatRateSettingsForm,
+    CampForm,
     ChargeForm,
     DrinkBookingForm,
     ExpenseForm,
@@ -30,7 +32,6 @@ from .models import Camp, Charge, MealSignup, Participant, PriceRule
 from .permissions import admin_required, editor_required
 from .roles import bootstrap_default_roles
 from .services import calculate_camp_settlements, calculate_participant_settlement, participant_kiosk_summary
-
 
 signer = Signer()
 User = get_user_model()
@@ -51,9 +52,10 @@ def setup_first_admin(request):
 
     form = FirstAdminSetupForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        admin_group, _ = bootstrap_default_roles()
-        user = form.save()
-        user.groups.add(admin_group)
+        with transaction.atomic():
+            admin_group, _ = bootstrap_default_roles()
+            user = form.save()
+            user.groups.add(admin_group)
         login(request, user, backend="django.contrib.auth.backends.ModelBackend")
         messages.success(request, "Erster Admin-Benutzer wurde angelegt.")
         return redirect("camp-list")
@@ -82,7 +84,8 @@ def camp_edit(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
     form = CampForm(request.POST or None, instance=camp)
     if request.method == "POST" and form.is_valid():
-        form.save()
+        with transaction.atomic():
+            form.save()
         messages.success(request, "Lager wurde gespeichert.")
         return redirect("camp-detail", camp_id=camp.pk)
     return render(request, "billing/form.html", {"form": form, "title": "Lager bearbeiten", "camp": camp})
@@ -113,9 +116,10 @@ def participant_create(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
     form = ParticipantForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        participant = form.save(commit=False)
-        participant.camp = camp
-        participant.save()
+        with transaction.atomic():
+            participant = form.save(commit=False)
+            participant.camp = camp
+            participant.save()
         messages.success(request, "Teilnehmer wurde gespeichert.")
         return redirect("participant-detail", participant_id=participant.pk)
     return render(request, "billing/form.html", {"form": form, "title": "Teilnehmer anlegen", "camp": camp})
@@ -133,9 +137,10 @@ def charge_create(request, participant_id):
     participant = get_object_or_404(Participant, pk=participant_id)
     form = ChargeForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        charge = form.save(commit=False)
-        charge.participant = participant
-        charge.save()
+        with transaction.atomic():
+            charge = form.save(commit=False)
+            charge.participant = participant
+            charge.save()
         messages.success(request, "Kostenposition wurde gespeichert.")
         return redirect("participant-detail", participant_id=participant.pk)
     return render(request, "billing/form.html", {"form": form, "title": "Kostenposition erfassen"})
@@ -146,9 +151,10 @@ def payment_create(request, participant_id):
     participant = get_object_or_404(Participant, pk=participant_id)
     form = PaymentForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        payment = form.save(commit=False)
-        payment.participant = participant
-        payment.save()
+        with transaction.atomic():
+            payment = form.save(commit=False)
+            payment.participant = participant
+            payment.save()
         messages.success(request, "Zahlung wurde gespeichert.")
         return redirect("participant-detail", participant_id=participant.pk)
     return render(request, "billing/form.html", {"form": form, "title": "Zahlung erfassen"})
@@ -158,8 +164,9 @@ def payment_create(request, participant_id):
 def pin_reset(request, participant_id):
     participant = get_object_or_404(Participant, pk=participant_id)
     if request.method == "POST":
-        participant.pin.reset_pin(changed_by=request.user)
-        participant.pin.save()
+        with transaction.atomic():
+            participant.pin.reset_pin(changed_by=request.user)
+            participant.pin.save()
         messages.success(request, "Teilnehmer-PIN wurde zurückgesetzt.")
     return redirect("participant-detail", participant_id=participant.pk)
 
@@ -169,8 +176,9 @@ def pin_set(request, participant_id):
     participant = get_object_or_404(Participant, pk=participant_id)
     form = ParticipantPinForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        participant.pin.set_pin(form.cleaned_data["pin"], changed_by=request.user)
-        participant.pin.save()
+        with transaction.atomic():
+            participant.pin.set_pin(form.cleaned_data["pin"], changed_by=request.user)
+            participant.pin.save()
         messages.success(request, "Teilnehmer-PIN wurde gesetzt.")
         return redirect("participant-detail", participant_id=participant.pk)
     return render(request, "billing/form.html", {"form": form, "title": "Teilnehmer-PIN setzen"})
@@ -181,9 +189,10 @@ def price_rule_create(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
     form = PriceRuleForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        rule = form.save(commit=False)
-        rule.camp = camp
-        rule.save()
+        with transaction.atomic():
+            rule = form.save(commit=False)
+            rule.camp = camp
+            rule.save()
         messages.success(request, "Preisregel wurde gespeichert.")
         return redirect("camp-detail", camp_id=camp.pk)
     return render(request, "billing/form.html", {"form": form, "title": "Preisregel anlegen"})
@@ -194,7 +203,8 @@ def price_rules_manage(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
     form = CampFlatRateSettingsForm(request.POST or None, camp=camp)
     if request.method == "POST" and form.is_valid():
-        form.save()
+        with transaction.atomic():
+            form.save()
         messages.success(request, "Lagerpauschalen wurden gespeichert.")
         return redirect("price-rules-manage", camp_id=camp.pk)
     grouped_rules = {
@@ -214,7 +224,8 @@ def price_rule_edit(request, price_rule_id):
     rule = get_object_or_404(PriceRule.objects.select_related("camp"), pk=price_rule_id)
     form = PriceRuleForm(request.POST or None, instance=rule)
     if request.method == "POST" and form.is_valid():
-        form.save()
+        with transaction.atomic():
+            form.save()
         messages.success(request, "Preisregel wurde gespeichert.")
         return redirect("camp-detail", camp_id=rule.camp.pk)
     return render(request, "billing/form.html", {"form": form, "title": "Preisregel bearbeiten", "camp": rule.camp})
@@ -226,9 +237,10 @@ def expense_create(request, camp_id):
     form = ExpenseForm(request.POST or None)
     form.fields["participant"].queryset = Participant.objects.filter(camp=camp)
     if request.method == "POST" and form.is_valid():
-        expense = form.save(commit=False)
-        expense.camp = camp
-        expense.save()
+        with transaction.atomic():
+            expense = form.save(commit=False)
+            expense.camp = camp
+            expense.save()
         messages.success(request, "Auslage wurde gespeichert.")
         return redirect("camp-detail", camp_id=camp.pk)
     return render(request, "billing/form.html", {"form": form, "title": "Auslage erfassen"})
@@ -257,7 +269,11 @@ def participant_import(request, camp_id):
         form = ParticipantImportForm(request.POST, request.FILES)
         if form.is_valid():
             upload = form.cleaned_data["file"]
-            rows = preview_participants(upload.file, upload.name)
+            try:
+                rows = preview_participants(upload.file, upload.name)
+            except ValidationError as error:
+                messages.error(request, "; ".join(error.messages))
+                return redirect("participant-import", camp_id=camp.pk)
             payload = json.dumps(rows_to_payload(rows), ensure_ascii=False).encode("utf-8")
             signed_rows = signer.sign(base64.b64encode(payload).decode("ascii"))
 
@@ -306,7 +322,10 @@ def kiosk_login(request):
         return redirect("kiosk-home")
     if request.method == "POST" and getattr(form, "missing_pin_participant", None) is not None:
         request.session[KIOSK_PIN_SETUP_SESSION_KEY] = form.missing_pin_participant.pk
-        messages.info(request, "Für diesen Teilnehmer ist noch kein PIN gesetzt. Bitte lege jetzt einen neuen PIN fest.")
+        messages.info(
+            request,
+            "Für diesen Teilnehmer ist noch kein PIN gesetzt. Bitte lege jetzt einen neuen PIN fest.",
+        )
         return redirect("kiosk-pin-setup")
 
     return render(request, "billing/kiosk_login.html", {"form": form})
@@ -332,10 +351,11 @@ def kiosk_pin_setup(request):
 
     form = KioskPinSetupForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        participant.pin.set_pin(form.cleaned_data["pin"])
-        participant.pin.save()
-        request.session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
-        request.session.pop(KIOSK_PIN_SETUP_SESSION_KEY, None)
+        with transaction.atomic():
+            participant.pin.set_pin(form.cleaned_data["pin"])
+            participant.pin.save()
+            request.session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+            request.session.pop(KIOSK_PIN_SETUP_SESSION_KEY, None)
         messages.success(request, "PIN wurde gesetzt. Du bist jetzt im Kiosk angemeldet.")
         return redirect("kiosk-home")
 
@@ -354,41 +374,46 @@ def kiosk_home(request):
             drink_form = DrinkBookingForm(request.POST, camp=participant.camp, prefix="drink")
             if drink_form.is_valid():
                 price_rule = drink_form.cleaned_data["price_rule"]
-                Charge.objects.create(
-                    participant=participant,
-                    kind=Charge.Kind.DRINK,
-                    description=price_rule.name,
-                    quantity=drink_form.cleaned_data["quantity"],
-                    unit_price=price_rule.unit_price,
-                    foerderfaehig=price_rule.foerderfaehig,
-                )
+                with transaction.atomic():
+                    Charge.objects.create(
+                        participant=participant,
+                        kind=Charge.Kind.DRINK,
+                        description=price_rule.name,
+                        quantity=drink_form.cleaned_data["quantity"],
+                        unit_price=price_rule.unit_price,
+                        foerderfaehig=price_rule.foerderfaehig,
+                    )
                 messages.success(request, "Getränk wurde gebucht.")
                 return redirect("kiosk-home")
         elif request.POST.get("action") == "meal":
             meal_form = MealBookingForm(request.POST, camp=participant.camp, prefix="meal")
             if meal_form.is_valid():
                 price_rule = meal_form.cleaned_data["price_rule"]
-                meal_display = dict(MealSignup.Meal.choices).get(meal_form.cleaned_data["meal"], meal_form.cleaned_data["meal"])
-                MealSignup.objects.update_or_create(
-                    participant=participant,
-                    meal_date=meal_form.cleaned_data["meal_date"],
-                    meal=meal_form.cleaned_data["meal"],
-                    defaults={
-                        "variant": meal_form.cleaned_data["variant"],
-                        "foerderfaehig": price_rule.foerderfaehig,
-                    },
+                meal_display = dict(MealSignup.Meal.choices).get(
+                    meal_form.cleaned_data["meal"],
+                    meal_form.cleaned_data["meal"],
                 )
-                Charge.objects.update_or_create(
-                    participant=participant,
-                    kind=Charge.Kind.FOOD,
-                    occurred_on=meal_form.cleaned_data["meal_date"],
-                    description=f"{price_rule.name} {meal_display}",
-                    defaults={
-                        "quantity": 1,
-                        "unit_price": price_rule.unit_price,
-                        "foerderfaehig": price_rule.foerderfaehig,
-                    },
-                )
+                with transaction.atomic():
+                    MealSignup.objects.update_or_create(
+                        participant=participant,
+                        meal_date=meal_form.cleaned_data["meal_date"],
+                        meal=meal_form.cleaned_data["meal"],
+                        defaults={
+                            "variant": meal_form.cleaned_data["variant"],
+                            "foerderfaehig": price_rule.foerderfaehig,
+                        },
+                    )
+                    Charge.objects.update_or_create(
+                        participant=participant,
+                        kind=Charge.Kind.FOOD,
+                        occurred_on=meal_form.cleaned_data["meal_date"],
+                        description=f"{price_rule.name} {meal_display}",
+                        defaults={
+                            "quantity": 1,
+                            "unit_price": price_rule.unit_price,
+                            "foerderfaehig": price_rule.foerderfaehig,
+                        },
+                    )
                 messages.success(request, "Essensanmeldung wurde gespeichert.")
                 return redirect("kiosk-home")
 

@@ -4,18 +4,18 @@
 
 Application code resides in `src/`. The core Django project configuration is located in `src/config/`, and the main domain application is in `src/billing/`.
 
-- `src/billing/models.py`: models for camp, participant, pricing, payment, expense, kiosk preparation, and settlement. If this file grows too large, refactor it into a `models/` package with cohesive modules.
-- `src/billing/services.py`: core business logic, including settlement and kiosk-summary logic. Keep views thin and share calculations through services.
+- `src/billing/models.py`: contains models for camp, participant, pricing, payment, expense, kiosk preparation, and settlement.
+- `src/billing/services.py`: encapsulates core business logic, including server-side settlement and kiosk-summary logic. Keep views thin and share complex calculations through services.
 - `src/billing/importers.py` and `src/billing/exporters.py`: CSV/XLSX/PDF import and export helpers.
 - `src/templates/`: server-rendered HTML templates.
-- `src/static/`: static assets such as CSS, JavaScript, and images.
+- `src/static/`: static assets.
 - `tests/`: pytest-based automated test suite.
 
 Golden rule: keep new modules small, cohesive, and domain-focused. Root-level files are reserved for global configuration, documentation, or build/deployment manifests.
 
 ## 2. Build, Test, and Development Commands
 
-Local setup:
+### Local Setup
 
 ```bash
 python -m venv .venv
@@ -29,18 +29,18 @@ python src/manage.py createsuperuser
 python src/manage.py runserver
 ```
 
-Dependency management: the project currently uses `requirements.txt` and `requirements-dev.txt`. Prefer migrating to `uv` or Poetry with a deterministic lock file before adding larger dependency sets.
+The project currently uses `requirements.txt` and `requirements-dev.txt`. Prefer migrating to `uv` or Poetry with a deterministic lock file before adding larger dependency sets.
 
-Docker setup:
+### Docker Setup
 
 ```bash
 cp .env.example .env
 docker compose up --build
 ```
 
-Security warning: never commit `.env` files or real secrets. Keep only safe placeholders in `.env.example`. Secret scanning is configured through pre-commit and should also run in CI.
+Never commit `.env` files or real secrets. Keep only safe placeholders in `.env.example`. Secret scanning is configured through pre-commit and should also run in CI.
 
-Tests and checks:
+### Tests and Linting
 
 ```bash
 .venv/bin/python src/manage.py check
@@ -51,29 +51,29 @@ mypy src
 npm run test:e2e
 ```
 
-Keep commands runnable from the repository root and document all required environment variables in `.env.example`.
+Keep commands runnable from the repository root. All required environment variables must be documented with safe placeholder values in `.env.example`.
 
 ## 3. Coding Style & Naming Conventions
 
-Python formatting and linting are enforced by Ruff. Do not rely on manual formatting rules when tooling can enforce them.
+Python formatting and linting are enforced by Ruff. Code should pass pre-commit checks before pushing.
 
-Use type hints for all new Python functions and methods, especially services, import/export helpers, and settlement code.
+Use Python type hints for all new functions and methods, especially services, import/export helpers, and settlement code.
 
 Naming:
 
 - `snake_case` for modules, functions, variables, and database fields.
-- `PascalCase` for classes, including Django models and forms.
+- `PascalCase` for classes.
 - `UPPER_SNAKE_CASE` for constants.
 
 Templates and CSS use 2-space indentation. Keep templates presentation-focused; business logic belongs in services or model properties.
 
 ## 4. Testing Guidelines
 
-Use `pytest` and `pytest-django`. Place tests in `tests/` and name them after the behavior under test, for example `test_settlements.py` or `test_importers.py`.
+Use `pytest` and `pytest-django`. Place tests in `tests/` and name them after the behavior under test.
 
-Every new feature must include tests for the happy path and at least one relevant edge or failure case.
+Every new feature must include tests covering the happy path and at least one edge or failure case.
 
-Critical paths require strong test coverage:
+Critical paths require strong coverage:
 
 - settlement math and financial calculations
 - data imports and parsing validation
@@ -98,7 +98,7 @@ Always read and process `TODO.md` before initiating work. Treat it as primary us
 
 Before editing, inspect the current project tree. Keep changes narrowly scoped to the requested task. Do not perform unrelated restructuring.
 
-Update this guideline document whenever build tools, testing frameworks, or conventions change.
+Update this document whenever build tools, testing frameworks, or conventions change.
 
 ## 7. Django ORM & Performance Guidelines
 

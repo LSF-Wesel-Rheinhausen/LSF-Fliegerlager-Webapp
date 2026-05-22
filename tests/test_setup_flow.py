@@ -2,6 +2,7 @@ import pytest
 from django.contrib.auth.models import Group, User
 from django.contrib.staticfiles import finders
 from django.urls import reverse
+from tests.factories import UserFactory
 
 from billing.permissions import ADMIN_GROUP, EDITOR_GROUP
 
@@ -41,7 +42,7 @@ def test_setup_creates_first_admin_and_logs_in(client):
 
 @pytest.mark.django_db
 def test_setup_is_disabled_after_user_exists(client):
-    User.objects.create_user(username="existing", password="strong-test-pass-123")
+    UserFactory(username="existing")
 
     response = client.get(reverse("setup"))
 

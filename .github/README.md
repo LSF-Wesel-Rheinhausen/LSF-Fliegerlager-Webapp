@@ -24,6 +24,7 @@ Die Anwendung ist eine Django-App mit Teilnehmerverwaltung, Preisregeln, Förder
 - [`docs/index.html`](../docs/index.html): HTML-Gesamtübersicht
 - [`docs/architecture.html`](../docs/architecture.html): Architektur, Datenfluss und Abrechnungslogik
 - [`docs/operations.html`](../docs/operations.html): Setup, Betrieb, Tests und typische Admin-Abläufe
+- [`docs/development.html`](../docs/development.html): Entwicklung, Qualität, Security und UI-Konventionen
 - [`FILES.md`](../FILES.md): schnelle Dateiübersicht
 - [`src/billing/README.md`](../src/billing/README.md): Domain-App und zentrale Module
 - [`tests/README.md`](../tests/README.md): Teststruktur
@@ -34,6 +35,7 @@ Die Anwendung ist eine Django-App mit Teilnehmerverwaltung, Preisregeln, Förder
 python -m venv .venv
 . .venv/bin/activate
 pip install -r requirements-dev.txt
+pre-commit install
 npm install
 python src/manage.py migrate
 python src/manage.py runserver
@@ -55,6 +57,8 @@ Danach läuft die App unter `http://localhost:8000`.
 ```bash
 .venv/bin/python src/manage.py check
 .venv/bin/python -m pytest
+.venv/bin/python -m ruff check .
+.venv/bin/python -m ruff format --check .
 ```
 
 End-to-End-Tests:
@@ -72,3 +76,7 @@ npm run test:local
 ## CI
 
 Der GitHub-Actions-Workflow liegt in [`workflows/ci.yml`](workflows/ci.yml). Er führt Python-Setup, Node-Setup, Django-Check, Pytest und Playwright-E2E aus.
+
+## Contribution Rules
+
+Beitrags- und Agentenregeln stehen in [`CONTRIBUTING.md`](../CONTRIBUTING.md) und [`AGENTS.md`](../AGENTS.md). Neue Python-Funktionen sollen Type Hints nutzen; ORM-Code muss N+1-Abfragen vermeiden; sensible Daten und `.env`-Dateien dürfen nicht committed oder geloggt werden. Templates sollen semantisches HTML, mobile-first CSS und barrierearme Formulare nutzen.

@@ -53,6 +53,7 @@ Der typische Ablauf:
 python -m venv .venv
 . .venv/bin/activate
 pip install -r requirements-dev.txt
+pre-commit install
 npm install
 python src/manage.py migrate
 python src/manage.py runserver
@@ -65,6 +66,8 @@ Danach läuft die Anwendung lokal unter `http://localhost:8000`.
 ```bash
 .venv/bin/python src/manage.py check
 .venv/bin/python -m pytest
+.venv/bin/python -m ruff check .
+.venv/bin/python -m ruff format --check .
 ```
 
 Für Browsertests:
@@ -79,6 +82,17 @@ Der lokale Sammellauf ist:
 npm run test:local
 ```
 
+## Qualitäts- und Sicherheitsregeln
+
+Die Beitragsregeln stehen in [`../CONTRIBUTING.md`](../CONTRIBUTING.md), die Agentenregeln in [`../AGENTS.md`](../AGENTS.md).
+
+- Ruff ist das Standardwerkzeug für Linting und Formatierung.
+- pre-commit führt lokale Qualitäts- und Secret-Checks aus.
+- Neue Python-Funktionen sollen Type Hints nutzen.
+- Django-ORM-Code soll N+1-Abfragen vermeiden und kritische Finanzoperationen transaktional ausführen.
+- `.env`-Dateien, personenbezogene Daten, Zahlungsdetails, PINs und Secrets dürfen nicht committed oder geloggt werden.
+- Servergerenderte Templates sollen semantisches HTML, mobile-first Layouts, barrierearme Formulare und modernes Vanilla JavaScript verwenden.
+
 ## HTML-Dokumentation
 
 Die wichtigsten Übersichten liegen zusätzlich als HTML vor:
@@ -86,3 +100,4 @@ Die wichtigsten Übersichten liegen zusätzlich als HTML vor:
 - [`index.html`](index.html): Gesamtübersicht.
 - [`architecture.html`](architecture.html): Architektur, Datenfluss und Abrechnungslogik.
 - [`operations.html`](operations.html): Setup, Betrieb, Tests und typische Admin-Abläufe.
+- [`development.html`](development.html): Beitragsregeln, Tooling, Security, ORM, Tests und UI-Konventionen.

@@ -7,6 +7,8 @@ if [[ "${CI:-}" == "true" ]]; then
 fi
 
 declare -a STEPS=(
+  "Ruff lint|.venv/bin/python -m ruff check ."
+  "Ruff format|.venv/bin/python -m ruff format --check ."
   "Django check|.venv/bin/python src/manage.py check"
   "Python tests|.venv/bin/python -m pytest"
   "E2E (Playwright)|npm run test:e2e"

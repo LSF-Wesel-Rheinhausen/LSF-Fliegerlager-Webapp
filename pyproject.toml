@@ -1,0 +1,38 @@
+[tool.ruff]
+target-version = "py313"
+line-length = 120
+src = ["src", "tests"]
+extend-exclude = ["src/billing/migrations"]
+
+[tool.ruff.lint]
+select = [
+  "E",
+  "F",
+  "I",
+  "B",
+  "UP",
+  "DJ",
+]
+ignore = [
+  "DJ001",
+  "DJ012",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[tool.mypy]
+python_version = "3.13"
+files = ["src"]
+plugins = ["mypy_django_plugin.main"]
+mypy_path = "src"
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unreachable = true
+no_implicit_optional = true
+
+[tool.django-stubs]
+django_settings_module = "config.settings"

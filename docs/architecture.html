@@ -17,7 +17,11 @@
   <body>
     <main>
       <h1>Architektur und Datenfluss</h1>
-      <p><a href="index.html">Zurück zur Übersicht</a></p>
+      <p>
+        <a href="index.html">Übersicht</a> ·
+        <a href="operations.html">Betrieb</a> ·
+        <a href="development.html">Entwicklung</a>
+      </p>
 
       <section>
         <h2>Technischer Aufbau</h2>
@@ -45,6 +49,12 @@
           <li>Förderung: nur für Jugendgruppenmitglieder; Berechnung über <code>Lager-Fördersatz * Hilfssatz * Berufssatz</code>.</li>
           <li>Gesamtbetrag: Brutto minus Förderung, danach Abzug von Zahlungen und vorgestreckten Beträgen.</li>
         </ul>
+      </section>
+
+      <section>
+        <h2>Performance- und Integritätsregeln</h2>
+        <p>Abrechnungs- und Kiosk-Schreibvorgänge laufen transaktional, damit Teilspeicherungen vermieden werden. Abfragen, deren Ergebnisse in Templates oder Services iteriert werden, sollen konsequent mit <code>select_related()</code> und <code>prefetch_related()</code> vorbereitet werden.</p>
+        <p>Raw SQL ist nicht vorgesehen. Die Django-ORM bleibt die Standardschnittstelle für Datenzugriff und schützt die Lesbarkeit der Abrechnungslogik.</p>
       </section>
 
       <section>

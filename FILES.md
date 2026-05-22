@@ -3,8 +3,11 @@
 Diese Datei gibt spaeteren Chats einen schnellen Einstieg in die Projektstruktur.
 
 - `README.md`: Projektbeschreibung, Setup, Tests, Rollen und Roadmap.
+- `CONTRIBUTING.md`: Beitragsregeln, Tooling, Security-, ORM- und Agentenrichtlinien.
 - `AGENTS.md`: Arbeitsregeln fuer Agenten im Repository.
-- `docs/`: zentrale Projektdokumentation als Markdown und statische HTML-Seiten.
+- `docs/`: zentrale Projektdokumentation als Markdown und statische HTML-Seiten inklusive Architektur, Betrieb und Entwicklung.
+- `.pre-commit-config.yaml`: pre-commit-Konfiguration fuer Basischecks, Ruff und gitleaks.
+- `pyproject.toml`: Ruff- und mypy-Konfiguration.
 - `.env.example`: Beispielkonfiguration fuer Docker/Deployment.
 - `.gitignore`: Ausgeschlossene lokale Dateien, Caches, Node-Module und Testartefakte.
 - `.githooks/pre-commit`: Git-Hook zum Ausfuehren der Tests vor Commits.

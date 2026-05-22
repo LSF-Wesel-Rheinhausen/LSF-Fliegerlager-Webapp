@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Entwicklung, Qualität und Security</title>
+    <style>
+      body { margin: 0; background: #f6f7f9; color: #20252d; font: 16px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      main { width: min(980px, calc(100vw - 32px)); margin: 40px auto; }
+      section { margin: 18px 0; padding: 24px; background: #fff; border: 1px solid #dce2ea; border-radius: 8px; }
+      h1, h2 { margin: 0 0 12px; line-height: 1.2; }
+      a { color: #0f766e; }
+      code, pre { border-radius: 4px; background: #eef2f6; }
+      code { padding: 2px 5px; }
+      pre { padding: 14px; overflow-x: auto; }
+      li + li { margin-top: 6px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Entwicklung, Qualität und Security</h1>
+      <p>
+        <a href="index.html">Übersicht</a> ·
+        <a href="architecture.html">Architektur</a> ·
+        <a href="operations.html">Betrieb</a>
+      </p>
+
+      <section>
+        <h2>Lokale Qualitätschecks</h2>
+        <pre><code>.venv/bin/python -m ruff check .
+.venv/bin/python -m ruff format --check .
+.venv/bin/python -m mypy src
+.venv/bin/python src/manage.py check
+.venv/bin/python -m pytest</code></pre>
+        <p>pre-commit bündelt Basischecks, Ruff und gitleaks. Die Hooks werden mit <code>pre-commit install</code> aktiviert.</p>
+      </section>
+
+      <section>
+        <h2>Django-ORM und Transaktionen</h2>
+        <ul>
+          <li>Iterierte ForeignKey- und OneToOne-Daten mit <code>select_related()</code> laden.</li>
+          <li>Reverse ForeignKeys und ManyToMany-Daten mit <code>prefetch_related()</code> vorbereiten.</li>
+          <li>Finanzielle Schreibvorgänge und Kiosk-Buchungen mit <code>transaction.atomic()</code> schützen.</li>
+          <li>Raw SQL vermeiden und die ORM-Schnittstellen bevorzugen.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Tests</h2>
+        <ul>
+          <li>Tests dürfen keine externen Netzwerke, echten APIs oder echten Mailversand nutzen.</li>
+          <li>Externe Abhängigkeiten werden mit <code>unittest.mock</code> oder <code>pytest-mock</code> gepatcht.</li>
+          <li>Neue wiederverwendbare Testdaten werden über <code>factory_boy</code> in <code>tests/factories.py</code> erzeugt.</li>
+          <li>Import-, Export-, Permission-, Kiosk- und Abrechnungspfade brauchen Edge-Case-Tests.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Security und Datenschutz</h2>
+        <ul>
+          <li>Keine PII, Zahlungsdetails, PINs, Passwörter oder Secrets loggen.</li>
+          <li>Keine <code>.env</code>-Dateien committen; nur <code>.env.example</code> mit Platzhaltern pflegen.</li>
+          <li>Für sicherheitsrelevante Zufallswerte das Modul <code>secrets</code> verwenden.</li>
+          <li>Dateiuploads nicht anhand der Endung allein verarbeiten; Inhalt und Format validieren.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Frontend-Konventionen</h2>
+        <ul>
+          <li>Servergerenderte Templates nutzen semantisches HTML und beschriftete Formularfelder.</li>
+          <li>Layouts sind mobile-first und basieren auf CSS Grid/Flexbox.</li>
+          <li>Inline-Styles und jQuery sind nicht vorgesehen.</li>
+          <li>Dynamisches Verhalten wird mit modernem Vanilla JavaScript oder bewusst ausgewählten leichten Tools umgesetzt.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Primäre Richtlinien</h2>
+        <ul>
+          <li><a href="../CONTRIBUTING.md">CONTRIBUTING.md</a></li>
+          <li><a href="../AGENTS.md">AGENTS.md</a></li>
+          <li><a href="../tests/README.md">tests/README.md</a></li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>

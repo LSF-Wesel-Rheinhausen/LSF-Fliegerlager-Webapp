@@ -1,9 +1,11 @@
 from io import BytesIO
 
 import pytest
+from django.core.exceptions import ValidationError
+from tests.factories import CampFactory
 
 from billing.importers import preview_participants, save_participants
-from billing.models import Camp, Participant
+from billing.models import Participant
 
 
 def test_csv_preview_validates_required_fields_and_numbers():
@@ -20,7 +22,7 @@ def test_csv_preview_validates_required_fields_and_numbers():
 
 @pytest.mark.django_db
 def test_save_participants_upserts_valid_rows():
-    camp = Camp.objects.create(name="Fliegerlager", year=2025)
+    camp = CampFactory()
     payload = b"first_name,last_name,email\nAda,Lovelace,ada@example.org\n"
     rows = preview_participants(BytesIO(payload), "teilnehmer.csv")
 
@@ -29,3 +31,8 @@ def test_save_participants_upserts_valid_rows():
 
     assert Participant.objects.count() == 1
     assert Participant.objects.get().email == "ada@example.org"
+
+
+def test_xlsx_preview_rejects_invalid_magic_number():
+    with pytest.raises(ValidationError, match="gültiges Excel"):
+        preview_participants(BytesIO(b"not-an-xlsx"), "teilnehmer.xlsx")

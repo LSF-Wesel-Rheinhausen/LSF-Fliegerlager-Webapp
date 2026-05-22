@@ -1,14 +1,15 @@
 import csv
-from dataclasses import asdict
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from decimal import Decimal, InvalidOperation
 from io import BytesIO, TextIOWrapper
 
+from django.core.exceptions import ValidationError
+from django.db import transaction
 from openpyxl import load_workbook
 
 from .models import Participant
 
-
+XLSX_MAGIC = b"PK\x03\x04"
 REQUIRED_PARTICIPANT_COLUMNS = ["first_name", "last_name"]
 PARTICIPANT_COLUMNS = [
     "first_name",
@@ -101,9 +102,23 @@ def read_xlsx(file_obj):
     return parsed
 
 
+def _peek(file_obj, size=4):
+    position = file_obj.tell() if file_obj.seekable() else None
+    header = file_obj.read(size)
+    if position is not None:
+        file_obj.seek(position)
+    return header
+
+
 def preview_participants(file_obj, filename):
-    if filename.lower().endswith(".xlsx"):
+    normalized_name = filename.lower()
+    header = _peek(file_obj)
+    if normalized_name.endswith(".xlsx"):
+        if not header.startswith(XLSX_MAGIC):
+            raise ValidationError("Die XLSX-Datei hat kein gültiges Excel-Dateiformat.")
         return read_xlsx(file_obj)
+    if header.startswith(XLSX_MAGIC):
+        raise ValidationError("Die Datei ist eine Excel-Datei, hat aber nicht die Endung .xlsx.")
     return read_csv(file_obj)
 
 
@@ -117,14 +132,17 @@ def rows_from_payload(payload):
 
 def save_participants(camp, rows):
     created = []
-    for row in rows:
-        if not row.valid:
-            continue
-        participant, _ = Participant.objects.update_or_create(
-            camp=camp,
-            first_name=row.data["first_name"],
-            last_name=row.data["last_name"],
-            defaults={field: row.data[field] for field in PARTICIPANT_COLUMNS if field not in {"first_name", "last_name"}},
-        )
-        created.append(participant)
+    with transaction.atomic():
+        for row in rows:
+            if not row.valid:
+                continue
+            participant, _ = Participant.objects.update_or_create(
+                camp=camp,
+                first_name=row.data["first_name"],
+                last_name=row.data["last_name"],
+                defaults={
+                    field: row.data[field] for field in PARTICIPANT_COLUMNS if field not in {"first_name", "last_name"}
+                },
+            )
+            created.append(participant)
     return created

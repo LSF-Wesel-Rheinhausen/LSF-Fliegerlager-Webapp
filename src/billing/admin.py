@@ -1,6 +1,17 @@
 from django.contrib import admin
 
-from .models import Camp, Charge, DrinkEntry, Expense, MealSignup, Participant, ParticipantPin, Payment, PriceRule, Settlement
+from .models import (
+    Camp,
+    Charge,
+    DrinkEntry,
+    Expense,
+    MealSignup,
+    Participant,
+    ParticipantPin,
+    Payment,
+    PriceRule,
+    Settlement,
+)
 
 
 @admin.register(Camp)
@@ -21,7 +32,16 @@ admin.site.register(ParticipantPin)
 
 @admin.register(PriceRule)
 class PriceRuleAdmin(admin.ModelAdmin):
-    list_display = ("camp", "kind", "name", "unit_price", "camp_flat_duration", "camp_flat_role", "foerderfaehig", "is_default")
+    list_display = (
+        "camp",
+        "kind",
+        "name",
+        "unit_price",
+        "camp_flat_duration",
+        "camp_flat_role",
+        "foerderfaehig",
+        "is_default",
+    )
     list_filter = ("camp", "kind", "camp_flat_duration", "camp_flat_role", "foerderfaehig", "is_default")
 
 

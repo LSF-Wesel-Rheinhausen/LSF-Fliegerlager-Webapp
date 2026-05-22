@@ -1,6 +1,7 @@
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
+from django.db import transaction
 
 from .models import Camp, Charge, Expense, MealSignup, Participant, ParticipantPin, Payment, PriceRule
 
@@ -141,7 +142,12 @@ class CampFlatRateSettingsForm(forms.Form):
     participant_2w_foerderfaehig = forms.BooleanField(label="Förderfähig", required=False)
     companion_1w_price = forms.DecimalField(label="Begleitperson 1 Woche", min_value=0, max_digits=10, decimal_places=2)
     companion_1w_foerderfaehig = forms.BooleanField(label="Förderfähig", required=False)
-    companion_2w_price = forms.DecimalField(label="Begleitperson 2 Wochen", min_value=0, max_digits=10, decimal_places=2)
+    companion_2w_price = forms.DecimalField(
+        label="Begleitperson 2 Wochen",
+        min_value=0,
+        max_digits=10,
+        decimal_places=2,
+    )
     companion_2w_foerderfaehig = forms.BooleanField(label="Förderfähig", required=False)
 
     variants = [
@@ -207,37 +213,38 @@ class CampFlatRateSettingsForm(forms.Form):
     def save(self):
         if self.camp is None:
             raise ValueError("CampFlatRateSettingsForm.save() requires camp.")
-        for prefix, role_label, role, duration_label, duration in self.variants:
-            rule = (
+        with transaction.atomic():
+            for prefix, role_label, role, duration_label, duration in self.variants:
+                rule = (
+                    PriceRule.objects.filter(
+                        camp=self.camp,
+                        kind=PriceRule.Kind.CAMP_FLAT,
+                        camp_flat_role=role,
+                        camp_flat_duration=duration,
+                    )
+                    .order_by("pk")
+                    .first()
+                )
+                if rule is None:
+                    rule = PriceRule(
+                        camp=self.camp,
+                        kind=PriceRule.Kind.CAMP_FLAT,
+                        camp_flat_role=role,
+                        camp_flat_duration=duration,
+                    )
+                rule.name = f"Lagerpauschale {role_label} {duration_label}"
+                rule.unit_price = self.cleaned_data[f"{prefix}_price"]
+                rule.applies_to_children = True
+                rule.applies_to_adults = True
+                rule.foerderfaehig = self.cleaned_data[f"{prefix}_foerderfaehig"]
+                rule.is_default = True
+                rule.save()
                 PriceRule.objects.filter(
                     camp=self.camp,
                     kind=PriceRule.Kind.CAMP_FLAT,
                     camp_flat_role=role,
                     camp_flat_duration=duration,
-                )
-                .order_by("pk")
-                .first()
-            )
-            if rule is None:
-                rule = PriceRule(
-                    camp=self.camp,
-                    kind=PriceRule.Kind.CAMP_FLAT,
-                    camp_flat_role=role,
-                    camp_flat_duration=duration,
-                )
-            rule.name = f"Lagerpauschale {role_label} {duration_label}"
-            rule.unit_price = self.cleaned_data[f"{prefix}_price"]
-            rule.applies_to_children = True
-            rule.applies_to_adults = True
-            rule.foerderfaehig = self.cleaned_data[f"{prefix}_foerderfaehig"]
-            rule.is_default = True
-            rule.save()
-            PriceRule.objects.filter(
-                camp=self.camp,
-                kind=PriceRule.Kind.CAMP_FLAT,
-                camp_flat_role=role,
-                camp_flat_duration=duration,
-            ).exclude(pk=rule.pk).update(is_default=False)
+                ).exclude(pk=rule.pk).update(is_default=False)
 
 
 class ChargeForm(forms.ModelForm):
@@ -322,7 +329,13 @@ class KioskLoginForm(forms.Form):
 
 class KioskPinSetupForm(forms.Form):
     pin = forms.CharField(label="Neuer PIN", min_length=4, max_length=12, strip=True, widget=forms.PasswordInput)
-    pin_repeat = forms.CharField(label="PIN wiederholen", min_length=4, max_length=12, strip=True, widget=forms.PasswordInput)
+    pin_repeat = forms.CharField(
+        label="PIN wiederholen",
+        min_length=4,
+        max_length=12,
+        strip=True,
+        widget=forms.PasswordInput,
+    )
 
     def clean(self):
         cleaned_data = super().clean()

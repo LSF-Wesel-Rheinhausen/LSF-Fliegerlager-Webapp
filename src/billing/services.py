@@ -3,8 +3,7 @@ from decimal import Decimal
 
 from django.db.models import Sum
 
-from .models import Charge, DrinkEntry, Expense, Participant, PriceRule
-
+from .models import DrinkEntry, Expense, Participant, PriceRule
 
 ZERO = Decimal("0.00")
 

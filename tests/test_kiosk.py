@@ -2,17 +2,16 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
-from django.contrib.auth.models import User
 from django.urls import reverse
+from tests.factories import CampFactory, ParticipantFactory, PriceRuleFactory, UserFactory
 
-from billing.models import Camp, Charge, MealSignup, Participant, PriceRule
+from billing.models import Charge, MealSignup, PriceRule
 from billing.views import KIOSK_PARTICIPANT_SESSION_KEY, KIOSK_PIN_SETUP_SESSION_KEY
 
 
 @pytest.mark.django_db
 def test_kiosk_login_redirects_to_pin_setup_when_pin_is_missing(client):
-    camp = Camp.objects.create(name="Fliegerlager", year=2025)
-    participant = Participant.objects.create(camp=camp, first_name="Ada", last_name="Lovelace")
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
 
     response = client.post(reverse("kiosk-login"), {"participant": participant.pk, "pin": "1234"})
 
@@ -24,8 +23,7 @@ def test_kiosk_login_redirects_to_pin_setup_when_pin_is_missing(client):
 
 @pytest.mark.django_db
 def test_kiosk_pin_setup_sets_pin_and_logs_participant_in(client):
-    camp = Camp.objects.create(name="Fliegerlager", year=2025)
-    participant = Participant.objects.create(camp=camp, first_name="Ada", last_name="Lovelace")
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
     session = client.session
     session[KIOSK_PIN_SETUP_SESSION_KEY] = participant.pk
     session.save()
@@ -45,8 +43,7 @@ def test_kiosk_pin_setup_sets_pin_and_logs_participant_in(client):
 
 @pytest.mark.django_db
 def test_kiosk_login_rejects_invalid_pin_for_existing_pin(client):
-    camp = Camp.objects.create(name="Fliegerlager", year=2025)
-    participant = Participant.objects.create(camp=camp, first_name="Grace", last_name="Hopper")
+    participant = ParticipantFactory(first_name="Grace", last_name="Hopper")
     participant.pin.set_pin("1234")
     participant.pin.save()
 
@@ -60,12 +57,12 @@ def test_kiosk_login_rejects_invalid_pin_for_existing_pin(client):
 
 @pytest.mark.django_db
 def test_kiosk_home_hides_normal_admin_header_and_renders_stepper_controls(client):
-    user = User.objects.create_user(username="admin", email="admin@example.test", password="test")
+    user = UserFactory(username="admin", email="admin@example.test")
     client.force_login(user)
 
-    camp = Camp.objects.create(name="Fliegerlager", year=2025)
-    participant = Participant.objects.create(camp=camp, first_name="Ada", last_name="Lovelace")
-    PriceRule.objects.create(
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    PriceRuleFactory(
         camp=camp,
         kind=PriceRule.Kind.DRINK,
         name="Getränk",
@@ -90,8 +87,8 @@ def test_kiosk_home_hides_normal_admin_header_and_renders_stepper_controls(clien
 
 @pytest.mark.django_db
 def test_kiosk_books_drink_with_camp_drink_price_and_subsidy_flag(client):
-    camp = Camp.objects.create(name="Fliegerlager", year=2025)
-    participant = Participant.objects.create(
+    camp = CampFactory()
+    participant = ParticipantFactory(
         camp=camp,
         first_name="Ada",
         last_name="Lovelace",
@@ -99,7 +96,7 @@ def test_kiosk_books_drink_with_camp_drink_price_and_subsidy_flag(client):
         hilfssatz=Decimal("0.5000"),
         berufssatz=Decimal("0.3300"),
     )
-    PriceRule.objects.create(
+    PriceRuleFactory(
         camp=camp,
         kind=PriceRule.Kind.DRINK,
         name="Getränk",
@@ -129,9 +126,9 @@ def test_kiosk_books_drink_with_camp_drink_price_and_subsidy_flag(client):
 
 @pytest.mark.django_db
 def test_kiosk_meal_signup_updates_existing_signup_and_creates_charge(client):
-    camp = Camp.objects.create(name="Fliegerlager", year=2025)
-    participant = Participant.objects.create(camp=camp, first_name="Ada", last_name="Lovelace")
-    meal_rule = PriceRule.objects.create(
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    meal_rule = PriceRuleFactory(
         camp=camp,
         kind=PriceRule.Kind.MEAL,
         name="Mittagessen",
