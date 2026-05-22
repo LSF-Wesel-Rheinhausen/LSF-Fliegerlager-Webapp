@@ -17,3 +17,6 @@ playwright-report/
 test-results/
 .test-local-logs/
 tmp/
+output/
+codex_schema.json
+tests/test_settlements.py.bak
