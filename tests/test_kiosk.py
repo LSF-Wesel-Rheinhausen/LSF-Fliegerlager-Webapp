@@ -143,10 +143,14 @@ def test_kiosk_books_drink_with_camp_drink_price_and_subsidy_flag(client):
 def test_kiosk_meal_signup_updates_existing_signup_and_creates_charge(client):
     camp = CampFactory()
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
-    meal_rule = PriceRuleFactory(
+    PriceRuleFactory(
         camp=camp,
         kind=PriceRule.Kind.MEAL,
-        name="Mittagessen",
+        meal_type=MealSignup.Meal.DINNER,
+        is_default=True,
+        applies_to_children=False,
+        applies_to_adults=True,
+        name="Abendessen",
         unit_price=Decimal("7.00"),
         foerderfaehig=False,
     )
@@ -156,7 +160,6 @@ def test_kiosk_meal_signup_updates_existing_signup_and_creates_charge(client):
 
     payload = {
         "action": "meal",
-        "meal-price_rule": meal_rule.pk,
         "meal-meal_date": date(2025, 7, 1).isoformat(),
         "meal-meal": MealSignup.Meal.DINNER,
         "meal-variant": MealSignup.Variant.NORMAL,
@@ -169,5 +172,125 @@ def test_kiosk_meal_signup_updates_existing_signup_and_creates_charge(client):
     signup = MealSignup.objects.get(participant=participant)
     assert signup.variant == MealSignup.Variant.VEGAN
     charge = Charge.objects.get(participant=participant, kind=Charge.Kind.FOOD)
-    assert charge.description == "Mittagessen Abendessen"
+    assert charge.description == "Abendessen Abendessen"
     assert charge.unit_price == Decimal("7.00")
+
+
+@pytest.mark.django_db
+def test_kiosk_drink_form_filters_by_participant_type(client):
+    camp = CampFactory()
+    participant_child = ParticipantFactory(camp=camp, is_child=True, first_name="C", last_name="C")
+    participant_companion = ParticipantFactory(camp=camp, is_companion=True, first_name="A", last_name="A")
+    participant_adult = ParticipantFactory(camp=camp, first_name="B", last_name="B")
+
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.DRINK,
+        name="Child Drink",
+        applies_to_children=True,
+        applies_to_adults=False,
+        applies_to_companions=False,
+    )
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.DRINK,
+        name="Companion Drink",
+        applies_to_children=False,
+        applies_to_adults=False,
+        applies_to_companions=True,
+    )
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.DRINK,
+        name="Adult Drink",
+        applies_to_children=False,
+        applies_to_adults=True,
+        applies_to_companions=False,
+    )
+
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant_child.pk
+    session.save()
+
+    response = client.get(reverse("kiosk-home"))
+    assert b"Child Drink" in response.content
+    assert b"Companion Drink" not in response.content
+    assert b"Adult Drink" not in response.content
+
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant_companion.pk
+    session.save()
+    response = client.get(reverse("kiosk-home"))
+    assert b"Child Drink" not in response.content
+    assert b"Companion Drink" in response.content
+    assert b"Adult Drink" not in response.content
+
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant_adult.pk
+    session.save()
+    response = client.get(reverse("kiosk-home"))
+    assert b"Child Drink" not in response.content
+    assert b"Companion Drink" not in response.content
+    assert b"Adult Drink" in response.content
+
+
+@pytest.mark.django_db
+def test_kiosk_meal_signup_child_breakfast_override(client):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, first_name="Timmy", is_child=True)
+
+    # Standard price
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.BREAKFAST,
+        is_default=True,
+        applies_to_children=True,
+        applies_to_adults=False,
+        name="Standard Frühstück Kind",
+        unit_price=Decimal("4.00"),
+    )
+
+    # Override price for July 2nd
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.BREAKFAST,
+        meal_date=date(2025, 7, 2),
+        is_default=False,
+        applies_to_children=True,
+        applies_to_adults=False,
+        name="Besonderes Frühstück",
+        unit_price=Decimal("5.50"),
+    )
+
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    # Book standard day
+    client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-meal_date": date(2025, 7, 1).isoformat(),
+            "meal-meal": MealSignup.Meal.BREAKFAST,
+            "meal-variant": MealSignup.Variant.NORMAL_CHILD,
+        },
+    )
+
+    # Book override day
+    client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-meal_date": date(2025, 7, 2).isoformat(),
+            "meal-meal": MealSignup.Meal.BREAKFAST,
+            "meal-variant": MealSignup.Variant.NORMAL_CHILD,
+        },
+    )
+
+    charges = list(Charge.objects.filter(participant=participant, kind=Charge.Kind.FOOD).order_by("occurred_on"))
+    assert len(charges) == 2
+    assert charges[0].unit_price == Decimal("4.00")
+    assert charges[0].description == "Standard Frühstück Kind Frühstück"
+    assert charges[1].unit_price == Decimal("5.50")
+    assert charges[1].description == "Besonderes Frühstück Frühstück"

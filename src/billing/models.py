@@ -130,6 +130,10 @@ class PriceRule(TimeStampedModel):
         DRINK = "drink", "Getränk"
         OTHER = "other", "Sonstiges"
 
+    class MealType(models.TextChoices):
+        BREAKFAST = "breakfast", "Frühstück"
+        DINNER = "dinner", "Abendessen"
+
     class CampFlatDuration(models.TextChoices):
         ONE_WEEK = "1w", "1 Woche"
         TWO_WEEKS = "2w", "2 Wochen"
@@ -144,8 +148,11 @@ class PriceRule(TimeStampedModel):
     unit_price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal("0"))])
     camp_flat_duration = models.CharField(max_length=2, choices=CampFlatDuration.choices, blank=True)
     camp_flat_role = models.CharField(max_length=20, choices=CampFlatRole.choices, blank=True)
+    meal_type = models.CharField(max_length=20, choices=MealType.choices, blank=True)
+    meal_date = models.DateField(null=True, blank=True)
     applies_to_children = models.BooleanField(default=True)
     applies_to_adults = models.BooleanField(default=True)
+    applies_to_companions = models.BooleanField(default=True)
     foerderfaehig = models.BooleanField(default=True)
     is_default = models.BooleanField(default=False)
 
@@ -222,7 +229,6 @@ class Expense(TimeStampedModel):
 class MealSignup(TimeStampedModel):
     class Meal(models.TextChoices):
         BREAKFAST = "breakfast", "Frühstück"
-        LUNCH = "lunch", "Mittagessen"
         DINNER = "dinner", "Abendessen"
 
     class Variant(models.TextChoices):

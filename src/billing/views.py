@@ -23,6 +23,7 @@ from .forms import (
     KioskLoginForm,
     KioskPinSetupForm,
     MealBookingForm,
+    MealStandardPricesForm,
     ParticipantForm,
     ParticipantImportForm,
     ParticipantPinForm,
@@ -288,20 +289,30 @@ def price_rule_create(request, camp_id):
 def price_rules_manage(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
     form = CampFlatRateSettingsForm(request.POST or None, camp=camp)
-    if request.method == "POST" and form.is_valid():
-        with transaction.atomic():
-            form.save()
-        messages.success(request, "Lagerpauschalen wurden gespeichert.")
-        return redirect("price-rules-manage", camp_id=camp.pk)
+    meal_form = MealStandardPricesForm(request.POST or None, camp=camp, prefix="meal")
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "camp_flat" and form.is_valid():
+            with transaction.atomic():
+                form.save()
+            messages.success(request, "Lagerpauschalen wurden gespeichert.")
+            return redirect("price-rules-manage", camp_id=camp.pk)
+        elif action == "meal_standard" and meal_form.is_valid():
+            with transaction.atomic():
+                meal_form.save()
+            messages.success(request, "Standardpreise für Verpflegung wurden gespeichert.")
+            return redirect("price-rules-manage", camp_id=camp.pk)
+
     grouped_rules = {
         "drinks": camp.price_rules.filter(kind=PriceRule.Kind.DRINK),
-        "meals": camp.price_rules.filter(kind=PriceRule.Kind.MEAL),
+        "meals": camp.price_rules.filter(kind=PriceRule.Kind.MEAL, is_default=False),
         "other": camp.price_rules.filter(kind__in=[PriceRule.Kind.NIGHT, PriceRule.Kind.OTHER]),
     }
     return render(
         request,
         "billing/price_rules_manage.html",
-        {"camp": camp, "form": form, "grouped_rules": grouped_rules},
+        {"camp": camp, "form": form, "meal_form": meal_form, "grouped_rules": grouped_rules},
     )
 
 
@@ -457,11 +468,11 @@ def kiosk_home(request):
     if participant is None:
         return redirect("kiosk-login")
 
-    drink_form = DrinkBookingForm(camp=participant.camp, prefix="drink")
-    meal_form = MealBookingForm(camp=participant.camp, prefix="meal")
+    drink_form = DrinkBookingForm(participant=participant, prefix="drink")
+    meal_form = MealBookingForm(participant=participant, prefix="meal")
     if request.method == "POST":
         if request.POST.get("action") == "drink":
-            drink_form = DrinkBookingForm(request.POST, camp=participant.camp, prefix="drink")
+            drink_form = DrinkBookingForm(request.POST, participant=participant, prefix="drink")
             if drink_form.is_valid():
                 price_rule = drink_form.cleaned_data["price_rule"]
                 with transaction.atomic():
@@ -476,36 +487,61 @@ def kiosk_home(request):
                 messages.success(request, "Getränk wurde gebucht.")
                 return redirect("kiosk-home")
         elif request.POST.get("action") == "meal":
-            meal_form = MealBookingForm(request.POST, camp=participant.camp, prefix="meal")
+            meal_form = MealBookingForm(request.POST, participant=participant, prefix="meal")
             if meal_form.is_valid():
-                price_rule = meal_form.cleaned_data["price_rule"]
-                meal_display = dict(MealSignup.Meal.choices).get(
-                    meal_form.cleaned_data["meal"],
-                    meal_form.cleaned_data["meal"],
-                )
-                with transaction.atomic():
-                    MealSignup.objects.update_or_create(
-                        participant=participant,
-                        meal_date=meal_form.cleaned_data["meal_date"],
-                        meal=meal_form.cleaned_data["meal"],
-                        defaults={
-                            "variant": meal_form.cleaned_data["variant"],
-                            "foerderfaehig": price_rule.foerderfaehig,
-                        },
+                meal_date = meal_form.cleaned_data["meal_date"]
+                meal = meal_form.cleaned_data["meal"]
+                variant = meal_form.cleaned_data["variant"]
+
+                is_child = variant in [MealSignup.Variant.NORMAL_CHILD, MealSignup.Variant.VEGAN_CHILD]
+
+                price_rule = PriceRule.objects.filter(
+                    camp=participant.camp,
+                    kind=PriceRule.Kind.MEAL,
+                    meal_type=meal,
+                    applies_to_children=is_child,
+                    meal_date=meal_date,
+                ).first()
+
+                if not price_rule:
+                    price_rule = PriceRule.objects.filter(
+                        camp=participant.camp,
+                        kind=PriceRule.Kind.MEAL,
+                        meal_type=meal,
+                        applies_to_children=is_child,
+                        is_default=True,
+                        meal_date__isnull=True,
+                    ).first()
+
+                if not price_rule:
+                    meal_form.add_error(
+                        None, "Für diese Mahlzeit ist kein Preis hinterlegt. Bitte wende dich an die Lagerleitung."
                     )
-                    Charge.objects.update_or_create(
-                        participant=participant,
-                        kind=Charge.Kind.FOOD,
-                        occurred_on=meal_form.cleaned_data["meal_date"],
-                        description=f"{price_rule.name} {meal_display}",
-                        defaults={
-                            "quantity": 1,
-                            "unit_price": price_rule.unit_price,
-                            "foerderfaehig": price_rule.foerderfaehig,
-                        },
-                    )
-                messages.success(request, "Essensanmeldung wurde gespeichert.")
-                return redirect("kiosk-home")
+                else:
+                    meal_display = dict(MealSignup.Meal.choices).get(meal, meal)
+                    with transaction.atomic():
+                        MealSignup.objects.update_or_create(
+                            participant=participant,
+                            meal_date=meal_date,
+                            meal=meal,
+                            defaults={
+                                "variant": variant,
+                                "foerderfaehig": price_rule.foerderfaehig,
+                            },
+                        )
+                        Charge.objects.update_or_create(
+                            participant=participant,
+                            kind=Charge.Kind.FOOD,
+                            occurred_on=meal_date,
+                            description=f"{price_rule.name} {meal_display}",
+                            defaults={
+                                "quantity": 1,
+                                "unit_price": price_rule.unit_price,
+                                "foerderfaehig": price_rule.foerderfaehig,
+                            },
+                        )
+                    messages.success(request, "Essensanmeldung wurde gespeichert.")
+                    return redirect("kiosk-home")
 
     recent_drinks = participant.charges.filter(kind=Charge.Kind.DRINK).order_by("-created_at")[:8]
     meal_signups = participant.meal_signups.order_by("meal_date", "meal")
@@ -516,8 +552,7 @@ def kiosk_home(request):
         "meal_form": meal_form,
         "recent_drinks": recent_drinks,
         "meal_signups": meal_signups,
-        "drink_rules": PriceRule.objects.filter(camp=participant.camp, kind=PriceRule.Kind.DRINK).order_by("name"),
-        "meal_rules": PriceRule.objects.filter(camp=participant.camp, kind=PriceRule.Kind.MEAL).order_by("name"),
+        "drink_rules": drink_form.fields["price_rule"].queryset,
         "kiosk_autologout": True,
     }
     return render(request, "billing/kiosk_home.html", context)

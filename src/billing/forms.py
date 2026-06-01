@@ -171,8 +171,11 @@ class PriceRuleForm(forms.ModelForm):
             "camp_flat_role",
             "applies_to_children",
             "applies_to_adults",
+            "applies_to_companions",
             "foerderfaehig",
             "is_default",
+            "meal_type",
+            "meal_date",
         ]
         labels = {
             "kind": "Art",
@@ -182,8 +185,11 @@ class PriceRuleForm(forms.ModelForm):
             "camp_flat_role": "Personengruppe",
             "applies_to_children": "Gilt für Kinder",
             "applies_to_adults": "Gilt für Erwachsene",
+            "applies_to_companions": "Gilt für Begleitpersonen",
             "foerderfaehig": "Förderfähig",
             "is_default": "Standardregel",
+            "meal_type": "Mahlzeit",
+            "meal_date": "Datum",
         }
         widgets = {
             "kind": forms.RadioSelect,
@@ -306,6 +312,7 @@ class CampFlatRateSettingsForm(forms.Form):
                 rule.unit_price = self.cleaned_data[f"{prefix}_price"]
                 rule.applies_to_children = True
                 rule.applies_to_adults = True
+                rule.applies_to_companions = True
                 rule.foerderfaehig = self.cleaned_data[f"{prefix}_foerderfaehig"]
                 rule.is_default = True
                 rule.save()
@@ -428,23 +435,125 @@ class DrinkBookingForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         camp = kwargs.pop("camp", None)
+        participant = kwargs.pop("participant", None)
         super().__init__(*args, **kwargs)
+        if participant is not None:
+            camp = participant.camp
         if camp is not None:
             queryset = PriceRule.objects.filter(camp=camp, kind=PriceRule.Kind.DRINK).order_by("name")
+            if participant is not None:
+                if participant.is_child:
+                    queryset = queryset.filter(applies_to_children=True)
+                elif participant.is_companion:
+                    queryset = queryset.filter(applies_to_companions=True)
+                else:
+                    queryset = queryset.filter(applies_to_adults=True)
             self.fields["price_rule"].queryset = queryset
         self.fields["price_rule"].label_from_instance = lambda rule: f"{rule.name} - {rule.unit_price} EUR"
 
 
 class MealBookingForm(forms.Form):
-    price_rule = forms.ModelChoiceField(label="Essen", queryset=PriceRule.objects.none())
     meal_date = forms.DateField(label="Datum", widget=forms.DateInput(attrs={"type": "date"}))
     meal = forms.ChoiceField(label="Mahlzeit", choices=MealSignup.Meal.choices)
     variant = forms.ChoiceField(label="Variante", choices=MealSignup.Variant.choices)
 
     def __init__(self, *args, **kwargs):
-        camp = kwargs.pop("camp", None)
+        participant = kwargs.pop("participant", None)
+        kwargs.pop("camp", None)
         super().__init__(*args, **kwargs)
-        if camp is not None:
-            queryset = PriceRule.objects.filter(camp=camp, kind=PriceRule.Kind.MEAL).order_by("name")
-            self.fields["price_rule"].queryset = queryset
-        self.fields["price_rule"].label_from_instance = lambda rule: f"{rule.name} - {rule.unit_price} EUR"
+        if participant is not None:
+            from django.utils import timezone
+
+            self.fields["meal_date"].initial = timezone.now().date()
+            if participant.is_child:
+                self.fields["variant"].choices = [
+                    (MealSignup.Variant.NORMAL_CHILD, "Normal (Kind)"),
+                    (MealSignup.Variant.VEGAN_CHILD, "Vegan/Vegetarisch (Kind)"),
+                ]
+            else:
+                self.fields["variant"].choices = [
+                    (MealSignup.Variant.NORMAL, "Normal"),
+                    (MealSignup.Variant.VEGAN, "Vegan/Vegetarisch"),
+                ]
+
+
+class MealStandardPricesForm(forms.Form):
+    breakfast_adult_price = forms.DecimalField(
+        label="Frühstück Erwachsene", max_digits=6, decimal_places=2, min_value=0, required=False
+    )
+    breakfast_adult_foerderfaehig = forms.BooleanField(label="Förderfähig", required=False)
+    breakfast_child_price = forms.DecimalField(
+        label="Frühstück Kinder", max_digits=6, decimal_places=2, min_value=0, required=False
+    )
+    breakfast_child_foerderfaehig = forms.BooleanField(label="Förderfähig", required=False)
+
+    dinner_adult_price = forms.DecimalField(
+        label="Abendessen Erwachsene", max_digits=6, decimal_places=2, min_value=0, required=False
+    )
+    dinner_adult_foerderfaehig = forms.BooleanField(label="Förderfähig", required=False)
+    dinner_child_price = forms.DecimalField(
+        label="Abendessen Kinder", max_digits=6, decimal_places=2, min_value=0, required=False
+    )
+    dinner_child_foerderfaehig = forms.BooleanField(label="Förderfähig", required=False)
+
+    def __init__(self, *args, **kwargs):
+        self.camp = kwargs.pop("camp")
+        super().__init__(*args, **kwargs)
+        # Load initial values
+        self.rules = {
+            "breakfast": PriceRule.objects.filter(
+                camp=self.camp, kind=PriceRule.Kind.MEAL, meal_type="breakfast", is_default=True, meal_date__isnull=True
+            ),
+            "dinner": PriceRule.objects.filter(
+                camp=self.camp, kind=PriceRule.Kind.MEAL, meal_type="dinner", is_default=True, meal_date__isnull=True
+            ),
+        }
+        for meal_type, qs in self.rules.items():
+            for rule in qs:
+                if rule.applies_to_adults:
+                    self.initial[f"{meal_type}_adult_price"] = rule.unit_price
+                    self.initial[f"{meal_type}_adult_foerderfaehig"] = rule.foerderfaehig
+                if rule.applies_to_children:
+                    self.initial[f"{meal_type}_child_price"] = rule.unit_price
+                    self.initial[f"{meal_type}_child_foerderfaehig"] = rule.foerderfaehig
+
+    def save(self):
+        with transaction.atomic():
+            for meal_type in ["breakfast", "dinner"]:
+                adult_price = self.cleaned_data.get(f"{meal_type}_adult_price")
+                adult_ff = self.cleaned_data.get(f"{meal_type}_adult_foerderfaehig")
+                child_price = self.cleaned_data.get(f"{meal_type}_child_price")
+                child_ff = self.cleaned_data.get(f"{meal_type}_child_foerderfaehig")
+
+                if adult_price is not None:
+                    PriceRule.objects.update_or_create(
+                        camp=self.camp,
+                        kind=PriceRule.Kind.MEAL,
+                        meal_type=meal_type,
+                        is_default=True,
+                        applies_to_adults=True,
+                        meal_date__isnull=True,
+                        defaults={
+                            "name": f"Standard {dict(PriceRule.MealType.choices).get(meal_type)}",
+                            "unit_price": adult_price,
+                            "foerderfaehig": adult_ff,
+                            "applies_to_children": False,
+                            "applies_to_companions": True,  # adults include companions for now
+                        },
+                    )
+                if child_price is not None:
+                    PriceRule.objects.update_or_create(
+                        camp=self.camp,
+                        kind=PriceRule.Kind.MEAL,
+                        meal_type=meal_type,
+                        is_default=True,
+                        applies_to_children=True,
+                        meal_date__isnull=True,
+                        defaults={
+                            "name": f"Standard {dict(PriceRule.MealType.choices).get(meal_type)} (Kind)",
+                            "unit_price": child_price,
+                            "foerderfaehig": child_ff,
+                            "applies_to_adults": False,
+                            "applies_to_companions": False,
+                        },
+                    )

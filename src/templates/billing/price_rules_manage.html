@@ -18,6 +18,7 @@
     </div>
     <form method="post">
       {% csrf_token %}
+      <input type="hidden" name="action" value="camp_flat">
       {{ form.non_field_errors }}
       <table class="settings-table">
         <thead>
@@ -69,12 +70,62 @@
   <section class="panel stack">
     <div class="toolbar compact-toolbar">
       <div>
-        <h2>Essen</h2>
-        <p>Diese Preise erscheinen im Kiosk unter Essen.</p>
+        <h2>Essen (Standardpreise)</h2>
+        <p>Diese Standardpreise gelten im Kiosk für jede Mahlzeit, sofern kein abweichender Tagespreis hinterlegt ist.</p>
       </div>
-      <a class="button" href="{% url 'price-rule-create' camp.pk %}" onclick="openCreateDialog('meal', 'Essen'); return false;">Essen anlegen</a>
     </div>
-    {% include "billing/price_rule_table.html" with rules=grouped_rules.meals empty_text="Noch keine Essenspreise vorhanden." %}
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="meal_standard">
+      {{ meal_form.non_field_errors }}
+      <table class="settings-table">
+        <thead>
+          <tr>
+            <th>Mahlzeit</th>
+            <th>Erwachsene</th>
+            <th>Kinder</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Frühstück</td>
+            <td>
+              {{ meal_form.breakfast_adult_price }}
+              <label>{{ meal_form.breakfast_adult_foerderfaehig }} Förderfähig</label>
+            </td>
+            <td>
+              {{ meal_form.breakfast_child_price }}
+              <label>{{ meal_form.breakfast_child_foerderfaehig }} Förderfähig</label>
+            </td>
+          </tr>
+          <tr>
+            <td>Abendessen</td>
+            <td>
+              {{ meal_form.dinner_adult_price }}
+              <label>{{ meal_form.dinner_adult_foerderfaehig }} Förderfähig</label>
+            </td>
+            <td>
+              {{ meal_form.dinner_child_price }}
+              <label>{{ meal_form.dinner_child_foerderfaehig }} Förderfähig</label>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="form-actions">
+        <button type="submit">Standardpreise speichern</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel stack">
+    <div class="toolbar compact-toolbar">
+      <div>
+        <h2>Essen (Abweichende Tagespreise)</h2>
+        <p>Spezielle Preise für bestimmte Mahlzeiten und Tage (z.B. Grillfest).</p>
+      </div>
+      <a class="button" href="{% url 'price-rule-create' camp.pk %}" onclick="openCreateDialog('meal', 'Tagespreis'); return false;">Tagespreis anlegen</a>
+    </div>
+    {% include "billing/price_rule_table.html" with rules=grouped_rules.meals empty_text="Keine abweichenden Tagespreise vorhanden." %}
   </section>
 
   <section class="panel stack">
@@ -98,8 +149,19 @@
       <input type="hidden" name="kind" id="id_kind">
 
       <p>
-        <label for="id_name">Name</label>
+        <label for="id_name">Name / Bezeichnung</label>
         <input type="text" name="name" id="id_name" required>
+      </p>
+
+      <p id="meal-fields" style="display: none;">
+        <label for="id_meal_type" style="display: block; margin-bottom: 4px;">Mahlzeit</label>
+        <select name="meal_type" id="id_meal_type" style="width: 100%; margin-bottom: 14px;">
+          <option value="breakfast">Frühstück</option>
+          <option value="dinner">Abendessen</option>
+        </select>
+
+        <label for="id_meal_date" style="display: block; margin-bottom: 4px;">Datum (für Tagespreis)</label>
+        <input type="date" name="meal_date" id="id_meal_date" style="width: 100%; margin-bottom: 14px;">
       </p>
 
       <p>
@@ -118,7 +180,7 @@
         </label>
       </div>
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
+      <div id="participant-type-checkboxes" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 16px;">
         <label style="display: inline-flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
           <input type="checkbox" name="applies_to_children" id="id_applies_to_children" checked>
           <span>Für Kinder</span>
@@ -126,6 +188,10 @@
         <label style="display: inline-flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
           <input type="checkbox" name="applies_to_adults" id="id_applies_to_adults" checked>
           <span>Für Erwachsene</span>
+        </label>
+        <label style="display: inline-flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
+          <input type="checkbox" name="applies_to_companions" id="id_applies_to_companions" checked>
+          <span>Für Begleitpersonen</span>
         </label>
       </div>
 
@@ -140,6 +206,8 @@
       const dialog = document.getElementById('price-rule-dialog');
       const form = document.getElementById('dialog-form');
       const title = document.getElementById('dialog-title');
+      const participantTypes = document.getElementById('participant-type-checkboxes');
+      const mealFields = document.getElementById('meal-fields');
 
       form.action = "{% url 'price-rule-create' camp.pk %}";
       form.reset();
@@ -149,15 +217,30 @@
       document.getElementById('id_is_default').checked = false;
       document.getElementById('id_applies_to_children').checked = true;
       document.getElementById('id_applies_to_adults').checked = true;
+      document.getElementById('id_applies_to_companions').checked = true;
+
+      if (kind === 'drink') {
+        participantTypes.style.display = 'none';
+      } else {
+        participantTypes.style.display = 'grid';
+      }
+
+      if (kind === 'meal') {
+        mealFields.style.display = 'block';
+      } else {
+        mealFields.style.display = 'none';
+      }
 
       title.textContent = kindLabel + ' anlegen';
       dialog.showModal();
     }
 
-    function openEditDialog(ruleId, kind, name, unitPrice, isFoerderfaehig, isDefault, appliesToChildren, appliesToAdults) {
+    function openEditDialog(ruleId, kind, name, unitPrice, isFoerderfaehig, isDefault, appliesToChildren, appliesToAdults, appliesToCompanions, mealType, mealDate) {
       const dialog = document.getElementById('price-rule-dialog');
       const form = document.getElementById('dialog-form');
       const title = document.getElementById('dialog-title');
+      const participantTypes = document.getElementById('participant-type-checkboxes');
+      const mealFields = document.getElementById('meal-fields');
 
       let urlPattern = "{% url 'price-rule-edit' '999' %}";
       form.action = urlPattern.replace('999', ruleId);
@@ -172,6 +255,24 @@
       document.getElementById('id_is_default').checked = isDefault === 'True';
       document.getElementById('id_applies_to_children').checked = appliesToChildren === 'True';
       document.getElementById('id_applies_to_adults').checked = appliesToAdults === 'True';
+      document.getElementById('id_applies_to_companions').checked = appliesToCompanions === 'True';
+
+      if (mealType) {
+        document.getElementById('id_meal_type').value = mealType;
+      }
+      document.getElementById('id_meal_date').value = mealDate || '';
+
+      if (kind === 'drink') {
+        participantTypes.style.display = 'none';
+      } else {
+        participantTypes.style.display = 'grid';
+      }
+
+      if (kind === 'meal') {
+        mealFields.style.display = 'block';
+      } else {
+        mealFields.style.display = 'none';
+      }
 
       title.textContent = 'Preisregel bearbeiten';
       dialog.showModal();

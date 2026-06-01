@@ -51,23 +51,11 @@
 
     <section class="panel">
       <h2>Essen anmelden</h2>
-      <p class="hint">
-        {% for rule in meal_rules %}
-          {{ rule.name }} {{ rule.unit_price|money_eur }}{% if not forloop.last %} · {% endif %}
-        {% empty %}
-          Keine Essenspreise im Lager hinterlegt.
-        {% endfor %}
-      </p>
+      <p class="hint">Der Preis wird automatisch anhand von Alter, Mahlzeit und Standard- oder Tagespreis berechnet.</p>
+      {{ meal_form.non_field_errors }}
       <form method="post" class="form-grid">
         {% csrf_token %}
         <input type="hidden" name="action" value="meal">
-        <p>
-          <label for="{{ meal_form.price_rule.id_for_label }}">{{ meal_form.price_rule.label }}</label>
-          {{ meal_form.price_rule }}
-          {% for error in meal_form.price_rule.errors %}
-            <span class="helptext error">{{ error }}</span>
-          {% endfor %}
-        </p>
         <p>
           <label for="{{ meal_form.meal_date.id_for_label }}">{{ meal_form.meal_date.label }}</label>
           {{ meal_form.meal_date }}

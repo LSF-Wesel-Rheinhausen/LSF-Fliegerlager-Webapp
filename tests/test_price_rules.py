@@ -16,6 +16,7 @@ def test_admin_can_manage_camp_flat_rates_without_dropdowns(client):
     response = client.post(
         reverse("price-rules-manage", args=[camp.pk]),
         {
+            "action": "camp_flat",
             "participant_1w_price": "120.00",
             "participant_1w_foerderfaehig": "on",
             "participant_2w_price": "220.00",
