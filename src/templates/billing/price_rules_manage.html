@@ -7,7 +7,7 @@
     </div>
     <div class="actions">
       <a class="button button-secondary" href="{% url 'camp-detail' camp.pk %}">Zurück zum Lager</a>
-      <a class="button" href="{% url 'price-rule-create' camp.pk %}">Einzelpreis anlegen</a>
+      <a class="button" href="{% url 'price-rule-create' camp.pk %}" onclick="openCreateDialog('other', 'Preisregel'); return false;">Einzelpreis anlegen</a>
     </div>
   </div>
 
@@ -61,7 +61,7 @@
         <h2>Getränke</h2>
         <p>Diese Preise erscheinen im Kiosk unter Getränke.</p>
       </div>
-      <a class="button" href="{% url 'price-rule-create' camp.pk %}">Getränk anlegen</a>
+      <a class="button" href="{% url 'price-rule-create' camp.pk %}" onclick="openCreateDialog('drink', 'Getränk'); return false;">Getränk anlegen</a>
     </div>
     {% include "billing/price_rule_table.html" with rules=grouped_rules.drinks empty_text="Noch keine Getränkepreise vorhanden." %}
   </section>
@@ -72,7 +72,7 @@
         <h2>Essen</h2>
         <p>Diese Preise erscheinen im Kiosk unter Essen.</p>
       </div>
-      <a class="button" href="{% url 'price-rule-create' camp.pk %}">Essen anlegen</a>
+      <a class="button" href="{% url 'price-rule-create' camp.pk %}" onclick="openCreateDialog('meal', 'Essen'); return false;">Essen anlegen</a>
     </div>
     {% include "billing/price_rule_table.html" with rules=grouped_rules.meals empty_text="Noch keine Essenspreise vorhanden." %}
   </section>
@@ -83,8 +83,111 @@
         <h2>Weitere Standardpreise</h2>
         <p>Übernachtungen und sonstige Preisregeln.</p>
       </div>
-      <a class="button" href="{% url 'price-rule-create' camp.pk %}">Preis anlegen</a>
+      <a class="button" href="{% url 'price-rule-create' camp.pk %}" onclick="openCreateDialog('other', 'Preisregel'); return false;">Preis anlegen</a>
     </div>
     {% include "billing/price_rule_table.html" with rules=grouped_rules.other empty_text="Noch keine weiteren Preisregeln vorhanden." %}
   </section>
+
+  <dialog id="price-rule-dialog">
+    <div class="toolbar compact-toolbar" style="margin-bottom: 16px;">
+      <h2 id="dialog-title" style="margin: 0;">Preisregel anlegen</h2>
+      <button type="button" class="button button-secondary" onclick="closeDialog()" style="min-height: 32px; padding: 6px 10px;">Schließen</button>
+    </div>
+    <form id="dialog-form" method="post" class="form-grid">
+      {% csrf_token %}
+      <input type="hidden" name="kind" id="id_kind">
+
+      <p>
+        <label for="id_name">Name</label>
+        <input type="text" name="name" id="id_name" required>
+      </p>
+
+      <p>
+        <label for="id_unit_price">Einzelpreis (EUR)</label>
+        <input type="number" name="unit_price" id="id_unit_price" step="0.01" min="0" required>
+      </p>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; margin-top: 10px;">
+        <label style="display: inline-flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
+          <input type="checkbox" name="foerderfaehig" id="id_foerderfaehig" checked>
+          <span>Förderfähig</span>
+        </label>
+        <label style="display: inline-flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
+          <input type="checkbox" name="is_default" id="id_is_default">
+          <span>Standardregel</span>
+        </label>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
+        <label style="display: inline-flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
+          <input type="checkbox" name="applies_to_children" id="id_applies_to_children" checked>
+          <span>Für Kinder</span>
+        </label>
+        <label style="display: inline-flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
+          <input type="checkbox" name="applies_to_adults" id="id_applies_to_adults" checked>
+          <span>Für Erwachsene</span>
+        </label>
+      </div>
+
+      <div class="form-actions" style="margin-top: 14px;">
+        <button type="submit" class="button">Speichern</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+    function openCreateDialog(kind, kindLabel) {
+      const dialog = document.getElementById('price-rule-dialog');
+      const form = document.getElementById('dialog-form');
+      const title = document.getElementById('dialog-title');
+
+      form.action = "{% url 'price-rule-create' camp.pk %}";
+      form.reset();
+
+      document.getElementById('id_kind').value = kind;
+      document.getElementById('id_foerderfaehig').checked = true;
+      document.getElementById('id_is_default').checked = false;
+      document.getElementById('id_applies_to_children').checked = true;
+      document.getElementById('id_applies_to_adults').checked = true;
+
+      title.textContent = kindLabel + ' anlegen';
+      dialog.showModal();
+    }
+
+    function openEditDialog(ruleId, kind, name, unitPrice, isFoerderfaehig, isDefault, appliesToChildren, appliesToAdults) {
+      const dialog = document.getElementById('price-rule-dialog');
+      const form = document.getElementById('dialog-form');
+      const title = document.getElementById('dialog-title');
+
+      let urlPattern = "{% url 'price-rule-edit' '999' %}";
+      form.action = urlPattern.replace('999', ruleId);
+
+      document.getElementById('id_kind').value = kind;
+      document.getElementById('id_name').value = name;
+
+      let cleanedPrice = parseFloat(unitPrice.replace(',', '.')).toFixed(2);
+      document.getElementById('id_unit_price').value = cleanedPrice;
+
+      document.getElementById('id_foerderfaehig').checked = isFoerderfaehig === 'True';
+      document.getElementById('id_is_default').checked = isDefault === 'True';
+      document.getElementById('id_applies_to_children').checked = appliesToChildren === 'True';
+      document.getElementById('id_applies_to_adults').checked = appliesToAdults === 'True';
+
+      title.textContent = 'Preisregel bearbeiten';
+      dialog.showModal();
+    }
+
+    function closeDialog() {
+      document.getElementById('price-rule-dialog').close();
+    }
+
+    document.getElementById('price-rule-dialog').addEventListener('click', function(e) {
+      const rect = this.getBoundingClientRect();
+      const isInDialog = (rect.top <= e.clientY && e.clientY <= rect.top + rect.height &&
+        rect.left <= e.clientX && e.clientX <= rect.left + rect.width);
+      if (!isInDialog) {
+        this.close();
+      }
+    });
+  </script>
 {% endblock %}

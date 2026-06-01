@@ -631,3 +631,35 @@ textarea {
     padding: 18px;
   }
 }
+
+/* Dialog/Popup Modals */
+dialog {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 24px;
+  background: var(--panel);
+  box-shadow: 0 20px 48px rgba(32, 37, 45, 0.16);
+  max-width: 480px;
+  width: 90%;
+  box-sizing: border-box;
+}
+
+dialog::backdrop {
+  background: rgba(32, 37, 45, 0.45);
+  backdrop-filter: blur(4px);
+}
+
+.button-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.button-link:hover {
+  color: var(--accent-dark);
+  text-decoration: none;
+}

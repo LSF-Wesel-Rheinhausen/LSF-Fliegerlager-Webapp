@@ -17,7 +17,9 @@
         <td>{{ rule.unit_price }} EUR</td>
         <td>{% if rule.foerderfaehig %}Ja{% else %}Nein{% endif %}</td>
         <td>{% if rule.is_default %}Ja{% else %}Nein{% endif %}</td>
-        <td><a href="{% url 'price-rule-edit' rule.pk %}">Bearbeiten</a></td>
+        <td>
+          <a class="button-link" href="{% url 'price-rule-edit' rule.pk %}" onclick="openEditDialog('{{ rule.pk }}', '{{ rule.kind }}', '{{ rule.name|escapejs }}', '{{ rule.unit_price }}', '{{ rule.foerderfaehig }}', '{{ rule.is_default }}', '{{ rule.applies_to_children }}', '{{ rule.applies_to_adults }}'); return false;">Bearbeiten</a>
+        </td>
       </tr>
     {% empty %}
       <tr><td colspan="6">{{ empty_text }}</td></tr>

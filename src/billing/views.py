@@ -280,7 +280,7 @@ def price_rule_create(request, camp_id):
             rule.camp = camp
             rule.save()
         messages.success(request, "Preisregel wurde gespeichert.")
-        return redirect("camp-detail", camp_id=camp.pk)
+        return redirect("price-rules-manage", camp_id=camp.pk)
     return render(request, "billing/form.html", {"form": form, "title": "Preisregel anlegen"})
 
 
@@ -313,7 +313,7 @@ def price_rule_edit(request, price_rule_id):
         with transaction.atomic():
             form.save()
         messages.success(request, "Preisregel wurde gespeichert.")
-        return redirect("camp-detail", camp_id=rule.camp.pk)
+        return redirect("price-rules-manage", camp_id=rule.camp.pk)
     return render(request, "billing/form.html", {"form": form, "title": "Preisregel bearbeiten", "camp": rule.camp})
 
 

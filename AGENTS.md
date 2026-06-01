@@ -163,6 +163,7 @@ AI agents must follow modern web standards for server-rendered Django templates.
 - Destructive or settlement-altering actions must include a clear confirmation step.
 - Use Django's `messages` framework for success, error, and warning feedback after form submissions.
 - Format currency and dates consistently according to the project's locale conventions.
+- Popups/Modals Preference: For workflows that require creating/editing data within an overview or management page (e.g. managing prices), prioritize using native HTML5 `<dialog>` elements (popups) with clean progressive enhancement fallbacks instead of redirecting the user away. Keep the user in the context of the page they are working on.
 
 ## graphify
 
