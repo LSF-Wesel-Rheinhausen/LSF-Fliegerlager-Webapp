@@ -16,12 +16,12 @@
       <nav>
         {% if user.is_authenticated %}
           {% if user|can_manage_users %}
-            <a class="button-secondary nav-link" href="{% url 'user-list' %}">Nutzer</a>
+            <a class="button button-secondary nav-link" href="{% url 'user-list' %}">Nutzer</a>
           {% endif %}
           <span>{{ user.email|default:user.username }}</span>
           <form method="post" action="{% url 'logout' %}">
             {% csrf_token %}
-            <button class="button-secondary" type="submit">Abmelden</button>
+            <button class="button button-secondary" type="submit">Abmelden</button>
           </form>
         {% endif %}
       </nav>
