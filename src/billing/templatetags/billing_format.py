@@ -3,6 +3,8 @@ from typing import Any
 
 from django import template
 
+from billing.permissions import is_admin
+
 register = template.Library()
 
 ZERO = Decimal("0.00")
@@ -19,3 +21,9 @@ def money_eur(value: Any) -> str:
     quantized = amount.quantize(TWOPLACES, rounding=ROUND_HALF_UP)
     formatted = format(quantized, ",.2f").replace(",", "X").replace(".", ",").replace("X", ".")
     return f"{formatted} €"
+
+
+@register.filter
+def can_manage_users(user: Any) -> bool:
+    """Return whether a template user may access user management."""
+    return is_admin(user)

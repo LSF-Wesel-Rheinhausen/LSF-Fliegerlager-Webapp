@@ -1,5 +1,6 @@
 import base64
 import json
+from typing import Any
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model, login
@@ -8,6 +9,7 @@ from django.contrib.auth.views import LoginView
 from django.core.exceptions import ValidationError
 from django.core.signing import BadSignature, Signer
 from django.db import transaction
+from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 from .exporters import camp_settlement_csv, camp_workbook_response, drink_entries_csv, participant_pdf_response
@@ -26,11 +28,14 @@ from .forms import (
     ParticipantPinForm,
     PaymentForm,
     PriceRuleForm,
+    UserCreateForm,
+    UserEditForm,
+    UserPasswordResetForm,
 )
 from .importers import preview_participants, rows_from_payload, rows_to_payload, save_participants
 from .models import Camp, Charge, MealSignup, Participant, PriceRule
-from .permissions import admin_required, editor_required
-from .roles import bootstrap_default_roles
+from .permissions import ADMIN_GROUP, admin_required, editor_required
+from .roles import ROLE_ADMIN, ROLE_EDITOR, active_admin_count, bootstrap_default_roles, set_user_role, user_role
 from .services import calculate_camp_settlements, calculate_participant_settlement, participant_kiosk_summary
 
 signer = Signer()
@@ -61,6 +66,87 @@ def setup_first_admin(request):
         return redirect("camp-list")
 
     return render(request, "billing/setup.html", {"form": form})
+
+
+def _is_application_admin_account(user: Any) -> bool:
+    return user.is_superuser or user_role(user) == ROLE_ADMIN
+
+
+def _would_remove_last_active_admin(
+    user: Any,
+    *,
+    was_active: bool,
+    was_admin: bool,
+    new_role: str,
+    is_active: bool,
+) -> bool:
+    if not was_active or not was_admin:
+        return False
+    if is_active and new_role == ROLE_ADMIN:
+        return False
+    return active_admin_count(User, exclude_user=user) == 0
+
+
+@admin_required
+def user_list(request: HttpRequest) -> HttpResponse:
+    """Render the application user management overview."""
+    users = User.objects.prefetch_related("groups").order_by("username")
+    user_rows = []
+    for managed_user in users:
+        group_names = {group.name for group in managed_user.groups.all()}
+        role = ROLE_ADMIN if managed_user.is_superuser or ADMIN_GROUP in group_names else ROLE_EDITOR
+        user_rows.append({"user": managed_user, "role": role})
+    return render(request, "billing/user_list.html", {"user_rows": user_rows})
+
+
+@admin_required
+def user_create(request: HttpRequest) -> HttpResponse:
+    """Create a new application user and assign the selected billing role."""
+    form = UserCreateForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            user = form.save()
+            set_user_role(user, form.cleaned_data["role"])
+        messages.success(request, "Benutzer wurde angelegt.")
+        return redirect("user-list")
+    return render(request, "billing/form.html", {"form": form, "title": "Benutzer anlegen"})
+
+
+@admin_required
+def user_edit(request: HttpRequest, user_id: int) -> HttpResponse:
+    """Edit account status and billing role for an existing user."""
+    managed_user = get_object_or_404(User.objects.prefetch_related("groups"), pk=user_id)
+    was_active = managed_user.is_active
+    was_admin = _is_application_admin_account(managed_user)
+    form = UserEditForm(request.POST or None, instance=managed_user)
+    if request.method == "POST" and form.is_valid():
+        if _would_remove_last_active_admin(
+            managed_user,
+            was_active=was_active,
+            was_admin=was_admin,
+            new_role=form.cleaned_data["role"],
+            is_active=form.cleaned_data["is_active"],
+        ):
+            form.add_error(None, "Der letzte aktive Admin kann nicht deaktiviert oder herabgestuft werden.")
+        else:
+            with transaction.atomic():
+                user = form.save()
+                set_user_role(user, form.cleaned_data["role"])
+            messages.success(request, "Benutzer wurde gespeichert.")
+            return redirect("user-list")
+    return render(request, "billing/form.html", {"form": form, "title": "Benutzer bearbeiten"})
+
+
+@admin_required
+def user_password_reset(request: HttpRequest, user_id: int) -> HttpResponse:
+    """Set a new password for an existing application user."""
+    managed_user = get_object_or_404(User, pk=user_id)
+    form = UserPasswordResetForm(managed_user, request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Passwort wurde neu gesetzt.")
+        return redirect("user-list")
+    return render(request, "billing/form.html", {"form": form, "title": "Passwort neu setzen"})
 
 
 @login_required

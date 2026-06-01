@@ -4,6 +4,10 @@ from . import views
 
 urlpatterns = [
     path("setup/", views.setup_first_admin, name="setup"),
+    path("users/", views.user_list, name="user-list"),
+    path("users/new/", views.user_create, name="user-create"),
+    path("users/<int:user_id>/edit/", views.user_edit, name="user-edit"),
+    path("users/<int:user_id>/password/", views.user_password_reset, name="user-password-reset"),
     path("", views.camp_list, name="camp-list"),
     path("camps/new/", views.camp_create, name="camp-create"),
     path("camps/<int:camp_id>/", views.camp_detail, name="camp-detail"),

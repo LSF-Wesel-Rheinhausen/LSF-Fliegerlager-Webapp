@@ -1,9 +1,12 @@
+from typing import Any
+
 from django import forms
 from django.contrib.auth import get_user_model
-from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
+from django.contrib.auth.forms import AuthenticationForm, SetPasswordForm, UserCreationForm
 from django.db import transaction
 
 from .models import Camp, Charge, Expense, MealSignup, Participant, ParticipantPin, Payment, PriceRule
+from .roles import ROLE_ADMIN, ROLE_CHOICES, user_role
 
 
 class EmailOrUsernameAuthenticationForm(AuthenticationForm):
@@ -21,7 +24,7 @@ class FirstAdminSetupForm(UserCreationForm):
         model = get_user_model()
         fields = ["username", "email"]
 
-    def save(self, commit=True):
+    def save(self, commit: bool = True) -> Any:
         user = super().save(commit=False)
         user.email = self.cleaned_data["email"]
         user.is_staff = True
@@ -29,6 +32,73 @@ class FirstAdminSetupForm(UserCreationForm):
         if commit:
             user.save()
         return user
+
+
+class UserCreateForm(UserCreationForm):
+    """Create an application user with an explicit billing role.
+
+    Args:
+        *args: Positional form arguments.
+        **kwargs: Keyword form arguments.
+    """
+
+    username = forms.CharField(label="Benutzername")
+    email = forms.EmailField(label="E-Mail-Adresse", required=True)
+    role = forms.ChoiceField(label="Rolle", choices=ROLE_CHOICES)
+    password1 = forms.CharField(label="Passwort", strip=False, widget=forms.PasswordInput)
+    password2 = forms.CharField(label="Passwort wiederholen", strip=False, widget=forms.PasswordInput)
+
+    class Meta:
+        model = get_user_model()
+        fields = ["username", "email"]
+
+    def save(self, commit: bool = True) -> Any:
+        """Persist the user account without assigning groups.
+
+        Args:
+            commit: Whether to save the user immediately.
+
+        Returns:
+            The created user instance.
+        """
+        user = super().save(commit=False)
+        user.email = self.cleaned_data["email"]
+        user.is_active = True
+        user.is_staff = self.cleaned_data["role"] == ROLE_ADMIN
+        user.is_superuser = False
+        if commit:
+            user.save()
+        return user
+
+
+class UserEditForm(forms.ModelForm):
+    """Edit non-password user account metadata and billing role."""
+
+    email = forms.EmailField(label="E-Mail-Adresse", required=True)
+    is_active = forms.BooleanField(label="Aktiv", required=False)
+    role = forms.ChoiceField(label="Rolle", choices=ROLE_CHOICES)
+
+    class Meta:
+        model = get_user_model()
+        fields = ["email", "is_active"]
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.fields["role"].initial = user_role(self.instance)
+
+    def clean_role(self) -> str:
+        """Prevent misleading role changes for Django superusers."""
+        role = self.cleaned_data["role"]
+        if self.instance.is_superuser and role != ROLE_ADMIN:
+            raise forms.ValidationError("Superuser bleiben immer Admins.", code="superuser_role")
+        return role
+
+
+class UserPasswordResetForm(SetPasswordForm):
+    """Set a new password for an existing user by an application admin."""
+
+    new_password1 = forms.CharField(label="Neues Passwort", strip=False, widget=forms.PasswordInput)
+    new_password2 = forms.CharField(label="Neues Passwort wiederholen", strip=False, widget=forms.PasswordInput)
 
 
 class CampForm(forms.ModelForm):

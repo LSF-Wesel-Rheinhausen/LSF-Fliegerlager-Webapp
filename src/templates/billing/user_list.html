@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Nutzerverwaltung{% endblock %}
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1>Nutzerverwaltung</h1>
+      <p>Konten, Rollen und Zugänge für die Abrechnung.</p>
+    </div>
+    <a class="button" href="{% url 'user-create' %}">Nutzer anlegen</a>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Benutzer</th>
+        <th>E-Mail</th>
+        <th>Rolle</th>
+        <th>Status</th>
+        <th>Aktionen</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in user_rows %}
+        <tr>
+          <td>
+            <strong>{{ row.user.username }}</strong>
+            {% if row.user.is_superuser %}
+              <span class="status-badge">Superuser</span>
+            {% endif %}
+          </td>
+          <td>{{ row.user.email|default:"-" }}</td>
+          <td>
+            {% if row.role == "admin" %}
+              Admin
+            {% else %}
+              Bearbeiter
+            {% endif %}
+          </td>
+          <td>
+            {% if row.user.is_active %}
+              <span class="status-badge status-badge--ok">Aktiv</span>
+            {% else %}
+              <span class="status-badge status-badge--muted">Inaktiv</span>
+            {% endif %}
+          </td>
+          <td>
+            <div class="actions">
+              <a class="button-secondary" href="{% url 'user-edit' row.user.pk %}">Bearbeiten</a>
+              <a class="button-secondary" href="{% url 'user-password-reset' row.user.pk %}">Passwort</a>
+            </div>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5">Noch keine Nutzer vorhanden.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}
