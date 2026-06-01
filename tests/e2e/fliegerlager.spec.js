@@ -106,7 +106,7 @@ test("Admin completes setup, login, camp workflow and logout", async ({ page }) 
   await createCamp(page);
 
   await expect(page.getByRole("link", { name: "Teilnehmer anlegen" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Preisregel anlegen" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Preise verwalten" }).first()).toBeVisible();
   await expect(page.getByRole("link", { name: "Auslage erfassen" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Teilnehmer importieren" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Abrechnung als CSV herunterladen" })).toBeVisible();

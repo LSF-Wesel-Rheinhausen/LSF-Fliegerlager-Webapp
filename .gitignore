@@ -1,4 +1,8 @@
 .venv/
+.cache/
+.codex/
+.DS_Store
+graphify-out/
 __pycache__/
 *.py[cod]
 *.sqlite3

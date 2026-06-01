@@ -78,11 +78,10 @@ def test_kiosk_home_hides_normal_admin_header_and_renders_stepper_controls(clien
     assert response.status_code == 200
     assert b"admin@example.test" not in response.content
     assert b'action="/logout/"' not in response.content
-    assert b"data-kiosk-stepper" in response.content
-    assert b"data-stepper-increment" in response.content
-    assert b"data-stepper-decrement" in response.content
-    assert b'inputmode="numeric"' in response.content
-    assert b"2 * 60 * 1000" in response.content
+    assert b'class="drink-card"' in response.content
+    assert b'name="drink-price_rule"' in response.content
+    assert b"1x tippen" in response.content
+    assert b'data-timeout-ms="120000"' in response.content
     assert reverse("kiosk-logout").encode() in response.content
     assert "Förderung anwenden".encode() not in response.content
 
@@ -97,7 +96,7 @@ def test_kiosk_pin_setup_uses_inactivity_logout_timer(client):
     response = client.get(reverse("kiosk-pin-setup"))
 
     assert response.status_code == 200
-    assert b"2 * 60 * 1000" in response.content
+    assert b'data-timeout-ms="120000"' in response.content
     assert reverse("kiosk-logout").encode() in response.content
 
 
