@@ -73,9 +73,16 @@ Lokaler Sammellauf:
 npm run test:local
 ```
 
-## CI
+## CI/CD Workflows
 
-Der GitHub-Actions-Workflow liegt in [`workflows/ci.yml`](workflows/ci.yml). Er führt Python-Setup, Node-Setup, Django-Check, Pytest und Playwright-E2E aus.
+Die GitHub-Actions-Workflows liegen in [`workflows/`](workflows/):
+- `ci.yml`: Führt lokales Python-Setup, Node-Setup, Django-Check, Pytest und Playwright-E2E aus.
+- `docker.yml`: Baut das Docker-Image, testet es intern und pusht es bei Merge auf `main` in die GitHub Container Registry (`ghcr.io`).
+- `security.yml`: Führt einen Trivy-Security-Scan über die Abhängigkeiten aus (wöchentlich und bei Push).
+- `pr-title.yml`: Erzwingt Semantic PR Titles (z.B. `feat:`, `fix:`).
+- `changelog-check.yml`: Prüft, ob bei Code-Änderungen in `src/` zwingend ein Changelog-Eintrag erstellt wurde.
+
+Zudem sorgt Dependabot (`dependabot.yml`) für automatisierte Updates von `pip`, `npm` und GitHub Actions.
 
 ## Contribution Rules
 
