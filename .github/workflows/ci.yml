@@ -47,3 +47,17 @@ jobs:
 
       - name: Browser UI tests
         run: npm run test:e2e
+
+  docker:
+    name: Build and test Docker container
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Build Docker image
+        run: docker build -t lsf-webapp:latest .
+
+      - name: Test Docker image
+        run: docker run --rm lsf-webapp:latest python manage.py check
