@@ -27,7 +27,24 @@
     <article class="metric"><span>Offen</span><strong>{{ settlement.balance }} EUR</strong></article>
   </section>
 
-
+  <section class="panel stack">
+    <div class="toolbar compact-toolbar">
+      <div>
+        <h2>Automatische Abrechnungspositionen</h2>
+        <p>Positionen, die durch automatische Preisregeln oder Förderungen entstanden sind.</p>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th>Position</th><th>Menge</th><th>Einzelpreis</th><th>Förderung</th><th>Summe</th></tr></thead>
+      <tbody>
+        {% for line in settlement.automatic_lines %}
+          <tr><td>{{ line.label }}</td><td>{{ line.quantity }}</td><td>{{ line.unit_price|money_eur }}</td><td>{{ line.subsidy_amount|money_eur }}</td><td>{{ line.total|money_eur }}</td></tr>
+        {% empty %}
+          <tr><td colspan="5">Keine automatischen Positionen vorhanden.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
 
   <section class="panel stack">
     <div class="toolbar compact-toolbar">

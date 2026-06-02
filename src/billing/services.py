@@ -20,6 +20,10 @@ class SettlementLine:
     total: Decimal
     source: str
 
+    @property
+    def is_automatic(self) -> bool:
+        return self.source.startswith("price_rule:")
+
 
 @dataclass(frozen=True)
 class SettlementResult:
@@ -31,6 +35,10 @@ class SettlementResult:
     total_paid: Decimal
     total_advanced: Decimal
     balance: Decimal
+
+    @property
+    def automatic_lines(self) -> list["SettlementLine"]:
+        return [line for line in self.lines if line.is_automatic]
 
     @property
     def is_overpaid(self):
