@@ -101,6 +101,15 @@ async function createCamp(page) {
   await expect(page.getByRole("heading", { name: `Sommerlager ${suffix} 2026` })).toBeVisible();
 }
 
+async function createParticipant(page, firstName, lastName) {
+  await page.getByRole("link", { name: "Teilnehmer anlegen" }).click();
+  await expect(page.getByRole("heading", { name: "Teilnehmer anlegen" })).toBeVisible();
+  await page.getByLabel("Vorname").fill(firstName);
+  await page.getByLabel("Nachname").fill(lastName);
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByRole("heading", { name: `${firstName} ${lastName}` })).toBeVisible();
+}
+
 test("Admin completes setup, login, camp workflow and logout", async ({ page }) => {
   await setupFirstAdmin(page);
   await createCamp(page);
@@ -117,6 +126,38 @@ test("Admin completes setup, login, camp workflow and logout", async ({ page }) 
   await logout(page);
   await expect(page).toHaveURL(/\/login\/?$/);
   await loginAsAdmin(page);
+});
+
+test("Admin edits a booking and sees the audit log", async ({ page }) => {
+  await setupFirstAdmin(page);
+  await createCamp(page);
+  await createParticipant(page, "Ada", "Lovelace");
+
+  await page.getByRole("link", { name: "Kosten erfassen" }).click();
+  await expect(page.getByRole("heading", { name: "Kostenposition erfassen" })).toBeVisible();
+  await page.getByLabel("Art").selectOption("drink");
+  await page.getByLabel("Beschreibung").fill("Cola");
+  await page.getByLabel("Menge").fill("2");
+  await page.getByLabel("Einzelpreis").fill("2.50");
+  await page.getByLabel("Förderfähig").check();
+  await page.getByRole("button", { name: "Speichern" }).click();
+
+  await expect(page.getByRole("heading", { name: "Ada Lovelace" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Buchungen", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Bearbeiten" }).click();
+  await expect(page.getByRole("heading", { name: "Buchung bearbeiten" })).toBeVisible();
+  await page.getByLabel("Beschreibung").fill("Cola korrigiert");
+  await page.getByLabel("Menge").fill("3");
+  await page.getByLabel("Datum").fill("2026-07-01");
+  await page.getByRole("button", { name: "Speichern" }).click();
+
+  await expect(page.getByRole("heading", { name: "Ada Lovelace" })).toBeVisible();
+  await expect(page.getByText("Buchung wurde gespeichert und protokolliert.")).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Cola korrigiert" }).first()).toBeVisible();
+  await expect(page.getByRole("cell", { name: "7,50 €" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Audit-Protokoll Buchungen" })).toBeVisible();
+  await expect(page.getByText("Cola · 2.00 x 2.50")).toBeVisible();
+  await expect(page.getByText("Cola korrigiert · 3.00 x 2.50")).toBeVisible();
 });
 
 for (const viewport of VIEWPORTS) {

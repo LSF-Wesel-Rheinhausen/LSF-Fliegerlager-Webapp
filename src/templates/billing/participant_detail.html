@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load billing_format %}
 {% block content %}
   <div class="toolbar">
     <div>
@@ -36,4 +37,73 @@
       {% endfor %}
     </tbody>
   </table>
+
+  <section class="panel stack">
+    <div class="toolbar compact-toolbar">
+      <div>
+        <h2>Buchungen</h2>
+        <p>Manuelle Kosten sowie Kiosk-Buchungen für Getränke und Essen.</p>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Art</th><th>Beschreibung</th><th>Menge</th><th>Einzelpreis</th><th>Summe</th><th>Datum</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for charge in charges %}
+          <tr>
+            <td>{{ charge.get_kind_display }}</td>
+            <td>{{ charge.description }}</td>
+            <td>{{ charge.quantity }}</td>
+            <td>{{ charge.unit_price|money_eur }}</td>
+            <td>{{ charge.total|money_eur }}</td>
+            <td>{{ charge.occurred_on|default:"-" }}</td>
+            <td>
+              {% if user|can_manage_users %}
+                <a href="{% url 'charge-edit' charge.pk %}">Bearbeiten</a>
+              {% else %}
+                -
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7">Keine Buchungen vorhanden.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel stack">
+    <h2>Audit-Protokoll Buchungen</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Zeitpunkt</th><th>Bearbeiter</th><th>Buchung</th><th>Vorher</th><th>Nachher</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in audit_logs %}
+          <tr>
+            <td>{{ log.created_at }}</td>
+            <td>{{ log.changed_by.email|default:log.changed_by.username|default:"System" }}</td>
+            <td>{{ log.charge.description }}</td>
+            <td>
+              {{ log.before.kind }} · {{ log.before.description }} ·
+              {{ log.before.quantity }} x {{ log.before.unit_price }} ·
+              {% if log.before.foerderfaehig %}förderfähig{% else %}nicht förderfähig{% endif %}
+            </td>
+            <td>
+              {{ log.after.kind }} · {{ log.after.description }} ·
+              {{ log.after.quantity }} x {{ log.after.unit_price }} ·
+              {% if log.after.foerderfaehig %}förderfähig{% else %}nicht förderfähig{% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5">Noch keine Änderungen an Buchungen protokolliert.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
 {% endblock %}

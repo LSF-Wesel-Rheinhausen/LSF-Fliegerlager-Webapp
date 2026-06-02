@@ -1,9 +1,10 @@
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import Any
 
 from django.db.models import Sum
 
-from .models import DrinkEntry, Expense, Participant, PriceRule
+from .models import BookingAuditLog, Charge, DrinkEntry, Expense, Participant, PriceRule
 
 ZERO = Decimal("0.00")
 
@@ -50,6 +51,52 @@ def _rule_applies(rule, participant):
     if not participant.is_child and not rule.applies_to_adults:
         return False
     return True
+
+
+def charge_audit_snapshot(charge: Charge) -> dict[str, str | bool | None]:
+    """Return the auditable business fields for a booking charge.
+
+    Args:
+        charge: The booking charge to serialize.
+
+    Returns:
+        A JSON-serializable snapshot of the charge fields that an admin may edit.
+    """
+    return {
+        "kind": charge.kind,
+        "description": charge.description,
+        "quantity": str(money(charge.quantity)),
+        "unit_price": str(money(charge.unit_price)),
+        "foerderfaehig": charge.foerderfaehig,
+        "occurred_on": charge.occurred_on.isoformat() if charge.occurred_on else None,
+    }
+
+
+def create_booking_audit_log(
+    charge: Charge,
+    before: dict[str, str | bool | None],
+    changed_by: Any,
+) -> BookingAuditLog | None:
+    """Persist an audit entry when editable booking fields changed.
+
+    Args:
+        charge: The charge after saving the edit.
+        before: Snapshot captured before the edit.
+        changed_by: User who performed the edit.
+
+    Returns:
+        The created audit log entry, or None if no tracked field changed.
+    """
+    after = charge_audit_snapshot(charge)
+    if before == after:
+        return None
+    return BookingAuditLog.objects.create(
+        charge=charge,
+        changed_by=changed_by,
+        action=BookingAuditLog.Action.UPDATED,
+        before=before,
+        after=after,
+    )
 
 
 def participant_camp_flat_duration(participant):
