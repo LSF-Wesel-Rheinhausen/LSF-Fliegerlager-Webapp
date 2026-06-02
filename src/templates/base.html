@@ -12,6 +12,11 @@
       <a class="brand" href="{% url 'camp-list' %}">
         <img src="{% static 'billing/logo.jpg' %}" alt="Luftsportfreunde Wesel-Rheinhausen e.V.">
         <span>Fliegerlager-Abrechnung</span>
+        {% if camp %}
+          <span class="status-badge" style="margin-left: 8px; background: var(--accent-soft); color: var(--accent-dark); border-color: rgba(0,92,169,0.2);">{{ camp.name }} {{ camp.year }}</span>
+        {% elif participant %}
+          <span class="status-badge" style="margin-left: 8px; background: var(--accent-soft); color: var(--accent-dark); border-color: rgba(0,92,169,0.2);">{{ participant.camp.name }} {{ participant.camp.year }}</span>
+        {% endif %}
       </a>
       <nav>
         {% if user.is_authenticated %}

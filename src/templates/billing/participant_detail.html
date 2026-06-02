@@ -4,7 +4,7 @@
   <div class="toolbar">
     <div>
       <h1>{{ participant.full_name }}</h1>
-      <p>{{ participant.camp }} · {{ participant.get_status_display }}</p>
+      <p>{{ participant.get_status_display }}</p>
     </div>
     <div class="actions">
       <a class="button" href="{% url 'charge-create' participant.pk %}">Kosten erfassen</a>
