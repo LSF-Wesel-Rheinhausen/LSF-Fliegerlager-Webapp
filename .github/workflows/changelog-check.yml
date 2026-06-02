@@ -1,0 +1,33 @@
+name: Changelog Enforcer
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check-changelog:
+    name: Check for changelog entry
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Verify changelog entry for code changes
+        run: |
+          # Get list of changed files compared to base branch
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...${{ github.sha }})
+
+          # Check if any files in src/ were modified
+          if echo "$CHANGED_FILES" | grep -q "^src/"; then
+            # If so, a changelog entry must exist in changelog/
+            if ! echo "$CHANGED_FILES" | grep -q "^changelog/"; then
+              echo "::error::Code changes detected in 'src/' but no changelog entry found in 'changelog/'. Please create a file following the format 'pr-<number>-<short-title>.md'."
+              exit 1
+            else
+              echo "Changelog entry found."
+            fi
+          else
+            echo "No code changes in 'src/'. Changelog entry not strictly required."
+          fi
