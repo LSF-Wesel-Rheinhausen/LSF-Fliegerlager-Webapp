@@ -1,0 +1,301 @@
+from decimal import Decimal
+
+import pytest
+from django.urls import reverse
+from tests.factories import (
+    CampFactory,
+    GroupFactory,
+    ParticipantFactory,
+    PriceRuleFactory,
+    SuperUserFactory,
+    UserFactory,
+)
+
+from billing.models import Camp, Charge, Expense, Participant, Payment, PriceRule
+from billing.permissions import EDITOR_GROUP
+
+
+@pytest.fixture
+def editor_user():
+    user = UserFactory(username="editor")
+    user.groups.add(GroupFactory(name=EDITOR_GROUP))
+    return user
+
+
+@pytest.fixture
+def admin_user():
+    return SuperUserFactory(username="admin")
+
+
+@pytest.fixture
+def permission_dataset():
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    rule = PriceRuleFactory(camp=camp, kind=PriceRule.Kind.DRINK, name="Cola", unit_price=Decimal("2.00"))
+    managed_user = UserFactory(username="managed", email="managed@example.test")
+    return {
+        "camp": camp,
+        "participant": participant,
+        "price_rule": rule,
+        "managed_user": managed_user,
+    }
+
+
+def _login_redirect(response):
+    assert response.status_code == 302
+    assert reverse("login") in response["Location"]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("route_name", "arg_getter"),
+    [
+        ("user-list", lambda data: []),
+        ("user-create", lambda data: []),
+        ("user-edit", lambda data: [data["managed_user"].pk]),
+        ("user-password-reset", lambda data: [data["managed_user"].pk]),
+        ("camp-create", lambda data: []),
+        ("camp-edit", lambda data: [data["camp"].pk]),
+        ("pin-set", lambda data: [data["participant"].pk]),
+        ("price-rule-create", lambda data: [data["camp"].pk]),
+        ("price-rules-manage", lambda data: [data["camp"].pk]),
+        ("price-rule-edit", lambda data: [data["price_rule"].pk]),
+    ],
+)
+def test_admin_only_get_views_reject_anonymous_and_editor(
+    client,
+    editor_user,
+    permission_dataset,
+    route_name,
+    arg_getter,
+):
+    url = reverse(route_name, args=arg_getter(permission_dataset))
+
+    _login_redirect(client.get(url))
+
+    client.force_login(editor_user)
+    _login_redirect(client.get(url))
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("route_name", "arg_getter"),
+    [
+        ("user-list", lambda data: []),
+        ("user-create", lambda data: []),
+        ("user-edit", lambda data: [data["managed_user"].pk]),
+        ("user-password-reset", lambda data: [data["managed_user"].pk]),
+        ("camp-create", lambda data: []),
+        ("camp-edit", lambda data: [data["camp"].pk]),
+        ("pin-set", lambda data: [data["participant"].pk]),
+        ("price-rule-create", lambda data: [data["camp"].pk]),
+        ("price-rules-manage", lambda data: [data["camp"].pk]),
+        ("price-rule-edit", lambda data: [data["price_rule"].pk]),
+    ],
+)
+def test_admin_only_get_views_allow_admin(client, admin_user, permission_dataset, route_name, arg_getter):
+    client.force_login(admin_user)
+
+    response = client.get(reverse(route_name, args=arg_getter(permission_dataset)))
+
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("route_name", "arg_getter"),
+    [
+        ("camp-list", lambda data: []),
+        ("camp-detail", lambda data: [data["camp"].pk]),
+        ("participant-create", lambda data: [data["camp"].pk]),
+        ("participant-detail", lambda data: [data["participant"].pk]),
+        ("charge-create", lambda data: [data["participant"].pk]),
+        ("payment-create", lambda data: [data["participant"].pk]),
+        ("expense-create", lambda data: [data["camp"].pk]),
+        ("participant-import", lambda data: [data["camp"].pk]),
+        ("export-settlements-csv", lambda data: [data["camp"].pk]),
+        ("export-drinks-csv", lambda data: [data["camp"].pk]),
+        ("export-workbook", lambda data: [data["camp"].pk]),
+        ("export-participant-pdf", lambda data: [data["participant"].pk]),
+    ],
+)
+def test_editor_views_reject_anonymous(client, permission_dataset, route_name, arg_getter):
+    response = client.get(reverse(route_name, args=arg_getter(permission_dataset)))
+
+    _login_redirect(response)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("user_fixture_name", ["editor_user", "admin_user"])
+@pytest.mark.parametrize(
+    ("route_name", "arg_getter"),
+    [
+        ("camp-list", lambda data: []),
+        ("camp-detail", lambda data: [data["camp"].pk]),
+        ("participant-create", lambda data: [data["camp"].pk]),
+        ("participant-detail", lambda data: [data["participant"].pk]),
+        ("charge-create", lambda data: [data["participant"].pk]),
+        ("payment-create", lambda data: [data["participant"].pk]),
+        ("expense-create", lambda data: [data["camp"].pk]),
+        ("participant-import", lambda data: [data["camp"].pk]),
+        ("export-settlements-csv", lambda data: [data["camp"].pk]),
+        ("export-drinks-csv", lambda data: [data["camp"].pk]),
+        ("export-workbook", lambda data: [data["camp"].pk]),
+        ("export-participant-pdf", lambda data: [data["participant"].pk]),
+    ],
+)
+def test_editor_views_allow_editor_and_admin(
+    client,
+    request,
+    permission_dataset,
+    user_fixture_name,
+    route_name,
+    arg_getter,
+):
+    client.force_login(request.getfixturevalue(user_fixture_name))
+
+    response = client.get(reverse(route_name, args=arg_getter(permission_dataset)))
+
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("route_name", "arg_getter", "payload", "count_model"),
+    [
+        (
+            "participant-create",
+            lambda data: [data["camp"].pk],
+            {
+                "first_name": "Grace",
+                "last_name": "Hopper",
+                "status": Participant.Status.REGISTERED,
+                "hilfssatz": "1.0000",
+                "berufssatz": "1.0000",
+                "booked_nights": "0",
+                "actual_nights": "0",
+            },
+            Participant,
+        ),
+        (
+            "charge-create",
+            lambda data: [data["participant"].pk],
+            {
+                "kind": Charge.Kind.OTHER,
+                "description": "Sonstiges",
+                "quantity": "1.00",
+                "unit_price": "5.00",
+                "foerderfaehig": "on",
+            },
+            Charge,
+        ),
+        (
+            "payment-create",
+            lambda data: [data["participant"].pk],
+            {"amount": "5.00", "paid_on": "2026-07-01"},
+            Payment,
+        ),
+        (
+            "expense-create",
+            lambda data: [data["camp"].pk],
+            {
+                "participant": lambda data: str(data["participant"].pk),
+                "category": "Einkauf",
+                "description": "Brötchen",
+                "amount": "8.00",
+                "reimbursable": "on",
+            },
+            Expense,
+        ),
+    ],
+)
+@pytest.mark.parametrize("user_fixture_name", ["editor_user", "admin_user"])
+def test_editor_post_views_allow_editor_and_admin(
+    client,
+    request,
+    permission_dataset,
+    route_name,
+    arg_getter,
+    payload,
+    count_model,
+    user_fixture_name,
+):
+    resolved_payload = {key: value(permission_dataset) if callable(value) else value for key, value in payload.items()}
+    before_count = count_model.objects.count()
+    client.force_login(request.getfixturevalue(user_fixture_name))
+
+    response = client.post(reverse(route_name, args=arg_getter(permission_dataset)), resolved_payload)
+
+    assert response.status_code == 302
+    assert count_model.objects.count() == before_count + 1
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("route_name", "arg_getter", "payload", "count_model"),
+    [
+        (
+            "camp-create",
+            lambda data: [],
+            {"name": "Adminlager", "year": "2027", "foerdersatz": "0.5000"},
+            Camp,
+        ),
+        (
+            "price-rule-create",
+            lambda data: [data["camp"].pk],
+            {
+                "kind": PriceRule.Kind.DRINK,
+                "name": "Fanta",
+                "unit_price": "2.50",
+                "foerderfaehig": "on",
+                "applies_to_children": "on",
+                "applies_to_adults": "on",
+                "applies_to_companions": "on",
+            },
+            PriceRule,
+        ),
+    ],
+)
+def test_admin_post_views_reject_editor_and_allow_admin(
+    client,
+    editor_user,
+    admin_user,
+    permission_dataset,
+    route_name,
+    arg_getter,
+    payload,
+    count_model,
+):
+    url = reverse(route_name, args=arg_getter(permission_dataset))
+    before_count = count_model.objects.count()
+    client.force_login(editor_user)
+
+    _login_redirect(client.post(url, payload))
+    assert count_model.objects.count() == before_count
+
+    client.force_login(admin_user)
+    response = client.post(url, payload)
+
+    assert response.status_code == 302
+    assert count_model.objects.count() == before_count + 1
+
+
+@pytest.mark.django_db
+def test_admin_pin_post_views_reject_editor_and_allow_admin(client, editor_user, admin_user, permission_dataset):
+    participant = permission_dataset["participant"]
+
+    client.force_login(editor_user)
+    _login_redirect(client.post(reverse("pin-set", args=[participant.pk]), {"pin": "1234"}))
+    _login_redirect(client.post(reverse("pin-reset", args=[participant.pk])))
+    participant.pin.refresh_from_db()
+    assert participant.pin.check_pin("1234") is False
+    assert participant.pin.must_set_pin is True
+
+    client.force_login(admin_user)
+    set_response = client.post(reverse("pin-set", args=[participant.pk]), {"pin": "1234"})
+    reset_response = client.post(reverse("pin-reset", args=[participant.pk]))
+    participant.pin.refresh_from_db()
+
+    assert set_response.status_code == 302
+    assert reset_response.status_code == 302
+    assert participant.pin.must_set_pin is True
