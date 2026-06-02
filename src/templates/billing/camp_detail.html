@@ -2,8 +2,8 @@
 {% block content %}
   <div class="toolbar">
     <div>
-      <h1>{{ camp.name }} {{ camp.year }}</h1>
-      <p>{{ camp.notes }}</p>
+      <h1>Übersicht</h1>
+      {% if camp.notes %}<p>{{ camp.notes }}</p>{% endif %}
     </div>
     <div class="actions">
       <a class="button button-secondary" href="{% url 'camp-edit' camp.pk %}">Lager bearbeiten</a>

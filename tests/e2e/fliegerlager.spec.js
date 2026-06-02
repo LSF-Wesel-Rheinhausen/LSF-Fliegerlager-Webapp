@@ -98,7 +98,8 @@ async function createCamp(page) {
   await page.getByLabel("Name").fill(`Sommerlager ${suffix}`);
   await page.getByLabel("Jahr").fill("2026");
   await page.getByRole("button", { name: "Speichern" }).click();
-  await expect(page.getByRole("heading", { name: `Sommerlager ${suffix} 2026` })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Übersicht" })).toBeVisible();
+  await expect(page.getByText(`Sommerlager ${suffix} 2026`).first()).toBeVisible();
 }
 
 async function createParticipant(page, firstName, lastName) {
