@@ -82,15 +82,6 @@ Der lokale Sammellauf ist:
 npm run test:local
 ```
 
-## CI/CD & Automatisierung
-
-Alle automatisierten GitHub-Actions-Workflows liegen in `.github/workflows/`:
-- **Tests** (`ci.yml`): Lokale Tests und Playwright.
-- **Docker** (`docker.yml`): Image Build, Test & Push zur Container Registry.
-- **Sicherheit** (`security.yml`): Trivy Vulnerability Scans.
-- **Compliance** (`pr-title.yml`, `changelog-check.yml`): Erzwingt Semantic PR Titles und zwingende Changelog-Einträge bei Code-Änderungen.
-Dependabot hält die Abhängigkeiten aktuell.
-
 ## Qualitäts- und Sicherheitsregeln
 
 Die Beitragsregeln stehen in [`../CONTRIBUTING.md`](../CONTRIBUTING.md), die Agentenregeln in [`../AGENTS.md`](../AGENTS.md).

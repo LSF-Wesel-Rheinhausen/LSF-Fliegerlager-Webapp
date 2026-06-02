@@ -1,11 +1,5 @@
 # Fliegerlager-Abrechnung
 
-[![Tests](https://github.com/LSF-Wesel-Rheinhausen/LSF-Fliegerlager-Webapp/actions/workflows/ci.yml/badge.svg)](https://github.com/LSF-Wesel-Rheinhausen/LSF-Fliegerlager-Webapp/actions/workflows/ci.yml)
-[![Docker](https://github.com/LSF-Wesel-Rheinhausen/LSF-Fliegerlager-Webapp/actions/workflows/docker.yml/badge.svg)](https://github.com/LSF-Wesel-Rheinhausen/LSF-Fliegerlager-Webapp/actions/workflows/docker.yml)
-[![Security Scan](https://github.com/LSF-Wesel-Rheinhausen/LSF-Fliegerlager-Webapp/actions/workflows/security.yml/badge.svg)](https://github.com/LSF-Wesel-Rheinhausen/LSF-Fliegerlager-Webapp/actions/workflows/security.yml)
-[![PR Title Check](https://github.com/LSF-Wesel-Rheinhausen/LSF-Fliegerlager-Webapp/actions/workflows/pr-title.yml/badge.svg)](https://github.com/LSF-Wesel-Rheinhausen/LSF-Fliegerlager-Webapp/actions/workflows/pr-title.yml)
-
-
 Web-App zur Verwaltung und Abrechnung eines Vereins-Fliegerlagers. Die Anwendung ist als Docker-basierte Django-App mit PostgreSQL vorbereitet und kann lokal auch mit SQLite laufen.
 
 ## Funktionen in V1
@@ -79,15 +73,6 @@ Um zusätzlich den älteren Projekt-Hook zu aktivieren:
 ```bash
 git config core.hooksPath .githooks
 ```
-
-## CI/CD & Automatisierung
-
-Das Repository nutzt GitHub Actions für verschiedene Automatisierungen:
-- **Tests (`ci.yml`)**: Führt bei jedem Push und PR die lokalen Python- und Playwright-Tests aus.
-- **Docker (`docker.yml`)**: Baut das Container-Image, testet es intern und pusht es beim Merge in den `main`-Branch in die GitHub Container Registry (`ghcr.io`).
-- **Security (`security.yml`)**: Scannt den Code und die Abhängigkeiten mit Trivy auf bekannte Schwachstellen.
-- **PR Title & Changelog (`pr-title.yml`, `changelog-check.yml`)**: Erzwingen *Semantic Pull Requests* und fordern Changelog-Einträge bei Änderungen im Code.
-- **Dependabot**: Hält `pip`-, `npm`- und `github-actions`-Abhängigkeiten automatisch aktuell.
 
 ## Rollen
 
