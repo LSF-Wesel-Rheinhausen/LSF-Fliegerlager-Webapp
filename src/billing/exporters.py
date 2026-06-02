@@ -7,7 +7,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
 from .models import Charge, DrinkEntry, Participant
-from .services import calculate_camp_settlements, calculate_participant_settlement
+from .services import calculate_camp_settlements, calculate_participant_settlement, money
 
 
 def csv_response(filename, rows, headers):
@@ -66,7 +66,7 @@ def drink_entries_csv(camp):
                 entry.description,
                 entry.quantity,
                 entry.unit_price,
-                entry.total,
+                money(entry.total),
                 entry.created_at,
             ]
         )
