@@ -119,3 +119,4 @@ Beitrags- und Agentenregeln stehen in [`CONTRIBUTING.md`](CONTRIBUTING.md) und [
 - UI-Ausbau: Bearbeiten-/Löschen-Flows, bessere Leerzustände, Druck-/PDF-Ansichten und Dashboard-Auswertungen.
 - Deployment und Betrieb: Produktionscheckliste, Backup-/Restore-Dokumentation, Monitoring/Healthcheck und sichere Env-Konfiguration.
 - KI-Auslese: Automatisierte KI-Auslese für Rechnungen aus Auslagen implementieren.
+- Dienstpläne, Einstellen der Dienstpläne für den Admin und eintragen für einen Dienst als Teilnehmer, inklusive der Anhzahl noch zu erledigenden Dienste
