@@ -2,10 +2,10 @@ from decimal import Decimal
 
 import pytest
 from django.urls import reverse
-from tests.factories import ChargeFactory, GroupFactory, ParticipantFactory, SuperUserFactory, UserFactory
 
 from billing.models import BookingAuditLog, Charge
 from billing.permissions import EDITOR_GROUP
+from tests.factories import ChargeFactory, GroupFactory, ParticipantFactory, SuperUserFactory, UserFactory
 
 
 @pytest.mark.django_db

@@ -2,6 +2,9 @@ from decimal import Decimal
 
 import pytest
 from django.urls import reverse
+
+from billing.models import Camp, Charge, Expense, Participant, Payment, PriceRule
+from billing.permissions import EDITOR_GROUP
 from tests.factories import (
     CampFactory,
     ChargeFactory,
@@ -11,9 +14,6 @@ from tests.factories import (
     SuperUserFactory,
     UserFactory,
 )
-
-from billing.models import Camp, Charge, Expense, Participant, Payment, PriceRule
-from billing.permissions import EDITOR_GROUP
 
 
 @pytest.fixture
