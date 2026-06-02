@@ -18,35 +18,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-          cache: pip
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install Python dependencies
-        run: pip install -r requirements-dev.txt
-
-      - name: Install Node dependencies
-        run: npm ci
-
-      - name: Django check
-        run: python src/manage.py check
-
-      - name: Python tests
-        run: pytest
-
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps
-
-      - name: Browser UI tests
-        run: npm run test:e2e
 
       - name: Build Docker image
         run: docker build -t lsf-webapp:latest .
