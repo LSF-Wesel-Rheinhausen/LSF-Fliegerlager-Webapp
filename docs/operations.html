@@ -69,6 +69,18 @@ npm run test:local</code></pre>
       </section>
 
       <section>
+        <h2>CI/CD & Automatisierung</h2>
+        <p>Das Projekt nutzt GitHub Actions (<code>.github/workflows/</code>) für kontinuierliche Integration:</p>
+        <ul>
+          <li><strong>ci.yml:</strong> Führt bei jedem Push und PR lokale Tests und Playwright aus.</li>
+          <li><strong>docker.yml:</strong> Baut das Image, testet es und pusht es nach einem Merge in die GitHub Container Registry (ghcr.io).</li>
+          <li><strong>security.yml:</strong> Führt regelmäßige Trivy Vulnerability Scans durch.</li>
+          <li><strong>pr-title.yml & changelog-check.yml:</strong> Erzwingen saubere PR-Namen und Changelog-Einträge.</li>
+          <li><strong>dependabot.yml:</strong> Automatisiert Abhängigkeits-Updates.</li>
+        </ul>
+      </section>
+
+      <section>
         <h2>Qualitäts- und Sicherheitsregeln</h2>
         <ul>
           <li>Ruff erzwingt Linting und Formatierung.</li>

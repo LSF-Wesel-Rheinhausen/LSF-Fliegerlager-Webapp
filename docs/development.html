@@ -56,6 +56,17 @@
       </section>
 
       <section>
+        <h2>CI/CD Pipeline</h2>
+        <p>Alle Qualitätschecks, Tests und Security-Scans werden automatisch in der CI ausgeführt (GitHub Actions unter <code>.github/workflows/</code>):</p>
+        <ul>
+          <li><strong>Automatisches Testen:</strong> Die <code>ci.yml</code> führt die Playwright- und Python-Tests in der Cloud aus.</li>
+          <li><strong>Image Build:</strong> Die <code>docker.yml</code> baut und testet den Container und übernimmt das Release zu ghcr.io.</li>
+          <li><strong>Sicherheits-Scans:</strong> Die <code>security.yml</code> durchsucht den Codebaum wöchentlich mit Trivy.</li>
+          <li><strong>Compliance:</strong> Pull Requests erfordern Semantic Titles (<code>feat:</code>, <code>fix:</code>) und Changelog-Einträge bei Code-Änderungen.</li>
+        </ul>
+      </section>
+
+      <section>
         <h2>Security und Datenschutz</h2>
         <ul>
           <li>Keine PII, Zahlungsdetails, PINs, Passwörter oder Secrets loggen.</li>
