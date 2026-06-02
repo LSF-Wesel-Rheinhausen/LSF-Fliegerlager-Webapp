@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from .models import (
+    BookingAuditLog,
     Camp,
     Charge,
     DrinkEntry,
@@ -49,6 +50,14 @@ class PriceRuleAdmin(admin.ModelAdmin):
 class ChargeAdmin(admin.ModelAdmin):
     list_display = ("participant", "kind", "description", "unit_price", "foerderfaehig", "occurred_on")
     list_filter = ("kind", "foerderfaehig")
+
+
+@admin.register(BookingAuditLog)
+class BookingAuditLogAdmin(admin.ModelAdmin):
+    list_display = ("charge", "action", "changed_by", "created_at")
+    list_filter = ("action", "created_at")
+    search_fields = ("charge__description", "charge__participant__first_name", "charge__participant__last_name")
+    readonly_fields = ("charge", "action", "changed_by", "before", "after", "created_at")
 
 
 admin.site.register(Payment)

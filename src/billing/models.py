@@ -189,6 +189,30 @@ class Charge(TimeStampedModel):
         return f"{self.participant}: {self.description}"
 
 
+class BookingAuditLog(models.Model):
+    class Action(models.TextChoices):
+        UPDATED = "updated", "Bearbeitet"
+
+    charge = models.ForeignKey(Charge, on_delete=models.CASCADE, related_name="audit_logs")
+    changed_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="booking_audit_logs",
+    )
+    action = models.CharField(max_length=20, choices=Action.choices, default=Action.UPDATED)
+    before = models.JSONField(default=dict)
+    after = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"{self.charge}: {self.get_action_display()} am {self.created_at:%Y-%m-%d %H:%M}"
+
+
 class Payment(TimeStampedModel):
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="payments")
     amount = models.DecimalField(max_digits=10, decimal_places=2)

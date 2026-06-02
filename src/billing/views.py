@@ -34,10 +34,16 @@ from .forms import (
     UserPasswordResetForm,
 )
 from .importers import preview_participants, rows_from_payload, rows_to_payload, save_participants
-from .models import Camp, Charge, MealSignup, Participant, PriceRule
+from .models import BookingAuditLog, Camp, Charge, MealSignup, Participant, PriceRule
 from .permissions import ADMIN_GROUP, admin_required, editor_required
 from .roles import ROLE_ADMIN, ROLE_EDITOR, active_admin_count, bootstrap_default_roles, set_user_role, user_role
-from .services import calculate_camp_settlements, calculate_participant_settlement, participant_kiosk_summary
+from .services import (
+    calculate_camp_settlements,
+    calculate_participant_settlement,
+    charge_audit_snapshot,
+    create_booking_audit_log,
+    participant_kiosk_summary,
+)
 
 signer = Signer()
 User = get_user_model()
@@ -216,7 +222,18 @@ def participant_create(request, camp_id):
 def participant_detail(request, participant_id):
     participant = get_object_or_404(Participant.objects.select_related("camp"), pk=participant_id)
     settlement = calculate_participant_settlement(participant)
-    return render(request, "billing/participant_detail.html", {"participant": participant, "settlement": settlement})
+    charges = participant.charges.order_by("-created_at", "-id")
+    audit_logs = BookingAuditLog.objects.filter(charge__participant=participant).select_related("changed_by", "charge")
+    return render(
+        request,
+        "billing/participant_detail.html",
+        {
+            "participant": participant,
+            "settlement": settlement,
+            "charges": charges,
+            "audit_logs": audit_logs,
+        },
+    )
 
 
 @editor_required
@@ -231,6 +248,27 @@ def charge_create(request, participant_id):
         messages.success(request, "Kostenposition wurde gespeichert.")
         return redirect("participant-detail", participant_id=participant.pk)
     return render(request, "billing/form.html", {"form": form, "title": "Kostenposition erfassen"})
+
+
+@admin_required
+def charge_edit(request, charge_id):
+    charge = get_object_or_404(Charge.objects.select_related("participant", "participant__camp"), pk=charge_id)
+    before = charge_audit_snapshot(charge)
+    form = ChargeForm(request.POST or None, instance=charge)
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            updated_charge = form.save()
+            audit_log = create_booking_audit_log(updated_charge, before, request.user)
+        if audit_log is None:
+            messages.success(request, "Buchung wurde gespeichert.")
+        else:
+            messages.success(request, "Buchung wurde gespeichert und protokolliert.")
+        return redirect("participant-detail", participant_id=charge.participant.pk)
+    return render(
+        request,
+        "billing/form.html",
+        {"form": form, "title": "Buchung bearbeiten", "camp": charge.participant.camp},
+    )
 
 
 @editor_required

@@ -4,6 +4,7 @@ import pytest
 from django.urls import reverse
 from tests.factories import (
     CampFactory,
+    ChargeFactory,
     GroupFactory,
     ParticipantFactory,
     PriceRuleFactory,
@@ -32,11 +33,19 @@ def permission_dataset():
     camp = CampFactory()
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     rule = PriceRuleFactory(camp=camp, kind=PriceRule.Kind.DRINK, name="Cola", unit_price=Decimal("2.00"))
+    charge = ChargeFactory(
+        participant=participant,
+        kind=Charge.Kind.OTHER,
+        description="Editierbar",
+        quantity=Decimal("1.00"),
+        unit_price=Decimal("2.00"),
+    )
     managed_user = UserFactory(username="managed", email="managed@example.test")
     return {
         "camp": camp,
         "participant": participant,
         "price_rule": rule,
+        "charge": charge,
         "managed_user": managed_user,
     }
 
@@ -57,6 +66,7 @@ def _login_redirect(response):
         ("camp-create", lambda data: []),
         ("camp-edit", lambda data: [data["camp"].pk]),
         ("pin-set", lambda data: [data["participant"].pk]),
+        ("charge-edit", lambda data: [data["charge"].pk]),
         ("price-rule-create", lambda data: [data["camp"].pk]),
         ("price-rules-manage", lambda data: [data["camp"].pk]),
         ("price-rule-edit", lambda data: [data["price_rule"].pk]),
@@ -88,6 +98,7 @@ def test_admin_only_get_views_reject_anonymous_and_editor(
         ("camp-create", lambda data: []),
         ("camp-edit", lambda data: [data["camp"].pk]),
         ("pin-set", lambda data: [data["participant"].pk]),
+        ("charge-edit", lambda data: [data["charge"].pk]),
         ("price-rule-create", lambda data: [data["camp"].pk]),
         ("price-rules-manage", lambda data: [data["camp"].pk]),
         ("price-rule-edit", lambda data: [data["price_rule"].pk]),
