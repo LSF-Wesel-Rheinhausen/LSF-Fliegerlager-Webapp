@@ -7,7 +7,7 @@
     </div>
     <div class="actions">
       <a class="button button-secondary" href="{% url 'camp-detail' camp.pk %}">Zurück zum Lager</a>
-      <a class="button" href="{% url 'price-rule-create' camp.pk %}" onclick="openCreateDialog('other', 'Preisregel'); return false;">Einzelpreis anlegen</a>
+      <button type="button" class="button" onclick="openCreateDialog('other', 'Preisregel')">Einzelpreis anlegen</button>
     </div>
   </div>
 
@@ -41,7 +41,7 @@
                 {% endfor %}
               </td>
               <td class="checkbox-cell">
-                <label>{{ row.foerderfaehig }} Förderfähig</label>
+                <label for="{{ row.foerderfaehig.id_for_label }}">{{ row.foerderfaehig }} Förderfähig</label>
                 {% for error in row.foerderfaehig.errors %}
                   <span class="helptext error">{{ error }}</span>
                 {% endfor %}
@@ -62,7 +62,7 @@
         <h2>Getränke</h2>
         <p>Diese Preise erscheinen im Kiosk unter Getränke.</p>
       </div>
-      <a class="button" href="{% url 'price-rule-create' camp.pk %}" onclick="openCreateDialog('drink', 'Getränk'); return false;">Getränk anlegen</a>
+      <button type="button" class="button" onclick="openCreateDialog('drink', 'Getränk')">Getränk anlegen</button>
     </div>
     {% include "billing/price_rule_table.html" with rules=grouped_rules.drinks empty_text="Noch keine Getränkepreise vorhanden." %}
   </section>
@@ -91,22 +91,22 @@
             <td>Frühstück</td>
             <td>
               {{ meal_form.breakfast_adult_price }}
-              <label>{{ meal_form.breakfast_adult_foerderfaehig }} Förderfähig</label>
+              <label for="{{ meal_form.breakfast_adult_foerderfaehig.id_for_label }}">{{ meal_form.breakfast_adult_foerderfaehig }} Förderfähig</label>
             </td>
             <td>
               {{ meal_form.breakfast_child_price }}
-              <label>{{ meal_form.breakfast_child_foerderfaehig }} Förderfähig</label>
+              <label for="{{ meal_form.breakfast_child_foerderfaehig.id_for_label }}">{{ meal_form.breakfast_child_foerderfaehig }} Förderfähig</label>
             </td>
           </tr>
           <tr>
             <td>Abendessen</td>
             <td>
               {{ meal_form.dinner_adult_price }}
-              <label>{{ meal_form.dinner_adult_foerderfaehig }} Förderfähig</label>
+              <label for="{{ meal_form.dinner_adult_foerderfaehig.id_for_label }}">{{ meal_form.dinner_adult_foerderfaehig }} Förderfähig</label>
             </td>
             <td>
               {{ meal_form.dinner_child_price }}
-              <label>{{ meal_form.dinner_child_foerderfaehig }} Förderfähig</label>
+              <label for="{{ meal_form.dinner_child_foerderfaehig.id_for_label }}">{{ meal_form.dinner_child_foerderfaehig }} Förderfähig</label>
             </td>
           </tr>
         </tbody>
@@ -123,7 +123,7 @@
         <h2>Essen (Abweichende Tagespreise)</h2>
         <p>Spezielle Preise für bestimmte Mahlzeiten und Tage (z.B. Grillfest).</p>
       </div>
-      <a class="button" href="{% url 'price-rule-create' camp.pk %}" onclick="openCreateDialog('meal', 'Tagespreis'); return false;">Tagespreis anlegen</a>
+      <button type="button" class="button" onclick="openCreateDialog('meal', 'Tagespreis')">Tagespreis anlegen</button>
     </div>
     {% include "billing/price_rule_table.html" with rules=grouped_rules.meals empty_text="Keine abweichenden Tagespreise vorhanden." %}
   </section>
@@ -134,15 +134,17 @@
         <h2>Weitere Standardpreise</h2>
         <p>Übernachtungen und sonstige Preisregeln.</p>
       </div>
-      <a class="button" href="{% url 'price-rule-create' camp.pk %}" onclick="openCreateDialog('other', 'Preisregel'); return false;">Preis anlegen</a>
+      <button type="button" class="button" onclick="openCreateDialog('other', 'Preisregel')">Preis anlegen</button>
     </div>
     {% include "billing/price_rule_table.html" with rules=grouped_rules.other empty_text="Noch keine weiteren Preisregeln vorhanden." %}
   </section>
 
-  <dialog id="price-rule-dialog">
+  <dialog id="price-rule-dialog" closedby="any">
     <div class="toolbar compact-toolbar" style="margin-bottom: 16px;">
       <h2 id="dialog-title" style="margin: 0;">Preisregel anlegen</h2>
-      <button type="button" class="button button-secondary" onclick="closeDialog()" style="min-height: 32px; padding: 6px 10px;">Schließen</button>
+      <form method="dialog">
+        <button class="button button-secondary" style="min-height: 32px; padding: 6px 10px;">Schließen</button>
+      </form>
     </div>
     <form id="dialog-form" method="post" class="form-grid">
       {% csrf_token %}
@@ -170,26 +172,26 @@
       </p>
 
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; margin-top: 10px;">
-        <label style="display: inline-flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
+        <label for="id_foerderfaehig" style="display: inline-flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
           <input type="checkbox" name="foerderfaehig" id="id_foerderfaehig" checked>
           <span>Förderfähig</span>
         </label>
-        <label style="display: inline-flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
+        <label for="id_is_default" style="display: inline-flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
           <input type="checkbox" name="is_default" id="id_is_default">
           <span>Standardregel</span>
         </label>
       </div>
 
       <div id="participant-type-checkboxes" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 16px;">
-        <label style="display: inline-flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
+        <label for="id_applies_to_children" style="display: inline-flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
           <input type="checkbox" name="applies_to_children" id="id_applies_to_children" checked>
           <span>Für Kinder</span>
         </label>
-        <label style="display: inline-flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
+        <label for="id_applies_to_adults" style="display: inline-flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
           <input type="checkbox" name="applies_to_adults" id="id_applies_to_adults" checked>
           <span>Für Erwachsene</span>
         </label>
-        <label style="display: inline-flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
+        <label for="id_applies_to_companions" style="display: inline-flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
           <input type="checkbox" name="applies_to_companions" id="id_applies_to_companions" checked>
           <span>Für Begleitpersonen</span>
         </label>
@@ -278,17 +280,6 @@
       dialog.showModal();
     }
 
-    function closeDialog() {
-      document.getElementById('price-rule-dialog').close();
     }
-
-    document.getElementById('price-rule-dialog').addEventListener('click', function(e) {
-      const rect = this.getBoundingClientRect();
-      const isInDialog = (rect.top <= e.clientY && e.clientY <= rect.top + rect.height &&
-        rect.left <= e.clientX && e.clientX <= rect.left + rect.width);
-      if (!isInDialog) {
-        this.close();
-      }
-    });
   </script>
 {% endblock %}

@@ -379,10 +379,13 @@ textarea {
   box-shadow: 0 8px 24px rgba(32, 37, 45, 0.06);
 }
 
-.metrics span {
-  display: block;
+.metrics dt {
   color: var(--muted);
   font-size: 13px;
+}
+
+.metrics dd {
+  margin: 0;
 }
 
 .metrics strong {

@@ -14,14 +14,14 @@
     </div>
   </div>
 
-  <section class="metrics" aria-label="Lagerkennzahlen">
-    <article class="metric"><span>Brutto</span><strong>{{ totals.gross }} EUR</strong></article>
-    <article class="metric"><span>Förderung</span><strong>{{ totals.subsidy }} EUR</strong></article>
-    <article class="metric"><span>Soll</span><strong>{{ totals.due }} EUR</strong></article>
-    <article class="metric"><span>Gezahlt</span><strong>{{ totals.paid }} EUR</strong></article>
-    <article class="metric"><span>Vorgestreckt</span><strong>{{ totals.advanced }} EUR</strong></article>
-    <article class="metric"><span>Offen</span><strong>{{ totals.balance }} EUR</strong></article>
-  </section>
+  <dl class="metrics" aria-label="Lagerkennzahlen">
+    <div class="metric"><dt>Brutto</dt><dd><strong>{{ totals.gross }} EUR</strong></dd></div>
+    <div class="metric"><dt>Förderung</dt><dd><strong>{{ totals.subsidy }} EUR</strong></dd></div>
+    <div class="metric"><dt>Soll</dt><dd><strong>{{ totals.due }} EUR</strong></dd></div>
+    <div class="metric"><dt>Gezahlt</dt><dd><strong>{{ totals.paid }} EUR</strong></dd></div>
+    <div class="metric"><dt>Vorgestreckt</dt><dd><strong>{{ totals.advanced }} EUR</strong></dd></div>
+    <div class="metric"><dt>Offen</dt><dd><strong>{{ totals.balance }} EUR</strong></dd></div>
+  </dl>
 
   <nav class="exportbar" aria-label="Exporte">
     <a href="{% url 'export-settlements-csv' camp.pk %}">Abrechnung als CSV herunterladen</a>

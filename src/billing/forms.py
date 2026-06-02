@@ -10,15 +10,23 @@ from .roles import ROLE_ADMIN, ROLE_CHOICES, user_role
 
 
 class EmailOrUsernameAuthenticationForm(AuthenticationForm):
-    username = forms.CharField(label="Benutzername oder E-Mail")
-    password = forms.CharField(label="Passwort", strip=False, widget=forms.PasswordInput)
+    username = forms.CharField(
+        label="Benutzername oder E-Mail", widget=forms.TextInput(attrs={"autocomplete": "username"})
+    )
+    password = forms.CharField(
+        label="Passwort", strip=False, widget=forms.PasswordInput(attrs={"autocomplete": "current-password"})
+    )
 
 
 class FirstAdminSetupForm(UserCreationForm):
     username = forms.CharField(label="Benutzername")
     email = forms.EmailField(label="E-Mail-Adresse", required=True)
-    password1 = forms.CharField(label="Passwort", strip=False, widget=forms.PasswordInput)
-    password2 = forms.CharField(label="Passwort wiederholen", strip=False, widget=forms.PasswordInput)
+    password1 = forms.CharField(
+        label="Passwort", strip=False, widget=forms.PasswordInput(attrs={"autocomplete": "new-password"})
+    )
+    password2 = forms.CharField(
+        label="Passwort wiederholen", strip=False, widget=forms.PasswordInput(attrs={"autocomplete": "new-password"})
+    )
 
     class Meta:
         model = get_user_model()
@@ -45,8 +53,12 @@ class UserCreateForm(UserCreationForm):
     username = forms.CharField(label="Benutzername")
     email = forms.EmailField(label="E-Mail-Adresse", required=True)
     role = forms.ChoiceField(label="Rolle", choices=ROLE_CHOICES)
-    password1 = forms.CharField(label="Passwort", strip=False, widget=forms.PasswordInput)
-    password2 = forms.CharField(label="Passwort wiederholen", strip=False, widget=forms.PasswordInput)
+    password1 = forms.CharField(
+        label="Passwort", strip=False, widget=forms.PasswordInput(attrs={"autocomplete": "new-password"})
+    )
+    password2 = forms.CharField(
+        label="Passwort wiederholen", strip=False, widget=forms.PasswordInput(attrs={"autocomplete": "new-password"})
+    )
 
     class Meta:
         model = get_user_model()
@@ -97,8 +109,14 @@ class UserEditForm(forms.ModelForm):
 class UserPasswordResetForm(SetPasswordForm):
     """Set a new password for an existing user by an application admin."""
 
-    new_password1 = forms.CharField(label="Neues Passwort", strip=False, widget=forms.PasswordInput)
-    new_password2 = forms.CharField(label="Neues Passwort wiederholen", strip=False, widget=forms.PasswordInput)
+    new_password1 = forms.CharField(
+        label="Neues Passwort", strip=False, widget=forms.PasswordInput(attrs={"autocomplete": "new-password"})
+    )
+    new_password2 = forms.CharField(
+        label="Neues Passwort wiederholen",
+        strip=False,
+        widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
+    )
 
 
 class CampForm(forms.ModelForm):
@@ -375,12 +393,22 @@ class ParticipantImportForm(forms.Form):
 
 
 class ParticipantPinForm(forms.Form):
-    pin = forms.CharField(label="Neue PIN", min_length=4, max_length=12, strip=True, widget=forms.PasswordInput)
+    pin = forms.CharField(
+        label="Neue PIN",
+        min_length=4,
+        max_length=12,
+        strip=True,
+        widget=forms.PasswordInput(attrs={"autocomplete": "new-password", "inputmode": "numeric"}),
+    )
 
 
 class KioskLoginForm(forms.Form):
     participant = forms.ModelChoiceField(label="Teilnehmer", queryset=Participant.objects.none())
-    pin = forms.CharField(label="PIN", strip=True, widget=forms.PasswordInput)
+    pin = forms.CharField(
+        label="PIN",
+        strip=True,
+        widget=forms.PasswordInput(attrs={"autocomplete": "current-password", "inputmode": "numeric"}),
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -405,13 +433,19 @@ class KioskLoginForm(forms.Form):
 
 
 class KioskPinSetupForm(forms.Form):
-    pin = forms.CharField(label="Neuer PIN", min_length=4, max_length=12, strip=True, widget=forms.PasswordInput)
+    pin = forms.CharField(
+        label="Neuer PIN",
+        min_length=4,
+        max_length=12,
+        strip=True,
+        widget=forms.PasswordInput(attrs={"autocomplete": "new-password", "inputmode": "numeric"}),
+    )
     pin_repeat = forms.CharField(
         label="PIN wiederholen",
         min_length=4,
         max_length=12,
         strip=True,
-        widget=forms.PasswordInput,
+        widget=forms.PasswordInput(attrs={"autocomplete": "new-password", "inputmode": "numeric"}),
     )
 
     def clean(self):
