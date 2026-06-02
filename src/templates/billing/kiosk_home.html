@@ -12,14 +12,14 @@
     </div>
   </div>
 
-  <section class="metrics" aria-label="Kiosk-Abrechnungsübersicht">
-    <article class="metric"><span>Brutto</span><strong>{{ summary.total_gross|money_eur }}</strong></article>
-    <article class="metric"><span>Förderung</span><strong>{{ summary.total_subsidy|money_eur }}</strong></article>
-    <article class="metric"><span>Soll</span><strong>{{ summary.total_due|money_eur }}</strong></article>
-    <article class="metric"><span>Gezahlt</span><strong>{{ summary.total_paid|money_eur }}</strong></article>
-    <article class="metric"><span>Vorgestreckt</span><strong>{{ summary.total_advanced|money_eur }}</strong></article>
-    <article class="metric"><span>Offen</span><strong>{{ summary.balance|money_eur }}</strong></article>
-  </section>
+  <dl class="metrics" aria-label="Kiosk-Abrechnungsübersicht">
+    <div class="metric"><dt>Brutto</dt><dd><strong>{{ summary.total_gross|money_eur }}</strong></dd></div>
+    <div class="metric"><dt>Förderung</dt><dd><strong>{{ summary.total_subsidy|money_eur }}</strong></dd></div>
+    <div class="metric"><dt>Soll</dt><dd><strong>{{ summary.total_due|money_eur }}</strong></dd></div>
+    <div class="metric"><dt>Gezahlt</dt><dd><strong>{{ summary.total_paid|money_eur }}</strong></dd></div>
+    <div class="metric"><dt>Vorgestreckt</dt><dd><strong>{{ summary.total_advanced|money_eur }}</strong></dd></div>
+    <div class="metric"><dt>Offen</dt><dd><strong>{{ summary.balance|money_eur }}</strong></dd></div>
+  </dl>
 
   <div class="kiosk-grid">
     <section class="panel">

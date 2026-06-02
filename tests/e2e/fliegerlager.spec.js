@@ -160,6 +160,31 @@ test("Admin edits a booking and sees the audit log", async ({ page }) => {
   await expect(page.getByText("Cola korrigiert · 3.00 x 2.50")).toBeVisible();
 });
 
+test("Admin can open and close price rule dialogs natively", async ({ page }) => {
+  await setupFirstAdmin(page);
+  await createCamp(page);
+
+  await page.getByRole("link", { name: "Preise verwalten" }).first().click();
+
+  // Open dialog
+  await page.getByRole("button", { name: "Einzelpreis anlegen" }).click();
+  await expect(page.locator("dialog#price-rule-dialog")).toBeVisible();
+  await expect(page.locator("#dialog-title")).toHaveText("Preisregel anlegen");
+
+  // Close dialog via native form button
+  await page.getByRole("button", { name: "Schließen" }).click();
+  await expect(page.locator("dialog#price-rule-dialog")).toBeHidden();
+
+  // Open another dialog to ensure it resets/works again
+  await page.getByRole("button", { name: "Getränk anlegen" }).click();
+  await expect(page.locator("dialog#price-rule-dialog")).toBeVisible();
+  await expect(page.locator("#dialog-title")).toHaveText("Getränk anlegen");
+
+  // Close dialog via Escape key (native behavior)
+  await page.keyboard.press("Escape");
+  await expect(page.locator("dialog#price-rule-dialog")).toBeHidden();
+});
+
 for (const viewport of VIEWPORTS) {
   test(`Layout has no unexpected overflow at ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
