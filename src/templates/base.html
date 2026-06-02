@@ -9,15 +9,17 @@
   </head>
   <body>
     <header class="topbar">
-      <a class="brand" href="{% url 'camp-list' %}">
-        <img src="{% static 'billing/logo.jpg' %}" alt="Luftsportfreunde Wesel-Rheinhausen e.V.">
-        <span>Fliegerlager-Abrechnung</span>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <a class="brand" href="{% url 'camp-list' %}">
+          <img src="{% static 'billing/logo.jpg' %}" alt="Luftsportfreunde Wesel-Rheinhausen e.V.">
+          <span>Fliegerlager-Abrechnung</span>
+        </a>
         {% if camp %}
-          <span class="status-badge" style="margin-left: 8px; background: var(--accent-soft); color: var(--accent-dark); border-color: rgba(0,92,169,0.2);">{{ camp.name }} {{ camp.year }}</span>
+          <span class="status-badge" style="margin: 0; background: var(--accent-soft); color: var(--accent-dark); border-color: rgba(0,92,169,0.2);">{{ camp.name }} {{ camp.year }}</span>
         {% elif participant %}
-          <span class="status-badge" style="margin-left: 8px; background: var(--accent-soft); color: var(--accent-dark); border-color: rgba(0,92,169,0.2);">{{ participant.camp.name }} {{ participant.camp.year }}</span>
+          <span class="status-badge" style="margin: 0; background: var(--accent-soft); color: var(--accent-dark); border-color: rgba(0,92,169,0.2);">{{ participant.camp.name }} {{ participant.camp.year }}</span>
         {% endif %}
-      </a>
+      </div>
       <nav>
         {% if user.is_authenticated %}
           {% if user|can_manage_users %}
