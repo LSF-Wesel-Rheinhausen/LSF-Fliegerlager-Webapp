@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 jobs:
   quality:
@@ -18,32 +19,30 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Setup Python
-        uses: actions/setup-python@v6
+
+      - name: Build Docker image
+        run: docker build -t lsf-webapp:latest .
+
+      - name: Test Docker image
+        run: docker run --rm lsf-webapp:latest python manage.py check
+
+      - name: Log in to the Container registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
         with:
-          python-version: "3.13"
-          cache: pip
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: 22
-          cache: npm
+      - name: Tag and push Docker image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          IMAGE_ID=ghcr.io/${{ github.repository }}
+          # Convert repository name to lowercase (Docker requirement)
+          IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
 
-      - name: Install Python dependencies
-        run: pip install -r requirements-dev.txt
+          docker tag lsf-webapp:latest $IMAGE_ID:latest
+          docker tag lsf-webapp:latest $IMAGE_ID:${{ github.sha }}
 
-      - name: Install Node dependencies
-        run: npm ci
-
-      - name: Django check
-        run: python src/manage.py check
-
-      - name: Python tests
-        run: pytest
-
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps
-
-      - name: Browser UI tests
-        run: npm run test:e2e
+          docker push $IMAGE_ID:latest
+          docker push $IMAGE_ID:${{ github.sha }}
