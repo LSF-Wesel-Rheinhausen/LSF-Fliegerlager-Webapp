@@ -90,7 +90,7 @@ Use Conventional Commits:
 - `docs: update kiosk setup guide`
 - `chore: add pre-commit configuration`
 
-Pull requests should include a clear summary, rationale, test results, and linked issues when available. Include screenshots or sample output for visible UI changes, generated reports, or modified exports. CI must pass before review.
+Pull requests should include a clear summary, rationale, test results, and linked issues when available. Include screenshots or sample output for visible UI changes, generated reports, or modified exports. CI must pass before review. **For features, major refactorings, and relevant bugfixes, a changelog entry MUST be created in the `changelog/` directory following the format `pr-<number>-<short-title>.md`.**
 
 ## 6. AI & Agent-Specific Instructions
 
