@@ -10,5 +10,11 @@ export DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY:-test_sk_playwright_local_only}"
 mkdir -p tmp
 rm -f tmp/e2e.sqlite3
 
-.venv/bin/python src/manage.py migrate --noinput
-.venv/bin/python src/manage.py runserver "127.0.0.1:${port}"
+if [ -x ".venv/bin/python" ]; then
+  PYTHON=".venv/bin/python"
+else
+  PYTHON="python"
+fi
+
+$PYTHON src/manage.py migrate --noinput
+$PYTHON src/manage.py runserver "127.0.0.1:${port}"
