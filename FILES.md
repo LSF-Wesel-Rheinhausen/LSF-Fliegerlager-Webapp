@@ -19,7 +19,12 @@ Diese Datei gibt spaeteren Chats einen schnellen Einstieg in die Projektstruktur
 - `requirements.txt`: Python-Laufzeitabhaengigkeiten.
 - `requirements-dev.txt`: Python-Testabhaengigkeiten.
 - `scripts/`: Lokale Hilfsskripte fuer Setup, Start, Cleanup, E2E-Server und Sammeltests.
-- `.github/workflows/ci.yml`: GitHub-Actions-Workflow fuer Python- und Browsertests.
+- `.github/workflows/ci.yml`: GitHub-Actions-Workflow fuer lokale Python- und Browsertests.
+- `.github/workflows/docker.yml`: GitHub-Actions-Workflow fuer den Docker-Build und Push zur Container Registry.
+- `.github/workflows/security.yml`: Trivy Vulnerability Scanner fuer Code und Dependencies.
+- `.github/workflows/pr-title.yml`: Enforcer fuer Semantic Pull Request Titel.
+- `.github/workflows/changelog-check.yml`: Ueberpruefung auf zwingende Changelog-Eintraege.
+- `.github/dependabot.yml`: Automatisierte Updates fuer npm, pip und GitHub Actions.
 - `src/manage.py`: Django-CLI-Einstieg.
 - `src/config/`: Django-Projektkonfiguration, URL-Routing, ASGI/WSGI.
 - `src/billing/`: Domain-App fuer Lager, Teilnehmer, Abrechnung, Importe, Exporte und Rollen.
