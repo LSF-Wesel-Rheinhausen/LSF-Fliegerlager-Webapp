@@ -99,11 +99,38 @@ def create_booking_audit_log(
     if before == after:
         return None
     return BookingAuditLog.objects.create(
+        participant=charge.participant,
         charge=charge,
         changed_by=changed_by,
         action=BookingAuditLog.Action.UPDATED,
         before=before,
         after=after,
+    )
+
+
+def create_booking_delete_audit_log(
+    charge: Charge,
+    before: dict[str, str | bool | None],
+    changed_by: Any,
+) -> BookingAuditLog:
+    """Persist an audit entry before a booking charge is deleted.
+
+    Args:
+        charge: The charge that will be deleted after the audit row is created.
+        before: Snapshot captured before deletion.
+        changed_by: User who performed the deletion.
+
+    Returns:
+        The created audit log entry. Its charge relation is cleared by the database
+        when the charge is deleted, while the JSON snapshot keeps the business data.
+    """
+    return BookingAuditLog.objects.create(
+        participant=charge.participant,
+        charge=charge,
+        changed_by=changed_by,
+        action=BookingAuditLog.Action.DELETED,
+        before=before,
+        after={},
     )
 
 

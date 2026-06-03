@@ -70,7 +70,19 @@
             <td>{{ charge.occurred_on|default:"-" }}</td>
             <td>
               {% if user|can_manage_users %}
-                <a href="{% url 'charge-edit' charge.pk %}">Bearbeiten</a>
+                <div class="row-actions">
+                  <a href="{% url 'charge-edit' charge.pk %}">Bearbeiten</a>
+                  <form method="post" action="{% url 'charge-delete' charge.pk %}">
+                    {% csrf_token %}
+                    <button
+                      type="submit"
+                      class="button-link button-link-danger"
+                      onclick="return confirm('Diese Buchung wirklich löschen?');"
+                    >
+                      Löschen
+                    </button>
+                  </form>
+                </div>
               {% else %}
                 -
               {% endif %}
@@ -96,16 +108,20 @@
           <tr>
             <td>{{ log.created_at }}</td>
             <td>{{ log.changed_by.email|default:log.changed_by.username|default:"System" }}</td>
-            <td>{{ log.charge.description }}</td>
+            <td>{{ log.charge.description|default:log.before.description }}</td>
             <td>
               {{ log.before.kind }} · {{ log.before.description }} ·
               {{ log.before.quantity }} x {{ log.before.unit_price }} ·
               {% if log.before.foerderfaehig %}förderfähig{% else %}nicht förderfähig{% endif %}
             </td>
             <td>
-              {{ log.after.kind }} · {{ log.after.description }} ·
-              {{ log.after.quantity }} x {{ log.after.unit_price }} ·
-              {% if log.after.foerderfaehig %}förderfähig{% else %}nicht förderfähig{% endif %}
+              {% if log.action == "deleted" %}
+                Gelöscht
+              {% else %}
+                {{ log.after.kind }} · {{ log.after.description }} ·
+                {{ log.after.quantity }} x {{ log.after.unit_price }} ·
+                {% if log.after.foerderfaehig %}förderfähig{% else %}nicht förderfähig{% endif %}
+              {% endif %}
             </td>
           </tr>
         {% empty %}

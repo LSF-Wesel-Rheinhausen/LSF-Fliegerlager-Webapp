@@ -310,3 +310,19 @@ def test_admin_pin_post_views_reject_editor_and_allow_admin(client, editor_user,
     assert set_response.status_code == 302
     assert reset_response.status_code == 302
     assert participant.pin.must_set_pin is True
+
+
+@pytest.mark.django_db
+def test_admin_charge_delete_rejects_editor_and_allows_admin(client, editor_user, admin_user, permission_dataset):
+    charge = permission_dataset["charge"]
+    url = reverse("charge-delete", args=[charge.pk])
+
+    client.force_login(editor_user)
+    _login_redirect(client.post(url))
+    assert Charge.objects.filter(pk=charge.pk).exists() is True
+
+    client.force_login(admin_user)
+    response = client.post(url)
+
+    assert response.status_code == 302
+    assert Charge.objects.filter(pk=charge.pk).exists() is False

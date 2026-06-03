@@ -666,3 +666,22 @@ dialog::backdrop {
   color: var(--accent-dark);
   text-decoration: none;
 }
+
+.button-link-danger {
+  color: var(--danger);
+}
+
+.button-link-danger:hover {
+  color: var(--danger);
+}
+
+.row-actions {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.row-actions form {
+  margin: 0;
+}

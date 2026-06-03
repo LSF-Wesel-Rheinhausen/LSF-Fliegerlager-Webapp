@@ -84,6 +84,55 @@ def test_editor_cannot_edit_booking_or_create_audit_log(client):
 
 
 @pytest.mark.django_db
+def test_admin_can_delete_booking_and_keeps_audit_log(client):
+    admin = SuperUserFactory(username="admin", email="admin@example.test")
+    charge = ChargeFactory(
+        kind=Charge.Kind.OTHER,
+        description="Fehlbuchung",
+        quantity=Decimal("1.00"),
+        unit_price=Decimal("9.50"),
+        foerderfaehig=False,
+    )
+    participant = charge.participant
+    client.force_login(admin)
+
+    response = client.post(reverse("charge-delete", args=[charge.pk]))
+
+    audit_log = BookingAuditLog.objects.get()
+    assert response.status_code == 302
+    assert response["Location"] == reverse("participant-detail", args=[participant.pk])
+    assert Charge.objects.filter(pk=charge.pk).exists() is False
+    assert audit_log.charge is None
+    assert audit_log.participant == participant
+    assert audit_log.changed_by == admin
+    assert audit_log.action == BookingAuditLog.Action.DELETED
+    assert audit_log.before == {
+        "kind": Charge.Kind.OTHER,
+        "description": "Fehlbuchung",
+        "quantity": "1.00",
+        "unit_price": "9.50",
+        "foerderfaehig": False,
+        "occurred_on": None,
+    }
+    assert audit_log.after == {}
+
+
+@pytest.mark.django_db
+def test_editor_cannot_delete_booking_or_create_audit_log(client):
+    editor = UserFactory(username="editor")
+    editor.groups.add(GroupFactory(name=EDITOR_GROUP))
+    charge = ChargeFactory(description="Bleibt bestehen", quantity=Decimal("1.00"))
+    client.force_login(editor)
+
+    response = client.post(reverse("charge-delete", args=[charge.pk]))
+
+    assert response.status_code == 302
+    assert reverse("login") in response["Location"]
+    assert Charge.objects.filter(pk=charge.pk).exists() is True
+    assert BookingAuditLog.objects.count() == 0
+
+
+@pytest.mark.django_db
 def test_participant_detail_renders_booking_audit_history_for_admin(client):
     admin = SuperUserFactory(username="admin", email="admin@example.test")
     participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
@@ -117,3 +166,32 @@ def test_participant_detail_renders_booking_audit_history_for_admin(client):
     assert b"Audit-Protokoll Buchungen" in response.content
     assert b"Abendessen korrigiert" in response.content
     assert reverse("charge-edit", args=[charge.pk]).encode() in response.content
+    assert reverse("charge-delete", args=[charge.pk]).encode() in response.content
+
+
+@pytest.mark.django_db
+def test_participant_detail_renders_deleted_booking_audit_history(client):
+    admin = SuperUserFactory(username="admin", email="admin@example.test")
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    BookingAuditLog.objects.create(
+        participant=participant,
+        charge=None,
+        changed_by=admin,
+        action=BookingAuditLog.Action.DELETED,
+        before={
+            "kind": Charge.Kind.OTHER,
+            "description": "Doppelte Buchung",
+            "quantity": "1.00",
+            "unit_price": "4.00",
+            "foerderfaehig": False,
+            "occurred_on": None,
+        },
+        after={},
+    )
+    client.force_login(admin)
+
+    response = client.get(reverse("participant-detail", args=[participant.pk]))
+
+    assert response.status_code == 200
+    assert b"Doppelte Buchung" in response.content
+    assert b"Gel\xc3\xb6scht" in response.content

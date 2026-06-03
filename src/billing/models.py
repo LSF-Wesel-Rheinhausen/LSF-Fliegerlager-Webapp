@@ -192,8 +192,16 @@ class Charge(TimeStampedModel):
 class BookingAuditLog(models.Model):
     class Action(models.TextChoices):
         UPDATED = "updated", "Bearbeitet"
+        DELETED = "deleted", "Gelöscht"
 
-    charge = models.ForeignKey(Charge, on_delete=models.CASCADE, related_name="audit_logs")
+    participant = models.ForeignKey(
+        Participant,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="booking_audit_logs",
+    )
+    charge = models.ForeignKey(Charge, on_delete=models.SET_NULL, null=True, blank=True, related_name="audit_logs")
     changed_by = models.ForeignKey(
         get_user_model(),
         on_delete=models.SET_NULL,

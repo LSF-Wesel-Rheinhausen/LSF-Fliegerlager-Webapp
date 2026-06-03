@@ -16,6 +16,7 @@ urlpatterns = [
     path("participants/<int:participant_id>/", views.participant_detail, name="participant-detail"),
     path("participants/<int:participant_id>/charges/new/", views.charge_create, name="charge-create"),
     path("charges/<int:charge_id>/edit/", views.charge_edit, name="charge-edit"),
+    path("charges/<int:charge_id>/delete/", views.charge_delete, name="charge-delete"),
     path("participants/<int:participant_id>/payments/new/", views.payment_create, name="payment-create"),
     path("participants/<int:participant_id>/pin/set/", views.pin_set, name="pin-set"),
     path("participants/<int:participant_id>/pin/reset/", views.pin_reset, name="pin-reset"),
