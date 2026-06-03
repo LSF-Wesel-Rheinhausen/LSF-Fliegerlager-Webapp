@@ -145,6 +145,7 @@ test("Admin edits a booking and sees the change log", async ({ page }) => {
 
   await expect(page.getByRole("heading", { name: "Ada Lovelace" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Buchungen", exact: true })).toBeVisible();
+  await expect(page.getByText(/^B#\d{5}$/).first()).toBeVisible();
   await page.getByRole("link", { name: "Bearbeiten" }).click();
   await expect(page.getByRole("heading", { name: "Buchung bearbeiten" })).toBeVisible();
   await page.getByLabel("Beschreibung").fill("Cola korrigiert");

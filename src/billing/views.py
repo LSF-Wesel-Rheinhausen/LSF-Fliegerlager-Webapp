@@ -12,6 +12,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .exporters import camp_settlement_csv, camp_workbook_response, drink_entries_csv, participant_pdf_response
@@ -226,7 +227,7 @@ def participant_create(request, camp_id):
 def participant_detail(request, participant_id):
     participant = get_object_or_404(Participant.objects.select_related("camp"), pk=participant_id)
     settlement = calculate_participant_settlement(participant)
-    charges = participant.charges.order_by("-created_at", "-id")
+    charges = participant.charges.filter(deleted_at__isnull=True).order_by("-created_at", "-id")
     audit_logs = BookingAuditLog.objects.filter(
         Q(participant=participant) | Q(charge__participant=participant)
     ).select_related("changed_by", "charge")
@@ -258,7 +259,10 @@ def charge_create(request, participant_id):
 
 @admin_required
 def charge_edit(request, charge_id):
-    charge = get_object_or_404(Charge.objects.select_related("participant", "participant__camp"), pk=charge_id)
+    charge = get_object_or_404(
+        Charge.objects.select_related("participant", "participant__camp").filter(deleted_at__isnull=True),
+        pk=charge_id,
+    )
     before = charge_audit_snapshot(charge)
     form = ChargeForm(request.POST or None, instance=charge)
     if request.method == "POST" and form.is_valid():
@@ -280,13 +284,17 @@ def charge_edit(request, charge_id):
 @admin_required
 @require_POST
 def charge_delete(request: HttpRequest, charge_id: int) -> HttpResponse:
-    """Delete a booking charge and keep an audit snapshot for later review."""
-    charge = get_object_or_404(Charge.objects.select_related("participant"), pk=charge_id)
+    """Mark a booking charge as deleted and keep an audit snapshot for later review."""
+    charge = get_object_or_404(
+        Charge.objects.select_related("participant").filter(deleted_at__isnull=True), pk=charge_id
+    )
     participant_id = charge.participant_id
     before = charge_audit_snapshot(charge)
     with transaction.atomic():
         create_booking_delete_audit_log(charge, before, request.user)
-        charge.delete()
+        charge.deleted_at = timezone.now()
+        charge.deleted_by = request.user
+        charge.save(update_fields=["deleted_at", "deleted_by"])
     messages.success(request, "Buchung wurde gelöscht und protokolliert.")
     return redirect("participant-detail", participant_id=participant_id)
 
@@ -623,7 +631,9 @@ def kiosk_home(request):
                     messages.success(request, "Essensanmeldung wurde gespeichert.")
                     return redirect("kiosk-home")
 
-    recent_drinks = participant.charges.filter(kind=Charge.Kind.DRINK).order_by("-created_at")[:8]
+    recent_drinks = participant.charges.filter(kind=Charge.Kind.DRINK, deleted_at__isnull=True).order_by("-created_at")[
+        :8
+    ]
     meal_signups = participant.meal_signups.order_by("meal_date", "meal")
     context = {
         "participant": participant,

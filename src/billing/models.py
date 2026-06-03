@@ -177,6 +177,14 @@ class Charge(TimeStampedModel):
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
     foerderfaehig = models.BooleanField(default=True)
     occurred_on = models.DateField(null=True, blank=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    deleted_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="deleted_charges",
+    )
 
     class Meta:
         ordering = ["participant", "kind", "description"]
@@ -185,8 +193,15 @@ class Charge(TimeStampedModel):
     def total(self):
         return self.quantity * self.unit_price
 
+    @property
+    def booking_reference(self) -> str:
+        """Return the human-readable booking identifier."""
+        if self.pk is None:
+            return ""
+        return f"B#{self.pk:05d}"
+
     def __str__(self):
-        return f"{self.participant}: {self.description}"
+        return f"{self.booking_reference} {self.participant}: {self.description}"
 
 
 class BookingAuditLog(models.Model):

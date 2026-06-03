@@ -45,7 +45,11 @@ def camp_settlement_csv(camp):
 def drink_entries_csv(camp):
     rows = []
     legacy_entries = DrinkEntry.objects.filter(participant__camp=camp).select_related("participant")
-    kiosk_charges = Charge.objects.filter(participant__camp=camp, kind=Charge.Kind.DRINK).select_related("participant")
+    kiosk_charges = Charge.objects.filter(
+        participant__camp=camp,
+        kind=Charge.Kind.DRINK,
+        deleted_at__isnull=True,
+    ).select_related("participant")
     for entry in legacy_entries:
         rows.append(
             [

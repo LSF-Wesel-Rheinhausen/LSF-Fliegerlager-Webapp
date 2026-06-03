@@ -1,10 +1,9 @@
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any
 
 from django.core.exceptions import ValidationError
 from django.db.models import Sum
-from django.utils.dateparse import parse_date
 
 from .models import BookingAuditLog, Charge, DrinkEntry, Expense, Participant, PriceRule
 
@@ -73,6 +72,7 @@ def charge_audit_snapshot(charge: Charge) -> dict[str, str | bool | None]:
         A JSON-serializable snapshot of the charge fields that an admin may edit.
     """
     return {
+        "booking_reference": charge.booking_reference,
         "kind": charge.kind,
         "description": charge.description,
         "quantity": str(money(charge.quantity)),
@@ -97,6 +97,8 @@ def create_booking_audit_log(
     Returns:
         The created audit log entry, or None if no tracked field changed.
     """
+    if charge.deleted_at is not None:
+        return None
     after = charge_audit_snapshot(charge)
     if before == after:
         return None
@@ -123,8 +125,8 @@ def create_booking_delete_audit_log(
         changed_by: User who performed the deletion.
 
     Returns:
-        The created audit log entry. Its charge relation is cleared by the database
-        when the charge is deleted, while the JSON snapshot keeps the business data.
+        The created audit log entry. The charge relation remains intact because
+        deletion is represented by soft-delete fields on the charge.
     """
     return BookingAuditLog.objects.create(
         participant=charge.participant,
@@ -144,55 +146,31 @@ def restore_booking_from_audit_log(audit_log: BookingAuditLog, changed_by: Any) 
         changed_by: User who requested the restoration.
 
     Returns:
-        The newly created charge.
+        The restored charge.
 
     Raises:
         ValidationError: If the audit row is not a restorable deletion snapshot.
     """
     if audit_log.action != BookingAuditLog.Action.DELETED:
         raise ValidationError("Nur gelöschte Buchungen können wiederhergestellt werden.")
-    if audit_log.charge_id is not None:
+    if audit_log.charge_id is None:
+        raise ValidationError("Diese Buchung kann ohne ursprüngliche Buchungs-ID nicht wiederhergestellt werden.")
+    if audit_log.charge.deleted_at is None:
         raise ValidationError("Diese Buchung wurde bereits wiederhergestellt.")
     if audit_log.participant_id is None:
         raise ValidationError("Diese Buchung kann keinem Teilnehmer mehr zugeordnet werden.")
 
-    snapshot = audit_log.before
-    try:
-        kind = str(snapshot["kind"])
-        description = str(snapshot["description"]).strip()
-        quantity = Decimal(str(snapshot["quantity"]))
-        unit_price = Decimal(str(snapshot["unit_price"]))
-        foerderfaehig = bool(snapshot["foerderfaehig"])
-        occurred_on_raw = snapshot.get("occurred_on")
-    except (KeyError, InvalidOperation, TypeError) as error:
-        raise ValidationError("Das Änderungsprotokoll enthält keine gültige Buchung.") from error
-
-    if kind not in Charge.Kind.values or not description:
-        raise ValidationError("Das Änderungsprotokoll enthält keine gültige Buchung.")
-
-    occurred_on = None
-    if occurred_on_raw:
-        occurred_on = parse_date(str(occurred_on_raw))
-        if occurred_on is None:
-            raise ValidationError("Das Änderungsprotokoll enthält kein gültiges Buchungsdatum.")
-
-    restored_charge = Charge.objects.create(
-        participant=audit_log.participant,
-        kind=kind,
-        description=description,
-        quantity=quantity,
-        unit_price=unit_price,
-        foerderfaehig=foerderfaehig,
-        occurred_on=occurred_on,
-    )
-    audit_log.charge = restored_charge
-    audit_log.save(update_fields=["charge"])
+    restored_charge = audit_log.charge
+    before = charge_audit_snapshot(restored_charge)
+    restored_charge.deleted_at = None
+    restored_charge.deleted_by = None
+    restored_charge.save(update_fields=["deleted_at", "deleted_by"])
     BookingAuditLog.objects.create(
         participant=audit_log.participant,
         charge=restored_charge,
         changed_by=changed_by,
         action=BookingAuditLog.Action.RESTORED,
-        before={},
+        before=before,
         after=charge_audit_snapshot(restored_charge),
     )
     return restored_charge
@@ -277,7 +255,7 @@ def manual_charge_lines(participant):
             eligible=charge.foerderfaehig,
             participant=participant,
         )
-        for charge in participant.charges.all()
+        for charge in Charge.objects.filter(participant=participant, deleted_at__isnull=True)
     ]
 
 

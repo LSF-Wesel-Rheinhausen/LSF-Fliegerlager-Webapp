@@ -48,8 +48,24 @@ class PriceRuleAdmin(admin.ModelAdmin):
 
 @admin.register(Charge)
 class ChargeAdmin(admin.ModelAdmin):
-    list_display = ("participant", "kind", "description", "unit_price", "foerderfaehig", "occurred_on")
-    list_filter = ("kind", "foerderfaehig")
+    list_display = (
+        "booking_reference",
+        "participant",
+        "kind",
+        "description",
+        "unit_price",
+        "foerderfaehig",
+        "occurred_on",
+        "deleted_at",
+    )
+    list_filter = ("kind", "foerderfaehig", "deleted_at")
+    search_fields = ("id", "description", "participant__first_name", "participant__last_name")
+    readonly_fields = ("deleted_at", "deleted_by")
+
+    @admin.display(description="Buchungsnr.", ordering="id")
+    def booking_reference(self, charge: Charge) -> str:
+        """Return the formatted booking reference for the admin changelist."""
+        return charge.booking_reference
 
 
 @admin.register(BookingAuditLog)
