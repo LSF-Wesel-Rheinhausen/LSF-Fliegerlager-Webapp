@@ -17,16 +17,16 @@ Analyse vom 2026-06-02:
 
 ### 1. Offizielle Coverage-Messung einfuehren
 
-- `pytest-cov` als Dev-Dependency in `requirements-dev.txt` aufnehmen.
-- Coverage-Konfiguration fuer `src/billing` im Projekt hinterlegen.
-- Zielkommando dokumentieren: `.venv/bin/python -m pytest --cov=src/billing --cov-report=term-missing`.
+- [x] `pytest-cov` als Dev-Dependency in `requirements-dev.txt` aufnehmen.
+- [x] Coverage-Konfiguration fuer `src/billing` im Projekt hinterlegen.
+- [x] Zielkommando dokumentieren: `.venv/bin/python -m pytest --cov=src/billing --cov-report=term-missing`.
 - Optional spaeter Mindestschwelle einfuehren, sobald der echte Ausgangswert bekannt ist.
 
 Akzeptanzkriterien:
 
-- Coverage-Report laeuft lokal reproduzierbar.
-- Report zeigt fehlende Zeilen fuer Views, Forms, Models, Services, Importer und Exporter.
-- Normale Test-Suite bleibt gruen.
+- [x] Coverage-Report laeuft lokal reproduzierbar.
+- [x] Report zeigt fehlende Zeilen fuer Views, Forms, Models, Services, Importer und Exporter.
+- [x] Normale Test-Suite bleibt gruen.
 
 ### 2. Fehlende E2E-Kernflows ergaenzen
 
