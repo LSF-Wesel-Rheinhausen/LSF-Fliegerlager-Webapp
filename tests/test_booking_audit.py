@@ -3,10 +3,12 @@ from decimal import Decimal
 import pytest
 from django.contrib.admin.sites import AdminSite
 from django.urls import reverse
+from django.utils import timezone
 
 from billing.admin import ChargeAdmin
 from billing.models import BookingAuditLog, Charge
 from billing.permissions import EDITOR_GROUP
+from billing.services import calculate_participant_settlement
 from tests.factories import ChargeFactory, GroupFactory, ParticipantFactory, SuperUserFactory, UserFactory
 
 
@@ -118,10 +120,13 @@ def test_admin_can_delete_booking_and_keeps_audit_log(client):
     response = client.post(reverse("charge-delete", args=[charge.pk]))
 
     audit_log = BookingAuditLog.objects.get()
+    charge.refresh_from_db()
     assert response.status_code == 302
     assert response["Location"] == reverse("participant-detail", args=[participant.pk])
-    assert Charge.objects.filter(pk=charge.pk).exists() is False
-    assert audit_log.charge is None
+    assert Charge.objects.filter(pk=charge.pk).exists() is True
+    assert charge.deleted_at is not None
+    assert charge.deleted_by == admin
+    assert audit_log.charge == charge
     assert audit_log.participant == participant
     assert audit_log.changed_by == admin
     assert audit_log.action == BookingAuditLog.Action.DELETED
@@ -149,6 +154,42 @@ def test_editor_cannot_delete_booking_or_create_audit_log(client):
     assert response.status_code == 302
     assert reverse("login") in response["Location"]
     assert Charge.objects.filter(pk=charge.pk).exists() is True
+    assert BookingAuditLog.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_deleted_booking_is_hidden_from_participant_detail_and_settlement(client):
+    admin = SuperUserFactory(username="admin", email="admin@example.test")
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    charge = ChargeFactory(participant=participant, description="Gelöschte Kosten", unit_price=Decimal("9.50"))
+    charge.deleted_at = timezone.now()
+    charge.deleted_by = admin
+    charge.save(update_fields=["deleted_at", "deleted_by"])
+    client.force_login(admin)
+
+    response = client.get(reverse("participant-detail", args=[participant.pk]))
+    settlement = calculate_participant_settlement(participant)
+
+    assert response.status_code == 200
+    assert b"Gel\xc3\xb6schte Kosten" not in response.content
+    assert charge.booking_reference.encode() not in response.content
+    assert settlement.total_due == Decimal("0.00")
+
+
+@pytest.mark.django_db
+def test_deleted_booking_cannot_be_edited_or_deleted_again(client):
+    admin = SuperUserFactory(username="admin", email="admin@example.test")
+    charge = ChargeFactory(description="Gelöschte Kosten")
+    charge.deleted_at = timezone.now()
+    charge.deleted_by = admin
+    charge.save(update_fields=["deleted_at", "deleted_by"])
+    client.force_login(admin)
+
+    edit_response = client.get(reverse("charge-edit", args=[charge.pk]))
+    delete_response = client.post(reverse("charge-delete", args=[charge.pk]))
+
+    assert edit_response.status_code == 404
+    assert delete_response.status_code == 404
     assert BookingAuditLog.objects.count() == 0
 
 
@@ -194,9 +235,13 @@ def test_participant_detail_renders_booking_audit_history_for_admin(client):
 def test_participant_detail_renders_deleted_booking_audit_history(client):
     admin = SuperUserFactory(username="admin", email="admin@example.test")
     participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    charge = ChargeFactory(participant=participant, description="Doppelte Buchung")
+    charge.deleted_at = timezone.now()
+    charge.deleted_by = admin
+    charge.save(update_fields=["deleted_at", "deleted_by"])
     BookingAuditLog.objects.create(
         participant=participant,
-        charge=None,
+        charge=charge,
         changed_by=admin,
         action=BookingAuditLog.Action.DELETED,
         before={
@@ -223,12 +268,25 @@ def test_participant_detail_renders_deleted_booking_audit_history(client):
 def test_admin_can_restore_deleted_booking_from_audit_log(client):
     admin = SuperUserFactory(username="admin", email="admin@example.test")
     participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    deleted_charge = ChargeFactory(
+        participant=participant,
+        kind=Charge.Kind.FOOD,
+        description="Frühstück",
+        quantity=Decimal("2.00"),
+        unit_price=Decimal("4.50"),
+        foerderfaehig=True,
+        occurred_on="2026-07-02",
+    )
+    deleted_charge.deleted_at = timezone.now()
+    deleted_charge.deleted_by = admin
+    deleted_charge.save(update_fields=["deleted_at", "deleted_by"])
     deleted_log = BookingAuditLog.objects.create(
         participant=participant,
-        charge=None,
+        charge=deleted_charge,
         changed_by=admin,
         action=BookingAuditLog.Action.DELETED,
         before={
+            "booking_reference": deleted_charge.booking_reference,
             "kind": Charge.Kind.FOOD,
             "description": "Frühstück",
             "quantity": "2.00",
@@ -242,13 +300,17 @@ def test_admin_can_restore_deleted_booking_from_audit_log(client):
 
     response = client.post(reverse("booking-audit-restore", args=[deleted_log.pk]), follow=True)
 
-    restored_charge = Charge.objects.get(participant=participant)
+    restored_charge = Charge.objects.get(pk=deleted_charge.pk)
     deleted_log.refresh_from_db()
     restored_log = BookingAuditLog.objects.exclude(pk=deleted_log.pk).get()
     assert response.status_code == 200
     assert response.redirect_chain == [(reverse("participant-detail", args=[participant.pk]), 302)]
     assert b"Fr\xc3\xbchst\xc3\xbcck" in response.content
     assert b"Wiederhergestellt" in response.content
+    assert restored_charge.pk == deleted_charge.pk
+    assert restored_charge.booking_reference == deleted_charge.booking_reference
+    assert restored_charge.deleted_at is None
+    assert restored_charge.deleted_by is None
     assert restored_charge.kind == Charge.Kind.FOOD
     assert restored_charge.description == "Frühstück"
     assert restored_charge.quantity == Decimal("2.00")
@@ -260,7 +322,15 @@ def test_admin_can_restore_deleted_booking_from_audit_log(client):
     assert restored_log.charge == restored_charge
     assert restored_log.changed_by == admin
     assert restored_log.action == BookingAuditLog.Action.RESTORED
-    assert restored_log.before == {}
+    assert restored_log.before == {
+        "booking_reference": restored_charge.booking_reference,
+        "kind": Charge.Kind.FOOD,
+        "description": "Frühstück",
+        "quantity": "2.00",
+        "unit_price": "4.50",
+        "foerderfaehig": True,
+        "occurred_on": "2026-07-02",
+    }
     assert restored_log.after == {
         "booking_reference": restored_charge.booking_reference,
         "kind": Charge.Kind.FOOD,
@@ -277,9 +347,12 @@ def test_editor_cannot_restore_deleted_booking(client):
     editor = UserFactory(username="editor")
     editor.groups.add(GroupFactory(name=EDITOR_GROUP))
     participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    charge = ChargeFactory(participant=participant, description="Doppelte Buchung")
+    charge.deleted_at = timezone.now()
+    charge.save(update_fields=["deleted_at"])
     deleted_log = BookingAuditLog.objects.create(
         participant=participant,
-        charge=None,
+        charge=charge,
         action=BookingAuditLog.Action.DELETED,
         before={
             "kind": Charge.Kind.OTHER,
@@ -295,11 +368,13 @@ def test_editor_cannot_restore_deleted_booking(client):
 
     response = client.post(reverse("booking-audit-restore", args=[deleted_log.pk]))
 
+    charge.refresh_from_db()
     deleted_log.refresh_from_db()
     assert response.status_code == 302
     assert reverse("login") in response["Location"]
-    assert deleted_log.charge is None
-    assert Charge.objects.count() == 0
+    assert deleted_log.charge == charge
+    assert charge.deleted_at is not None
+    assert Charge.objects.count() == 1
     assert BookingAuditLog.objects.count() == 1
 
 

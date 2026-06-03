@@ -2,6 +2,7 @@ from decimal import Decimal
 
 import pytest
 from django.urls import reverse
+from django.utils import timezone
 
 from billing.models import BookingAuditLog, Camp, Charge, Expense, Participant, Payment, PriceRule
 from billing.permissions import EDITOR_GROUP
@@ -323,17 +324,22 @@ def test_admin_charge_delete_rejects_editor_and_allows_admin(client, editor_user
 
     client.force_login(admin_user)
     response = client.post(url)
+    charge.refresh_from_db()
 
     assert response.status_code == 302
-    assert Charge.objects.filter(pk=charge.pk).exists() is False
+    assert Charge.objects.filter(pk=charge.pk).exists() is True
+    assert charge.deleted_at is not None
 
 
 @pytest.mark.django_db
 def test_admin_booking_restore_rejects_editor_and_allows_admin(client, editor_user, admin_user, permission_dataset):
     participant = permission_dataset["participant"]
+    charge = permission_dataset["charge"]
+    charge.deleted_at = timezone.now()
+    charge.save(update_fields=["deleted_at"])
     deleted_log = BookingAuditLog.objects.create(
         participant=participant,
-        charge=None,
+        charge=charge,
         action=BookingAuditLog.Action.DELETED,
         before={
             "kind": Charge.Kind.OTHER,
@@ -349,12 +355,16 @@ def test_admin_booking_restore_rejects_editor_and_allows_admin(client, editor_us
 
     client.force_login(editor_user)
     _login_redirect(client.post(url))
+    charge.refresh_from_db()
     deleted_log.refresh_from_db()
-    assert deleted_log.charge is None
+    assert deleted_log.charge == charge
+    assert charge.deleted_at is not None
 
     client.force_login(admin_user)
     response = client.post(url)
+    charge.refresh_from_db()
     deleted_log.refresh_from_db()
 
     assert response.status_code == 302
-    assert deleted_log.charge is not None
+    assert deleted_log.charge == charge
+    assert charge.deleted_at is None
