@@ -56,9 +56,11 @@ class ChargeAdmin(admin.ModelAdmin):
         "unit_price",
         "foerderfaehig",
         "occurred_on",
+        "deleted_at",
     )
-    list_filter = ("kind", "foerderfaehig")
+    list_filter = ("kind", "foerderfaehig", "deleted_at")
     search_fields = ("id", "description", "participant__first_name", "participant__last_name")
+    readonly_fields = ("deleted_at", "deleted_by")
 
     @admin.display(description="Buchungsnr.", ordering="id")
     def booking_reference(self, charge: Charge) -> str:

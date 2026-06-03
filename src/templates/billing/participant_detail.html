@@ -139,7 +139,7 @@
               {% endif %}
             </td>
             <td>
-              {% if user|can_manage_users and log.action == "deleted" and not log.charge and log.participant %}
+              {% if user|can_manage_users and log.action == "deleted" and log.charge.deleted_at and log.participant %}
                 <form method="post" action="{% url 'booking-audit-restore' log.pk %}">
                   {% csrf_token %}
                   <button

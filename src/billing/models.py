@@ -177,6 +177,14 @@ class Charge(TimeStampedModel):
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
     foerderfaehig = models.BooleanField(default=True)
     occurred_on = models.DateField(null=True, blank=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    deleted_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="deleted_charges",
+    )
 
     class Meta:
         ordering = ["participant", "kind", "description"]
