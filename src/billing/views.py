@@ -459,7 +459,9 @@ def participant_import(request, camp_id):
             except ValidationError as error:
                 messages.error(request, "; ".join(error.messages))
                 return redirect("participant-import", camp_id=camp.pk)
-            payload = json.dumps(rows_to_payload(rows), ensure_ascii=False).encode("utf-8")
+            from django.core.serializers.json import DjangoJSONEncoder
+
+            payload = json.dumps(rows_to_payload(rows), cls=DjangoJSONEncoder, ensure_ascii=False).encode("utf-8")
             signed_rows = signer.sign(base64.b64encode(payload).decode("ascii"))
 
     return render(

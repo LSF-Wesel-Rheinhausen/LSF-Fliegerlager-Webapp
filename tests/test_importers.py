@@ -2,10 +2,10 @@ from io import BytesIO
 
 import pytest
 from django.core.exceptions import ValidationError
-from tests.factories import CampFactory
 
 from billing.importers import preview_participants, save_participants
 from billing.models import Participant
+from tests.factories import CampFactory
 
 
 def test_csv_preview_validates_required_fields_and_numbers():
@@ -36,3 +36,26 @@ def test_save_participants_upserts_valid_rows():
 def test_xlsx_preview_rejects_invalid_magic_number():
     with pytest.raises(ValidationError, match="gültiges Excel"):
         preview_participants(BytesIO(b"not-an-xlsx"), "teilnehmer.xlsx")
+
+
+@pytest.mark.django_db
+def test_import_confirm_rejects_invalid_signature(client):
+    from django.urls import reverse
+
+    from tests.factories import CampFactory, SuperUserFactory
+
+    user = SuperUserFactory(username="admin", email="admin@example.test")
+    camp = CampFactory()
+    client.force_login(user)
+
+    response = client.post(
+        reverse("participant-import", args=[camp.pk]),
+        {
+            "confirm": "1",
+            "rows": "invalid-signature",
+        },
+    )
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("participant-import", args=[camp.pk])
+    assert Participant.objects.filter(first_name="Ada").count() == 0

@@ -1,8 +1,11 @@
 {% extends "base.html" %}
+{% load billing_format %}
 {% block content %}
   <div class="toolbar">
     <h1>Lager</h1>
-    <a class="button" href="{% url 'camp-create' %}">Lager anlegen</a>
+    {% if user|can_manage_users %}
+      <a class="button" href="{% url 'camp-create' %}">Lager anlegen</a>
+    {% endif %}
   </div>
   <table>
     <thead>

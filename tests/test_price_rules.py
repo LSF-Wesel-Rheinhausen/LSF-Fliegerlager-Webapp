@@ -2,9 +2,9 @@ from decimal import Decimal
 
 import pytest
 from django.urls import reverse
-from tests.factories import CampFactory, SuperUserFactory
 
 from billing.models import PriceRule
+from tests.factories import CampFactory, SuperUserFactory
 
 
 @pytest.mark.django_db
@@ -100,3 +100,34 @@ def test_price_rule_edit_redirects_to_manage_page(client):
     assert response.status_code == 302
     assert response["Location"] == reverse("price-rules-manage", args=[rule.camp.pk])
     assert rule.name == "Cola Light"
+
+
+@pytest.mark.django_db
+def test_price_rule_form_validates_camp_flat_fields():
+    from billing.forms import PriceRuleForm
+
+    # valid camp flat
+    form = PriceRuleForm(
+        {
+            "kind": PriceRule.Kind.CAMP_FLAT,
+            "name": "Pauschale",
+            "unit_price": "100.00",
+            "camp_flat_duration": PriceRule.CampFlatDuration.ONE_WEEK,
+            "camp_flat_role": PriceRule.CampFlatRole.PARTICIPANT,
+        }
+    )
+    assert form.is_valid()
+
+    # invalid: missing duration and role
+    form = PriceRuleForm(
+        {
+            "kind": PriceRule.Kind.CAMP_FLAT,
+            "name": "Pauschale",
+            "unit_price": "100.00",
+            "camp_flat_duration": "",
+            "camp_flat_role": "",
+        }
+    )
+    assert not form.is_valid()
+    assert "Bitte 1 Woche oder 2 Wochen auswählen." in form.errors["camp_flat_duration"]
+    assert "Bitte Teilnehmer oder Begleitperson auswählen." in form.errors["camp_flat_role"]

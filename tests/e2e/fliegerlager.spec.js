@@ -1,4 +1,4 @@
-const { expect, test } = require("@playwright/test");
+const { expect, test } = require("./fixtures");
 
 const VIEWPORTS = [
   { name: "13 Zoll Laptop", width: 1280, height: 800 },
@@ -76,10 +76,7 @@ async function setupFirstAdmin(page) {
 }
 
 async function logout(page) {
-  const logoutButton = page.getByRole("button", { name: "Abmelden" });
-  if (await isVisible(logoutButton)) {
-    await logoutButton.click();
-  }
+  await page.getByRole("button", { name: "Abmelden" }).click();
 }
 
 async function loginAsAdmin(page) {
@@ -91,15 +88,17 @@ async function loginAsAdmin(page) {
   await expect(page.getByRole("heading", { name: "Lager" })).toBeVisible();
 }
 
-async function createCamp(page) {
+async function createCamp(page, name = "Sommerlager") {
   await page.getByRole("link", { name: "Lager anlegen" }).click();
   await expect(page.getByRole("heading", { name: "Lager anlegen" })).toBeVisible();
   const suffix = Date.now().toString();
-  await page.getByLabel("Name").fill(`Sommerlager ${suffix}`);
+  const campName = `${name} ${suffix}`;
+  await page.getByLabel("Name").fill(campName);
   await page.getByLabel("Jahr").fill("2026");
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(page.getByRole("heading", { name: "Übersicht" })).toBeVisible();
-  await expect(page.getByText(`Sommerlager ${suffix} 2026`).first()).toBeVisible();
+  await expect(page.getByText(campName).first()).toBeVisible();
+  return campName;
 }
 
 async function createParticipant(page, firstName, lastName) {
@@ -185,6 +184,150 @@ test("Admin can open and close price rule dialogs natively", async ({ page }) =>
   // Close dialog via Escape key (native behavior)
   await page.keyboard.press("Escape");
   await expect(page.locator("dialog#price-rule-dialog")).toBeHidden();
+});
+
+test("Kiosk flow: login, pin setup, drink and meal booking", async ({ page }) => {
+  await setupFirstAdmin(page);
+  await createCamp(page, "Sommerlager Kiosk");
+  await createParticipant(page, "Marie", "Curie");
+
+  await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
+  await page.getByText("Sommerlager Kiosk").click();
+
+  // Create drink price rule
+  await page.getByRole("link", { name: "Preise verwalten" }).first().click();
+  await page.getByRole("button", { name: "Getränk anlegen" }).click();
+  await page.locator("#price-rule-dialog").getByLabel("Name").fill("Apfelsaft");
+  await page.locator("#price-rule-dialog").getByLabel("Einzelpreis").fill("1.50");
+  await page.locator("#price-rule-dialog").getByRole("button", { name: "Speichern" }).click();
+
+  // Set meal standard price
+  await page.locator('input[name="meal-breakfast_adult_price"]').fill("5.00");
+  await page.locator('input[name="meal-dinner_adult_price"]').fill("7.00");
+  await page.getByRole("button", { name: "Standardpreise speichern" }).click();
+
+  await logout(page);
+
+  // Kiosk Flow
+  await page.goto("/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Marie Curie" });
+  await page.getByLabel("PIN").fill("0000");
+  await page.getByRole("button", { name: "Anmelden" }).click();
+
+  // Should redirect to PIN setup
+  await expect(page).toHaveURL(/.*\/kiosk\/pin\//);
+  await page.getByLabel("Neuer PIN").fill("1234");
+  await page.getByLabel("PIN wiederholen").fill("1234");
+  await page.getByRole("button", { name: "Speichern" }).click();
+
+  // Now in Kiosk Home
+  await expect(page).toHaveURL(/.*\/kiosk\//);
+  await expect(page.getByText("PIN wurde gesetzt.")).toBeVisible();
+
+  // Book a drink
+  await page.getByRole("button", { name: "Apfelsaft" }).click();
+  await expect(page.getByText("Getränk wurde gebucht.")).toBeVisible();
+
+  // Book a meal
+  await page.locator('input[name="meal-meal_date"]').fill("2026-06-03");
+  await Promise.all([
+    page.waitForNavigation(),
+    page.locator('section.panel').filter({ hasText: 'Essen anmelden' }).locator('form').evaluate(form => form.submit())
+  ]);
+  await expect(page.getByText("Essensanmeldung wurde gespeichert.")).toBeVisible();
+
+  await page.getByRole("link", { name: "Abmelden" }).click();
+  await expect(page).toHaveURL(/.*\/kiosk\/login\//);
+});
+
+test("Import flow: upload CSV and confirm", async ({ page }) => {
+  await setupFirstAdmin(page);
+  const campName = await createCamp(page, "Sommerlager Import");
+
+  await page.getByRole("link", { name: "Teilnehmer importieren" }).click();
+
+  const csvContent = "first_name,last_name\nImport,Test\n";
+  await page.getByLabel("Importdatei").setInputFiles({
+    name: "test.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(csvContent),
+  });
+  await page.getByRole("button", { name: "Vorschau" }).click();
+
+  await expect(page.getByText("Import Test")).toBeVisible();
+  await page.getByRole("button", { name: "Gültige Zeilen importieren" }).click();
+
+  await expect(page.getByText("1 Teilnehmer wurden importiert.")).toBeVisible();
+  await expect(page.locator(".status-badge").first()).toContainText("Sommerlager Import");
+});
+
+test("Finance flow: payments and expenses", async ({ page }) => {
+  await setupFirstAdmin(page);
+  await createCamp(page, "Sommerlager Finance");
+  await createParticipant(page, "Marie", "Curie");
+
+  await page.getByRole("link", { name: "Zahlung erfassen" }).click();
+  await page.getByLabel("Betrag").fill("50.00");
+  await page.locator("#id_paid_on").fill("2026-07-01");
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByText("Zahlung wurde gespeichert.")).toBeVisible();
+
+  // Create an expense
+  await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
+  await page.getByText("Sommerlager Finance").click(); // Click on the camp link in the list
+  await page.getByRole("link", { name: "Auslage erfassen" }).click();
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Marie Curie" });
+  await page.locator("#id_category").fill("Bürobedarf");
+  await page.getByLabel("Beschreibung").fill("Stifte");
+  await page.getByLabel("Betrag").fill("15.50");
+  await page.locator("#id_paid_on").fill("2026-07-01");
+  await page.getByRole("button", { name: "Speichern" }).click();
+
+  await expect(page.getByText("Auslage wurde gespeichert.")).toBeVisible();
+});
+
+test("Export flow: downloading CSV and XLSX returns 200 without deep parsing", async ({ page }) => {
+  await setupFirstAdmin(page);
+  await createCamp(page, "Sommerlager Export");
+  await createParticipant(page, "Marie", "Curie");
+
+  await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
+  await page.getByText("Sommerlager Export").click();
+
+  const [downloadCsv] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole("link", { name: "Abrechnung als CSV herunterladen" }).click()
+  ]);
+  expect(downloadCsv.suggestedFilename()).toMatch(/\.csv$/);
+
+  const [downloadXlsx] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole("link", { name: "Arbeitsmappe herunterladen" }).click()
+  ]);
+  expect(downloadXlsx.suggestedFilename()).toMatch(/\.xlsx$/);
+});
+
+test("Role flow: editor cannot see admin functions", async ({ page }) => {
+  await setupFirstAdmin(page);
+
+  await page.getByRole("link", { name: "Nutzer" }).click();
+  await page.getByRole("link", { name: "Nutzer anlegen" }).click();
+  await page.getByLabel("Benutzername").fill("editor");
+  await page.getByLabel("E-Mail").fill("editor@example.test");
+  await page.getByLabel("Rolle").selectOption("Bearbeiter");
+  await page.locator("#id_password1").fill("editor-pass-123");
+  await page.locator("#id_password2").fill("editor-pass-123");
+  await page.getByRole("button", { name: "Speichern" }).click();
+
+  await logout(page);
+
+  await page.goto("/login/");
+  await page.locator("#id_username").fill("editor@example.test");
+  await page.locator("#id_password").fill("editor-pass-123");
+  await page.getByRole("button", { name: "Anmelden" }).click();
+
+  await expect(page.getByRole("link", { name: "Lager anlegen" })).toBeHidden();
+  await expect(page.getByRole("link", { name: "Nutzer" })).toBeHidden();
 });
 
 for (const viewport of VIEWPORTS) {
