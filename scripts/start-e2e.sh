@@ -7,8 +7,9 @@ export DJANGO_ALLOWED_HOSTS="${DJANGO_ALLOWED_HOSTS:-127.0.0.1,localhost}"
 export DJANGO_DEBUG="${DJANGO_DEBUG:-1}"
 export DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY:-test_sk_playwright_local_only}"
 
-mkdir -p tmp
-rm -f tmp/e2e.sqlite3
+db_path="${DATABASE_URL#sqlite:///}"
+mkdir -p "$(dirname "$db_path")"
+rm -f "$db_path"
 
 if [ -x ".venv/bin/python" ]; then
   PYTHON=".venv/bin/python"

@@ -3,10 +3,10 @@ from decimal import Decimal
 
 import pytest
 from django.urls import reverse
-from tests.factories import CampFactory, ParticipantFactory, PriceRuleFactory, UserFactory
 
 from billing.models import Charge, MealSignup, PriceRule
 from billing.views import KIOSK_PARTICIPANT_SESSION_KEY, KIOSK_PIN_SETUP_SESSION_KEY
+from tests.factories import CampFactory, ParticipantFactory, PriceRuleFactory, UserFactory
 
 
 @pytest.mark.django_db
@@ -294,3 +294,51 @@ def test_kiosk_meal_signup_child_breakfast_override(client):
     assert charges[0].description == "Standard Frühstück Kind Frühstück"
     assert charges[1].unit_price == Decimal("5.50")
     assert charges[1].description == "Besonderes Frühstück Frühstück"
+
+
+@pytest.mark.django_db
+def test_kiosk_pin_setup_rejects_mismatched_pins(client):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    session = client.session
+    session[KIOSK_PIN_SETUP_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-pin-setup"),
+        {"pin": "1234", "pin_repeat": "9876"},
+    )
+
+    assert response.status_code == 200
+    assert b"Die PINs stimmen nicht \xc3\xbcberein." in response.content
+    participant.refresh_from_db()
+    assert getattr(participant, "pin", None) is None or not participant.pin.pin_hash
+    assert KIOSK_PARTICIPANT_SESSION_KEY not in client.session
+
+
+@pytest.mark.django_db
+def test_kiosk_meal_signup_without_price_rule_shows_error(client):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    # intentionally not creating a PriceRule for dinner
+
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-meal_date": date(2025, 7, 1).isoformat(),
+            "meal-meal": MealSignup.Meal.DINNER,
+            "meal-variant": MealSignup.Variant.NORMAL,
+        },
+    )
+
+    assert response.status_code == 200
+    assert (
+        b"Keine Preisregel f\xc3\xbcr diese Mahlzeit hinterlegt." in response.content
+        or b"error" in response.content.lower()
+        or b"fehler" in response.content.lower()
+    )
+    assert not MealSignup.objects.filter(participant=participant).exists()

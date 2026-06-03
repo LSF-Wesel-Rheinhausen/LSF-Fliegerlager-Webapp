@@ -49,6 +49,7 @@ Danach läuft die App unter `http://localhost:8000`.
 
 ```bash
 .venv/bin/python -m pytest
+.venv/bin/python -m pytest --cov=src/billing --cov-report=term-missing
 .venv/bin/python src/manage.py check
 .venv/bin/python -m ruff check .
 .venv/bin/python -m ruff format --check .

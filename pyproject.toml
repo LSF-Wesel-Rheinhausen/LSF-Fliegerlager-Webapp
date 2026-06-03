@@ -36,3 +36,24 @@ no_implicit_optional = true
 
 [tool.django-stubs]
 django_settings_module = "config.settings"
+
+[tool.coverage.run]
+source = ["src/billing"]
+branch = true
+omit = [
+    "src/billing/migrations/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "pass",
+    "\\.\\.\\."
+]
