@@ -219,13 +219,15 @@ def test_admin_can_restore_deleted_booking_from_audit_log(client):
     )
     client.force_login(admin)
 
-    response = client.post(reverse("booking-audit-restore", args=[deleted_log.pk]))
+    response = client.post(reverse("booking-audit-restore", args=[deleted_log.pk]), follow=True)
 
     restored_charge = Charge.objects.get(participant=participant)
     deleted_log.refresh_from_db()
     restored_log = BookingAuditLog.objects.exclude(pk=deleted_log.pk).get()
-    assert response.status_code == 302
-    assert response["Location"] == reverse("participant-detail", args=[participant.pk])
+    assert response.status_code == 200
+    assert response.redirect_chain == [(reverse("participant-detail", args=[participant.pk]), 302)]
+    assert b"Fr\xc3\xbchst\xc3\xbcck" in response.content
+    assert b"Wiederhergestellt" in response.content
     assert restored_charge.kind == Charge.Kind.FOOD
     assert restored_charge.description == "Frühstück"
     assert restored_charge.quantity == Decimal("2.00")

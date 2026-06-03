@@ -108,11 +108,21 @@
           <tr>
             <td>{{ log.created_at }}</td>
             <td>{{ log.changed_by.email|default:log.changed_by.username|default:"System" }}</td>
-            <td>{{ log.charge.description|default:log.before.description }}</td>
             <td>
-              {{ log.before.kind }} · {{ log.before.description }} ·
-              {{ log.before.quantity }} x {{ log.before.unit_price }} ·
-              {% if log.before.foerderfaehig %}förderfähig{% else %}nicht förderfähig{% endif %}
+              {% if log.charge %}
+                {{ log.charge.description }}
+              {% else %}
+                {{ log.before.description }}
+              {% endif %}
+            </td>
+            <td>
+              {% if log.action == "restored" %}
+                -
+              {% else %}
+                {{ log.before.kind }} · {{ log.before.description }} ·
+                {{ log.before.quantity }} x {{ log.before.unit_price }} ·
+                {% if log.before.foerderfaehig %}förderfähig{% else %}nicht förderfähig{% endif %}
+              {% endif %}
             </td>
             <td>
               {% if log.action == "deleted" %}

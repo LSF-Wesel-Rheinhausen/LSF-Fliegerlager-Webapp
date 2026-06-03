@@ -7,6 +7,7 @@
 - Änderungsprotokolleinträge bleiben auch nach gelöschten Buchungen erhalten.
 - Das Protokoll heißt jetzt Änderungsprotokoll.
 - Admins können gelöschte Buchungen aus dem Änderungsprotokoll wiederherstellen.
+- Die Teilnehmerseite rendert wiederhergestellte Protokolleinträge ohne Zugriff auf leere Vorher-Snapshots.
 
 ## Geänderte Dateien
 
@@ -30,6 +31,7 @@
 
 - Bestanden: `.venv/bin/python src/manage.py check`
 - Bestanden: `.venv/bin/python -m pytest tests/test_booking_audit.py tests/test_view_permissions.py`
+- Bestanden: `.venv/bin/python -m pytest tests/test_booking_audit.py::test_admin_can_restore_deleted_booking_from_audit_log -q`
 - Bestanden: `.venv/bin/python -m pytest`
 - Bestanden: `.venv/bin/ruff check .`
 - Bestanden: `.venv/bin/ruff format --check .`
