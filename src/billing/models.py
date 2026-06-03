@@ -185,8 +185,15 @@ class Charge(TimeStampedModel):
     def total(self):
         return self.quantity * self.unit_price
 
+    @property
+    def booking_reference(self) -> str:
+        """Return the human-readable booking identifier."""
+        if self.pk is None:
+            return ""
+        return f"B#{self.pk:05d}"
+
     def __str__(self):
-        return f"{self.participant}: {self.description}"
+        return f"{self.booking_reference} {self.participant}: {self.description}"
 
 
 class BookingAuditLog(models.Model):

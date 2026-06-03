@@ -56,12 +56,13 @@
     <table>
       <thead>
         <tr>
-          <th>Art</th><th>Beschreibung</th><th>Menge</th><th>Einzelpreis</th><th>Summe</th><th>Datum</th><th></th>
+          <th>Nr.</th><th>Art</th><th>Beschreibung</th><th>Menge</th><th>Einzelpreis</th><th>Summe</th><th>Datum</th><th></th>
         </tr>
       </thead>
       <tbody>
         {% for charge in charges %}
           <tr>
+            <td>{{ charge.booking_reference }}</td>
             <td>{{ charge.get_kind_display }}</td>
             <td>{{ charge.description }}</td>
             <td>{{ charge.quantity }}</td>
@@ -89,7 +90,7 @@
             </td>
           </tr>
         {% empty %}
-          <tr><td colspan="7">Keine Buchungen vorhanden.</td></tr>
+          <tr><td colspan="8">Keine Buchungen vorhanden.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -119,6 +120,7 @@
               {% if log.action == "restored" %}
                 -
               {% else %}
+                {{ log.before.booking_reference|default:"-" }} ·
                 {{ log.before.kind }} · {{ log.before.description }} ·
                 {{ log.before.quantity }} x {{ log.before.unit_price }} ·
                 {% if log.before.foerderfaehig %}förderfähig{% else %}nicht förderfähig{% endif %}
@@ -130,6 +132,7 @@
               {% elif log.action == "restored" %}
                 Wiederhergestellt
               {% else %}
+                {{ log.after.booking_reference|default:"-" }} ·
                 {{ log.after.kind }} · {{ log.after.description }} ·
                 {{ log.after.quantity }} x {{ log.after.unit_price }} ·
                 {% if log.after.foerderfaehig %}förderfähig{% else %}nicht förderfähig{% endif %}
