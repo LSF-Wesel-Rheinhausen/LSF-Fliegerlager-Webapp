@@ -3,7 +3,7 @@ from decimal import Decimal
 import pytest
 from django.urls import reverse
 
-from billing.models import Camp, Charge, Expense, Participant, Payment, PriceRule
+from billing.models import BookingAuditLog, Camp, Charge, Expense, Participant, Payment, PriceRule
 from billing.permissions import EDITOR_GROUP
 from tests.factories import (
     CampFactory,
@@ -310,3 +310,51 @@ def test_admin_pin_post_views_reject_editor_and_allow_admin(client, editor_user,
     assert set_response.status_code == 302
     assert reset_response.status_code == 302
     assert participant.pin.must_set_pin is True
+
+
+@pytest.mark.django_db
+def test_admin_charge_delete_rejects_editor_and_allows_admin(client, editor_user, admin_user, permission_dataset):
+    charge = permission_dataset["charge"]
+    url = reverse("charge-delete", args=[charge.pk])
+
+    client.force_login(editor_user)
+    _login_redirect(client.post(url))
+    assert Charge.objects.filter(pk=charge.pk).exists() is True
+
+    client.force_login(admin_user)
+    response = client.post(url)
+
+    assert response.status_code == 302
+    assert Charge.objects.filter(pk=charge.pk).exists() is False
+
+
+@pytest.mark.django_db
+def test_admin_booking_restore_rejects_editor_and_allows_admin(client, editor_user, admin_user, permission_dataset):
+    participant = permission_dataset["participant"]
+    deleted_log = BookingAuditLog.objects.create(
+        participant=participant,
+        charge=None,
+        action=BookingAuditLog.Action.DELETED,
+        before={
+            "kind": Charge.Kind.OTHER,
+            "description": "Wiederherstellbar",
+            "quantity": "1.00",
+            "unit_price": "2.00",
+            "foerderfaehig": True,
+            "occurred_on": None,
+        },
+        after={},
+    )
+    url = reverse("booking-audit-restore", args=[deleted_log.pk])
+
+    client.force_login(editor_user)
+    _login_redirect(client.post(url))
+    deleted_log.refresh_from_db()
+    assert deleted_log.charge is None
+
+    client.force_login(admin_user)
+    response = client.post(url)
+    deleted_log.refresh_from_db()
+
+    assert response.status_code == 302
+    assert deleted_log.charge is not None

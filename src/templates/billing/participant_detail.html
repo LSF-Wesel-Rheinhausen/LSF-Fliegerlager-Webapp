@@ -70,7 +70,19 @@
             <td>{{ charge.occurred_on|default:"-" }}</td>
             <td>
               {% if user|can_manage_users %}
-                <a href="{% url 'charge-edit' charge.pk %}">Bearbeiten</a>
+                <div class="row-actions">
+                  <a href="{% url 'charge-edit' charge.pk %}">Bearbeiten</a>
+                  <form method="post" action="{% url 'charge-delete' charge.pk %}">
+                    {% csrf_token %}
+                    <button
+                      type="submit"
+                      class="button-link button-link-danger"
+                      onclick="return confirm('Diese Buchung wirklich löschen?');"
+                    >
+                      Löschen
+                    </button>
+                  </form>
+                </div>
               {% else %}
                 -
               {% endif %}
@@ -84,11 +96,11 @@
   </section>
 
   <section class="panel stack">
-    <h2>Audit-Protokoll Buchungen</h2>
+    <h2>Änderungsprotokoll</h2>
     <table>
       <thead>
         <tr>
-          <th>Zeitpunkt</th><th>Bearbeiter</th><th>Buchung</th><th>Vorher</th><th>Nachher</th>
+          <th>Zeitpunkt</th><th>Bearbeiter</th><th>Buchung</th><th>Vorher</th><th>Nachher</th><th>Aktion</th>
         </tr>
       </thead>
       <tbody>
@@ -96,20 +108,52 @@
           <tr>
             <td>{{ log.created_at }}</td>
             <td>{{ log.changed_by.email|default:log.changed_by.username|default:"System" }}</td>
-            <td>{{ log.charge.description }}</td>
             <td>
-              {{ log.before.kind }} · {{ log.before.description }} ·
-              {{ log.before.quantity }} x {{ log.before.unit_price }} ·
-              {% if log.before.foerderfaehig %}förderfähig{% else %}nicht förderfähig{% endif %}
+              {% if log.charge %}
+                {{ log.charge.description }}
+              {% else %}
+                {{ log.before.description }}
+              {% endif %}
             </td>
             <td>
-              {{ log.after.kind }} · {{ log.after.description }} ·
-              {{ log.after.quantity }} x {{ log.after.unit_price }} ·
-              {% if log.after.foerderfaehig %}förderfähig{% else %}nicht förderfähig{% endif %}
+              {% if log.action == "restored" %}
+                -
+              {% else %}
+                {{ log.before.kind }} · {{ log.before.description }} ·
+                {{ log.before.quantity }} x {{ log.before.unit_price }} ·
+                {% if log.before.foerderfaehig %}förderfähig{% else %}nicht förderfähig{% endif %}
+              {% endif %}
+            </td>
+            <td>
+              {% if log.action == "deleted" %}
+                Gelöscht
+              {% elif log.action == "restored" %}
+                Wiederhergestellt
+              {% else %}
+                {{ log.after.kind }} · {{ log.after.description }} ·
+                {{ log.after.quantity }} x {{ log.after.unit_price }} ·
+                {% if log.after.foerderfaehig %}förderfähig{% else %}nicht förderfähig{% endif %}
+              {% endif %}
+            </td>
+            <td>
+              {% if user|can_manage_users and log.action == "deleted" and not log.charge and log.participant %}
+                <form method="post" action="{% url 'booking-audit-restore' log.pk %}">
+                  {% csrf_token %}
+                  <button
+                    type="submit"
+                    class="button-link"
+                    onclick="return confirm('Diese Buchung wiederherstellen?');"
+                  >
+                    Wiederherstellen
+                  </button>
+                </form>
+              {% else %}
+                -
+              {% endif %}
             </td>
           </tr>
         {% empty %}
-          <tr><td colspan="5">Noch keine Änderungen an Buchungen protokolliert.</td></tr>
+          <tr><td colspan="6">Noch keine Änderungen an Buchungen protokolliert.</td></tr>
         {% endfor %}
       </tbody>
     </table>

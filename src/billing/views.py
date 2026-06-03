@@ -9,8 +9,10 @@ from django.contrib.auth.views import LoginView
 from django.core.exceptions import ValidationError
 from django.core.signing import BadSignature, Signer
 from django.db import transaction
+from django.db.models import Q
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
 
 from .exporters import camp_settlement_csv, camp_workbook_response, drink_entries_csv, participant_pdf_response
 from .forms import (
@@ -42,7 +44,9 @@ from .services import (
     calculate_participant_settlement,
     charge_audit_snapshot,
     create_booking_audit_log,
+    create_booking_delete_audit_log,
     participant_kiosk_summary,
+    restore_booking_from_audit_log,
 )
 
 signer = Signer()
@@ -223,7 +227,9 @@ def participant_detail(request, participant_id):
     participant = get_object_or_404(Participant.objects.select_related("camp"), pk=participant_id)
     settlement = calculate_participant_settlement(participant)
     charges = participant.charges.order_by("-created_at", "-id")
-    audit_logs = BookingAuditLog.objects.filter(charge__participant=participant).select_related("changed_by", "charge")
+    audit_logs = BookingAuditLog.objects.filter(
+        Q(participant=participant) | Q(charge__participant=participant)
+    ).select_related("changed_by", "charge")
     return render(
         request,
         "billing/participant_detail.html",
@@ -269,6 +275,42 @@ def charge_edit(request, charge_id):
         "billing/form.html",
         {"form": form, "title": "Buchung bearbeiten", "camp": charge.participant.camp},
     )
+
+
+@admin_required
+@require_POST
+def charge_delete(request: HttpRequest, charge_id: int) -> HttpResponse:
+    """Delete a booking charge and keep an audit snapshot for later review."""
+    charge = get_object_or_404(Charge.objects.select_related("participant"), pk=charge_id)
+    participant_id = charge.participant_id
+    before = charge_audit_snapshot(charge)
+    with transaction.atomic():
+        create_booking_delete_audit_log(charge, before, request.user)
+        charge.delete()
+    messages.success(request, "Buchung wurde gelöscht und protokolliert.")
+    return redirect("participant-detail", participant_id=participant_id)
+
+
+@admin_required
+@require_POST
+def booking_audit_restore(request: HttpRequest, audit_log_id: int) -> HttpResponse:
+    """Restore a deleted booking from a deletion audit entry."""
+    audit_log = get_object_or_404(
+        BookingAuditLog.objects.select_related("participant", "charge"),
+        pk=audit_log_id,
+    )
+    participant_id = audit_log.participant_id
+    try:
+        with transaction.atomic():
+            restored_charge = restore_booking_from_audit_log(audit_log, request.user)
+    except ValidationError as error:
+        messages.error(request, error.message)
+        if participant_id is None:
+            return redirect("camp-list")
+        return redirect("participant-detail", participant_id=participant_id)
+
+    messages.success(request, f"Buchung „{restored_charge.description}“ wurde wiederhergestellt.")
+    return redirect("participant-detail", participant_id=restored_charge.participant_id)
 
 
 @editor_required

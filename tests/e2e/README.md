@@ -10,7 +10,7 @@ Die Tests pruefen:
 - Login und Logout.
 - Lageranlage.
 - Deutsche Aktionslabels und Exportlinks.
-- Admin-Bearbeitung einer Buchung inklusive sichtbarem Audit-Protokoll.
+- Admin-Bearbeitung einer Buchung inklusive sichtbarem Änderungsprotokoll.
 - Native Dialoge fuer das Anlegen und Bearbeiten von Preisregeln.
 - Sichtbares Vereinslogo und geladenes CSS.
 - Desktop- und iPhone-Viewports ohne unerwarteten horizontalen Overflow.
