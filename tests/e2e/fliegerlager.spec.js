@@ -129,7 +129,7 @@ test("Admin completes setup, login, camp workflow and logout", async ({ page }) 
   await loginAsAdmin(page);
 });
 
-test("Admin edits a booking and sees the audit log", async ({ page }) => {
+test("Admin edits a booking and sees the change log", async ({ page }) => {
   await setupFirstAdmin(page);
   await createCamp(page);
   await createParticipant(page, "Ada", "Lovelace");
@@ -156,7 +156,7 @@ test("Admin edits a booking and sees the audit log", async ({ page }) => {
   await expect(page.getByText("Buchung wurde gespeichert und protokolliert.")).toBeVisible();
   await expect(page.getByRole("cell", { name: "Cola korrigiert" }).first()).toBeVisible();
   await expect(page.getByRole("cell", { name: "7,50 €" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Audit-Protokoll Buchungen" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Änderungsprotokoll" })).toBeVisible();
   await expect(page.getByText("Cola · 2.00 x 2.50")).toBeVisible();
   await expect(page.getByText("Cola korrigiert · 3.00 x 2.50")).toBeVisible();
 });

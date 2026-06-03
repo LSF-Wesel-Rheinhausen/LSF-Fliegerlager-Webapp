@@ -54,10 +54,10 @@ class ChargeAdmin(admin.ModelAdmin):
 
 @admin.register(BookingAuditLog)
 class BookingAuditLogAdmin(admin.ModelAdmin):
-    list_display = ("charge", "action", "changed_by", "created_at")
+    list_display = ("participant", "charge", "action", "changed_by", "created_at")
     list_filter = ("action", "created_at")
-    search_fields = ("charge__description", "charge__participant__first_name", "charge__participant__last_name")
-    readonly_fields = ("charge", "action", "changed_by", "before", "after", "created_at")
+    search_fields = ("charge__description", "participant__first_name", "participant__last_name")
+    readonly_fields = ("participant", "charge", "action", "changed_by", "before", "after", "created_at")
 
 
 admin.site.register(Payment)

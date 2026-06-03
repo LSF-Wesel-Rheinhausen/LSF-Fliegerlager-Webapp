@@ -1,8 +1,10 @@
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from django.core.exceptions import ValidationError
 from django.db.models import Sum
+from django.utils.dateparse import parse_date
 
 from .models import BookingAuditLog, Charge, DrinkEntry, Expense, Participant, PriceRule
 
@@ -132,6 +134,68 @@ def create_booking_delete_audit_log(
         before=before,
         after={},
     )
+
+
+def restore_booking_from_audit_log(audit_log: BookingAuditLog, changed_by: Any) -> Charge:
+    """Restore a deleted booking from its audit snapshot.
+
+    Args:
+        audit_log: The deletion audit row that contains the original charge fields.
+        changed_by: User who requested the restoration.
+
+    Returns:
+        The newly created charge.
+
+    Raises:
+        ValidationError: If the audit row is not a restorable deletion snapshot.
+    """
+    if audit_log.action != BookingAuditLog.Action.DELETED:
+        raise ValidationError("Nur gelöschte Buchungen können wiederhergestellt werden.")
+    if audit_log.charge_id is not None:
+        raise ValidationError("Diese Buchung wurde bereits wiederhergestellt.")
+    if audit_log.participant_id is None:
+        raise ValidationError("Diese Buchung kann keinem Teilnehmer mehr zugeordnet werden.")
+
+    snapshot = audit_log.before
+    try:
+        kind = str(snapshot["kind"])
+        description = str(snapshot["description"]).strip()
+        quantity = Decimal(str(snapshot["quantity"]))
+        unit_price = Decimal(str(snapshot["unit_price"]))
+        foerderfaehig = bool(snapshot["foerderfaehig"])
+        occurred_on_raw = snapshot.get("occurred_on")
+    except (KeyError, InvalidOperation, TypeError) as error:
+        raise ValidationError("Das Änderungsprotokoll enthält keine gültige Buchung.") from error
+
+    if kind not in Charge.Kind.values or not description:
+        raise ValidationError("Das Änderungsprotokoll enthält keine gültige Buchung.")
+
+    occurred_on = None
+    if occurred_on_raw:
+        occurred_on = parse_date(str(occurred_on_raw))
+        if occurred_on is None:
+            raise ValidationError("Das Änderungsprotokoll enthält kein gültiges Buchungsdatum.")
+
+    restored_charge = Charge.objects.create(
+        participant=audit_log.participant,
+        kind=kind,
+        description=description,
+        quantity=quantity,
+        unit_price=unit_price,
+        foerderfaehig=foerderfaehig,
+        occurred_on=occurred_on,
+    )
+    audit_log.charge = restored_charge
+    audit_log.save(update_fields=["charge"])
+    BookingAuditLog.objects.create(
+        participant=audit_log.participant,
+        charge=restored_charge,
+        changed_by=changed_by,
+        action=BookingAuditLog.Action.RESTORED,
+        before={},
+        after=charge_audit_snapshot(restored_charge),
+    )
+    return restored_charge
 
 
 def participant_camp_flat_duration(participant):

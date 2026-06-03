@@ -17,7 +17,7 @@ Web-App zur Verwaltung und Abrechnung eines Vereins-Fliegerlagers. Die Anwendung
 - Übersichtliche Preisverwaltung mit Lagerpauschalen für 1/2 Wochen und Teilnehmer/Begleitpersonen, Getränke, Standardpreise für Mahlzeiten und abweichende Tagespreise
 - Native Dialoge für Preisregelanlage und -bearbeitung, damit Admins im Kontext der Preisübersicht bleiben
 - Teilnehmer-Kiosk: PIN-Login, PIN-Ersteinrichtung, sichtbarer Auto-Logout-Timer, große Getränketasten (Ein-Tap-Buchung) und Essensanmeldungen mit Tablet-/Mobilbedienung
-- Admin-Bearbeitung von Buchungen mit Audit-Protokoll der geänderten abrechnungsrelevanten Felder
+- Admin-Bearbeitung, Löschung und Wiederherstellung von Buchungen mit Änderungsprotokoll der abrechnungsrelevanten Felder
 - CSV-/Excel-Import mit Vorschau und Validierung
 - CSV-, Excel- und PDF-Export für Lager- und Einzelabrechnungen sowie Getränkeauswertungen
 

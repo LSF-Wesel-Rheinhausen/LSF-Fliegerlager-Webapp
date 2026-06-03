@@ -35,7 +35,11 @@ class Migration(migrations.Migration):
             model_name="bookingauditlog",
             name="action",
             field=models.CharField(
-                choices=[("updated", "Bearbeitet"), ("deleted", "Gelöscht")],
+                choices=[
+                    ("updated", "Bearbeitet"),
+                    ("deleted", "Gelöscht"),
+                    ("restored", "Wiederhergestellt"),
+                ],
                 default="updated",
                 max_length=20,
             ),

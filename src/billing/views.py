@@ -46,6 +46,7 @@ from .services import (
     create_booking_audit_log,
     create_booking_delete_audit_log,
     participant_kiosk_summary,
+    restore_booking_from_audit_log,
 )
 
 signer = Signer()
@@ -288,6 +289,28 @@ def charge_delete(request: HttpRequest, charge_id: int) -> HttpResponse:
         charge.delete()
     messages.success(request, "Buchung wurde gelöscht und protokolliert.")
     return redirect("participant-detail", participant_id=participant_id)
+
+
+@admin_required
+@require_POST
+def booking_audit_restore(request: HttpRequest, audit_log_id: int) -> HttpResponse:
+    """Restore a deleted booking from a deletion audit entry."""
+    audit_log = get_object_or_404(
+        BookingAuditLog.objects.select_related("participant", "charge"),
+        pk=audit_log_id,
+    )
+    participant_id = audit_log.participant_id
+    try:
+        with transaction.atomic():
+            restored_charge = restore_booking_from_audit_log(audit_log, request.user)
+    except ValidationError as error:
+        messages.error(request, error.message)
+        if participant_id is None:
+            return redirect("camp-list")
+        return redirect("participant-detail", participant_id=participant_id)
+
+    messages.success(request, f"Buchung „{restored_charge.description}“ wurde wiederhergestellt.")
+    return redirect("participant-detail", participant_id=restored_charge.participant_id)
 
 
 @editor_required

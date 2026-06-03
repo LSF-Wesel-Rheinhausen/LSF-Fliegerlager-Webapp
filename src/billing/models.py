@@ -193,6 +193,7 @@ class BookingAuditLog(models.Model):
     class Action(models.TextChoices):
         UPDATED = "updated", "Bearbeitet"
         DELETED = "deleted", "Gelöscht"
+        RESTORED = "restored", "Wiederhergestellt"
 
     participant = models.ForeignKey(
         Participant,
