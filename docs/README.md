@@ -18,12 +18,13 @@ Der typische Ablauf:
 ## Wichtige Funktionen
 
 - Rollen: `Admin` und `Bearbeiter` über Django-Gruppen.
-- Ersteinrichtung: Beim ersten Start kann der erste Admin im Browser angelegt werden.
-- Preisverwaltung: eigene Admin-Route für Lagerpauschalen, Getränke, Essen und sonstige Preisregeln.
+- Ersteinrichtung: Beim ersten Start kann der erste Admin im Browser angelegt werden; danach verwalten Admins Nutzer, Rollen und Passwörter in der Anwendung.
+- Preisverwaltung: eigene Admin-Route für Lagerpauschalen, Getränke, Standard-Mahlzeitenpreise, abweichende Tagespreise und sonstige Preisregeln.
 - Förderlogik: Jugendgruppenmitglieder erhalten Förderung über `Lager-Fördersatz * Hilfssatz * Berufssatz`.
-- Kiosk: separater PIN-Login, PIN-Ersteinrichtung, Tablet-/Mobiloberfläche, automatische Abmeldung nach Inaktivität.
-- Abrechnung: serverseitig in `src/billing/services.py`, damit UI, Export und Kiosk dieselbe Logik nutzen.
-- Import/Export: Teilnehmerimport per CSV/XLSX, Abrechnungsexporte als CSV/XLSX/PDF.
+- Kiosk: separater PIN-Login, PIN-Ersteinrichtung, Tablet-/Mobiloberfläche, automatische Abmeldung nach Inaktivität, Getränkebuchung und Essensanmeldung.
+- Buchungsbearbeitung: Admins können Kostenpositionen korrigieren; geänderte abrechnungsrelevante Felder werden im Audit-Protokoll gespeichert.
+- Abrechnung: serverseitig in `src/billing/services.py`, damit UI, Export und Kiosk dieselbe Logik nutzen. Aktuell werden Abrechnungen on-demand berechnet; persistierte `Settlement`-Datensätze sind modellseitig vorbereitet.
+- Import/Export: Teilnehmerimport per CSV/XLSX, Abrechnungsexporte als Lager-CSV, Getränke-CSV, Excel-Arbeitsmappe und Einzelabrechnung als PDF.
 
 ## Projektstruktur
 
@@ -41,11 +42,24 @@ Der typische Ablauf:
 
 `src/billing/models.py` enthält das Datenmodell für Lager, Teilnehmer, Preisregeln, Kosten, Zahlungen, Auslagen, Kiosk-PINs und Abrechnungsläufe.
 
-`src/billing/services.py` enthält die Abrechnungslogik. Hier werden Lagerpauschalen automatisch ausgewählt, Förderung berechnet und Teilnehmer-/Lagerzusammenfassungen erzeugt.
+`src/billing/services.py` enthält die Abrechnungslogik und Audit-Helfer. Hier werden Lagerpauschalen automatisch ausgewählt, Förderung berechnet, Kiosk-Zusammenfassungen erzeugt und Buchungsänderungen vergleichbar protokolliert.
 
-`src/billing/forms.py` enthält die Formulare für Admin, Bearbeiter und Kiosk. Die Preisverwaltung nutzt eine eigene Matrix für die vier Lagerpauschalen.
+`src/billing/forms.py` enthält die Formulare für Admin, Bearbeiter und Kiosk. Die Preisverwaltung nutzt eine eigene Matrix für die vier Lagerpauschalen und ein separates Formular für Standardpreise von Frühstück und Abendessen.
 
-`src/billing/views.py` enthält die servergerenderten Seiten für Setup, Lager, Teilnehmer, Preisverwaltung, Import/Export und Kiosk.
+`src/billing/views.py` enthält die servergerenderten Seiten für Setup, Nutzerverwaltung, Lager, Teilnehmer, Preisverwaltung, Import/Export und Kiosk.
+
+## Importformat
+
+Teilnehmer können per CSV oder XLSX importiert werden. Pflichtspalten sind `first_name` und `last_name`. Weitere unterstützte Spalten sind `email`, `phone`, `status`, `is_child`, `is_youth_group`, `is_companion`, `hilfssatz`, `berufssatz`, `booked_nights`, `actual_nights` und `notes`.
+
+Boolesche Werte akzeptieren unter anderem `1`, `true`, `ja`, `yes` und `x`. Dezimalwerte dürfen Komma oder Punkt verwenden. XLSX-Dateien werden anhand ihres Inhalts geprüft; eine Excel-Datei mit falscher Endung wird abgewiesen.
+
+## Exporte
+
+- Lagerabrechnung als CSV: Nachname, Vorname, Brutto, Förderung, Soll, Gezahlt, Vorgestreckt und Offen.
+- Getränke als CSV: historische `DrinkEntry`-Daten und aktuelle Kiosk-Getränkebuchungen aus `Charge`.
+- Excel-Arbeitsmappe: Blatt `Abrechnung` plus Blatt `Teilnehmer`.
+- Einzelabrechnung als PDF: Positionen und Summen für einen Teilnehmer.
 
 ## Lokaler Start
 
@@ -68,6 +82,7 @@ Danach läuft die Anwendung lokal unter `http://localhost:8000`.
 .venv/bin/python -m pytest
 .venv/bin/python -m ruff check .
 .venv/bin/python -m ruff format --check .
+.venv/bin/python -m mypy src
 ```
 
 Für Browsertests:

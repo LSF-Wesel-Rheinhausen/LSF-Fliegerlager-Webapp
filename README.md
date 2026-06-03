@@ -11,13 +11,15 @@ Web-App zur Verwaltung und Abrechnung eines Vereins-Fliegerlagers. Die Anwendung
 ## Funktionen in V1
 
 - Lager/Jahre mit Preisen und Abrechnungsregeln verwalten
-- Vereinsnutzer mit E-Mail-/Passwort-Login und Rollen `Admin` und `Bearbeiter`
+- Vereinsnutzer mit E-Mail-/Passwort-Login, Nutzerverwaltung, Passwort-Reset durch Admins und Rollen `Admin` und `Bearbeiter`
 - Teilnehmer, Zahlungen, Kostenpositionen und vorgestreckte Beträge pflegen
 - Server-seitige Abrechnung je Teilnehmer und Gesamtauswertung je Lager, inklusive Förderlogik über Lager-, Hilfs- und Berufssatz
-- Übersichtliche Preisverwaltung mit Lagerpauschalen für 1/2 Wochen und Teilnehmer/Begleitpersonen sowie Preisregeln für Getränke und Essen
+- Übersichtliche Preisverwaltung mit Lagerpauschalen für 1/2 Wochen und Teilnehmer/Begleitpersonen, Getränke, Standardpreise für Mahlzeiten und abweichende Tagespreise
+- Native Dialoge für Preisregelanlage und -bearbeitung, damit Admins im Kontext der Preisübersicht bleiben
 - Teilnehmer-Kiosk: PIN-Login, PIN-Ersteinrichtung, sichtbarer Auto-Logout-Timer, große Getränketasten (Ein-Tap-Buchung) und Essensanmeldungen mit Tablet-/Mobilbedienung
+- Admin-Bearbeitung von Buchungen mit Audit-Protokoll der geänderten abrechnungsrelevanten Felder
 - CSV-/Excel-Import mit Vorschau und Validierung
-- CSV-, Excel- und PDF-Export für Abrechnungen
+- CSV-, Excel- und PDF-Export für Lager- und Einzelabrechnungen sowie Getränkeauswertungen
 
 ## Lokale Entwicklung
 
@@ -49,6 +51,7 @@ Danach läuft die App unter `http://localhost:8000`.
 .venv/bin/python src/manage.py check
 .venv/bin/python -m ruff check .
 .venv/bin/python -m ruff format --check .
+.venv/bin/python -m mypy src
 ```
 
 Playwright-End-to-End-Tests:
@@ -72,7 +75,7 @@ Lokaler Sammellauf:
 npm run test:local
 ```
 
-Die Python-Toolchain nutzt Ruff für Linting/Formatierung, mypy für statische Typprüfung und pre-commit für lokale Qualitäts- und Secret-Checks. `.env`-Dateien dürfen nicht committed werden; `.env.example` enthält nur sichere Platzhalter.
+Die Python-Toolchain nutzt Ruff für Linting/Formatierung, mypy für statische Typprüfung, `factory_boy` für wiederverwendbare Testdaten und pre-commit für lokale Qualitäts- und Secret-Checks. `.env`-Dateien dürfen nicht committed werden; `.env.example` enthält nur sichere Platzhalter.
 
 Um zusätzlich den älteren Projekt-Hook zu aktivieren:
 
@@ -88,6 +91,16 @@ Das Repository nutzt GitHub Actions für verschiedene Automatisierungen:
 - **Security (`security.yml`)**: Scannt den Code und die Abhängigkeiten mit Trivy auf bekannte Schwachstellen.
 - **PR Title & Changelog (`pr-title.yml`, `changelog-check.yml`)**: Erzwingen *Semantic Pull Requests* und fordern Changelog-Einträge bei Änderungen im Code.
 - **Dependabot**: Hält `pip`-, `npm`- und `github-actions`-Abhängigkeiten automatisch aktuell.
+
+## Konfiguration
+
+Die wichtigsten Umgebungsvariablen stehen mit sicheren Platzhaltern in [`.env.example`](.env.example):
+
+- `DJANGO_SECRET_KEY`: produktiver Secret Key, lokal nur Platzhalter verwenden.
+- `DJANGO_DEBUG`: `1` für lokale Entwicklung, `0` für Docker/Deployment.
+- `DJANGO_ALLOWED_HOSTS`: kommaseparierte Hostnamen.
+- `CSRF_TRUSTED_ORIGINS`: kommaseparierte vertrauenswürdige Origins mit Schema.
+- `DATABASE_URL`: Datenbank-URL; lokal kann SQLite genutzt werden, Docker nutzt PostgreSQL.
 
 ## Rollen
 
@@ -113,8 +126,8 @@ Beitrags- und Agentenregeln stehen in [`CONTRIBUTING.md`](CONTRIBUTING.md) und [
 
 - Installierbare Webapp/PWA: Web App Manifest, App-Icons, Theme-/Hintergrundfarben, Service Worker für Shell-/Asset-Caching und Installationshinweise für iOS, Android und Desktop.
 - Teilnehmer-Kiosk: PWA-Ausbau, Offline-Hinweise und weitere Tablet-Optimierungen.
-- Getränke-/Essens-Workflow: Tages-/Mahlzeitenübersichten, Storno-/Korrekturflüsse und optionale Schnellerfassung.
-- Persistierte Abrechnungsläufe: berechnete Abrechnungen speichern, Verlauf/Versionierung und Nachvollziehbarkeit von Zeitpunkt und Bearbeiter.
+- Getränke-/Essens-Workflow: Tages-/Mahlzeitenübersichten, Storno-Flüsse und optionale Schnellerfassung.
+- Persistierte Abrechnungsläufe: den vorhandenen `Settlement`-Speicher als produktiven Bedienworkflow ausbauen, inklusive Verlauf/Versionierung und Nachvollziehbarkeit von Zeitpunkt und Bearbeiter.
 - Mehr Tests: View-/Permission-Integrationstests, Exporttests für CSV/XLSX/PDF, Import-Edge-Cases und zusätzliche Settlement-Regressionsfälle.
 - UI-Ausbau: Bearbeiten-/Löschen-Flows, bessere Leerzustände, Druck-/PDF-Ansichten und Dashboard-Auswertungen.
 - Deployment und Betrieb: Produktionscheckliste, Backup-/Restore-Dokumentation, Monitoring/Healthcheck und sichere Env-Konfiguration.

@@ -70,13 +70,14 @@
 
       <section>
         <h2>Überblick</h2>
-        <p>Die Anwendung ist eine Django-Webapp zur Verwaltung und Abrechnung eines Vereins-Fliegerlagers. Sie unterstützt Lager, Teilnehmer, Preisregeln, Förderlogik, Zahlungen, Auslagen, Import/Export und einen Kiosk-Modus für Teilnehmer.</p>
+        <p>Die Anwendung ist eine Django-Webapp zur Verwaltung und Abrechnung eines Vereins-Fliegerlagers. Sie unterstützt Lager, Nutzerverwaltung, Teilnehmer, Preisregeln, Förderlogik, Zahlungen, Auslagen, Import/Export, Buchungs-Audit und einen Kiosk-Modus für Teilnehmer.</p>
         <ol>
           <li>Admin legt Lager und Lager-Fördersatz an.</li>
           <li>Teilnehmer werden manuell oder per CSV/XLSX importiert.</li>
-          <li>Preisregeln werden gepflegt, inklusive Lagerpauschalen für 1/2 Wochen und Teilnehmer/Begleitpersonen.</li>
+          <li>Preisregeln werden gepflegt, inklusive Lagerpauschalen, Getränke, Standard-Mahlzeitenpreise und abweichende Tagespreise.</li>
           <li>Teilnehmer buchen Getränke und Essen im Kiosk per PIN.</li>
           <li>Die Abrechnung berechnet Brutto, Förderung, Soll, Zahlungen, Auslagen und offenen Saldo.</li>
+          <li>Admins korrigieren Buchungen bei Bedarf; Änderungen werden im Audit-Protokoll sichtbar.</li>
         </ol>
       </section>
 
@@ -85,11 +86,11 @@
         <div class="grid">
           <div>
             <h3>Admin</h3>
-            <p>Lager, Rollen, Teilnehmer-PINs, Preisregeln, Fördersatz und Exporte.</p>
+            <p>Lager, Nutzer, Rollen, Teilnehmer-PINs, Preisregeln, Fördersatz, Buchungskorrekturen und Exporte.</p>
           </div>
           <div>
             <h3>Kiosk</h3>
-            <p>PIN-Login, PIN-Ersteinrichtung, große Getränketasten mit Ein-Tap-Buchung, Essen und sichtbarer Auto-Logout-Timer.</p>
+            <p>PIN-Login, PIN-Ersteinrichtung, große Getränketasten mit Ein-Tap-Buchung, Essensanmeldung und sichtbarer Auto-Logout-Timer.</p>
           </div>
           <div>
             <h3>Abrechnung</h3>
@@ -97,7 +98,7 @@
           </div>
           <div>
             <h3>Import/Export</h3>
-            <p>Teilnehmerimport per CSV/XLSX und Export als CSV, Excel oder PDF.</p>
+            <p>Teilnehmerimport per CSV/XLSX und Exporte als Lager-CSV, Getränke-CSV, Excel-Arbeitsmappe oder Einzel-PDF.</p>
           </div>
         </div>
       </section>
@@ -113,6 +114,8 @@
           <li><a href="../src/static/billing/README.md">src/static/billing/README.md</a> - CSS und Assets.</li>
           <li><a href="../scripts/README.md">scripts/README.md</a> - lokale Hilfsskripte.</li>
           <li><a href="../tests/README.md">tests/README.md</a> - Teststruktur.</li>
+          <li><a href="../tests/e2e/README.md">tests/e2e/README.md</a> - Playwright-End-to-End-Tests.</li>
+          <li><a href="../.github/workflows/README.md">.github/workflows/README.md</a> - CI/CD-Workflows.</li>
         </ul>
       </section>
 

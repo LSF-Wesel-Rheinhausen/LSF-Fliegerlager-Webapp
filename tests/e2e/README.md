@@ -10,6 +10,8 @@ Die Tests pruefen:
 - Login und Logout.
 - Lageranlage.
 - Deutsche Aktionslabels und Exportlinks.
+- Admin-Bearbeitung einer Buchung inklusive sichtbarem Audit-Protokoll.
+- Native Dialoge fuer das Anlegen und Bearbeiten von Preisregeln.
 - Sichtbares Vereinslogo und geladenes CSS.
 - Desktop- und iPhone-Viewports ohne unerwarteten horizontalen Overflow.
 
@@ -17,4 +19,8 @@ Vor lokalen E2E-Laeufen muessen die Playwright-Systemabhaengigkeiten installiert
 
 ```bash
 npx playwright install-deps
+npx playwright install
+npm run test:e2e
 ```
+
+Playwright startet standardmaessig einen isolierten Django-Testserver ueber `scripts/start-e2e.sh` und nutzt `tmp/e2e.sqlite3`. Mit `PLAYWRIGHT_USE_EXTERNAL_SERVER=1` kann stattdessen ein bereits laufender Server gegen `PLAYWRIGHT_BASE_URL` verwendet werden.

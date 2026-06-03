@@ -5,7 +5,7 @@ Diese Datei gibt spaeteren Chats einen schnellen Einstieg in die Projektstruktur
 - `README.md`: Projektbeschreibung, Setup, Tests, Rollen und Roadmap.
 - `CONTRIBUTING.md`: Beitragsregeln, Tooling, Security-, ORM- und Agentenrichtlinien.
 - `AGENTS.md`: Arbeitsregeln fuer Agenten im Repository.
-- `docs/`: zentrale Projektdokumentation als Markdown und statische HTML-Seiten inklusive Architektur, Betrieb und Entwicklung.
+- `docs/`: zentrale Projektdokumentation als Markdown und statische HTML-Seiten inklusive Architektur, Betrieb, Import/Export, Konfiguration und Entwicklung.
 - `.pre-commit-config.yaml`: pre-commit-Konfiguration fuer Basischecks, Ruff und gitleaks.
 - `pyproject.toml`: Ruff- und mypy-Konfiguration.
 - `.env.example`: Beispielkonfiguration fuer Docker/Deployment.
@@ -30,4 +30,4 @@ Diese Datei gibt spaeteren Chats einen schnellen Einstieg in die Projektstruktur
 - `src/billing/`: Domain-App fuer Lager, Teilnehmer, Abrechnung, Importe, Exporte und Rollen.
 - `src/static/billing/`: Stylesheet und Vereinslogo.
 - `src/templates/`: Servergerenderte Django-Templates inklusive Kiosk und Preisverwaltung.
-- `tests/`: Pytest-Tests und Playwright-E2E-Tests.
+- `tests/`: Pytest-Tests, `factory_boy`-Factories und Playwright-E2E-Tests fuer Auth, Rollen, Nutzerverwaltung, Import/Export, Abrechnung, Kiosk, Preisverwaltung, Buchungs-Audit und View-Berechtigungen.

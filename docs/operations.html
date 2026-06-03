@@ -33,28 +33,49 @@ pip install -r requirements-dev.txt
 pre-commit install
 npm install
 python src/manage.py migrate
+python src/manage.py bootstrap_roles
 python src/manage.py runserver</code></pre>
         <p>Beim ersten Aufruf führt die App durch die Ersteinrichtung und legt den ersten Admin an.</p>
+      </section>
+
+      <section>
+        <h2>Konfiguration</h2>
+        <p>Alle produktionsrelevanten Platzhalter stehen in <code>.env.example</code>.</p>
+        <ul>
+          <li><code>DJANGO_SECRET_KEY</code>: produktiver Secret Key.</li>
+          <li><code>DJANGO_DEBUG</code>: <code>1</code> lokal, <code>0</code> für Docker/Deployment.</li>
+          <li><code>DJANGO_ALLOWED_HOSTS</code>: kommaseparierte Hostnamen.</li>
+          <li><code>CSRF_TRUSTED_ORIGINS</code>: kommaseparierte Origins inklusive Schema.</li>
+          <li><code>DATABASE_URL</code>: Datenbank-URL; Docker nutzt PostgreSQL, E2E nutzt SQLite.</li>
+        </ul>
       </section>
 
       <section>
         <h2>Docker</h2>
         <pre><code>cp .env.example .env
 docker compose up --build</code></pre>
-        <p>Danach läuft die App unter <code>http://localhost:8000</code>.</p>
+        <p>Danach läuft die App unter <code>http://localhost:8000</code>. Der Compose-Start führt Migrationen, <code>bootstrap_roles</code>, <code>collectstatic</code> und anschließend Gunicorn aus.</p>
       </section>
 
       <section>
         <h2>Typischer Admin-Ablauf</h2>
         <ol>
           <li>Lager anlegen und Lager-Fördersatz pflegen.</li>
+          <li>Nutzer und Rollen in der Nutzerverwaltung pflegen.</li>
           <li>Preisverwaltung öffnen und Lagerpauschalen für Teilnehmer/Begleiter und 1/2 Wochen eintragen.</li>
-          <li>Getränke- und Essenspreise als Preisregeln anlegen.</li>
+          <li>Getränkepreise, Standardpreise für Frühstück/Abendessen und bei Bedarf abweichende Tagespreise anlegen.</li>
           <li>Teilnehmer importieren oder manuell anlegen.</li>
           <li>PINs setzen oder Teilnehmer im Kiosk ihre PIN beim ersten Login setzen lassen.</li>
           <li>Während des Lagers Kiosk für Buchungen nutzen: Getränke per großer Ein-Tap-Taste buchen, Essen anmelden, Countdown zur automatischen Abmeldung im Blick behalten.</li>
-          <li>Abrechnung prüfen und Exporte erzeugen.</li>
+          <li>Falsche Buchungen als Admin korrigieren und Audit-Protokoll prüfen.</li>
+          <li>Abrechnung prüfen und Exporte erzeugen: Lager-CSV, Getränke-CSV, Excel-Arbeitsmappe und Einzel-PDF.</li>
         </ol>
+      </section>
+
+      <section>
+        <h2>Import und Export</h2>
+        <p>Der Teilnehmerimport akzeptiert CSV und XLSX. Pflichtspalten sind <code>first_name</code> und <code>last_name</code>; weitere Spalten sind <code>email</code>, <code>phone</code>, <code>status</code>, <code>is_child</code>, <code>is_youth_group</code>, <code>is_companion</code>, <code>hilfssatz</code>, <code>berufssatz</code>, <code>booked_nights</code>, <code>actual_nights</code> und <code>notes</code>.</p>
+        <p>Die Importseite zeigt eine Vorschau. Beim Speichern werden nur gültige Zeilen übernommen; vorhandene Teilnehmer werden pro Lager anhand von Vor- und Nachname aktualisiert.</p>
       </section>
 
       <section>
@@ -63,9 +84,10 @@ docker compose up --build</code></pre>
 .venv/bin/python -m pytest
 .venv/bin/python -m ruff check .
 .venv/bin/python -m ruff format --check .
+.venv/bin/python -m mypy src
 npm run test:e2e
 npm run test:local</code></pre>
-        <p>Die Tests decken Authentifizierung, Rollen, Import, Abrechnung, Kiosk und Preisverwaltung ab.</p>
+        <p>Die Tests decken Authentifizierung, Rollen, Nutzerverwaltung, Import, Export, Abrechnung, Kiosk, Preisverwaltung, Buchungs-Audit und View-Berechtigungen ab. <code>npm run test:local</code> schreibt Logs nach <code>.test-local-logs/&lt;timestamp&gt;/</code>.</p>
       </section>
 
       <section>

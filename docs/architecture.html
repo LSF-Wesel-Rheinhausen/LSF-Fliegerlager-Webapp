@@ -37,8 +37,10 @@
       <section>
         <h2>Domain-Modell</h2>
         <p><code>Camp</code> hält Lagerdaten und den generellen Lager-Fördersatz. <code>Participant</code> hält Teilnehmerdaten inklusive Hilfssatz, Berufssatz, Nächten und Begleitstatus.</p>
-        <p><code>PriceRule</code> bildet Preisregeln ab. Für Lagerpauschalen gibt es strukturierte Felder für Dauer (<code>1w</code>/<code>2w</code>) und Rolle (<code>participant</code>/<code>companion</code>).</p>
+        <p><code>PriceRule</code> bildet Preisregeln ab. Für Lagerpauschalen gibt es strukturierte Felder für Dauer (<code>1w</code>/<code>2w</code>) und Rolle (<code>participant</code>/<code>companion</code>); für Mahlzeiten gibt es Typ, optionales Tagesdatum und Standardregeln.</p>
         <p><code>Charge</code>, <code>Payment</code> und <code>Expense</code> bilden Kosten, Zahlungen und vorgestreckte Beträge ab. <code>ParticipantPin</code> schützt den Kiosk-Zugang.</p>
+        <p><code>MealSignup</code> speichert Essensanmeldungen eindeutig pro Teilnehmer, Datum und Mahlzeit. <code>DrinkEntry</code> bleibt für ältere Getränkedaten erhalten; aktuelle Kiosk-Getränke werden als <code>Charge</code> gespeichert.</p>
+        <p><code>BookingAuditLog</code> protokolliert Admin-Korrekturen an Buchungen. <code>Settlement</code> ist modellseitig vorbereitet; die sichtbaren Abrechnungen werden derzeit on-demand berechnet.</p>
       </section>
 
       <section>
@@ -48,6 +50,7 @@
           <li>Lagerpauschale: Auswahl nach Begleitstatus und tatsächlichen bzw. gebuchten Nächten.</li>
           <li>Förderung: nur für Jugendgruppenmitglieder; Berechnung über <code>Lager-Fördersatz * Hilfssatz * Berufssatz</code>.</li>
           <li>Gesamtbetrag: Brutto minus Förderung, danach Abzug von Zahlungen und vorgestreckten Beträgen.</li>
+          <li>Buchungs-Audit: vor und nach einer Admin-Korrektur werden die abrechnungsrelevanten Felder als JSON-Snapshot gespeichert.</li>
         </ul>
       </section>
 
@@ -62,9 +65,15 @@
         <ol>
           <li>Teilnehmer meldet sich mit PIN an oder legt beim ersten Mal eine PIN an.</li>
           <li>Getränke und Essen werden aus den Preisregeln des aktiven Lagers geladen.</li>
-          <li>Buchungen werden als Kostenpositionen gespeichert.</li>
+          <li>Getränke werden als Kostenpositionen gespeichert; Essensanmeldungen erzeugen oder aktualisieren die passende Anmeldung und Kostenposition.</li>
           <li>Die Kiosk-Zusammenfassung wird aus der normalen Abrechnung berechnet.</li>
         </ol>
+      </section>
+
+      <section>
+        <h2>Import und Export</h2>
+        <p>Der Teilnehmerimport liest CSV oder XLSX, prüft Pflichtspalten und Excel-Inhalte und speichert gültige Zeilen transaktional per Upsert.</p>
+        <p>Exporte nutzen dieselbe Abrechnungslogik wie die Oberfläche: Lagerabrechnung als CSV, Getränke als CSV, Excel-Arbeitsmappe mit Abrechnung und Teilnehmerdaten sowie Einzelabrechnung als PDF.</p>
       </section>
     </main>
   </body>

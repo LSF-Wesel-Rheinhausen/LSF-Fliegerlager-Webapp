@@ -50,8 +50,9 @@
         <ul>
           <li>Tests dürfen keine externen Netzwerke, echten APIs oder echten Mailversand nutzen.</li>
           <li>Externe Abhängigkeiten werden mit <code>unittest.mock</code> oder <code>pytest-mock</code> gepatcht.</li>
-          <li>Neue wiederverwendbare Testdaten werden über <code>factory_boy</code> in <code>tests/factories.py</code> erzeugt.</li>
-          <li>Import-, Export-, Permission-, Kiosk- und Abrechnungspfade brauchen Edge-Case-Tests.</li>
+          <li>Wiederverwendbare Testdaten werden über <code>factory_boy</code> in <code>tests/factories.py</code> erzeugt.</li>
+          <li>Import-, Export-, Permission-, Nutzerverwaltungs-, Kiosk-, Audit- und Abrechnungspfade brauchen Edge-Case-Tests.</li>
+          <li>Playwright-Tests nutzen role-/label-basierte Selektoren, prüfen native Dialoge und laufen in Chromium, Firefox und WebKit.</li>
         </ul>
       </section>
 
@@ -63,6 +64,7 @@
           <li><strong>Image Build:</strong> Die <code>docker.yml</code> baut und testet den Container und übernimmt das Release zu ghcr.io.</li>
           <li><strong>Sicherheits-Scans:</strong> Die <code>security.yml</code> durchsucht den Codebaum wöchentlich mit Trivy.</li>
           <li><strong>Compliance:</strong> Pull Requests erfordern Semantic Titles (<code>feat:</code>, <code>fix:</code>) und Changelog-Einträge bei Code-Änderungen.</li>
+          <li><strong>Dependabot:</strong> Aktualisiert pip-, npm- und GitHub-Actions-Abhängigkeiten.</li>
         </ul>
       </section>
 
@@ -83,6 +85,7 @@
           <li>Layouts sind mobile-first und basieren auf CSS Grid/Flexbox.</li>
           <li>Inline-Styles und jQuery sind nicht vorgesehen.</li>
           <li>Dynamisches Verhalten wird mit modernem Vanilla JavaScript oder bewusst ausgewählten leichten Tools umgesetzt.</li>
+          <li>Erstellen- und Bearbeiten-Workflows innerhalb von Übersichten nutzen bevorzugt native <code>&lt;dialog&gt;</code>-Elemente mit progressiver Verbesserung.</li>
         </ul>
       </section>
 
