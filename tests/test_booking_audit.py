@@ -47,6 +47,10 @@ def test_admin_can_edit_booking_and_creates_audit_log(client):
         "unit_price": "2.50",
         "foerderfaehig": True,
         "occurred_on": None,
+        "is_cancelled": False,
+        "cancelled_at": None,
+        "cancelled_by": None,
+        "cancellation_note": "",
     }
     assert audit_log.after == {
         "kind": Charge.Kind.DRINK,
@@ -55,6 +59,10 @@ def test_admin_can_edit_booking_and_creates_audit_log(client):
         "unit_price": "2.50",
         "foerderfaehig": True,
         "occurred_on": "2026-07-01",
+        "is_cancelled": False,
+        "cancelled_at": None,
+        "cancelled_by": None,
+        "cancellation_note": "",
     }
 
 

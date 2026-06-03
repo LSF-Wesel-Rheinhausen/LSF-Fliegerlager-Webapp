@@ -9,6 +9,7 @@
       <a class="button button-secondary" href="{% url 'camp-edit' camp.pk %}">Lager bearbeiten</a>
       <a class="button" href="{% url 'participant-create' camp.pk %}">Teilnehmer anlegen</a>
       <a class="button" href="{% url 'price-rules-manage' camp.pk %}">Preise verwalten</a>
+      <a class="button" href="{% url 'meal-overview' camp.pk %}">Mahlzeitenübersicht</a>
       <a class="button" href="{% url 'expense-create' camp.pk %}">Auslage erfassen</a>
       <a class="button" href="{% url 'participant-import' camp.pk %}">Teilnehmer importieren</a>
     </div>

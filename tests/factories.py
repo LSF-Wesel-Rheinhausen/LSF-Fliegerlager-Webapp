@@ -5,7 +5,7 @@ import factory
 from django.contrib.auth.models import Group, User
 from django.utils import timezone
 
-from billing.models import Camp, Charge, DrinkEntry, Expense, Participant, Payment, PriceRule
+from billing.models import Camp, Charge, DrinkEntry, Expense, MealSignup, Participant, Payment, PriceRule
 
 
 class UserFactory(factory.django.DjangoModelFactory):
@@ -85,6 +85,16 @@ class DrinkEntryFactory(factory.django.DjangoModelFactory):
     booked_at = factory.LazyFunction(
         lambda: timezone.datetime(2025, 7, 1, 12, 0, tzinfo=timezone.get_current_timezone())
     )
+
+
+class MealSignupFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = MealSignup
+
+    participant = factory.SubFactory(ParticipantFactory)
+    meal_date = date(2025, 7, 1)
+    meal = MealSignup.Meal.DINNER
+    variant = MealSignup.Variant.NORMAL
 
 
 class PaymentFactory(factory.django.DjangoModelFactory):

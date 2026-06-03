@@ -174,6 +174,16 @@ button:hover,
   color: var(--accent-dark);
 }
 
+.button-danger {
+  border-color: var(--danger);
+  background: var(--danger);
+}
+
+.button-danger:hover {
+  border-color: #912018;
+  background: #912018;
+}
+
 .nav-link {
   min-height: 32px;
   padding: 6px 10px;
@@ -243,6 +253,12 @@ tbody tr:hover {
 .status-badge--muted {
   background: #eef2f6;
   color: #4b5565;
+}
+
+.status-badge--danger {
+  border-color: #fecdca;
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 .panel {
@@ -395,6 +411,34 @@ textarea {
   line-height: 1.2;
 }
 
+.inline-metrics {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin: 0;
+}
+
+.inline-metrics div {
+  min-width: 96px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-soft);
+}
+
+.inline-metrics dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.inline-metrics dd {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+}
+
 .exportbar {
   margin: 14px 0;
 }
@@ -541,6 +585,42 @@ textarea {
   background: var(--ok-soft);
   border: 1px solid #abefc6;
   color: #075e45;
+}
+
+.message.error {
+  border-color: #fecdca;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.is-cancelled {
+  background: #fff8f7;
+  color: #5f241f;
+}
+
+.is-cancelled td {
+  text-decoration-color: rgba(180, 35, 24, 0.28);
+}
+
+.modal-dialog {
+  width: min(520px, calc(100vw - 32px));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 22px;
+  box-shadow: var(--shadow);
+}
+
+.modal-dialog::backdrop {
+  background: rgba(32, 37, 45, 0.42);
+}
+
+.split-actions {
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .negative {

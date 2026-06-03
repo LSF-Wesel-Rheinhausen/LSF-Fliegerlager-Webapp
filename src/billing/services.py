@@ -2,9 +2,11 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
+from django.db import transaction
 from django.db.models import Sum
+from django.utils import timezone
 
-from .models import BookingAuditLog, Charge, DrinkEntry, Expense, Participant, PriceRule
+from .models import BookingAuditLog, Charge, DrinkEntry, Expense, MealSignup, Participant, PriceRule
 
 ZERO = Decimal("0.00")
 
@@ -77,6 +79,10 @@ def charge_audit_snapshot(charge: Charge) -> dict[str, str | bool | None]:
         "unit_price": str(money(charge.unit_price)),
         "foerderfaehig": charge.foerderfaehig,
         "occurred_on": charge.occurred_on.isoformat() if charge.occurred_on else None,
+        "is_cancelled": charge.is_cancelled,
+        "cancelled_at": charge.cancelled_at.isoformat() if charge.cancelled_at else None,
+        "cancelled_by": str(charge.cancelled_by_id) if charge.cancelled_by_id else None,
+        "cancellation_note": charge.cancellation_note,
     }
 
 
@@ -105,6 +111,101 @@ def create_booking_audit_log(
         before=before,
         after=after,
     )
+
+
+def meal_charge_for_signup(signup: MealSignup) -> Charge | None:
+    return (
+        Charge.objects.filter(
+            participant=signup.participant,
+            kind=Charge.Kind.FOOD,
+            occurred_on=signup.meal_date,
+            description__endswith=dict(MealSignup.Meal.choices).get(signup.meal, signup.meal),
+        )
+        .order_by("-created_at", "-id")
+        .first()
+    )
+
+
+def _set_charge_cancellation(charge: Charge, *, cancelled: bool, changed_by: Any, note: str = "") -> BookingAuditLog:
+    before = charge_audit_snapshot(charge)
+    charge.is_cancelled = cancelled
+    charge.cancelled_at = timezone.now() if cancelled else None
+    charge.cancelled_by = changed_by if cancelled else None
+    charge.cancellation_note = note if cancelled else ""
+    charge.save(update_fields=["is_cancelled", "cancelled_at", "cancelled_by", "cancellation_note", "updated_at"])
+    return BookingAuditLog.objects.create(
+        charge=charge,
+        changed_by=changed_by,
+        action=BookingAuditLog.Action.CANCELLED if cancelled else BookingAuditLog.Action.RESTORED,
+        before=before,
+        after=charge_audit_snapshot(charge),
+    )
+
+
+def cancel_meal_signup(signup: MealSignup, *, changed_by: Any, note: str) -> BookingAuditLog | None:
+    note = note.strip()
+    with transaction.atomic():
+        signup = MealSignup.objects.select_related("participant").select_for_update().get(pk=signup.pk)
+        charge = meal_charge_for_signup(signup)
+        if charge is not None:
+            charge = Charge.objects.select_for_update().get(pk=charge.pk)
+        signup.is_cancelled = True
+        signup.cancelled_at = timezone.now()
+        signup.cancelled_by = changed_by
+        signup.cancellation_note = note
+        signup.save(update_fields=["is_cancelled", "cancelled_at", "cancelled_by", "cancellation_note", "updated_at"])
+        if charge is None:
+            return None
+        return _set_charge_cancellation(charge, cancelled=True, changed_by=changed_by, note=note)
+
+
+def restore_meal_signup(signup: MealSignup, *, changed_by: Any) -> BookingAuditLog | None:
+    with transaction.atomic():
+        signup = MealSignup.objects.select_related("participant").select_for_update().get(pk=signup.pk)
+        charge = meal_charge_for_signup(signup)
+        if charge is not None:
+            charge = Charge.objects.select_for_update().get(pk=charge.pk)
+        signup.is_cancelled = False
+        signup.cancelled_at = None
+        signup.cancelled_by = None
+        signup.cancellation_note = ""
+        signup.save(update_fields=["is_cancelled", "cancelled_at", "cancelled_by", "cancellation_note", "updated_at"])
+        if charge is None:
+            return None
+        return _set_charge_cancellation(charge, cancelled=False, changed_by=changed_by)
+
+
+def camp_meal_overview(camp) -> list[dict[str, Any]]:
+    signups = (
+        MealSignup.objects.filter(participant__camp=camp)
+        .select_related("participant", "cancelled_by")
+        .order_by("meal_date", "meal", "participant__last_name", "participant__first_name")
+    )
+    grouped: dict[tuple[Any, str], dict[str, Any]] = {}
+    variant_labels = dict(MealSignup.Variant.choices)
+    meal_labels = dict(MealSignup.Meal.choices)
+    for signup in signups:
+        key = (signup.meal_date, signup.meal)
+        row = grouped.setdefault(
+            key,
+            {
+                "meal_date": signup.meal_date,
+                "meal": signup.meal,
+                "meal_label": meal_labels.get(signup.meal, signup.meal),
+                "active_count": 0,
+                "cancelled_count": 0,
+                "variant_counts": {},
+                "signups": [],
+            },
+        )
+        if signup.is_cancelled:
+            row["cancelled_count"] += 1
+        else:
+            row["active_count"] += 1
+            label = variant_labels.get(signup.variant, signup.variant)
+            row["variant_counts"][label] = row["variant_counts"].get(label, 0) + 1
+        row["signups"].append(signup)
+    return list(grouped.values())
 
 
 def participant_camp_flat_duration(participant):
@@ -187,6 +288,7 @@ def manual_charge_lines(participant):
             participant=participant,
         )
         for charge in participant.charges.all()
+        if not charge.is_cancelled
     ]
 
 

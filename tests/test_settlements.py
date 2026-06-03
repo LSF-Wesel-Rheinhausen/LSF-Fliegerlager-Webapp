@@ -2,6 +2,9 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+
+from billing.models import Charge, PriceRule
+from billing.services import calculate_participant_settlement
 from tests.factories import (
     CampFactory,
     ChargeFactory,
@@ -11,9 +14,6 @@ from tests.factories import (
     PaymentFactory,
     PriceRuleFactory,
 )
-
-from billing.models import Charge, PriceRule
-from billing.services import calculate_participant_settlement
 
 
 @pytest.mark.django_db
@@ -85,6 +85,31 @@ def test_settlement_allows_overpayment():
 
     assert result.balance == Decimal("-5.00")
     assert result.is_overpaid is True
+
+
+@pytest.mark.django_db
+def test_settlement_ignores_cancelled_charge():
+    participant = ParticipantFactory(first_name="Linus", last_name="Torvalds")
+    ChargeFactory(
+        participant=participant,
+        kind=Charge.Kind.FOOD,
+        description="Storniertes Abendessen",
+        quantity=Decimal("1"),
+        unit_price=Decimal("7.00"),
+        is_cancelled=True,
+    )
+    ChargeFactory(
+        participant=participant,
+        kind=Charge.Kind.OTHER,
+        description="Aktive Kosten",
+        quantity=Decimal("1"),
+        unit_price=Decimal("5.00"),
+    )
+
+    result = calculate_participant_settlement(participant)
+
+    assert result.total_due == Decimal("5.00")
+    assert [line.label for line in result.lines] == ["Aktive Kosten"]
 
 
 @pytest.mark.django_db

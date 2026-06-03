@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1>Mahlzeitenübersicht</h1>
+      <p>Essensanmeldungen nach Tag und Mahlzeit, inklusive Storno-Status.</p>
+    </div>
+    <div class="actions">
+      <a class="button button-secondary" href="{% url 'camp-detail' camp.pk %}">Zurück zur Übersicht</a>
+    </div>
+  </div>
+
+  <section class="stack">
+    {% for group in meal_groups %}
+      <article class="panel stack">
+        <div class="toolbar compact-toolbar">
+          <div>
+            <h2>{{ group.meal_date }} · {{ group.meal_label }}</h2>
+            <p>
+              {{ group.active_count }} aktiv
+              {% if group.cancelled_count %}
+                · {{ group.cancelled_count }} storniert
+              {% endif %}
+            </p>
+          </div>
+          <dl class="inline-metrics" aria-label="Varianten">
+            {% for variant, count in group.variant_counts.items %}
+              <div><dt>{{ variant }}</dt><dd>{{ count }}</dd></div>
+            {% empty %}
+              <div><dt>Aktiv</dt><dd>0</dd></div>
+            {% endfor %}
+          </dl>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Teilnehmer</th>
+              <th>Variante</th>
+              <th>Status</th>
+              <th>Bemerkung</th>
+              <th>Aktion</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for signup in group.signups %}
+              <tr class="{% if signup.is_cancelled %}is-cancelled{% endif %}">
+                <td>
+                  <a href="{% url 'participant-detail' signup.participant.pk %}">{{ signup.participant.full_name }}</a>
+                </td>
+                <td>{{ signup.get_variant_display }}</td>
+                <td>
+                  {% if signup.is_cancelled %}
+                    <span class="status-badge status-badge--danger">Storniert</span>
+                    {% if signup.cancelled_at %}
+                      <span class="muted">am {{ signup.cancelled_at }}</span>
+                    {% endif %}
+                  {% else %}
+                    <span class="status-badge status-badge--ok">Aktiv</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if signup.cancellation_note %}
+                    {{ signup.cancellation_note }}
+                  {% else %}
+                    <span class="muted">-</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if signup.is_cancelled %}
+                    <form method="post" action="{% url 'meal-signup-restore' signup.pk %}">
+                      {% csrf_token %}
+                      <button class="button button-secondary" type="submit">Storno zurücknehmen</button>
+                    </form>
+                  {% else %}
+                    <button
+                      class="button button-danger"
+                      type="button"
+                      data-open-cancel-dialog
+                      data-action="{% url 'meal-signup-cancel' signup.pk %}"
+                      data-participant="{{ signup.participant.full_name }}"
+                      data-meal="{{ group.meal_date }} · {{ group.meal_label }}"
+                    >
+                      Stornieren
+                    </button>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </article>
+    {% empty %}
+      <section class="panel">
+        <h2>Noch keine Essensanmeldungen</h2>
+        <p>Wenn Teilnehmer im Kiosk Mahlzeiten buchen, erscheinen sie hier nach Datum gruppiert.</p>
+      </section>
+    {% endfor %}
+  </section>
+
+  <dialog id="cancel-dialog" class="modal-dialog">
+    <form method="post" id="cancel-form" class="stack">
+      {% csrf_token %}
+      <div>
+        <h2>Essensanmeldung stornieren</h2>
+        <p id="cancel-dialog-context"></p>
+      </div>
+      {{ cancellation_form.cancellation_note.label_tag }}
+      {{ cancellation_form.cancellation_note }}
+      <div class="form-actions split-actions">
+        <button class="button button-secondary" type="button" data-close-cancel-dialog>Abbrechen</button>
+        <button class="button button-danger" type="submit">Storno speichern</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+    (() => {
+      const dialog = document.getElementById('cancel-dialog');
+      const form = document.getElementById('cancel-form');
+      const context = document.getElementById('cancel-dialog-context');
+      if (!dialog || !form || !context) return;
+
+      document.querySelectorAll('[data-open-cancel-dialog]').forEach((button) => {
+        button.addEventListener('click', () => {
+          form.action = button.dataset.action;
+          context.textContent = `${button.dataset.participant} · ${button.dataset.meal}`;
+          dialog.showModal();
+        });
+      });
+
+      document.querySelectorAll('[data-close-cancel-dialog]').forEach((button) => {
+        button.addEventListener('click', () => dialog.close());
+      });
+    })();
+  </script>
+{% endblock %}

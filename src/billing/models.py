@@ -177,6 +177,16 @@ class Charge(TimeStampedModel):
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
     foerderfaehig = models.BooleanField(default=True)
     occurred_on = models.DateField(null=True, blank=True)
+    is_cancelled = models.BooleanField(default=False)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cancelled_charges",
+    )
+    cancellation_note = models.TextField(blank=True)
 
     class Meta:
         ordering = ["participant", "kind", "description"]
@@ -192,6 +202,8 @@ class Charge(TimeStampedModel):
 class BookingAuditLog(models.Model):
     class Action(models.TextChoices):
         UPDATED = "updated", "Bearbeitet"
+        CANCELLED = "cancelled", "Storniert"
+        RESTORED = "restored", "Storno zurückgenommen"
 
     charge = models.ForeignKey(Charge, on_delete=models.CASCADE, related_name="audit_logs")
     changed_by = models.ForeignKey(
@@ -266,6 +278,16 @@ class MealSignup(TimeStampedModel):
     meal = models.CharField(max_length=20, choices=Meal.choices)
     variant = models.CharField(max_length=20, choices=Variant.choices)
     foerderfaehig = models.BooleanField(default=True)
+    is_cancelled = models.BooleanField(default=False)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cancelled_meal_signups",
+    )
+    cancellation_note = models.TextField(blank=True)
 
     class Meta:
         ordering = ["meal_date", "meal", "participant"]

@@ -17,6 +17,7 @@ Web-App zur Verwaltung und Abrechnung eines Vereins-Fliegerlagers. Die Anwendung
 - Übersichtliche Preisverwaltung mit Lagerpauschalen für 1/2 Wochen und Teilnehmer/Begleitpersonen, Getränke, Standardpreise für Mahlzeiten und abweichende Tagespreise
 - Native Dialoge für Preisregelanlage und -bearbeitung, damit Admins im Kontext der Preisübersicht bleiben
 - Teilnehmer-Kiosk: PIN-Login, PIN-Ersteinrichtung, sichtbarer Auto-Logout-Timer, große Getränketasten (Ein-Tap-Buchung) und Essensanmeldungen mit Tablet-/Mobilbedienung
+- Admin-Mahlzeitenübersicht pro Tag mit Varianten-Zählung, reversiblem Soft-Storno, Storno-Bemerkung und Audit-Protokoll
 - Admin-Bearbeitung von Buchungen mit Audit-Protokoll der geänderten abrechnungsrelevanten Felder
 - CSV-/Excel-Import mit Vorschau und Validierung
 - CSV-, Excel- und PDF-Export für Lager- und Einzelabrechnungen sowie Getränkeauswertungen
@@ -126,7 +127,7 @@ Beitrags- und Agentenregeln stehen in [`CONTRIBUTING.md`](CONTRIBUTING.md) und [
 
 - Installierbare Webapp/PWA: Web App Manifest, App-Icons, Theme-/Hintergrundfarben, Service Worker für Shell-/Asset-Caching und Installationshinweise für iOS, Android und Desktop.
 - Teilnehmer-Kiosk: PWA-Ausbau, Offline-Hinweise und weitere Tablet-Optimierungen.
-- Getränke-/Essens-Workflow: Tages-/Mahlzeitenübersichten, Storno-Flüsse und optionale Schnellerfassung.
+- Getränke-/Essens-Workflow: Getränke-Tagesübersichten, optionale Schnellerfassung und weitere Storno-Flüsse außerhalb der Admin-Mahlzeitenübersicht.
 - Persistierte Abrechnungsläufe: den vorhandenen `Settlement`-Speicher als produktiven Bedienworkflow ausbauen, inklusive Verlauf/Versionierung und Nachvollziehbarkeit von Zeitpunkt und Bearbeiter.
 - Mehr Tests: View-/Permission-Integrationstests, Exporttests für CSV/XLSX/PDF, Import-Edge-Cases und zusätzliche Settlement-Regressionsfälle.
 - UI-Ausbau: Bearbeiten-/Löschen-Flows, bessere Leerzustände, Druck-/PDF-Ansichten und Dashboard-Auswertungen.

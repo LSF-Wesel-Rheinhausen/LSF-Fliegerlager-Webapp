@@ -3,7 +3,7 @@ from decimal import Decimal
 import pytest
 from django.urls import reverse
 
-from billing.models import Camp, Charge, Expense, Participant, Payment, PriceRule
+from billing.models import Camp, Charge, Expense, MealSignup, Participant, Payment, PriceRule
 from billing.permissions import EDITOR_GROUP
 from tests.factories import (
     CampFactory,
@@ -40,12 +40,19 @@ def permission_dataset():
         quantity=Decimal("1.00"),
         unit_price=Decimal("2.00"),
     )
+    meal_signup = MealSignup.objects.create(
+        participant=participant,
+        meal_date="2025-07-01",
+        meal=MealSignup.Meal.DINNER,
+        variant=MealSignup.Variant.NORMAL,
+    )
     managed_user = UserFactory(username="managed", email="managed@example.test")
     return {
         "camp": camp,
         "participant": participant,
         "price_rule": rule,
         "charge": charge,
+        "meal_signup": meal_signup,
         "managed_user": managed_user,
     }
 
@@ -70,6 +77,7 @@ def _login_redirect(response):
         ("price-rule-create", lambda data: [data["camp"].pk]),
         ("price-rules-manage", lambda data: [data["camp"].pk]),
         ("price-rule-edit", lambda data: [data["price_rule"].pk]),
+        ("meal-overview", lambda data: [data["camp"].pk]),
     ],
 )
 def test_admin_only_get_views_reject_anonymous_and_editor(
@@ -102,6 +110,7 @@ def test_admin_only_get_views_reject_anonymous_and_editor(
         ("price-rule-create", lambda data: [data["camp"].pk]),
         ("price-rules-manage", lambda data: [data["camp"].pk]),
         ("price-rule-edit", lambda data: [data["price_rule"].pk]),
+        ("meal-overview", lambda data: [data["camp"].pk]),
     ],
 )
 def test_admin_only_get_views_allow_admin(client, admin_user, permission_dataset, route_name, arg_getter):

@@ -16,6 +16,7 @@ from .exporters import camp_settlement_csv, camp_workbook_response, drink_entrie
 from .forms import (
     CampFlatRateSettingsForm,
     CampForm,
+    CancellationForm,
     ChargeForm,
     DrinkBookingForm,
     ExpenseForm,
@@ -40,9 +41,12 @@ from .roles import ROLE_ADMIN, ROLE_EDITOR, active_admin_count, bootstrap_defaul
 from .services import (
     calculate_camp_settlements,
     calculate_participant_settlement,
+    camp_meal_overview,
+    cancel_meal_signup,
     charge_audit_snapshot,
     create_booking_audit_log,
     participant_kiosk_summary,
+    restore_meal_signup,
 )
 
 signer = Signer()
@@ -366,6 +370,39 @@ def price_rule_edit(request, price_rule_id):
     return render(request, "billing/form.html", {"form": form, "title": "Preisregel bearbeiten", "camp": rule.camp})
 
 
+@admin_required
+def meal_overview(request, camp_id):
+    camp = get_object_or_404(Camp, pk=camp_id)
+    return render(
+        request,
+        "billing/meal_overview.html",
+        {"camp": camp, "meal_groups": camp_meal_overview(camp), "cancellation_form": CancellationForm()},
+    )
+
+
+@admin_required
+def meal_signup_cancel(request, signup_id):
+    signup = get_object_or_404(MealSignup.objects.select_related("participant", "participant__camp"), pk=signup_id)
+    if request.method != "POST":
+        return redirect("meal-overview", camp_id=signup.participant.camp.pk)
+    form = CancellationForm(request.POST)
+    if form.is_valid():
+        cancel_meal_signup(signup, changed_by=request.user, note=form.cleaned_data["cancellation_note"])
+        messages.success(request, "Essensanmeldung wurde storniert.")
+    else:
+        messages.error(request, "Bitte gib eine Storno-Bemerkung an.")
+    return redirect("meal-overview", camp_id=signup.participant.camp.pk)
+
+
+@admin_required
+def meal_signup_restore(request, signup_id):
+    signup = get_object_or_404(MealSignup.objects.select_related("participant", "participant__camp"), pk=signup_id)
+    if request.method == "POST":
+        restore_meal_signup(signup, changed_by=request.user)
+        messages.success(request, "Storno wurde zurückgenommen.")
+    return redirect("meal-overview", camp_id=signup.participant.camp.pk)
+
+
 @editor_required
 def expense_create(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
@@ -565,6 +602,10 @@ def kiosk_home(request):
                             defaults={
                                 "variant": variant,
                                 "foerderfaehig": price_rule.foerderfaehig,
+                                "is_cancelled": False,
+                                "cancelled_at": None,
+                                "cancelled_by": None,
+                                "cancellation_note": "",
                             },
                         )
                         Charge.objects.update_or_create(
@@ -576,6 +617,10 @@ def kiosk_home(request):
                                 "quantity": 1,
                                 "unit_price": price_rule.unit_price,
                                 "foerderfaehig": price_rule.foerderfaehig,
+                                "is_cancelled": False,
+                                "cancelled_at": None,
+                                "cancelled_by": None,
+                                "cancellation_note": "",
                             },
                         )
                     messages.success(request, "Essensanmeldung wurde gespeichert.")

@@ -511,6 +511,14 @@ class MealBookingForm(forms.Form):
                 ]
 
 
+class CancellationForm(forms.Form):
+    cancellation_note = forms.CharField(
+        label="Storno-Bemerkung",
+        max_length=500,
+        widget=forms.Textarea(attrs={"rows": 3}),
+    )
+
+
 class MealStandardPricesForm(forms.Form):
     breakfast_adult_price = forms.DecimalField(
         label="Frühstück Erwachsene", max_digits=6, decimal_places=2, min_value=0, required=False
