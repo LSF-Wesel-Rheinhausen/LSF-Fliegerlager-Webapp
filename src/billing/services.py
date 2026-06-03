@@ -73,6 +73,7 @@ def charge_audit_snapshot(charge: Charge) -> dict[str, str | bool | None]:
         A JSON-serializable snapshot of the charge fields that an admin may edit.
     """
     return {
+        "booking_reference": charge.booking_reference,
         "kind": charge.kind,
         "description": charge.description,
         "quantity": str(money(charge.quantity)),

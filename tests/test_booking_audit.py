@@ -1,11 +1,28 @@
 from decimal import Decimal
 
 import pytest
+from django.contrib.admin.sites import AdminSite
 from django.urls import reverse
 
+from billing.admin import ChargeAdmin
 from billing.models import BookingAuditLog, Charge
 from billing.permissions import EDITOR_GROUP
 from tests.factories import ChargeFactory, GroupFactory, ParticipantFactory, SuperUserFactory, UserFactory
+
+
+@pytest.mark.django_db
+def test_booking_reference_uses_human_readable_charge_id():
+    charge = ChargeFactory()
+
+    assert charge.booking_reference == f"B#{charge.pk:05d}"
+    assert charge.booking_reference in str(charge)
+
+
+def test_charge_admin_displays_booking_reference():
+    admin = ChargeAdmin(Charge, AdminSite())
+
+    assert "booking_reference" in admin.list_display
+    assert "id" in admin.search_fields
 
 
 @pytest.mark.django_db
@@ -41,6 +58,7 @@ def test_admin_can_edit_booking_and_creates_audit_log(client):
     assert charge.occurred_on.isoformat() == "2026-07-01"
     assert audit_log.changed_by == admin
     assert audit_log.before == {
+        "booking_reference": charge.booking_reference,
         "kind": Charge.Kind.DRINK,
         "description": "Cola",
         "quantity": "2.00",
@@ -49,6 +67,7 @@ def test_admin_can_edit_booking_and_creates_audit_log(client):
         "occurred_on": None,
     }
     assert audit_log.after == {
+        "booking_reference": charge.booking_reference,
         "kind": Charge.Kind.DRINK,
         "description": "Cola korrigiert",
         "quantity": "3.00",
@@ -107,6 +126,7 @@ def test_admin_can_delete_booking_and_keeps_audit_log(client):
     assert audit_log.changed_by == admin
     assert audit_log.action == BookingAuditLog.Action.DELETED
     assert audit_log.before == {
+        "booking_reference": charge.booking_reference,
         "kind": Charge.Kind.OTHER,
         "description": "Fehlbuchung",
         "quantity": "1.00",
@@ -164,6 +184,7 @@ def test_participant_detail_renders_booking_audit_history_for_admin(client):
     assert response.status_code == 200
     assert b"Buchungen" in response.content
     assert b"\xc3\x84nderungsprotokoll" in response.content
+    assert charge.booking_reference.encode() in response.content
     assert b"Abendessen korrigiert" in response.content
     assert reverse("charge-edit", args=[charge.pk]).encode() in response.content
     assert reverse("charge-delete", args=[charge.pk]).encode() in response.content
@@ -241,6 +262,7 @@ def test_admin_can_restore_deleted_booking_from_audit_log(client):
     assert restored_log.action == BookingAuditLog.Action.RESTORED
     assert restored_log.before == {}
     assert restored_log.after == {
+        "booking_reference": restored_charge.booking_reference,
         "kind": Charge.Kind.FOOD,
         "description": "Frühstück",
         "quantity": "2.00",
