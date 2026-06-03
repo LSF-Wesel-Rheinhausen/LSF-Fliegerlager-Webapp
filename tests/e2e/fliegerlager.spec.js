@@ -294,17 +294,17 @@ test("Export flow: downloading CSV and XLSX returns 200 without deep parsing", a
   await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
   await page.getByText("Sommerlager Export").click();
 
-  const [downloadCsv] = await Promise.all([
-    page.waitForEvent('download'),
-    page.getByRole("link", { name: "Abrechnung als CSV herunterladen" }).click()
-  ]);
-  expect(downloadCsv.suggestedFilename()).toMatch(/\.csv$/);
+  const csvLink = page.getByRole("link", { name: "Abrechnung als CSV herunterladen" });
+  const csvHref = await csvLink.getAttribute("href");
+  const csvResponse = await page.request.get(csvHref);
+  expect(csvResponse.ok()).toBeTruthy();
+  expect(csvResponse.headers()['content-disposition']).toContain('.csv');
 
-  const [downloadXlsx] = await Promise.all([
-    page.waitForEvent('download'),
-    page.getByRole("link", { name: "Arbeitsmappe herunterladen" }).click()
-  ]);
-  expect(downloadXlsx.suggestedFilename()).toMatch(/\.xlsx$/);
+  const xlsxLink = page.getByRole("link", { name: "Arbeitsmappe herunterladen" });
+  const xlsxHref = await xlsxLink.getAttribute("href");
+  const xlsxResponse = await page.request.get(xlsxHref);
+  expect(xlsxResponse.ok()).toBeTruthy();
+  expect(xlsxResponse.headers()['content-disposition']).toContain('.xlsx');
 });
 
 test("Role flow: editor cannot see admin functions", async ({ page }) => {
