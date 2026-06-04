@@ -122,6 +122,62 @@ class ParticipantPin(TimeStampedModel):
         return f"PIN {self.participant}"
 
 
+class ParticipantFamilyMember(TimeStampedModel):
+    """Represent a kiosk-only family member billed through a participant."""
+
+    class Role(models.TextChoices):
+        CHILD = "child", "Kind"
+        COMPANION = "companion", "Begleitperson"
+
+    guardian = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="family_members")
+    first_name = models.CharField(max_length=120)
+    last_name = models.CharField(max_length=120)
+    role = models.CharField(max_length=20, choices=Role.choices)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["last_name", "first_name"]
+
+    @property
+    def full_name(self) -> str:
+        """Return the display name used in kiosk booking dialogs."""
+        return f"{self.first_name} {self.last_name}".strip()
+
+    @property
+    def is_child(self) -> bool:
+        """Return whether this family member should use child meal pricing."""
+        return self.role == self.Role.CHILD
+
+    def __str__(self):
+        return f"{self.full_name} ({self.guardian})"
+
+
+class ParticipantBookingLink(TimeStampedModel):
+    """Track participant-to-participant kiosk booking invitations."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Offen"
+        ACCEPTED = "accepted", "Angenommen"
+        DECLINED = "declined", "Abgelehnt"
+        REVOKED = "revoked", "Aufgelöst"
+
+    inviter = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="sent_booking_links")
+    invitee = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="received_booking_links")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=~models.Q(inviter=models.F("invitee")),
+                name="booking_link_distinct_participants",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.inviter} -> {self.invitee} ({self.get_status_display()})"
+
+
 class PriceRule(TimeStampedModel):
     class Kind(models.TextChoices):
         CAMP_FLAT = "camp_flat", "Lagerpauschale"
@@ -286,6 +342,13 @@ class MealSignup(TimeStampedModel):
         VEGAN_CHILD = "vegan_child", "Vegan Kind"
 
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="meal_signups")
+    family_member = models.ForeignKey(
+        ParticipantFamilyMember,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="meal_signups",
+    )
     meal_date = models.DateField()
     meal = models.CharField(max_length=20, choices=Meal.choices)
     variant = models.CharField(max_length=20, choices=Variant.choices)
@@ -294,7 +357,16 @@ class MealSignup(TimeStampedModel):
     class Meta:
         ordering = ["meal_date", "meal", "participant"]
         constraints = [
-            models.UniqueConstraint(fields=["participant", "meal_date", "meal"], name="unique_meal_signup"),
+            models.UniqueConstraint(
+                fields=["participant", "meal_date", "meal"],
+                condition=models.Q(family_member__isnull=True),
+                name="unique_meal_signup",
+            ),
+            models.UniqueConstraint(
+                fields=["participant", "family_member", "meal_date", "meal"],
+                condition=models.Q(family_member__isnull=False),
+                name="unique_family_member_meal_signup",
+            ),
         ]
 
     def __str__(self):

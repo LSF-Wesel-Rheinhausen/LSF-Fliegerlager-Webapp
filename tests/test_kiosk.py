@@ -4,7 +4,7 @@ from decimal import Decimal
 import pytest
 from django.urls import reverse
 
-from billing.models import Charge, MealSignup, PriceRule
+from billing.models import Charge, MealSignup, ParticipantBookingLink, ParticipantFamilyMember, PriceRule
 from billing.views import KIOSK_PARTICIPANT_SESSION_KEY, KIOSK_PIN_SETUP_SESSION_KEY
 from tests.factories import CampFactory, ParticipantFactory, PriceRuleFactory, UserFactory
 
@@ -56,7 +56,7 @@ def test_kiosk_login_rejects_invalid_pin_for_existing_pin(client):
 
 
 @pytest.mark.django_db
-def test_kiosk_home_hides_normal_admin_header_and_renders_stepper_controls(client):
+def test_kiosk_home_hides_normal_admin_header_and_renders_drink_dialog_controls(client):
     user = UserFactory(username="admin", email="admin@example.test")
     client.force_login(user)
 
@@ -79,8 +79,9 @@ def test_kiosk_home_hides_normal_admin_header_and_renders_stepper_controls(clien
     assert b"admin@example.test" not in response.content
     assert b'action="/logout/"' not in response.content
     assert b'class="drink-card"' in response.content
-    assert b'name="drink-price_rule"' in response.content
-    assert b"1x tippen" in response.content
+    assert b'data-rule-id="' in response.content
+    assert b"Menge w\xc3\xa4hlen" in response.content
+    assert b'id="drink-dialog"' in response.content
     assert b'data-timeout-ms="120000"' in response.content
     assert reverse("kiosk-logout").encode() in response.content
     assert "Förderung anwenden".encode() not in response.content
@@ -172,6 +173,152 @@ def test_kiosk_meal_signup_updates_existing_signup_and_creates_charge(client):
     signup = MealSignup.objects.get(participant=participant)
     assert signup.variant == MealSignup.Variant.VEGAN
     charge = Charge.objects.get(participant=participant, kind=Charge.Kind.FOOD)
+    assert charge.description == "Abendessen Abendessen"
+    assert charge.unit_price == Decimal("7.00")
+
+
+@pytest.mark.django_db
+def test_kiosk_creates_family_member_and_books_meal_on_guardian(client):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, first_name="Vater", last_name="Muster")
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        is_default=True,
+        applies_to_children=True,
+        applies_to_adults=False,
+        name="Abendessen Kind",
+        unit_price=Decimal("4.00"),
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "family_member_create",
+            "family-first_name": "Kind",
+            "family-last_name": "Muster",
+            "family-role": ParticipantFamilyMember.Role.CHILD,
+        },
+    )
+
+    assert response.status_code == 302
+    family_member = ParticipantFamilyMember.objects.get(guardian=participant)
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-meal_date": date(2025, 7, 1).isoformat(),
+            "meal-meal": MealSignup.Meal.DINNER,
+            "meal-variant": MealSignup.Variant.NORMAL,
+            "meal-target": [f"family-{family_member.pk}"],
+            f"meal-variant-family-{family_member.pk}": MealSignup.Variant.NORMAL_CHILD,
+        },
+    )
+
+    assert response.status_code == 302
+    signup = MealSignup.objects.get(participant=participant, family_member=family_member)
+    assert signup.variant == MealSignup.Variant.NORMAL_CHILD
+    charge = Charge.objects.get(participant=participant, kind=Charge.Kind.FOOD)
+    assert charge.description == "Abendessen Kind Abendessen für Kind Muster"
+    assert charge.unit_price == Decimal("4.00")
+
+
+@pytest.mark.django_db
+def test_kiosk_booking_link_invite_accept_revoke_flow(client):
+    camp = CampFactory()
+    inviter = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")
+    invitee = ParticipantFactory(camp=camp, first_name="Grace", last_name="B")
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = inviter.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "booking_link_invite",
+            "link-participant": invitee.pk,
+        },
+    )
+
+    assert response.status_code == 302
+    link = ParticipantBookingLink.objects.get(inviter=inviter, invitee=invitee)
+    assert link.status == ParticipantBookingLink.Status.PENDING
+
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = invitee.pk
+    session.save()
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "booking_link_accept",
+            "booking_link_id": link.pk,
+        },
+    )
+
+    assert response.status_code == 302
+    link.refresh_from_db()
+    assert link.status == ParticipantBookingLink.Status.ACCEPTED
+    response = client.get(reverse("kiosk-home"))
+    assert f"participant-{inviter.pk}".encode() in response.content
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "booking_link_revoke",
+            "booking_link_id": link.pk,
+        },
+    )
+
+    assert response.status_code == 302
+    link.refresh_from_db()
+    assert link.status == ParticipantBookingLink.Status.REVOKED
+
+
+@pytest.mark.django_db
+def test_kiosk_books_meal_for_linked_participant_on_linked_account(client):
+    camp = CampFactory()
+    inviter = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")
+    invitee = ParticipantFactory(camp=camp, first_name="Grace", last_name="B")
+    ParticipantBookingLink.objects.create(
+        inviter=inviter,
+        invitee=invitee,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        is_default=True,
+        applies_to_children=False,
+        applies_to_adults=True,
+        name="Abendessen",
+        unit_price=Decimal("7.00"),
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = inviter.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-meal_date": date(2025, 7, 1).isoformat(),
+            "meal-meal": MealSignup.Meal.DINNER,
+            "meal-variant": MealSignup.Variant.NORMAL,
+            "meal-target": [f"participant-{invitee.pk}"],
+            f"meal-variant-participant-{invitee.pk}": MealSignup.Variant.VEGAN,
+        },
+    )
+
+    assert response.status_code == 302
+    signup = MealSignup.objects.get(participant=invitee)
+    assert signup.variant == MealSignup.Variant.VEGAN
+    assert not Charge.objects.filter(participant=inviter, kind=Charge.Kind.FOOD).exists()
+    charge = Charge.objects.get(participant=invitee, kind=Charge.Kind.FOOD)
     assert charge.description == "Abendessen Abendessen"
     assert charge.unit_price == Decimal("7.00")
 

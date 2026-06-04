@@ -8,6 +8,8 @@ from .models import (
     Expense,
     MealSignup,
     Participant,
+    ParticipantBookingLink,
+    ParticipantFamilyMember,
     ParticipantPin,
     Payment,
     PriceRule,
@@ -29,6 +31,20 @@ class ParticipantAdmin(admin.ModelAdmin):
 
 
 admin.site.register(ParticipantPin)
+
+
+@admin.register(ParticipantFamilyMember)
+class ParticipantFamilyMemberAdmin(admin.ModelAdmin):
+    list_display = ("last_name", "first_name", "guardian", "role", "is_active")
+    list_filter = ("role", "is_active", "guardian__camp")
+    search_fields = ("first_name", "last_name", "guardian__first_name", "guardian__last_name")
+
+
+@admin.register(ParticipantBookingLink)
+class ParticipantBookingLinkAdmin(admin.ModelAdmin):
+    list_display = ("inviter", "invitee", "status", "created_at", "updated_at")
+    list_filter = ("status", "created_at")
+    search_fields = ("inviter__first_name", "inviter__last_name", "invitee__first_name", "invitee__last_name")
 
 
 @admin.register(PriceRule)

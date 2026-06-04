@@ -23,6 +23,8 @@ from .forms import (
     DrinkBookingForm,
     ExpenseForm,
     FirstAdminSetupForm,
+    KioskBookingLinkInviteForm,
+    KioskFamilyMemberForm,
     KioskLoginForm,
     KioskPinSetupForm,
     MealBookingForm,
@@ -37,7 +39,7 @@ from .forms import (
     UserPasswordResetForm,
 )
 from .importers import preview_participants, rows_from_payload, rows_to_payload, save_participants
-from .models import BookingAuditLog, Camp, Charge, MealSignup, Participant, PriceRule
+from .models import BookingAuditLog, Camp, Charge, MealSignup, Participant, ParticipantBookingLink, PriceRule
 from .permissions import ADMIN_GROUP, admin_required, editor_required
 from .roles import ROLE_ADMIN, ROLE_EDITOR, active_admin_count, bootstrap_default_roles, set_user_role, user_role
 from .services import (
@@ -529,6 +531,127 @@ def _kiosk_participant(request):
     return _kiosk_participant_from_session(request, KIOSK_PARTICIPANT_SESSION_KEY)
 
 
+def _accepted_booking_links(participant):
+    return ParticipantBookingLink.objects.select_related("inviter", "invitee").filter(
+        Q(inviter=participant) | Q(invitee=participant),
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+
+
+def _linked_booking_participants(participant):
+    linked_participants = []
+    for link in _accepted_booking_links(participant):
+        linked_participants.append(link.invitee if link.inviter_id == participant.pk else link.inviter)
+    return sorted(linked_participants, key=lambda item: (item.last_name, item.first_name, item.pk))
+
+
+def _variant_choices_for_booking_target(is_child):
+    if is_child:
+        return [
+            (MealSignup.Variant.NORMAL_CHILD, "Normal (Kind)"),
+            (MealSignup.Variant.VEGAN_CHILD, "Vegan/Vegetarisch (Kind)"),
+        ]
+    return [
+        (MealSignup.Variant.NORMAL, "Normal"),
+        (MealSignup.Variant.VEGAN, "Vegan/Vegetarisch"),
+    ]
+
+
+def _meal_price_rule(camp, meal, meal_date, is_child):
+    price_rule = PriceRule.objects.filter(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=meal,
+        applies_to_children=is_child,
+        meal_date=meal_date,
+    ).first()
+    if price_rule:
+        return price_rule
+    return PriceRule.objects.filter(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=meal,
+        applies_to_children=is_child,
+        is_default=True,
+        meal_date__isnull=True,
+    ).first()
+
+
+def _kiosk_meal_targets(participant):
+    targets = [
+        {
+            "token": f"participant-{participant.pk}",
+            "kind": "participant",
+            "object": participant,
+            "name": participant.full_name,
+            "role": "Ich",
+            "is_child": participant.is_child,
+            "variant_choices": _variant_choices_for_booking_target(participant.is_child),
+        }
+    ]
+    for member in participant.family_members.filter(is_active=True).order_by("last_name", "first_name"):
+        targets.append(
+            {
+                "token": f"family-{member.pk}",
+                "kind": "family",
+                "object": member,
+                "name": member.full_name,
+                "role": member.get_role_display(),
+                "is_child": member.is_child,
+                "variant_choices": _variant_choices_for_booking_target(member.is_child),
+            }
+        )
+    for linked_participant in _linked_booking_participants(participant):
+        targets.append(
+            {
+                "token": f"participant-{linked_participant.pk}",
+                "kind": "participant",
+                "object": linked_participant,
+                "name": linked_participant.full_name,
+                "role": "Verknüpft",
+                "is_child": linked_participant.is_child,
+                "variant_choices": _variant_choices_for_booking_target(linked_participant.is_child),
+            }
+        )
+    return targets
+
+
+def _target_lookup(meal_targets):
+    return {target["token"]: target for target in meal_targets}
+
+
+def _book_meal_for_target(target, meal_date, meal, variant, price_rule):
+    meal_display = dict(MealSignup.Meal.choices).get(meal, meal)
+    target_object = target["object"]
+    participant = target_object if target["kind"] == "participant" else target_object.guardian
+    family_member = target_object if target["kind"] == "family" else None
+    signup_defaults = {
+        "variant": variant,
+        "foerderfaehig": price_rule.foerderfaehig,
+    }
+    charge_description = f"{price_rule.name} {meal_display}"
+    if family_member is not None:
+        charge_description = f"{charge_description} für {family_member.full_name}"
+    MealSignup.objects.update_or_create(
+        participant=participant,
+        family_member=family_member,
+        meal_date=meal_date,
+        meal=meal,
+        defaults=signup_defaults,
+    )
+    Charge.objects.update_or_create(
+        participant=participant,
+        kind=Charge.Kind.FOOD,
+        occurred_on=meal_date,
+        description=charge_description,
+        defaults={
+            "quantity": 1,
+            "unit_price": price_rule.unit_price,
+            "foerderfaehig": price_rule.foerderfaehig,
+        },
+    )
+
+
 def kiosk_pin_setup(request):
     participant = _kiosk_participant_from_session(request, KIOSK_PIN_SETUP_SESSION_KEY)
     if participant is None:
@@ -558,8 +681,11 @@ def kiosk_home(request):
     if participant is None:
         return redirect("kiosk-login")
 
+    meal_targets = _kiosk_meal_targets(participant)
     drink_form = DrinkBookingForm(participant=participant, prefix="drink")
     meal_form = MealBookingForm(participant=participant, prefix="meal")
+    family_member_form = KioskFamilyMemberForm(prefix="family")
+    booking_link_form = KioskBookingLinkInviteForm(inviter=participant, prefix="link")
     if request.method == "POST":
         if request.POST.get("action") == "drink":
             drink_form = DrinkBookingForm(request.POST, participant=participant, prefix="drink")
@@ -581,70 +707,131 @@ def kiosk_home(request):
             if meal_form.is_valid():
                 meal_date = meal_form.cleaned_data["meal_date"]
                 meal = meal_form.cleaned_data["meal"]
-                variant = meal_form.cleaned_data["variant"]
-
-                is_child = variant in [MealSignup.Variant.NORMAL_CHILD, MealSignup.Variant.VEGAN_CHILD]
-
-                price_rule = PriceRule.objects.filter(
-                    camp=participant.camp,
-                    kind=PriceRule.Kind.MEAL,
-                    meal_type=meal,
-                    applies_to_children=is_child,
-                    meal_date=meal_date,
-                ).first()
-
-                if not price_rule:
-                    price_rule = PriceRule.objects.filter(
-                        camp=participant.camp,
-                        kind=PriceRule.Kind.MEAL,
-                        meal_type=meal,
-                        applies_to_children=is_child,
-                        is_default=True,
-                        meal_date__isnull=True,
-                    ).first()
-
-                if not price_rule:
+                selected_tokens = request.POST.getlist("meal-target")
+                targets_by_token = _target_lookup(meal_targets)
+                if not selected_tokens:
+                    selected_tokens = [f"participant-{participant.pk}"]
+                selected_targets = [targets_by_token[token] for token in selected_tokens if token in targets_by_token]
+                if not selected_targets:
+                    meal_form.add_error(None, "Bitte mindestens eine Person auswählen.")
+                missing_prices = []
+                invalid_variants = []
+                bookings = []
+                for target in selected_targets:
+                    variant = request.POST.get(f"meal-variant-{target['token']}") or meal_form.cleaned_data["variant"]
+                    valid_variants = {choice[0] for choice in target["variant_choices"]}
+                    if variant not in valid_variants:
+                        invalid_variants.append(target["name"])
+                        continue
+                    price_rule = _meal_price_rule(participant.camp, meal, meal_date, target["is_child"])
+                    if price_rule is None:
+                        missing_prices.append(target["name"])
+                        continue
+                    bookings.append((target, variant, price_rule))
+                if invalid_variants:
+                    meal_form.add_error(None, "Bitte für jede ausgewählte Person eine gültige Variante auswählen.")
+                if missing_prices:
                     meal_form.add_error(
-                        None, "Für diese Mahlzeit ist kein Preis hinterlegt. Bitte wende dich an die Lagerleitung."
+                        None,
+                        "Für diese Mahlzeit ist kein Preis hinterlegt: " + ", ".join(missing_prices),
                     )
-                else:
-                    meal_display = dict(MealSignup.Meal.choices).get(meal, meal)
+                if not meal_form.errors:
                     with transaction.atomic():
-                        MealSignup.objects.update_or_create(
-                            participant=participant,
-                            meal_date=meal_date,
-                            meal=meal,
-                            defaults={
-                                "variant": variant,
-                                "foerderfaehig": price_rule.foerderfaehig,
-                            },
-                        )
-                        Charge.objects.update_or_create(
-                            participant=participant,
-                            kind=Charge.Kind.FOOD,
-                            occurred_on=meal_date,
-                            description=f"{price_rule.name} {meal_display}",
-                            defaults={
-                                "quantity": 1,
-                                "unit_price": price_rule.unit_price,
-                                "foerderfaehig": price_rule.foerderfaehig,
-                            },
-                        )
+                        for target, variant, price_rule in bookings:
+                            _book_meal_for_target(target, meal_date, meal, variant, price_rule)
                     messages.success(request, "Essensanmeldung wurde gespeichert.")
                     return redirect("kiosk-home")
+        elif request.POST.get("action") == "family_member_create":
+            family_member_form = KioskFamilyMemberForm(request.POST, prefix="family")
+            if family_member_form.is_valid():
+                with transaction.atomic():
+                    family_member = family_member_form.save(commit=False)
+                    family_member.guardian = participant
+                    family_member.save()
+                messages.success(request, "Familienmitglied wurde angelegt.")
+                return redirect("kiosk-home")
+        elif request.POST.get("action") == "family_member_deactivate":
+            member_id = request.POST.get("family_member_id")
+            family_member = participant.family_members.filter(pk=member_id, is_active=True).first()
+            if family_member is not None:
+                family_member.is_active = False
+                family_member.save(update_fields=["is_active", "updated_at"])
+                messages.success(request, "Familienmitglied wurde entfernt.")
+                return redirect("kiosk-home")
+            messages.error(request, "Familienmitglied wurde nicht gefunden.")
+        elif request.POST.get("action") == "booking_link_invite":
+            booking_link_form = KioskBookingLinkInviteForm(request.POST, inviter=participant, prefix="link")
+            if booking_link_form.is_valid():
+                with transaction.atomic():
+                    ParticipantBookingLink.objects.create(
+                        inviter=participant,
+                        invitee=booking_link_form.cleaned_data["participant"],
+                    )
+                messages.success(request, "Einladung wurde gesendet.")
+                return redirect("kiosk-home")
+        elif request.POST.get("action") in ["booking_link_accept", "booking_link_decline", "booking_link_revoke"]:
+            link_id = request.POST.get("booking_link_id")
+            if request.POST.get("action") == "booking_link_accept":
+                booking_link = participant.received_booking_links.filter(
+                    pk=link_id,
+                    status=ParticipantBookingLink.Status.PENDING,
+                ).first()
+                new_status = ParticipantBookingLink.Status.ACCEPTED
+                success_message = "Einladung wurde angenommen."
+            elif request.POST.get("action") == "booking_link_decline":
+                booking_link = participant.received_booking_links.filter(
+                    pk=link_id,
+                    status=ParticipantBookingLink.Status.PENDING,
+                ).first()
+                new_status = ParticipantBookingLink.Status.DECLINED
+                success_message = "Einladung wurde abgelehnt."
+            else:
+                booking_link = ParticipantBookingLink.objects.filter(
+                    Q(inviter=participant) | Q(invitee=participant),
+                    pk=link_id,
+                    status=ParticipantBookingLink.Status.ACCEPTED,
+                ).first()
+                new_status = ParticipantBookingLink.Status.REVOKED
+                success_message = "Verknüpfung wurde aufgelöst."
+            if booking_link is not None:
+                booking_link.status = new_status
+                booking_link.save(update_fields=["status", "updated_at"])
+                messages.success(request, success_message)
+                return redirect("kiosk-home")
+            messages.error(request, "Verknüpfung wurde nicht gefunden.")
 
     recent_drinks = participant.charges.filter(kind=Charge.Kind.DRINK, deleted_at__isnull=True).order_by("-created_at")[
         :8
     ]
-    meal_signups = participant.meal_signups.order_by("meal_date", "meal")
+    visible_participant_ids = [target["object"].pk for target in meal_targets if target["kind"] == "participant"]
+    meal_signups = (
+        MealSignup.objects.select_related("participant", "family_member")
+        .filter(Q(participant=participant) | Q(participant_id__in=visible_participant_ids))
+        .order_by("meal_date", "meal", "participant__last_name", "participant__first_name")
+    )
+    pending_invites = participant.received_booking_links.select_related("inviter").filter(
+        status=ParticipantBookingLink.Status.PENDING
+    )
+    sent_invites = participant.sent_booking_links.select_related("invitee").filter(
+        status=ParticipantBookingLink.Status.PENDING
+    )
+    accepted_links = _accepted_booking_links(participant)
     context = {
         "participant": participant,
         "summary": participant_kiosk_summary(participant),
         "drink_form": drink_form,
         "meal_form": meal_form,
+        "meal_default_variant": meal_form.fields["variant"].choices[0][0],
+        "family_member_form": family_member_form,
+        "booking_link_form": booking_link_form,
         "recent_drinks": recent_drinks,
         "meal_signups": meal_signups,
         "drink_rules": drink_form.fields["price_rule"].queryset,
+        "meal_targets": meal_targets,
+        "family_members": participant.family_members.filter(is_active=True).order_by("last_name", "first_name"),
+        "pending_invites": pending_invites,
+        "sent_invites": sent_invites,
+        "accepted_links": accepted_links,
         "kiosk_autologout": True,
     }
     return render(request, "billing/kiosk_home.html", context)

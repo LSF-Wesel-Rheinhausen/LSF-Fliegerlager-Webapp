@@ -21,20 +21,44 @@
     <div class="metric"><dt>Offen</dt><dd><strong>{{ summary.balance|money_eur }}</strong></dd></div>
   </dl>
 
+  {% if pending_invites %}
+    <section class="panel stack">
+      <h2>Einladungen</h2>
+      {% for invite in pending_invites %}
+        <div class="kiosk-list-row">
+          <span>{{ invite.inviter.full_name }} möchte gegenseitiges Mitbuchen erlauben.</span>
+          <form method="post" class="inline-actions">
+            {% csrf_token %}
+            <input type="hidden" name="booking_link_id" value="{{ invite.pk }}">
+            <button type="submit" name="action" value="booking_link_accept">Annehmen</button>
+            <button type="submit" name="action" value="booking_link_decline" class="button-secondary">Ablehnen</button>
+          </form>
+        </div>
+      {% endfor %}
+    </section>
+  {% endif %}
+
   <div class="kiosk-grid">
     <section class="panel">
       <h2>Getränk buchen</h2>
-      <p class="hint">Tippe auf ein Getränk. Es wird direkt mit 1 Stück gebucht.</p>
-      <form method="post" class="stack kiosk-drink-form">
+      <p class="hint">Tippe auf ein Getränk und wähle danach die Menge.</p>
+      <form method="post" class="stack kiosk-drink-form" id="drink-booking-form">
         {% csrf_token %}
         <input type="hidden" name="action" value="drink">
+        <input type="hidden" name="drink-price_rule" id="drink-price-rule">
         {{ drink_form.quantity.as_hidden }}
         <div class="drink-card-grid" role="group" aria-label="Getränke auswählen">
           {% for rule in drink_rules %}
-            <button type="submit" class="drink-card" name="drink-price_rule" value="{{ rule.pk }}">
+            <button
+              type="button"
+              class="drink-card"
+              data-drink-button
+              data-rule-id="{{ rule.pk }}"
+              data-rule-name="{{ rule.name }}"
+            >
               <span class="drink-card__title">{{ rule.name }}</span>
               <span class="drink-card__price">{{ rule.unit_price|money_eur }}</span>
-              <span class="drink-card__meta">1x tippen</span>
+              <span class="drink-card__meta">Menge wählen</span>
             </button>
           {% empty %}
             <p class="hint">Keine Getränkepreise im Lager hinterlegt.</p>
@@ -51,11 +75,12 @@
 
     <section class="panel">
       <h2>Essen anmelden</h2>
-      <p class="hint">Der Preis wird automatisch anhand von Alter, Mahlzeit und Standard- oder Tagespreis berechnet.</p>
+      <p class="hint">Wähle Mahlzeit und danach im Popup die Personen samt Variante.</p>
       {{ meal_form.non_field_errors }}
-      <form method="post" class="form-grid">
+      <form method="post" class="form-grid" id="meal-booking-form">
         {% csrf_token %}
         <input type="hidden" name="action" value="meal">
+        <input type="hidden" name="{{ meal_form.variant.html_name }}" value="{{ meal_default_variant }}">
         <p>
           <label for="{{ meal_form.meal_date.id_for_label }}">{{ meal_form.meal_date.label }}</label>
           {{ meal_form.meal_date }}
@@ -70,17 +95,65 @@
             <span class="helptext error">{{ error }}</span>
           {% endfor %}
         </p>
-        <p>
-          <label for="{{ meal_form.variant.id_for_label }}">{{ meal_form.variant.label }}</label>
-          {{ meal_form.variant }}
-          {% for error in meal_form.variant.errors %}
-            <span class="helptext error">{{ error }}</span>
-          {% endfor %}
-        </p>
         <div class="form-actions">
-          <button type="submit">Speichern</button>
+          <button type="button" data-open-meal-dialog>Personen auswählen</button>
         </div>
       </form>
+    </section>
+  </div>
+
+  <div class="kiosk-grid">
+    <section class="panel stack">
+      <div class="toolbar compact-toolbar">
+        <div>
+          <h2>Familie</h2>
+          <p>Diese Personen werden über dein Konto abgerechnet.</p>
+        </div>
+        <button type="button" class="button" data-open-family-dialog>Anlegen</button>
+      </div>
+      {% for member in family_members %}
+        <div class="kiosk-list-row">
+          <span>{{ member.full_name }} · {{ member.get_role_display }}</span>
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="family_member_deactivate">
+            <input type="hidden" name="family_member_id" value="{{ member.pk }}">
+            <button type="submit" class="button-secondary">Entfernen</button>
+          </form>
+        </div>
+      {% empty %}
+        <p class="hint">Noch keine Familienmitglieder angelegt.</p>
+      {% endfor %}
+    </section>
+
+    <section class="panel stack">
+      <h2>Mitbuchungen</h2>
+      <form method="post" class="form-grid">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="booking_link_invite">
+        {{ booking_link_form.as_p }}
+        <div class="form-actions">
+          <button type="submit">Einladen</button>
+        </div>
+      </form>
+      {% for invite in sent_invites %}
+        <p class="hint">Offen: {{ invite.invitee.full_name }}</p>
+      {% endfor %}
+      {% for link in accepted_links %}
+        <div class="kiosk-list-row">
+          <span>
+            {% if link.inviter_id == participant.pk %}{{ link.invitee.full_name }}{% else %}{{ link.inviter.full_name }}{% endif %}
+          </span>
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="booking_link_revoke">
+            <input type="hidden" name="booking_link_id" value="{{ link.pk }}">
+            <button type="submit" class="button-secondary">Auflösen</button>
+          </form>
+        </div>
+      {% empty %}
+        <p class="hint">Keine angenommenen Verknüpfungen vorhanden.</p>
+      {% endfor %}
     </section>
   </div>
 
@@ -108,19 +181,120 @@
     <section>
       <h2>Essensanmeldungen</h2>
       <table>
-        <thead><tr><th>Datum</th><th>Mahlzeit</th><th>Variante</th></tr></thead>
+        <thead><tr><th>Datum</th><th>Person</th><th>Mahlzeit</th><th>Variante</th></tr></thead>
         <tbody>
           {% for signup in meal_signups %}
             <tr>
               <td>{{ signup.meal_date }}</td>
+              <td>{% if signup.family_member %}{{ signup.family_member.full_name }}{% else %}{{ signup.participant.full_name }}{% endif %}</td>
               <td>{{ signup.get_meal_display }}</td>
               <td>{{ signup.get_variant_display }}</td>
             </tr>
           {% empty %}
-            <tr><td colspan="3">Noch keine Essensanmeldungen vorhanden.</td></tr>
+            <tr><td colspan="4">Noch keine Essensanmeldungen vorhanden.</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </section>
   </div>
+
+  <dialog id="drink-dialog" aria-labelledby="drink-dialog-title">
+    <form method="dialog" class="dialog-heading">
+      <h2 id="drink-dialog-title">Getränk buchen</h2>
+      <button class="button button-secondary">Schließen</button>
+    </form>
+    <p class="hint" data-drink-dialog-name></p>
+    <div class="quantity-grid" role="group" aria-label="Menge auswählen">
+      {% for quantity in "12345" %}
+        <button type="button" data-drink-quantity="{{ quantity }}">{{ quantity }}x</button>
+      {% endfor %}
+    </div>
+    <p>
+      <label for="custom-drink-quantity">Eigene Menge</label>
+      <input id="custom-drink-quantity" type="number" inputmode="numeric" min="1" max="99" step="1" required>
+    </p>
+    <button type="button" class="button" data-submit-custom-drink>Menge buchen</button>
+  </dialog>
+
+  <dialog id="meal-dialog" aria-labelledby="meal-dialog-title">
+    <form method="dialog" class="dialog-heading">
+      <h2 id="meal-dialog-title">Personen auswählen</h2>
+      <button class="button button-secondary">Schließen</button>
+    </form>
+    <div class="target-list">
+      {% for target in meal_targets %}
+        <article class="target-row">
+          <label>
+            <input type="checkbox" form="meal-booking-form" name="meal-target" value="{{ target.token }}" {% if target.object.pk == participant.pk and target.kind == "participant" %}checked{% endif %}>
+            <span>{{ target.name }} · {{ target.role }}</span>
+          </label>
+          <select form="meal-booking-form" name="meal-variant-{{ target.token }}" aria-label="Variante für {{ target.name }}">
+            {% for value, label in target.variant_choices %}
+              <option value="{{ value }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </article>
+      {% endfor %}
+    </div>
+    <button type="submit" form="meal-booking-form" class="button">Essensanmeldung speichern</button>
+  </dialog>
+
+  <dialog id="family-dialog" aria-labelledby="family-dialog-title">
+    <form method="dialog" class="dialog-heading">
+      <h2 id="family-dialog-title">Familienmitglied anlegen</h2>
+      <button class="button button-secondary">Schließen</button>
+    </form>
+    <form method="post" class="form-grid">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="family_member_create">
+      {{ family_member_form.as_p }}
+      <div class="form-actions">
+        <button type="submit">Speichern</button>
+      </div>
+    </form>
+  </dialog>
+{% endblock %}
+{% block scripts %}
+  <script>
+    (() => {
+      const drinkDialog = document.getElementById("drink-dialog");
+      const drinkForm = document.getElementById("drink-booking-form");
+      const priceRuleInput = document.getElementById("drink-price-rule");
+      const quantityInput = document.getElementById("id_drink-quantity");
+      const customQuantityInput = document.getElementById("custom-drink-quantity");
+      const drinkName = document.querySelector("[data-drink-dialog-name]");
+      const mealDialog = document.getElementById("meal-dialog");
+      const familyDialog = document.getElementById("family-dialog");
+
+      document.querySelectorAll("[data-drink-button]").forEach((button) => {
+        button.addEventListener("click", () => {
+          priceRuleInput.value = button.dataset.ruleId;
+          customQuantityInput.value = "";
+          drinkName.textContent = button.dataset.ruleName || "";
+          drinkDialog.showModal();
+        });
+      });
+
+      const submitDrink = (quantity) => {
+        quantityInput.value = quantity;
+        drinkForm.requestSubmit();
+      };
+
+      document.querySelectorAll("[data-drink-quantity]").forEach((button) => {
+        button.addEventListener("click", () => submitDrink(button.dataset.drinkQuantity));
+      });
+
+      document.querySelector("[data-submit-custom-drink]")?.addEventListener("click", () => {
+        const quantity = Number(customQuantityInput.value);
+        if (Number.isInteger(quantity) && quantity >= 1 && quantity <= 99) {
+          submitDrink(String(quantity));
+        } else {
+          customQuantityInput.reportValidity();
+        }
+      });
+
+      document.querySelector("[data-open-meal-dialog]")?.addEventListener("click", () => mealDialog.showModal());
+      document.querySelector("[data-open-family-dialog]")?.addEventListener("click", () => familyDialog.showModal());
+    })();
+  </script>
 {% endblock %}
