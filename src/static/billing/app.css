@@ -490,7 +490,8 @@ textarea {
 
 .drink-card {
   display: grid;
-  justify-items: start;
+  place-items: center;
+  align-content: center;
   gap: 8px;
   min-height: 112px;
   padding: 18px;
@@ -499,7 +500,7 @@ textarea {
   background: linear-gradient(180deg, #ffffff 0%, #edf4fd 100%);
   color: var(--text);
   box-shadow: 0 10px 24px rgba(0, 92, 169, 0.08);
-  text-align: left;
+  text-align: center;
 }
 
 .drink-card:hover {
@@ -513,6 +514,7 @@ textarea {
   font-size: 17px;
   font-weight: 800;
   line-height: 1.15;
+  overflow-wrap: anywhere;
 }
 
 .drink-card__price {
