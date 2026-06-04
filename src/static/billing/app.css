@@ -16,6 +16,7 @@
   --ok-soft: #ecfdf3;
   --shadow: 0 12px 32px rgba(32, 37, 45, 0.08);
   --radius: 8px;
+  --radius-sm: 6px;
 }
 
 * {
@@ -476,23 +477,23 @@ textarea {
 .kiosk-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
-  margin-top: 20px;
+  gap: 22px;
+  margin-top: 24px;
 }
 
 .drink-card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 12px;
-  margin: 10px 0 14px;
+  gap: 14px;
+  margin: 14px 0 16px;
 }
 
 .drink-card {
   display: grid;
   justify-items: start;
-  gap: 6px;
-  min-height: 104px;
-  padding: 16px 16px 15px;
+  gap: 8px;
+  min-height: 112px;
+  padding: 18px;
   border: 1px solid rgba(0, 92, 169, 0.18);
   border-radius: 16px;
   background: linear-gradient(180deg, #ffffff 0%, #edf4fd 100%);
@@ -532,6 +533,132 @@ textarea {
   color: var(--accent-dark);
   font-size: 12px;
   font-weight: 700;
+}
+
+.kiosk-list-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.kiosk-list-row:last-child {
+  border-bottom: 0;
+}
+
+.kiosk-list-row__content {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.kiosk-list-row__content strong {
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.kiosk-list-row__content span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.kiosk-list-row__actions {
+  flex: 0 0 auto;
+}
+
+.inline-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.kiosk-section-heading {
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+
+.kiosk-section-heading h2,
+.kiosk-section-heading p {
+  margin-bottom: 0;
+}
+
+.dialog-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dialog-heading h2 {
+  margin: 0;
+}
+
+.quantity-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0 20px;
+}
+
+.quantity-grid button {
+  min-height: 56px;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.dialog-field {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.target-list {
+  display: grid;
+  gap: 14px;
+  margin: 16px 0 22px;
+  max-height: min(58vh, 560px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.target-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 240px);
+  gap: 16px;
+  align-items: center;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-soft);
+}
+
+.target-row label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 700;
+  min-width: 0;
+}
+
+.target-row label span {
+  overflow-wrap: anywhere;
+}
+
+.target-row input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
+.target-row select {
+  min-height: 44px;
 }
 
 .message {
@@ -610,7 +737,31 @@ textarea {
   }
 
   .drink-card {
-    min-height: 92px;
+    min-height: 96px;
+  }
+
+  .kiosk-list-row,
+  .inline-actions,
+  .dialog-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .kiosk-list-row {
+    gap: 12px;
+  }
+
+  .kiosk-list-row__actions {
+    width: 100%;
+  }
+
+  .target-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .quantity-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   table {
@@ -639,12 +790,22 @@ textarea {
 dialog {
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 24px;
+  padding: 26px;
   background: var(--panel);
   box-shadow: 0 20px 48px rgba(32, 37, 45, 0.16);
-  max-width: 480px;
-  width: 90%;
+  max-width: 560px;
+  width: min(92vw, 560px);
   box-sizing: border-box;
+}
+
+.kiosk-dialog--compact {
+  max-width: 520px;
+  width: min(92vw, 520px);
+}
+
+.kiosk-dialog--wide {
+  max-width: 760px;
+  width: min(94vw, 760px);
 }
 
 dialog::backdrop {

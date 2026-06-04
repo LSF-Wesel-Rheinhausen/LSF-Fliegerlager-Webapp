@@ -3,9 +3,20 @@ from typing import Any
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, SetPasswordForm, UserCreationForm
-from django.db import transaction
+from django.db import models, transaction
 
-from .models import Camp, Charge, Expense, MealSignup, Participant, ParticipantPin, Payment, PriceRule
+from .models import (
+    Camp,
+    Charge,
+    Expense,
+    MealSignup,
+    Participant,
+    ParticipantBookingLink,
+    ParticipantFamilyMember,
+    ParticipantPin,
+    Payment,
+    PriceRule,
+)
 from .roles import ROLE_ADMIN, ROLE_CHOICES, user_role
 
 
@@ -484,6 +495,49 @@ class DrinkBookingForm(forms.Form):
                     queryset = queryset.filter(applies_to_adults=True)
             self.fields["price_rule"].queryset = queryset
         self.fields["price_rule"].label_from_instance = lambda rule: f"{rule.name} - {rule.unit_price} EUR"
+
+
+class KioskFamilyMemberForm(forms.ModelForm):
+    """Create a kiosk-only family member for bundled participant billing."""
+
+    class Meta:
+        model = ParticipantFamilyMember
+        fields = ["first_name", "last_name", "role"]
+        labels = {
+            "first_name": "Vorname",
+            "last_name": "Nachname",
+            "role": "Rolle",
+        }
+
+
+class KioskBookingLinkInviteForm(forms.Form):
+    """Invite another active camp participant for reciprocal kiosk booking."""
+
+    participant = forms.ModelChoiceField(label="Teilnehmer einladen", queryset=Participant.objects.none())
+
+    def __init__(self, *args, **kwargs):
+        self.inviter = kwargs.pop("inviter")
+        super().__init__(*args, **kwargs)
+        self.fields["participant"].queryset = (
+            Participant.objects.filter(camp=self.inviter.camp, camp__is_active=True)
+            .exclude(pk=self.inviter.pk)
+            .order_by("last_name", "first_name")
+        )
+
+    def clean_participant(self):
+        """Reject duplicate active invitations for the same participant pair."""
+        participant = self.cleaned_data["participant"]
+        active_statuses = [
+            ParticipantBookingLink.Status.PENDING,
+            ParticipantBookingLink.Status.ACCEPTED,
+        ]
+        existing_link = ParticipantBookingLink.objects.filter(
+            models.Q(inviter=self.inviter, invitee=participant) | models.Q(inviter=participant, invitee=self.inviter),
+            status__in=active_statuses,
+        ).exists()
+        if existing_link:
+            raise forms.ValidationError("Zwischen diesen Teilnehmern besteht bereits eine offene Verknüpfung.")
+        return participant
 
 
 class MealBookingForm(forms.Form):
