@@ -26,6 +26,7 @@
 - Bestanden: `.venv/bin/python -m pytest tests/test_kiosk.py tests/test_forms.py`
 - Bestanden: `.venv/bin/python -m pytest tests/test_kiosk.py`
 - Bestanden: `.venv/bin/python -m pytest`
+- Bestanden: `npm run test:e2e`
 - Bestanden: `.venv/bin/ruff check src/billing/models.py src/billing/forms.py src/billing/views.py src/billing/admin.py tests/test_kiosk.py`
 
 ## Offene Punkte
