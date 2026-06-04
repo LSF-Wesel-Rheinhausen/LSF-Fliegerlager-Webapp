@@ -119,6 +119,7 @@ def test_admin_only_get_views_allow_admin(client, admin_user, permission_dataset
     [
         ("camp-list", lambda data: []),
         ("camp-detail", lambda data: [data["camp"].pk]),
+        ("camp-meal-overview", lambda data: [data["camp"].pk]),
         ("participant-create", lambda data: [data["camp"].pk]),
         ("participant-detail", lambda data: [data["participant"].pk]),
         ("charge-create", lambda data: [data["participant"].pk]),
@@ -144,6 +145,7 @@ def test_editor_views_reject_anonymous(client, permission_dataset, route_name, a
     [
         ("camp-list", lambda data: []),
         ("camp-detail", lambda data: [data["camp"].pk]),
+        ("camp-meal-overview", lambda data: [data["camp"].pk]),
         ("participant-create", lambda data: [data["camp"].pk]),
         ("participant-detail", lambda data: [data["participant"].pk]),
         ("charge-create", lambda data: [data["participant"].pk]),

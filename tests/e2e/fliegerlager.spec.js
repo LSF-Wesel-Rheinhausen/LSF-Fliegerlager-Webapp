@@ -231,8 +231,7 @@ test("Kiosk flow: login, pin setup, drink and meal booking", async ({ page }) =>
   await expect(page.getByText("Getränk wurde gebucht.")).toBeVisible();
 
   // Book a meal
-  await page.locator('input[name="meal-meal_date"]').fill("2026-06-03");
-  await page.getByRole("button", { name: "Personen auswählen" }).click();
+  await page.getByRole("button", { name: "Buchen" }).first().click();
   await expect(page.locator("dialog#meal-dialog")).toBeVisible();
   await page.locator("dialog#meal-dialog").getByRole("button", { name: "Essensanmeldung speichern" }).click();
   await expect(page.getByText("Essensanmeldung wurde gespeichert.")).toBeVisible();

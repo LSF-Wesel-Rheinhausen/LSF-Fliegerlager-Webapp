@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1>Essensübersicht</h1>
+      <p>{{ camp }} · Stichzeitpunkt {{ camp.meal_booking_cutoff_time|time:"H:i" }} Uhr</p>
+    </div>
+    <div class="actions">
+      <a class="button button-secondary" href="{% url 'camp-detail' camp.pk %}">Zur Übersicht</a>
+      <a class="button" href="{% url 'camp-edit' camp.pk %}">Stichzeitpunkt ändern</a>
+    </div>
+  </div>
+
+  <section class="panel stack">
+    <div class="toolbar compact-toolbar">
+      <div>
+        <h2>Caterer-Bestellung</h2>
+        <p>Gezählt werden aktive Buchungen. Zurücknahmen bleiben separat sichtbar.</p>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Datum</th>
+          <th>Mahlzeit</th>
+          <th>Normal</th>
+          <th>Vegan</th>
+          <th>Normal Kind</th>
+          <th>Vegan Kind</th>
+          <th>Aktiv</th>
+          <th>Zurückgenommen</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for day in meal_overview_days %}
+          {% for meal in day.meals %}
+            <tr>
+              <td>{{ day.meal_date|date:"d.m.Y" }}</td>
+              <td>{{ meal.meal_label }}</td>
+              {% for _variant, count in meal.variant_counts.items %}
+                <td>{{ count }}</td>
+              {% endfor %}
+              <td><strong>{{ meal.active_total }}</strong></td>
+              <td>{{ meal.retracted_total }}</td>
+            </tr>
+          {% endfor %}
+        {% empty %}
+          <tr><td colspan="8">Noch keine Lagertage vorhanden.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endblock %}

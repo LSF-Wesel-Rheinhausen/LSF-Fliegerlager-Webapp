@@ -12,6 +12,7 @@ urlpatterns = [
     path("camps/new/", views.camp_create, name="camp-create"),
     path("camps/<int:camp_id>/", views.camp_detail, name="camp-detail"),
     path("camps/<int:camp_id>/edit/", views.camp_edit, name="camp-edit"),
+    path("camps/<int:camp_id>/meals/", views.camp_meal_overview, name="camp-meal-overview"),
     path("camps/<int:camp_id>/participants/new/", views.participant_create, name="participant-create"),
     path("participants/<int:participant_id>/", views.participant_detail, name="participant-detail"),
     path("participants/<int:participant_id>/charges/new/", views.charge_create, name="charge-create"),

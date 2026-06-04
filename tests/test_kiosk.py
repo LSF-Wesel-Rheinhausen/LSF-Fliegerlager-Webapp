@@ -1,8 +1,9 @@
-from datetime import date
+from datetime import date, datetime, time
 from decimal import Decimal
 
 import pytest
 from django.urls import reverse
+from django.utils import timezone
 
 from billing.models import Charge, MealSignup, ParticipantBookingLink, ParticipantFamilyMember, PriceRule
 from billing.views import KIOSK_PARTICIPANT_SESSION_KEY, KIOSK_PIN_SETUP_SESSION_KEY
@@ -175,6 +176,110 @@ def test_kiosk_meal_signup_updates_existing_signup_and_creates_charge(client):
     charge = Charge.objects.get(participant=participant, kind=Charge.Kind.FOOD)
     assert charge.description == "Abendessen Abendessen"
     assert charge.unit_price == Decimal("7.00")
+    assert signup.charge == charge
+
+
+@pytest.mark.django_db
+def test_kiosk_meal_signup_for_tomorrow_closes_after_camp_cutoff(client, monkeypatch):
+    fixed_now = timezone.make_aware(datetime(2026, 7, 1, 12, 1))
+    monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
+    camp = CampFactory(meal_booking_cutoff_time=time(12, 0))
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        is_default=True,
+        applies_to_children=False,
+        applies_to_adults=True,
+        name="Abendessen",
+        unit_price=Decimal("7.00"),
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-meal_date": date(2026, 7, 2).isoformat(),
+            "meal-meal": MealSignup.Meal.DINNER,
+            "meal-variant": MealSignup.Variant.NORMAL,
+        },
+    )
+
+    assert response.status_code == 200
+    assert b"sind nach 12:00 Uhr geschlossen" in response.content
+    assert not MealSignup.objects.filter(participant=participant).exists()
+    assert not Charge.objects.filter(participant=participant, kind=Charge.Kind.FOOD).exists()
+
+
+@pytest.mark.django_db
+def test_kiosk_meal_signup_for_tomorrow_stays_open_before_camp_cutoff(client, monkeypatch):
+    fixed_now = timezone.make_aware(datetime(2026, 7, 1, 11, 59))
+    monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
+    camp = CampFactory(meal_booking_cutoff_time=time(12, 0))
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        is_default=True,
+        applies_to_children=False,
+        applies_to_adults=True,
+        name="Abendessen",
+        unit_price=Decimal("7.00"),
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-meal_date": date(2026, 7, 2).isoformat(),
+            "meal-meal": MealSignup.Meal.DINNER,
+            "meal-variant": MealSignup.Variant.NORMAL,
+        },
+    )
+
+    assert response.status_code == 302
+    assert MealSignup.objects.filter(participant=participant, status=MealSignup.Status.ACTIVE).exists()
+
+
+@pytest.mark.django_db
+def test_kiosk_retracts_meal_signup_and_soft_deletes_food_charge(client):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    charge = Charge.objects.create(
+        participant=participant,
+        kind=Charge.Kind.FOOD,
+        description="Abendessen Abendessen",
+        quantity=1,
+        unit_price=Decimal("7.00"),
+        occurred_on=date(2026, 7, 2),
+    )
+    signup = MealSignup.objects.create(
+        participant=participant,
+        meal_date=date(2026, 7, 2),
+        meal=MealSignup.Meal.DINNER,
+        variant=MealSignup.Variant.NORMAL,
+        charge=charge,
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(reverse("kiosk-home"), {"action": "meal_retract", "meal_signup_id": signup.pk})
+
+    assert response.status_code == 302
+    signup.refresh_from_db()
+    charge.refresh_from_db()
+    assert signup.status == MealSignup.Status.RETRACTED
+    assert signup.retracted_at is not None
+    assert charge.deleted_at is not None
 
 
 @pytest.mark.django_db

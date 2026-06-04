@@ -663,6 +663,105 @@ textarea {
   min-height: 44px;
 }
 
+.kiosk-meal-form {
+  display: none;
+}
+
+.meal-calendar {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.meal-day {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-soft);
+}
+
+.meal-day h3 {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.meal-day__slots {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.meal-slot {
+  display: grid;
+  gap: 10px;
+  min-height: 112px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+}
+
+.meal-slot--booked {
+  border-color: #abefc6;
+  background: var(--ok-soft);
+}
+
+.meal-slot--multiple {
+  border-color: #b2ddff;
+  background: #eff8ff;
+}
+
+.meal-slot--retracted {
+  border-color: #fedf89;
+  background: #fffaeb;
+}
+
+.meal-slot__body {
+  display: grid;
+  gap: 2px;
+}
+
+.meal-slot__body strong,
+.meal-slot__body span {
+  overflow-wrap: anywhere;
+}
+
+.meal-slot__body span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.meal-slot__bookings {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.meal-slot__bookings li {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(105, 115, 134, 0.18);
+}
+
+.meal-slot__bookings span {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.meal-slot__action {
+  align-self: end;
+}
+
 .message {
   margin-bottom: 12px;
   padding: 11px 13px;
@@ -760,6 +859,14 @@ textarea {
   .target-row {
     grid-template-columns: 1fr;
     gap: 12px;
+  }
+
+  .meal-day {
+    grid-template-columns: 1fr;
+  }
+
+  .meal-day__slots {
+    grid-template-columns: 1fr;
   }
 
   .quantity-grid {

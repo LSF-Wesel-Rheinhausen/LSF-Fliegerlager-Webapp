@@ -1,3 +1,4 @@
+from datetime import time
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -21,6 +22,7 @@ class Camp(TimeStampedModel):
     starts_on = models.DateField(null=True, blank=True)
     ends_on = models.DateField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
+    meal_booking_cutoff_time = models.TimeField(default=time(12, 0))
     foerdersatz = models.DecimalField(
         max_digits=6,
         decimal_places=4,
@@ -252,7 +254,7 @@ class Charge(TimeStampedModel):
     @property
     def booking_reference(self) -> str:
         """Return the human-readable booking identifier."""
-        if self.pk is None:
+        if self._state.adding:
             return ""
         return f"B#{self.pk:05d}"
 
@@ -331,9 +333,15 @@ class Expense(TimeStampedModel):
 
 
 class MealSignup(TimeStampedModel):
+    """Store one kiosk meal booking or retraction for a person and meal slot."""
+
     class Meal(models.TextChoices):
         BREAKFAST = "breakfast", "Frühstück"
         DINNER = "dinner", "Abendessen"
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Gebucht"
+        RETRACTED = "retracted", "Zurückgenommen"
 
     class Variant(models.TextChoices):
         NORMAL = "normal", "Normal"
@@ -352,7 +360,16 @@ class MealSignup(TimeStampedModel):
     meal_date = models.DateField()
     meal = models.CharField(max_length=20, choices=Meal.choices)
     variant = models.CharField(max_length=20, choices=Variant.choices)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
     foerderfaehig = models.BooleanField(default=True)
+    retracted_at = models.DateTimeField(null=True, blank=True)
+    charge = models.ForeignKey(
+        Charge,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="meal_signups",
+    )
 
     class Meta:
         ordering = ["meal_date", "meal", "participant"]

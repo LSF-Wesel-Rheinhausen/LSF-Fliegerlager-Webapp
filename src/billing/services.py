@@ -1,13 +1,40 @@
 from dataclasses import dataclass
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
 from django.core.exceptions import ValidationError
 from django.db.models import Sum
+from django.utils import timezone
 
-from .models import BookingAuditLog, Charge, DrinkEntry, Expense, Participant, PriceRule
+from .models import BookingAuditLog, Camp, Charge, DrinkEntry, Expense, MealSignup, Participant, PriceRule
 
 ZERO = Decimal("0.00")
+MEAL_VARIANT_ORDER = [
+    MealSignup.Variant.NORMAL,
+    MealSignup.Variant.VEGAN,
+    MealSignup.Variant.NORMAL_CHILD,
+    MealSignup.Variant.VEGAN_CHILD,
+]
+
+
+@dataclass(frozen=True)
+class MealCount:
+    """Aggregate meal bookings for one day and meal type."""
+
+    meal: str
+    meal_label: str
+    variant_counts: dict[str, int]
+    active_total: int
+    retracted_total: int
+
+
+@dataclass(frozen=True)
+class MealOverviewDay:
+    """Represent one day in the caterer meal overview."""
+
+    meal_date: date
+    meals: list[MealCount]
 
 
 @dataclass(frozen=True)
@@ -52,6 +79,80 @@ def money(value):
 
 def rate(value):
     return (value or ZERO).quantize(Decimal("0.0001"))
+
+
+def is_meal_change_locked(camp: Camp, meal_date: date, now: datetime | None = None) -> bool:
+    """Return whether kiosk meal changes are closed for the requested meal date.
+
+    Args:
+        camp: Camp whose cutoff time controls kiosk meal changes.
+        meal_date: Meal date the participant wants to book or retract.
+        now: Optional timezone-aware timestamp for tests.
+
+    Returns:
+        True when tomorrow's bookings are past the camp cutoff time.
+    """
+    current_time = timezone.localtime(now) if now is not None else timezone.localtime()
+    cutoff_at = datetime.combine(
+        current_time.date(),
+        camp.meal_booking_cutoff_time,
+        tzinfo=current_time.tzinfo,
+    )
+    return meal_date == current_time.date() + timedelta(days=1) and current_time >= cutoff_at
+
+
+def meal_change_lock_message(camp: Camp, meal_date: date) -> str:
+    """Return the user-facing message for a closed kiosk meal slot."""
+    return (
+        f"Buchungen und Rücknahmen für {meal_date:%d.%m.%Y} sind nach "
+        f"{camp.meal_booking_cutoff_time:%H:%M} Uhr geschlossen."
+    )
+
+
+def camp_meal_dates(camp: Camp, include_dates: set[date] | None = None) -> list[date]:
+    """Return the ordered meal dates that should appear in meal overviews."""
+    if camp.starts_on and camp.ends_on and camp.starts_on <= camp.ends_on:
+        day_count = (camp.ends_on - camp.starts_on).days
+        return [camp.starts_on + timedelta(days=offset) for offset in range(day_count + 1)]
+    if include_dates:
+        return sorted(include_dates)
+    return [timezone.localdate()]
+
+
+def calculate_meal_overview(camp: Camp) -> list[MealOverviewDay]:
+    """Aggregate active and retracted meal signups for a camp by day and meal."""
+    signups = list(
+        MealSignup.objects.select_related("participant", "family_member")
+        .filter(participant__camp=camp)
+        .order_by("meal_date", "meal", "variant")
+    )
+    dates = camp_meal_dates(camp, {signup.meal_date for signup in signups})
+    meal_labels = dict(MealSignup.Meal.choices)
+    variant_labels = dict(MealSignup.Variant.choices)
+    days = []
+    for meal_date in dates:
+        meals = []
+        for meal, _meal_label in MealSignup.Meal.choices:
+            scoped = [signup for signup in signups if signup.meal_date == meal_date and signup.meal == meal]
+            variant_counts = {
+                variant_labels[variant]: sum(
+                    1 for signup in scoped if signup.status == MealSignup.Status.ACTIVE and signup.variant == variant
+                )
+                for variant in MEAL_VARIANT_ORDER
+            }
+            active_total = sum(variant_counts.values())
+            retracted_total = sum(1 for signup in scoped if signup.status == MealSignup.Status.RETRACTED)
+            meals.append(
+                MealCount(
+                    meal=meal,
+                    meal_label=meal_labels[meal],
+                    variant_counts=variant_counts,
+                    active_total=active_total,
+                    retracted_total=retracted_total,
+                )
+            )
+        days.append(MealOverviewDay(meal_date=meal_date, meals=meals))
+    return days
 
 
 def _rule_applies(rule, participant):
@@ -155,12 +256,14 @@ def restore_booking_from_audit_log(audit_log: BookingAuditLog, changed_by: Any) 
         raise ValidationError("Nur gelöschte Buchungen können wiederhergestellt werden.")
     if audit_log.charge_id is None:
         raise ValidationError("Diese Buchung kann ohne ursprüngliche Buchungs-ID nicht wiederhergestellt werden.")
-    if audit_log.charge.deleted_at is None:
+    restored_charge = audit_log.charge
+    if restored_charge is None:
+        raise ValidationError("Diese Buchung kann ohne ursprüngliche Buchung nicht wiederhergestellt werden.")
+    if restored_charge.deleted_at is None:
         raise ValidationError("Diese Buchung wurde bereits wiederhergestellt.")
     if audit_log.participant_id is None:
         raise ValidationError("Diese Buchung kann keinem Teilnehmer mehr zugeordnet werden.")
 
-    restored_charge = audit_log.charge
     before = charge_audit_snapshot(restored_charge)
     restored_charge.deleted_at = None
     restored_charge.deleted_by = None

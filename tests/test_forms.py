@@ -1,8 +1,32 @@
 import pytest
 
-from billing.forms import FirstAdminSetupForm, UserCreateForm, UserEditForm
+from billing.forms import CampForm, FirstAdminSetupForm, UserCreateForm, UserEditForm
 from billing.roles import ROLE_EDITOR
-from tests.factories import SuperUserFactory
+from tests.factories import CampFactory, SuperUserFactory
+
+
+@pytest.mark.django_db
+def test_camp_form_saves_meal_booking_cutoff_time():
+    camp = CampFactory()
+    form = CampForm(
+        instance=camp,
+        data={
+            "name": camp.name,
+            "year": camp.year,
+            "starts_on": "",
+            "ends_on": "",
+            "is_active": "on",
+            "meal_booking_cutoff_time": "11:30",
+            "foerdersatz": "0.5000",
+            "notes": "",
+        },
+    )
+
+    assert form.is_valid(), form.errors
+    saved_camp = form.save()
+
+    assert saved_camp.meal_booking_cutoff_time.hour == 11
+    assert saved_camp.meal_booking_cutoff_time.minute == 30
 
 
 @pytest.mark.django_db

@@ -19,7 +19,7 @@ from .models import (
 
 @admin.register(Camp)
 class CampAdmin(admin.ModelAdmin):
-    list_display = ("name", "year", "foerdersatz", "is_active", "starts_on", "ends_on")
+    list_display = ("name", "year", "foerdersatz", "meal_booking_cutoff_time", "is_active", "starts_on", "ends_on")
     search_fields = ("name",)
 
 
@@ -94,6 +94,19 @@ class BookingAuditLogAdmin(admin.ModelAdmin):
 
 admin.site.register(Payment)
 admin.site.register(Expense)
-admin.site.register(MealSignup)
+
+
+@admin.register(MealSignup)
+class MealSignupAdmin(admin.ModelAdmin):
+    list_display = ("participant", "family_member", "meal_date", "meal", "variant", "status", "retracted_at")
+    list_filter = ("participant__camp", "meal", "variant", "status", "meal_date")
+    search_fields = (
+        "participant__first_name",
+        "participant__last_name",
+        "family_member__first_name",
+        "family_member__last_name",
+    )
+
+
 admin.site.register(DrinkEntry)
 admin.site.register(Settlement)
