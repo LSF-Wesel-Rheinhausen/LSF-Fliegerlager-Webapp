@@ -26,8 +26,11 @@
       <h2>Einladungen</h2>
       {% for invite in pending_invites %}
         <div class="kiosk-list-row">
-          <span>{{ invite.inviter.full_name }} möchte gegenseitiges Mitbuchen erlauben.</span>
-          <form method="post" class="inline-actions">
+          <div class="kiosk-list-row__content">
+            <strong>{{ invite.inviter.full_name }}</strong>
+            <span>möchte gegenseitiges Mitbuchen erlauben.</span>
+          </div>
+          <form method="post" class="inline-actions kiosk-list-row__actions">
             {% csrf_token %}
             <input type="hidden" name="booking_link_id" value="{{ invite.pk }}">
             <button type="submit" name="action" value="booking_link_accept">Annehmen</button>
@@ -104,7 +107,7 @@
 
   <div class="kiosk-grid">
     <section class="panel stack">
-      <div class="toolbar compact-toolbar">
+      <div class="toolbar compact-toolbar kiosk-section-heading">
         <div>
           <h2>Familie</h2>
           <p>Diese Personen werden über dein Konto abgerechnet.</p>
@@ -113,8 +116,11 @@
       </div>
       {% for member in family_members %}
         <div class="kiosk-list-row">
-          <span>{{ member.full_name }} · {{ member.get_role_display }}</span>
-          <form method="post">
+          <div class="kiosk-list-row__content">
+            <strong>{{ member.full_name }}</strong>
+            <span>{{ member.get_role_display }}</span>
+          </div>
+          <form method="post" class="kiosk-list-row__actions">
             {% csrf_token %}
             <input type="hidden" name="action" value="family_member_deactivate">
             <input type="hidden" name="family_member_id" value="{{ member.pk }}">
@@ -127,7 +133,9 @@
     </section>
 
     <section class="panel stack">
-      <h2>Mitbuchungen</h2>
+      <div class="kiosk-section-heading">
+        <h2>Mitbuchungen</h2>
+      </div>
       <form method="post" class="form-grid">
         {% csrf_token %}
         <input type="hidden" name="action" value="booking_link_invite">
@@ -141,10 +149,13 @@
       {% endfor %}
       {% for link in accepted_links %}
         <div class="kiosk-list-row">
-          <span>
-            {% if link.inviter_id == participant.pk %}{{ link.invitee.full_name }}{% else %}{{ link.inviter.full_name }}{% endif %}
-          </span>
-          <form method="post">
+          <div class="kiosk-list-row__content">
+            <strong>
+              {% if link.inviter_id == participant.pk %}{{ link.invitee.full_name }}{% else %}{{ link.inviter.full_name }}{% endif %}
+            </strong>
+            <span>Gegenseitig freigegeben</span>
+          </div>
+          <form method="post" class="kiosk-list-row__actions">
             {% csrf_token %}
             <input type="hidden" name="action" value="booking_link_revoke">
             <input type="hidden" name="booking_link_id" value="{{ link.pk }}">
@@ -198,7 +209,7 @@
     </section>
   </div>
 
-  <dialog id="drink-dialog" aria-labelledby="drink-dialog-title">
+  <dialog id="drink-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="drink-dialog-title">
     <form method="dialog" class="dialog-heading">
       <h2 id="drink-dialog-title">Getränk buchen</h2>
       <button class="button button-secondary">Schließen</button>
@@ -209,14 +220,14 @@
         <button type="button" data-drink-quantity="{{ quantity }}">{{ quantity }}x</button>
       {% endfor %}
     </div>
-    <p>
+    <p class="dialog-field">
       <label for="custom-drink-quantity">Eigene Menge</label>
       <input id="custom-drink-quantity" type="number" inputmode="numeric" min="1" max="99" step="1" required>
     </p>
     <button type="button" class="button" data-submit-custom-drink>Menge buchen</button>
   </dialog>
 
-  <dialog id="meal-dialog" aria-labelledby="meal-dialog-title">
+  <dialog id="meal-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="meal-dialog-title">
     <form method="dialog" class="dialog-heading">
       <h2 id="meal-dialog-title">Personen auswählen</h2>
       <button class="button button-secondary">Schließen</button>
@@ -239,7 +250,7 @@
     <button type="submit" form="meal-booking-form" class="button">Essensanmeldung speichern</button>
   </dialog>
 
-  <dialog id="family-dialog" aria-labelledby="family-dialog-title">
+  <dialog id="family-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="family-dialog-title">
     <form method="dialog" class="dialog-heading">
       <h2 id="family-dialog-title">Familienmitglied anlegen</h2>
       <button class="button button-secondary">Schließen</button>
