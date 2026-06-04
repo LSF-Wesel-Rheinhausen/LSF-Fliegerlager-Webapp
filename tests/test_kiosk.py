@@ -178,6 +178,41 @@ def test_kiosk_meal_signup_updates_existing_signup_and_creates_charge(client):
 
 
 @pytest.mark.django_db
+def test_kiosk_meal_signup_requires_person_when_dialog_selection_is_empty(client):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        is_default=True,
+        applies_to_children=False,
+        applies_to_adults=True,
+        name="Abendessen",
+        unit_price=Decimal("7.00"),
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-targets-submitted": "1",
+            "meal-meal_date": date(2025, 7, 1).isoformat(),
+            "meal-meal": MealSignup.Meal.DINNER,
+            "meal-variant": MealSignup.Variant.NORMAL,
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Bitte mindestens eine Person auswählen.".encode() in response.content
+    assert not MealSignup.objects.filter(participant=participant).exists()
+    assert not Charge.objects.filter(participant=participant, kind=Charge.Kind.FOOD).exists()
+
+
+@pytest.mark.django_db
 def test_kiosk_creates_family_member_and_books_meal_on_guardian(client):
     camp = CampFactory()
     participant = ParticipantFactory(camp=camp, first_name="Vater", last_name="Muster")
@@ -321,6 +356,46 @@ def test_kiosk_books_meal_for_linked_participant_on_linked_account(client):
     charge = Charge.objects.get(participant=invitee, kind=Charge.Kind.FOOD)
     assert charge.description == "Abendessen Abendessen"
     assert charge.unit_price == Decimal("7.00")
+
+
+@pytest.mark.django_db
+def test_kiosk_hides_linked_participant_family_member_meal_signups(client):
+    camp = CampFactory()
+    viewer = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")
+    linked = ParticipantFactory(camp=camp, first_name="Grace", last_name="B")
+    family_member = ParticipantFamilyMember.objects.create(
+        guardian=linked,
+        first_name="Kind",
+        last_name="B",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    ParticipantBookingLink.objects.create(
+        inviter=viewer,
+        invitee=linked,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    MealSignup.objects.create(
+        participant=linked,
+        meal_date=date(2025, 7, 1),
+        meal=MealSignup.Meal.DINNER,
+        variant=MealSignup.Variant.NORMAL,
+    )
+    MealSignup.objects.create(
+        participant=linked,
+        family_member=family_member,
+        meal_date=date(2025, 7, 1),
+        meal=MealSignup.Meal.BREAKFAST,
+        variant=MealSignup.Variant.NORMAL_CHILD,
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = viewer.pk
+    session.save()
+
+    response = client.get(reverse("kiosk-home"))
+
+    assert response.status_code == 200
+    assert b"Grace B" in response.content
+    assert b"Kind B" not in response.content
 
 
 @pytest.mark.django_db

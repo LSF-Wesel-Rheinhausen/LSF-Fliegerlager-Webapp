@@ -83,6 +83,7 @@
       <form method="post" class="form-grid" id="meal-booking-form">
         {% csrf_token %}
         <input type="hidden" name="action" value="meal">
+        <input type="hidden" name="meal-targets-submitted" value="1">
         <input type="hidden" name="{{ meal_form.variant.html_name }}" value="{{ meal_default_variant }}">
         <p>
           <label for="{{ meal_form.meal_date.id_for_label }}">{{ meal_form.meal_date.label }}</label>

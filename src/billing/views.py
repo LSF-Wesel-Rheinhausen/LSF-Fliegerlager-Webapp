@@ -709,7 +709,7 @@ def kiosk_home(request):
                 meal = meal_form.cleaned_data["meal"]
                 selected_tokens = request.POST.getlist("meal-target")
                 targets_by_token = _target_lookup(meal_targets)
-                if not selected_tokens:
+                if not selected_tokens and request.POST.get("meal-targets-submitted") != "1":
                     selected_tokens = [f"participant-{participant.pk}"]
                 selected_targets = [targets_by_token[token] for token in selected_tokens if token in targets_by_token]
                 if not selected_targets:
@@ -803,10 +803,14 @@ def kiosk_home(request):
     recent_drinks = participant.charges.filter(kind=Charge.Kind.DRINK, deleted_at__isnull=True).order_by("-created_at")[
         :8
     ]
-    visible_participant_ids = [target["object"].pk for target in meal_targets if target["kind"] == "participant"]
+    linked_participant_ids = [
+        target["object"].pk
+        for target in meal_targets
+        if target["kind"] == "participant" and target["object"].pk != participant.pk
+    ]
     meal_signups = (
         MealSignup.objects.select_related("participant", "family_member")
-        .filter(Q(participant=participant) | Q(participant_id__in=visible_participant_ids))
+        .filter(Q(participant=participant) | Q(participant_id__in=linked_participant_ids, family_member__isnull=True))
         .order_by("meal_date", "meal", "participant__last_name", "participant__first_name")
     )
     pending_invites = participant.received_booking_links.select_related("inviter").filter(
