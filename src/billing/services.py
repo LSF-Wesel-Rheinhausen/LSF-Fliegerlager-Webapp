@@ -90,9 +90,11 @@ def is_meal_change_locked(camp: Camp, meal_date: date, now: datetime | None = No
         now: Optional timezone-aware timestamp for tests.
 
     Returns:
-        True when tomorrow's bookings are past the camp cutoff time.
+        True when the meal date is in the past or tomorrow's bookings are past the camp cutoff time.
     """
     current_time = timezone.localtime(now) if now is not None else timezone.localtime()
+    if meal_date <= current_time.date():
+        return True
     cutoff_at = datetime.combine(
         current_time.date(),
         camp.meal_booking_cutoff_time,
@@ -103,6 +105,8 @@ def is_meal_change_locked(camp: Camp, meal_date: date, now: datetime | None = No
 
 def meal_change_lock_message(camp: Camp, meal_date: date) -> str:
     """Return the user-facing message for a closed kiosk meal slot."""
+    if meal_date <= timezone.localdate():
+        return f"Buchungen und Rücknahmen für {meal_date:%d.%m.%Y} sind geschlossen."
     return (
         f"Buchungen und Rücknahmen für {meal_date:%d.%m.%Y} sind nach "
         f"{camp.meal_booking_cutoff_time:%H:%M} Uhr geschlossen."

@@ -3,7 +3,7 @@ from typing import Any
 
 from django import template
 
-from billing.permissions import is_admin
+from billing.permissions import is_admin, is_huebers, is_meal_manager
 
 register = template.Library()
 
@@ -27,3 +27,15 @@ def money_eur(value: Any) -> str:
 def can_manage_users(user: Any) -> bool:
     """Return whether a template user may access user management."""
     return is_admin(user)
+
+
+@register.filter
+def can_manage_meals(user: Any) -> bool:
+    """Return whether a template user may access meal overview and cutoff pages."""
+    return is_meal_manager(user)
+
+
+@register.filter
+def is_huebers_user(user: Any) -> bool:
+    """Return whether a template user has the Huebers-only role."""
+    return is_huebers(user)

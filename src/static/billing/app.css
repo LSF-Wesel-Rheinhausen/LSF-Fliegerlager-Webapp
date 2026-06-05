@@ -762,6 +762,26 @@ textarea {
   align-self: end;
 }
 
+.meal-calendar-group {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #ffffff;
+}
+
+.meal-calendar-group summary {
+  min-height: 44px;
+  padding: 12px 14px;
+  color: var(--text);
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.meal-calendar-group__content {
+  display: grid;
+  gap: 14px;
+  padding: 0 14px 14px;
+}
+
 .message {
   margin-bottom: 12px;
   padding: 11px 13px;

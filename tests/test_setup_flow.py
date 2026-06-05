@@ -2,9 +2,9 @@ import pytest
 from django.contrib.auth.models import Group, User
 from django.contrib.staticfiles import finders
 from django.urls import reverse
-from tests.factories import UserFactory
 
-from billing.permissions import ADMIN_GROUP, EDITOR_GROUP
+from billing.permissions import ADMIN_GROUP, EDITOR_GROUP, HUEBERS_GROUP
+from tests.factories import UserFactory
 
 
 @pytest.mark.django_db
@@ -35,9 +35,18 @@ def test_setup_creates_first_admin_and_logs_in(client):
     assert user.is_superuser is True
     assert user.groups.filter(name=ADMIN_GROUP).exists()
     assert Group.objects.filter(name=EDITOR_GROUP).exists()
+    assert Group.objects.filter(name=HUEBERS_GROUP).exists()
 
     response = client.get(reverse("camp-list"))
     assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_root_opens_kiosk_login(client):
+    response = client.get("/")
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("kiosk-login")
 
 
 @pytest.mark.django_db

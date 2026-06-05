@@ -1,5 +1,6 @@
 import base64
 import json
+from datetime import timedelta
 from typing import Any
 
 from django.contrib import messages
@@ -28,6 +29,7 @@ from .forms import (
     KioskLoginForm,
     KioskPinSetupForm,
     MealBookingForm,
+    MealCutoffForm,
     MealStandardPricesForm,
     ParticipantForm,
     ParticipantImportForm,
@@ -40,8 +42,23 @@ from .forms import (
 )
 from .importers import preview_participants, rows_from_payload, rows_to_payload, save_participants
 from .models import BookingAuditLog, Camp, Charge, MealSignup, Participant, ParticipantBookingLink, PriceRule
-from .permissions import ADMIN_GROUP, admin_required, editor_required
-from .roles import ROLE_ADMIN, ROLE_EDITOR, active_admin_count, bootstrap_default_roles, set_user_role, user_role
+from .permissions import (
+    ADMIN_GROUP,
+    EDITOR_GROUP,
+    HUEBERS_GROUP,
+    admin_required,
+    editor_required,
+    meal_manager_required,
+)
+from .roles import (
+    ROLE_ADMIN,
+    ROLE_EDITOR,
+    ROLE_HUEBERS,
+    active_admin_count,
+    bootstrap_default_roles,
+    set_user_role,
+    user_role,
+)
 from .services import (
     calculate_camp_settlements,
     calculate_meal_overview,
@@ -76,7 +93,7 @@ def setup_first_admin(request):
     form = FirstAdminSetupForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
-            admin_group, _ = bootstrap_default_roles()
+            admin_group, _editor_group, _huebers_group = bootstrap_default_roles()
             user = form.save()
             user.groups.add(admin_group)
         login(request, user, backend="django.contrib.auth.backends.ModelBackend")
@@ -112,7 +129,14 @@ def user_list(request: HttpRequest) -> HttpResponse:
     user_rows = []
     for managed_user in users:
         group_names = {group.name for group in managed_user.groups.all()}
-        role = ROLE_ADMIN if managed_user.is_superuser or ADMIN_GROUP in group_names else ROLE_EDITOR
+        if managed_user.is_superuser or ADMIN_GROUP in group_names:
+            role = ROLE_ADMIN
+        elif HUEBERS_GROUP in group_names:
+            role = ROLE_HUEBERS
+        elif EDITOR_GROUP in group_names:
+            role = ROLE_EDITOR
+        else:
+            role = ROLE_EDITOR
         user_rows.append({"user": managed_user, "role": role})
     return render(request, "billing/user_list.html", {"user_rows": user_rows})
 
@@ -720,7 +744,31 @@ def _kiosk_meal_calendar(camp, meal_signups):
     return days
 
 
-@editor_required
+def _group_kiosk_meal_calendar(days):
+    today = timezone.localdate()
+    tomorrow = today + timedelta(days=1)
+    return {
+        "past": [day for day in days if day["date"] < today],
+        "current": [day for day in days if today <= day["date"] <= tomorrow],
+        "future": [day for day in days if day["date"] > tomorrow],
+    }
+
+
+@meal_manager_required
+def meal_cutoff_edit(request, camp_id):
+    """Edit only the meal booking cutoff for a camp."""
+    camp = get_object_or_404(Camp, pk=camp_id)
+    form = MealCutoffForm(request.POST or None, instance=camp)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Essens-Stichzeitpunkt wurde gespeichert.")
+        return redirect("camp-meal-overview", camp_id=camp.pk)
+    return render(
+        request, "billing/form.html", {"form": form, "title": "Essens-Stichzeitpunkt bearbeiten", "camp": camp}
+    )
+
+
+@meal_manager_required
 def camp_meal_overview(request, camp_id):
     """Render the per-day meal counts used for caterer ordering."""
     camp = get_object_or_404(Camp, pk=camp_id)
@@ -912,6 +960,7 @@ def kiosk_home(request):
         .order_by("meal_date", "meal", "participant__last_name", "participant__first_name")
     )
     meal_signups = list(meal_signups)
+    meal_calendar_days = _kiosk_meal_calendar(participant.camp, meal_signups)
     pending_invites = participant.received_booking_links.select_related("inviter").filter(
         status=ParticipantBookingLink.Status.PENDING
     )
@@ -929,7 +978,8 @@ def kiosk_home(request):
         "booking_link_form": booking_link_form,
         "recent_drinks": recent_drinks,
         "meal_signups": meal_signups,
-        "meal_calendar_days": _kiosk_meal_calendar(participant.camp, meal_signups),
+        "meal_calendar_days": meal_calendar_days,
+        "meal_calendar_groups": _group_kiosk_meal_calendar(meal_calendar_days),
         "drink_rules": drink_form.fields["price_rule"].queryset,
         "meal_targets": meal_targets,
         "family_members": participant.family_members.filter(is_active=True).order_by("last_name", "first_name"),

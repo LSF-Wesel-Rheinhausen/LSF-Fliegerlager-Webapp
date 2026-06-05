@@ -57,6 +57,9 @@ async function assertNoUnexpectedOverflow(page) {
 
 async function setupFirstAdmin(page) {
   await page.goto("/");
+  if (page.url().includes("/kiosk/")) {
+    await page.getByRole("link", { name: "Admin-Interface" }).click();
+  }
   if (page.url().includes("/login/")) {
     await loginAsAdmin(page);
     return;
@@ -95,6 +98,8 @@ async function createCamp(page, name = "Sommerlager") {
   const campName = `${name} ${suffix}`;
   await page.getByLabel("Name").fill(campName);
   await page.getByLabel("Jahr").fill("2026");
+  await page.getByLabel("Beginn").fill("2026-07-01");
+  await page.getByLabel("Ende").fill("2026-07-03");
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(page.getByRole("heading", { name: "Übersicht" })).toBeVisible();
   await expect(page.getByText(campName).first()).toBeVisible();
@@ -231,6 +236,7 @@ test("Kiosk flow: login, pin setup, drink and meal booking", async ({ page }) =>
   await expect(page.getByText("Getränk wurde gebucht.")).toBeVisible();
 
   // Book a meal
+  await page.getByText("Zukünftige Buchungen anzeigen").click();
   await page.getByRole("button", { name: "Buchen" }).first().click();
   await expect(page.locator("dialog#meal-dialog")).toBeVisible();
   await page.locator("dialog#meal-dialog").getByRole("button", { name: "Essensanmeldung speichern" }).click();

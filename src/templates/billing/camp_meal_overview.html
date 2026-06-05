@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load billing_format %}
 {% block content %}
   <div class="toolbar">
     <div>
@@ -6,8 +7,12 @@
       <p>{{ camp }} · Stichzeitpunkt {{ camp.meal_booking_cutoff_time|time:"H:i" }} Uhr</p>
     </div>
     <div class="actions">
-      <a class="button button-secondary" href="{% url 'camp-detail' camp.pk %}">Zur Übersicht</a>
-      <a class="button" href="{% url 'camp-edit' camp.pk %}">Stichzeitpunkt ändern</a>
+      {% if user|is_huebers_user %}
+        <a class="button button-secondary" href="{% url 'camp-list' %}">Zur Lagerauswahl</a>
+      {% else %}
+        <a class="button button-secondary" href="{% url 'camp-detail' camp.pk %}">Zur Übersicht</a>
+      {% endif %}
+      <a class="button" href="{% url 'meal-cutoff-edit' camp.pk %}">Stichzeitpunkt ändern</a>
     </div>
   </div>
 

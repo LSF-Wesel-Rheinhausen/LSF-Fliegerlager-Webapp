@@ -172,6 +172,20 @@ class CampForm(forms.ModelForm):
         return self.cleaned_data["meal_booking_cutoff_time"] or time(12, 0)
 
 
+class MealCutoffForm(forms.ModelForm):
+    """Edit the camp meal booking cutoff without exposing other camp settings."""
+
+    class Meta:
+        model = Camp
+        fields = ["meal_booking_cutoff_time"]
+        labels = {"meal_booking_cutoff_time": "Essens-Stichzeitpunkt"}
+        widgets = {"meal_booking_cutoff_time": forms.TimeInput(attrs={"type": "time"})}
+
+    def clean_meal_booking_cutoff_time(self):
+        """Return the default noon cutoff when the form field is omitted."""
+        return self.cleaned_data["meal_booking_cutoff_time"] or time(12, 0)
+
+
 class ParticipantForm(forms.ModelForm):
     class Meta:
         model = Participant

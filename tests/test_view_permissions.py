@@ -1,3 +1,4 @@
+from datetime import time
 from decimal import Decimal
 
 import pytest
@@ -5,7 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from billing.models import BookingAuditLog, Camp, Charge, Expense, Participant, Payment, PriceRule
-from billing.permissions import EDITOR_GROUP
+from billing.permissions import EDITOR_GROUP, HUEBERS_GROUP
 from tests.factories import (
     CampFactory,
     ChargeFactory,
@@ -21,6 +22,13 @@ from tests.factories import (
 def editor_user():
     user = UserFactory(username="editor")
     user.groups.add(GroupFactory(name=EDITOR_GROUP))
+    return user
+
+
+@pytest.fixture
+def huebers_user():
+    user = UserFactory(username="huebers")
+    user.groups.add(GroupFactory(name=HUEBERS_GROUP))
     return user
 
 
@@ -120,6 +128,7 @@ def test_admin_only_get_views_allow_admin(client, admin_user, permission_dataset
         ("camp-list", lambda data: []),
         ("camp-detail", lambda data: [data["camp"].pk]),
         ("camp-meal-overview", lambda data: [data["camp"].pk]),
+        ("meal-cutoff-edit", lambda data: [data["camp"].pk]),
         ("participant-create", lambda data: [data["camp"].pk]),
         ("participant-detail", lambda data: [data["participant"].pk]),
         ("charge-create", lambda data: [data["participant"].pk]),
@@ -146,6 +155,7 @@ def test_editor_views_reject_anonymous(client, permission_dataset, route_name, a
         ("camp-list", lambda data: []),
         ("camp-detail", lambda data: [data["camp"].pk]),
         ("camp-meal-overview", lambda data: [data["camp"].pk]),
+        ("meal-cutoff-edit", lambda data: [data["camp"].pk]),
         ("participant-create", lambda data: [data["camp"].pk]),
         ("participant-detail", lambda data: [data["participant"].pk]),
         ("charge-create", lambda data: [data["participant"].pk]),
@@ -171,6 +181,58 @@ def test_editor_views_allow_editor_and_admin(
     response = client.get(reverse(route_name, args=arg_getter(permission_dataset)))
 
     assert response.status_code == 200
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("route_name", "arg_getter"),
+    [
+        ("camp-list", lambda data: []),
+        ("camp-meal-overview", lambda data: [data["camp"].pk]),
+        ("meal-cutoff-edit", lambda data: [data["camp"].pk]),
+    ],
+)
+def test_huebers_can_access_meal_management_views(client, huebers_user, permission_dataset, route_name, arg_getter):
+    client.force_login(huebers_user)
+
+    response = client.get(reverse(route_name, args=arg_getter(permission_dataset)))
+
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("route_name", "arg_getter"),
+    [
+        ("camp-detail", lambda data: [data["camp"].pk]),
+        ("participant-create", lambda data: [data["camp"].pk]),
+        ("participant-detail", lambda data: [data["participant"].pk]),
+        ("price-rules-manage", lambda data: [data["camp"].pk]),
+        ("expense-create", lambda data: [data["camp"].pk]),
+        ("export-workbook", lambda data: [data["camp"].pk]),
+    ],
+)
+def test_huebers_cannot_access_billing_management_views(
+    client, huebers_user, permission_dataset, route_name, arg_getter
+):
+    client.force_login(huebers_user)
+
+    response = client.get(reverse(route_name, args=arg_getter(permission_dataset)))
+
+    _login_redirect(response)
+
+
+@pytest.mark.django_db
+def test_huebers_can_update_meal_cutoff_only(client, huebers_user, permission_dataset):
+    camp = permission_dataset["camp"]
+    client.force_login(huebers_user)
+
+    response = client.post(reverse("meal-cutoff-edit", args=[camp.pk]), {"meal_booking_cutoff_time": "18:00"})
+
+    camp.refresh_from_db()
+    assert response.status_code == 302
+    assert response["Location"] == reverse("camp-meal-overview", args=[camp.pk])
+    assert camp.meal_booking_cutoff_time == time(18, 0)
 
 
 @pytest.mark.django_db

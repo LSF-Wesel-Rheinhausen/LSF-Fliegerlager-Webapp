@@ -8,4 +8,4 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         bootstrap_default_roles()
-        self.stdout.write(self.style.SUCCESS("Rollen Admin und Bearbeiter wurden angelegt."))
+        self.stdout.write(self.style.SUCCESS("Rollen Admin, Bearbeiter und Huebers wurden angelegt."))

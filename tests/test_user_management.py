@@ -2,9 +2,17 @@ import pytest
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.urls import reverse
-from tests.factories import GroupFactory, UserFactory
 
-from billing.permissions import ADMIN_GROUP, EDITOR_GROUP, is_admin, is_editor
+from billing.permissions import (
+    ADMIN_GROUP,
+    EDITOR_GROUP,
+    HUEBERS_GROUP,
+    is_admin,
+    is_editor,
+    is_huebers,
+    is_meal_manager,
+)
+from tests.factories import GroupFactory, UserFactory
 
 
 def _admin_user():
@@ -60,6 +68,32 @@ def test_admin_can_create_editor_user(client):
     assert user.groups.filter(name=EDITOR_GROUP).exists()
     assert is_admin(user) is False
     assert is_editor(user) is True
+
+
+@pytest.mark.django_db
+def test_admin_can_create_huebers_user(client):
+    client.force_login(_admin_user())
+
+    response = client.post(
+        reverse("user-create"),
+        {
+            "username": "huebers",
+            "email": "huebers@example.test",
+            "role": "huebers",
+            "password1": "strong-test-pass-123",
+            "password2": "strong-test-pass-123",
+        },
+    )
+
+    user = User.objects.get(username="huebers")
+    assert response.status_code == 302
+    assert user.is_staff is False
+    assert user.is_superuser is False
+    assert user.groups.filter(name=HUEBERS_GROUP).exists()
+    assert is_admin(user) is False
+    assert is_editor(user) is False
+    assert is_huebers(user) is True
+    assert is_meal_manager(user) is True
 
 
 @pytest.mark.django_db
