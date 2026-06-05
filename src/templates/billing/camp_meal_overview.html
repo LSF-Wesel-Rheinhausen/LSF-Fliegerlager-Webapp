@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% load billing_format %}
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1>Essensübersicht</h1>
+      <p>{{ camp }} · Stichzeitpunkt {{ camp.meal_booking_cutoff_time|time:"H:i" }} Uhr</p>
+    </div>
+    <div class="actions">
+      {% if user|is_huebers_user %}
+        <a class="button button-secondary" href="{% url 'camp-list' %}">Zur Lagerauswahl</a>
+      {% else %}
+        <a class="button button-secondary" href="{% url 'camp-detail' camp.pk %}">Zur Übersicht</a>
+      {% endif %}
+      <a class="button" href="{% url 'meal-cutoff-edit' camp.pk %}">Stichzeitpunkt ändern</a>
+    </div>
+  </div>
+
+  <section class="panel stack meal-order-panel">
+    <div class="toolbar compact-toolbar">
+      <div>
+        <h2>Nächster Tag: {{ next_order_date|date:"d.m.Y" }}</h2>
+        {% if next_meal_order %}
+          <p>Bestellung wurde um {{ next_meal_order.ordered_at|date:"d.m.Y H:i" }} Uhr abgeschickt.</p>
+        {% else %}
+          <p>Prüfe die Abendessen-Zahlen und markiere die Caterer-Bestellung danach als abgeschickt.</p>
+        {% endif %}
+      </div>
+      <form method="post" action="{% url 'meal-order-mark-sent' camp.pk %}">
+        {% csrf_token %}
+        <button type="submit" {% if next_meal_order %}class="button-secondary"{% endif %}>
+          {% if next_meal_order %}Erneut als bestellt markieren{% else %}Bestellung ist abgeschickt{% endif %}
+        </button>
+      </form>
+    </div>
+    {% if next_order_day %}
+      {% for meal in next_order_day.meals %}
+        <dl class="metrics meal-order-metrics" aria-label="Bestellung für den nächsten Tag">
+          {% for variant, count in meal.variant_counts.items %}
+            <div class="metric"><dt>{{ variant }}</dt><dd><strong>{{ count }}</strong></dd></div>
+          {% endfor %}
+          <div class="metric"><dt>Aktiv</dt><dd><strong>{{ meal.active_total }}</strong></dd></div>
+          <div class="metric"><dt>Zurückgenommen</dt><dd><strong>{{ meal.retracted_total }}</strong></dd></div>
+        </dl>
+      {% endfor %}
+    {% else %}
+      <p class="hint">Für den nächsten Tag sind keine Lagerdaten vorhanden.</p>
+    {% endif %}
+  </section>
+
+  <section class="panel stack">
+    <div class="toolbar compact-toolbar">
+      <div>
+        <h2>Caterer-Bestellung</h2>
+        <p>Gezählt werden aktive Buchungen. Zurücknahmen bleiben separat sichtbar.</p>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Datum</th>
+          <th>Mahlzeit</th>
+          <th>Normal</th>
+          <th>Vegan</th>
+          <th>Normal Kind</th>
+          <th>Vegan Kind</th>
+          <th>Aktiv</th>
+          <th>Zurückgenommen</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for day in meal_overview_days %}
+          {% for meal in day.meals %}
+            <tr>
+              <td>{{ day.meal_date|date:"d.m.Y" }}</td>
+              <td>{{ meal.meal_label }}</td>
+              {% for _variant, count in meal.variant_counts.items %}
+                <td>{{ count }}</td>
+              {% endfor %}
+              <td><strong>{{ meal.active_total }}</strong></td>
+              <td>{{ meal.retracted_total }}</td>
+            </tr>
+          {% endfor %}
+        {% empty %}
+          <tr><td colspan="8">Noch keine Lagertage vorhanden.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endblock %}

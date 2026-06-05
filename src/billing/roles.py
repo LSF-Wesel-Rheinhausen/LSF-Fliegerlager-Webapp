@@ -3,27 +3,31 @@ from typing import Any
 from django.contrib.auth.models import Group, Permission
 from django.db.models import Q
 
-from .permissions import ADMIN_GROUP, EDITOR_GROUP
+from .permissions import ADMIN_GROUP, EDITOR_GROUP, HUEBERS_GROUP
 
 ROLE_ADMIN = "admin"
 ROLE_EDITOR = "editor"
+ROLE_HUEBERS = "huebers"
 ROLE_CHOICES = (
     (ROLE_ADMIN, "Admin"),
     (ROLE_EDITOR, "Bearbeiter"),
+    (ROLE_HUEBERS, "Huebers"),
 )
 
 
 def bootstrap_default_roles():
     admin_group, _ = Group.objects.get_or_create(name=ADMIN_GROUP)
     editor_group, _ = Group.objects.get_or_create(name=EDITOR_GROUP)
+    huebers_group, _ = Group.objects.get_or_create(name=HUEBERS_GROUP)
 
     admin_group.permissions.set(Permission.objects.all())
     editable = Permission.objects.filter(content_type__app_label="billing").filter(
         Q(codename__startswith="add_") | Q(codename__startswith="change_") | Q(codename__startswith="view_")
     )
     editor_group.permissions.set(editable)
+    huebers_group.permissions.set(Permission.objects.none())
 
-    return admin_group, editor_group
+    return admin_group, editor_group, huebers_group
 
 
 def set_user_role(user: Any, role: str) -> None:
@@ -31,18 +35,21 @@ def set_user_role(user: Any, role: str) -> None:
 
     Args:
         user: Django user instance to update.
-        role: One of ``ROLE_ADMIN`` or ``ROLE_EDITOR``.
+        role: One of ``ROLE_ADMIN``, ``ROLE_EDITOR`` or ``ROLE_HUEBERS``.
 
     Raises:
         ValueError: If ``role`` is not a supported application role.
     """
-    admin_group, editor_group = bootstrap_default_roles()
-    user.groups.remove(admin_group, editor_group)
+    admin_group, editor_group, huebers_group = bootstrap_default_roles()
+    user.groups.remove(admin_group, editor_group, huebers_group)
     if role == ROLE_ADMIN:
         user.groups.add(admin_group)
         user.is_staff = True
     elif role == ROLE_EDITOR:
         user.groups.add(editor_group)
+        user.is_staff = False
+    elif role == ROLE_HUEBERS:
+        user.groups.add(huebers_group)
         user.is_staff = False
     else:
         raise ValueError(f"Unsupported role: {role}")
@@ -55,6 +62,8 @@ def user_role(user: Any) -> str:
         return ROLE_ADMIN
     if user.groups.filter(name=EDITOR_GROUP).exists():
         return ROLE_EDITOR
+    if user.groups.filter(name=HUEBERS_GROUP).exists():
+        return ROLE_HUEBERS
     return ROLE_EDITOR
 
 

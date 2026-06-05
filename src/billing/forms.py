@@ -1,3 +1,4 @@
+from datetime import time
 from typing import Any
 
 from django import forms
@@ -131,23 +132,58 @@ class UserPasswordResetForm(SetPasswordForm):
 
 
 class CampForm(forms.ModelForm):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialize optional cutoff input with the project default."""
+        super().__init__(*args, **kwargs)
+        self.fields["meal_booking_cutoff_time"].required = False
+        self.fields["meal_booking_cutoff_time"].initial = time(12, 0)
+
     class Meta:
         model = Camp
-        fields = ["name", "year", "starts_on", "ends_on", "is_active", "foerdersatz", "notes"]
+        fields = [
+            "name",
+            "year",
+            "starts_on",
+            "ends_on",
+            "is_active",
+            "meal_booking_cutoff_time",
+            "foerdersatz",
+            "notes",
+        ]
         labels = {
             "name": "Name",
             "year": "Jahr",
             "starts_on": "Beginn",
             "ends_on": "Ende",
             "is_active": "Aktiv",
+            "meal_booking_cutoff_time": "Essens-Stichzeitpunkt",
             "foerdersatz": "Fördersatz",
             "notes": "Notizen",
         }
         widgets = {
             "starts_on": forms.DateInput(attrs={"type": "date"}),
             "ends_on": forms.DateInput(attrs={"type": "date"}),
+            "meal_booking_cutoff_time": forms.TimeInput(attrs={"type": "time"}),
             "foerdersatz": forms.NumberInput(attrs={"step": "0.0001", "min": "0", "max": "1"}),
         }
+
+    def clean_meal_booking_cutoff_time(self):
+        """Return the default noon cutoff when the form field is omitted."""
+        return self.cleaned_data["meal_booking_cutoff_time"] or time(12, 0)
+
+
+class MealCutoffForm(forms.ModelForm):
+    """Edit the camp meal booking cutoff without exposing other camp settings."""
+
+    class Meta:
+        model = Camp
+        fields = ["meal_booking_cutoff_time"]
+        labels = {"meal_booking_cutoff_time": "Essens-Stichzeitpunkt"}
+        widgets = {"meal_booking_cutoff_time": forms.TimeInput(attrs={"type": "time"})}
+
+    def clean_meal_booking_cutoff_time(self):
+        """Return the default noon cutoff when the form field is omitted."""
+        return self.cleaned_data["meal_booking_cutoff_time"] or time(12, 0)
 
 
 class ParticipantForm(forms.ModelForm):

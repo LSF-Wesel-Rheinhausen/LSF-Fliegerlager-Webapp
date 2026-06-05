@@ -1,0 +1,49 @@
+{% for day in days %}
+  <article class="meal-day">
+    <h3>{{ day.date|date:"d.m." }}</h3>
+    <div class="meal-day__slots">
+      {% for slot in day.meals %}
+        <section class="meal-slot meal-slot--{{ slot.status }}">
+          <div class="meal-slot__body">
+            <strong>{{ slot.label }}</strong>
+            <span>{{ slot.status_label }}</span>
+          </div>
+          {% if slot.active_signups %}
+            <ul class="meal-slot__bookings">
+              {% for signup in slot.active_signups %}
+                <li>
+                  <span>{% if signup.family_member %}{{ signup.family_member.full_name }}{% else %}{{ signup.participant.full_name }}{% endif %}</span>
+                  <span>{{ signup.get_variant_display }}</span>
+                  {% if not slot.locked %}
+                    <form method="post">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="meal_retract">
+                      <input type="hidden" name="meal_signup_id" value="{{ signup.pk }}">
+                      <button type="submit" class="button-secondary">Zurücknehmen</button>
+                    </form>
+                  {% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+          {% if slot.locked %}
+            <span class="status-badge status-badge--muted">Geschlossen</span>
+          {% else %}
+            <button
+              type="button"
+              class="button-secondary meal-slot__action"
+              data-open-meal-dialog
+              data-meal-date="{{ day.date|date:'Y-m-d' }}"
+              data-meal="{{ slot.meal }}"
+              data-meal-label="{{ slot.label }}"
+            >
+              Buchen
+            </button>
+          {% endif %}
+        </section>
+      {% endfor %}
+    </div>
+  </article>
+{% empty %}
+  <p class="hint">Keine passenden Essensbuchungen vorhanden.</p>
+{% endfor %}

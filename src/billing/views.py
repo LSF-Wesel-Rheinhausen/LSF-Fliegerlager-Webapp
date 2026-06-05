@@ -1,5 +1,6 @@
 import base64
 import json
+from datetime import timedelta
 from typing import Any
 
 from django.contrib import messages
@@ -28,6 +29,7 @@ from .forms import (
     KioskLoginForm,
     KioskPinSetupForm,
     MealBookingForm,
+    MealCutoffForm,
     MealStandardPricesForm,
     ParticipantForm,
     ParticipantImportForm,
@@ -39,15 +41,37 @@ from .forms import (
     UserPasswordResetForm,
 )
 from .importers import preview_participants, rows_from_payload, rows_to_payload, save_participants
-from .models import BookingAuditLog, Camp, Charge, MealSignup, Participant, ParticipantBookingLink, PriceRule
-from .permissions import ADMIN_GROUP, admin_required, editor_required
-from .roles import ROLE_ADMIN, ROLE_EDITOR, active_admin_count, bootstrap_default_roles, set_user_role, user_role
+from .models import BookingAuditLog, Camp, Charge, MealOrder, MealSignup, Participant, ParticipantBookingLink, PriceRule
+from .permissions import (
+    ADMIN_GROUP,
+    EDITOR_GROUP,
+    HUEBERS_GROUP,
+    admin_required,
+    editor_required,
+    meal_manager_required,
+)
+from .roles import (
+    ROLE_ADMIN,
+    ROLE_EDITOR,
+    ROLE_HUEBERS,
+    active_admin_count,
+    bootstrap_default_roles,
+    set_user_role,
+    user_role,
+)
 from .services import (
+    admin_interface_contacts,
     calculate_camp_settlements,
+    calculate_meal_overview,
     calculate_participant_settlement,
+    camp_meal_dates,
     charge_audit_snapshot,
     create_booking_audit_log,
     create_booking_delete_audit_log,
+    is_meal_change_locked,
+    meal_change_lock_message,
+    meal_order_for_date,
+    next_catering_order_date,
     participant_kiosk_summary,
     restore_booking_from_audit_log,
 )
@@ -72,7 +96,7 @@ def setup_first_admin(request):
     form = FirstAdminSetupForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
-            admin_group, _ = bootstrap_default_roles()
+            admin_group, _editor_group, _huebers_group = bootstrap_default_roles()
             user = form.save()
             user.groups.add(admin_group)
         login(request, user, backend="django.contrib.auth.backends.ModelBackend")
@@ -108,7 +132,14 @@ def user_list(request: HttpRequest) -> HttpResponse:
     user_rows = []
     for managed_user in users:
         group_names = {group.name for group in managed_user.groups.all()}
-        role = ROLE_ADMIN if managed_user.is_superuser or ADMIN_GROUP in group_names else ROLE_EDITOR
+        if managed_user.is_superuser or ADMIN_GROUP in group_names:
+            role = ROLE_ADMIN
+        elif HUEBERS_GROUP in group_names:
+            role = ROLE_HUEBERS
+        elif EDITOR_GROUP in group_names:
+            role = ROLE_EDITOR
+        else:
+            role = ROLE_EDITOR
         user_rows.append({"user": managed_user, "role": role})
     return render(request, "billing/user_list.html", {"user_rows": user_rows})
 
@@ -295,7 +326,7 @@ def charge_delete(request: HttpRequest, charge_id: int) -> HttpResponse:
     with transaction.atomic():
         create_booking_delete_audit_log(charge, before, request.user)
         charge.deleted_at = timezone.now()
-        charge.deleted_by = request.user
+        charge.deleted_by_id = request.user.pk
         charge.save(update_fields=["deleted_at", "deleted_by"])
     messages.success(request, "Buchung wurde gelöscht und protokolliert.")
     return redirect("participant-detail", participant_id=participant_id)
@@ -620,6 +651,12 @@ def _target_lookup(meal_targets):
     return {target["token"]: target for target in meal_targets}
 
 
+def _target_token_for_signup(signup):
+    if signup.family_member_id is not None:
+        return f"family-{signup.family_member_id}"
+    return f"participant-{signup.participant_id}"
+
+
 def _book_meal_for_target(target, meal_date, meal, variant, price_rule):
     meal_display = dict(MealSignup.Meal.choices).get(meal, meal)
     target_object = target["object"]
@@ -627,29 +664,145 @@ def _book_meal_for_target(target, meal_date, meal, variant, price_rule):
     family_member = target_object if target["kind"] == "family" else None
     signup_defaults = {
         "variant": variant,
+        "status": MealSignup.Status.ACTIVE,
         "foerderfaehig": price_rule.foerderfaehig,
+        "retracted_at": None,
     }
     charge_description = f"{price_rule.name} {meal_display}"
     if family_member is not None:
         charge_description = f"{charge_description} für {family_member.full_name}"
-    MealSignup.objects.update_or_create(
+    signup, _created = MealSignup.objects.update_or_create(
         participant=participant,
         family_member=family_member,
         meal_date=meal_date,
         meal=meal,
         defaults=signup_defaults,
     )
-    Charge.objects.update_or_create(
-        participant=participant,
-        kind=Charge.Kind.FOOD,
-        occurred_on=meal_date,
-        description=charge_description,
-        defaults={
-            "quantity": 1,
-            "unit_price": price_rule.unit_price,
-            "foerderfaehig": price_rule.foerderfaehig,
+    charge = signup.charge
+    if charge is None:
+        charge = Charge(participant=participant, kind=Charge.Kind.FOOD)
+    charge.participant = participant
+    charge.kind = Charge.Kind.FOOD
+    charge.occurred_on = meal_date
+    charge.description = charge_description
+    charge.quantity = 1
+    charge.unit_price = price_rule.unit_price
+    charge.foerderfaehig = price_rule.foerderfaehig
+    charge.deleted_at = None
+    charge.deleted_by = None
+    charge.save()
+    if signup.charge_id != charge.pk:
+        signup.charge = charge
+        signup.save(update_fields=["charge", "updated_at"])
+
+
+def _retract_meal_signup(signup):
+    signup.status = MealSignup.Status.RETRACTED
+    signup.retracted_at = timezone.now()
+    signup.save(update_fields=["status", "retracted_at", "updated_at"])
+    if signup.charge_id is None:
+        return
+    signup.charge.deleted_at = timezone.now()
+    signup.charge.deleted_by = None
+    signup.charge.save(update_fields=["deleted_at", "deleted_by"])
+
+
+def _kiosk_meal_calendar(camp, meal_signups):
+    signups_by_date_meal = {}
+    included_dates = {signup.meal_date for signup in meal_signups}
+    for signup in meal_signups:
+        signups_by_date_meal.setdefault((signup.meal_date, signup.meal), []).append(signup)
+
+    meal_labels = dict(MealSignup.Meal.choices)
+    days = []
+    for meal_date in camp_meal_dates(camp, included_dates):
+        meals = []
+        for meal, _label in MealSignup.Meal.choices:
+            scoped = signups_by_date_meal.get((meal_date, meal), [])
+            active_signups = [signup for signup in scoped if signup.status == MealSignup.Status.ACTIVE]
+            has_retracted = any(signup.status == MealSignup.Status.RETRACTED for signup in scoped)
+            if len(active_signups) > 1:
+                status = "multiple"
+                status_label = "Mehrere Buchungen"
+            elif len(active_signups) == 1:
+                status = "booked"
+                status_label = "Gebucht"
+            elif has_retracted:
+                status = "retracted"
+                status_label = "Zurückgenommen"
+            else:
+                status = "empty"
+                status_label = "Ungebucht"
+            meals.append(
+                {
+                    "meal": meal,
+                    "label": meal_labels[meal],
+                    "status": status,
+                    "status_label": status_label,
+                    "active_signups": active_signups,
+                    "locked": is_meal_change_locked(camp, meal_date),
+                }
+            )
+        days.append({"date": meal_date, "meals": meals})
+    return days
+
+
+def _group_kiosk_meal_calendar(days):
+    today = timezone.localdate()
+    tomorrow = today + timedelta(days=1)
+    return {
+        "past": [day for day in days if day["date"] < today],
+        "current": [day for day in days if today <= day["date"] <= tomorrow],
+        "future": [day for day in days if day["date"] > tomorrow],
+    }
+
+
+@meal_manager_required
+def meal_cutoff_edit(request, camp_id):
+    """Edit only the meal booking cutoff for a camp."""
+    camp = get_object_or_404(Camp, pk=camp_id)
+    form = MealCutoffForm(request.POST or None, instance=camp)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Essens-Stichzeitpunkt wurde gespeichert.")
+        return redirect("camp-meal-overview", camp_id=camp.pk)
+    return render(
+        request, "billing/form.html", {"form": form, "title": "Essens-Stichzeitpunkt bearbeiten", "camp": camp}
+    )
+
+
+@meal_manager_required
+def camp_meal_overview(request, camp_id):
+    """Render the per-day meal counts used for caterer ordering."""
+    camp = get_object_or_404(Camp, pk=camp_id)
+    next_order_date = next_catering_order_date()
+    meal_overview_days = calculate_meal_overview(camp)
+    return render(
+        request,
+        "billing/camp_meal_overview.html",
+        {
+            "camp": camp,
+            "meal_overview_days": meal_overview_days,
+            "next_order_day": next((day for day in meal_overview_days if day.meal_date == next_order_date), None),
+            "next_order_date": next_order_date,
+            "next_meal_order": meal_order_for_date(camp, next_order_date),
         },
     )
+
+
+@meal_manager_required
+@require_POST
+def meal_order_mark_sent(request, camp_id):
+    """Mark tomorrow's catering meal order as sent."""
+    camp = get_object_or_404(Camp, pk=camp_id)
+    meal_date = next_catering_order_date()
+    MealOrder.objects.update_or_create(
+        camp=camp,
+        meal_date=meal_date,
+        defaults={"ordered_at": timezone.now(), "ordered_by": request.user},
+    )
+    messages.success(request, f"Essensbestellung für {meal_date:%d.%m.%Y} wurde als abgeschickt markiert.")
+    return redirect("camp-meal-overview", camp_id=camp.pk)
 
 
 def kiosk_pin_setup(request):
@@ -681,6 +834,8 @@ def kiosk_home(request):
     if participant is None:
         return redirect("kiosk-login")
 
+    next_order_date = next_catering_order_date()
+    next_meal_order = meal_order_for_date(participant.camp, next_order_date)
     meal_targets = _kiosk_meal_targets(participant)
     drink_form = DrinkBookingForm(participant=participant, prefix="drink")
     meal_form = MealBookingForm(participant=participant, prefix="meal")
@@ -707,6 +862,8 @@ def kiosk_home(request):
             if meal_form.is_valid():
                 meal_date = meal_form.cleaned_data["meal_date"]
                 meal = meal_form.cleaned_data["meal"]
+                if is_meal_change_locked(participant.camp, meal_date):
+                    meal_form.add_error(None, meal_change_lock_message(participant.camp, meal_date))
                 selected_tokens = request.POST.getlist("meal-target")
                 targets_by_token = _target_lookup(meal_targets)
                 if not selected_tokens and request.POST.get("meal-targets-submitted") != "1":
@@ -741,6 +898,23 @@ def kiosk_home(request):
                             _book_meal_for_target(target, meal_date, meal, variant, price_rule)
                     messages.success(request, "Essensanmeldung wurde gespeichert.")
                     return redirect("kiosk-home")
+        elif request.POST.get("action") == "meal_retract":
+            signup_id = request.POST.get("meal_signup_id")
+            targets_by_token = _target_lookup(meal_targets)
+            signup = (
+                MealSignup.objects.select_related("participant", "family_member", "charge")
+                .filter(pk=signup_id, status=MealSignup.Status.ACTIVE)
+                .first()
+            )
+            if signup is None or _target_token_for_signup(signup) not in targets_by_token:
+                messages.error(request, "Essensanmeldung wurde nicht gefunden.")
+            elif is_meal_change_locked(participant.camp, signup.meal_date):
+                messages.error(request, meal_change_lock_message(participant.camp, signup.meal_date))
+            else:
+                with transaction.atomic():
+                    _retract_meal_signup(signup)
+                messages.success(request, "Essensanmeldung wurde zurückgenommen.")
+                return redirect("kiosk-home")
         elif request.POST.get("action") == "family_member_create":
             family_member_form = KioskFamilyMemberForm(request.POST, prefix="family")
             if family_member_form.is_valid():
@@ -813,6 +987,8 @@ def kiosk_home(request):
         .filter(Q(participant=participant) | Q(participant_id__in=linked_participant_ids, family_member__isnull=True))
         .order_by("meal_date", "meal", "participant__last_name", "participant__first_name")
     )
+    meal_signups = list(meal_signups)
+    meal_calendar_days = _kiosk_meal_calendar(participant.camp, meal_signups)
     pending_invites = participant.received_booking_links.select_related("inviter").filter(
         status=ParticipantBookingLink.Status.PENDING
     )
@@ -830,6 +1006,8 @@ def kiosk_home(request):
         "booking_link_form": booking_link_form,
         "recent_drinks": recent_drinks,
         "meal_signups": meal_signups,
+        "meal_calendar_days": meal_calendar_days,
+        "meal_calendar_groups": _group_kiosk_meal_calendar(meal_calendar_days),
         "drink_rules": drink_form.fields["price_rule"].queryset,
         "meal_targets": meal_targets,
         "family_members": participant.family_members.filter(is_active=True).order_by("last_name", "first_name"),
@@ -837,5 +1015,9 @@ def kiosk_home(request):
         "sent_invites": sent_invites,
         "accepted_links": accepted_links,
         "kiosk_autologout": True,
+        "kiosk_contacts": admin_interface_contacts(User),
+        "next_order_date": next_order_date,
+        "next_meal_order": next_meal_order,
+        "next_order_locked": is_meal_change_locked(participant.camp, next_order_date),
     }
     return render(request, "billing/kiosk_home.html", context)

@@ -14,7 +14,13 @@
     <tbody>
       {% for camp in camps %}
         <tr>
-          <td><a href="{% url 'camp-detail' camp.pk %}">{{ camp.name }}</a></td>
+          <td>
+            {% if user|is_huebers_user %}
+              <a href="{% url 'camp-meal-overview' camp.pk %}">{{ camp.name }}</a>
+            {% else %}
+              <a href="{% url 'camp-detail' camp.pk %}">{{ camp.name }}</a>
+            {% endif %}
+          </td>
           <td>{{ camp.year }}</td>
           <td>{{ camp.starts_on|default:"" }} - {{ camp.ends_on|default:"" }}</td>
           <td>{% if camp.is_active %}Aktiv{% else %}Archiv{% endif %}</td>
