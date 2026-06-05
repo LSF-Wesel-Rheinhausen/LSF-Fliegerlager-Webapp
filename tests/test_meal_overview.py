@@ -23,9 +23,9 @@ def test_calculate_meal_overview_counts_active_variants_and_retractions():
     deleted_charge = Charge.objects.create(
         participant=linked_participant,
         kind=Charge.Kind.FOOD,
-        description="Frühstück",
+        description="Abendessen",
         quantity=1,
-        unit_price=Decimal("5.00"),
+        unit_price=Decimal("7.00"),
         occurred_on=date(2026, 7, 1),
     )
     MealSignup.objects.create(
@@ -36,15 +36,21 @@ def test_calculate_meal_overview_counts_active_variants_and_retractions():
     )
     MealSignup.objects.create(
         participant=participant,
+        meal_date=date(2026, 7, 1),
+        meal=MealSignup.Meal.DINNER,
+        variant=MealSignup.Variant.NORMAL,
+    )
+    MealSignup.objects.create(
+        participant=participant,
         family_member=child,
         meal_date=date(2026, 7, 1),
-        meal=MealSignup.Meal.BREAKFAST,
+        meal=MealSignup.Meal.DINNER,
         variant=MealSignup.Variant.VEGAN_CHILD,
     )
     MealSignup.objects.create(
         participant=linked_participant,
         meal_date=date(2026, 7, 1),
-        meal=MealSignup.Meal.BREAKFAST,
+        meal=MealSignup.Meal.DINNER,
         variant=MealSignup.Variant.VEGAN,
         status=MealSignup.Status.RETRACTED,
         charge=deleted_charge,
@@ -52,11 +58,13 @@ def test_calculate_meal_overview_counts_active_variants_and_retractions():
 
     overview = calculate_meal_overview(camp)
 
-    breakfast = overview[0].meals[0]
-    assert breakfast.variant_counts["Normal"] == 1
-    assert breakfast.variant_counts["Vegan Kind"] == 1
-    assert breakfast.active_total == 2
-    assert breakfast.retracted_total == 1
+    assert len(overview[0].meals) == 1
+    dinner = overview[0].meals[0]
+    assert dinner.meal == MealSignup.Meal.DINNER
+    assert dinner.variant_counts["Normal"] == 1
+    assert dinner.variant_counts["Vegan Kind"] == 1
+    assert dinner.active_total == 2
+    assert dinner.retracted_total == 1
 
 
 @pytest.mark.django_db
@@ -76,4 +84,5 @@ def test_camp_meal_overview_renders_counts_for_admin(client):
     assert response.status_code == 200
     assert b"Essens\xc3\xbcbersicht" in response.content
     assert b"Abendessen" in response.content
+    assert b"Fr\xc3\xbchst\xc3\xbcck" not in response.content
     assert b"<strong>1</strong>" in response.content

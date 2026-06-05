@@ -124,7 +124,7 @@ def camp_meal_dates(camp: Camp, include_dates: set[date] | None = None) -> list[
 
 
 def calculate_meal_overview(camp: Camp) -> list[MealOverviewDay]:
-    """Aggregate active and retracted meal signups for a camp by day and meal."""
+    """Aggregate dinner signups for a camp by day for catering orders."""
     signups = list(
         MealSignup.objects.select_related("participant", "family_member")
         .filter(participant__camp=camp)
@@ -136,7 +136,7 @@ def calculate_meal_overview(camp: Camp) -> list[MealOverviewDay]:
     days = []
     for meal_date in dates:
         meals = []
-        for meal, _meal_label in MealSignup.Meal.choices:
+        for meal, _meal_label in [(MealSignup.Meal.DINNER, meal_labels[MealSignup.Meal.DINNER])]:
             scoped = [signup for signup in signups if signup.meal_date == meal_date and signup.meal == meal]
             variant_counts = {
                 variant_labels[variant]: sum(
