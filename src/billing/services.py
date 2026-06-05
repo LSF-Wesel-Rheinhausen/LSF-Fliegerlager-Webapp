@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -36,6 +37,16 @@ class MealOverviewDay:
 
     meal_date: date
     meals: list[MealCount]
+
+
+@dataclass(frozen=True)
+class AdminInterfaceContact:
+    """Represent a kiosk-visible leadership contact."""
+
+    name: str
+    email: str
+    phone: str
+    phone_href: str
 
 
 @dataclass(frozen=True)
@@ -134,9 +145,14 @@ def meal_order_for_date(camp: Camp, meal_date: date) -> MealOrder | None:
     return MealOrder.objects.select_related("ordered_by").filter(camp=camp, meal_date=meal_date).first()
 
 
-def admin_interface_contacts(user_model: Any) -> list[Any]:
+def _phone_href(phone: str) -> str:
+    """Return a sanitized telephone link target for a display phone number."""
+    return re.sub(r"(?!^\+)[^0-9]", "", phone)
+
+
+def admin_interface_contacts(user_model: Any, camp: Camp | None = None) -> list[AdminInterfaceContact]:
     """Return active users who can be contacted for admin-interface meal issues."""
-    return list(
+    users = list(
         user_model.objects.filter(is_active=True)
         .filter(
             Q(is_superuser=True) | Q(groups__name__in=[ADMIN_GROUP, EDITOR_GROUP, HUEBERS_GROUP]) | Q(is_staff=True)
@@ -144,6 +160,26 @@ def admin_interface_contacts(user_model: Any) -> list[Any]:
         .distinct()
         .order_by("last_name", "first_name", "username")
     )
+    contact_phones_by_email: dict[str, str] = {}
+    emails = [user.email.strip() for user in users if user.email]
+    if camp is not None and emails:
+        participants = (
+            Participant.objects.filter(camp=camp, email__in=emails)
+            .exclude(phone="")
+            .order_by("last_name", "first_name", "pk")
+        )
+        for participant in participants:
+            email = participant.email.strip().lower()
+            contact_phones_by_email.setdefault(email, participant.phone)
+    return [
+        AdminInterfaceContact(
+            name=user.get_full_name() or user.username,
+            email=user.email,
+            phone=contact_phones_by_email.get(user.email.strip().lower(), "") if user.email else "",
+            phone_href=_phone_href(contact_phones_by_email.get(user.email.strip().lower(), "")) if user.email else "",
+        )
+        for user in users
+    ]
 
 
 def calculate_meal_overview(camp: Camp) -> list[MealOverviewDay]:

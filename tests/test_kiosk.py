@@ -99,10 +99,18 @@ def test_kiosk_home_hides_normal_admin_header_and_renders_drink_dialog_controls(
 
 @pytest.mark.django_db
 def test_kiosk_home_shows_leadership_contact_button(client):
+    camp = CampFactory()
     admin_user = UserFactory(username="leitung", email="leitung@example.test")
     admin_user.is_superuser = True
     admin_user.save()
-    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    ParticipantFactory(
+        camp=camp,
+        first_name="Lager",
+        last_name="Leitung",
+        email="leitung@example.test",
+        phone="0123 / 456",
+    )
     session = client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session.save()
@@ -110,8 +118,10 @@ def test_kiosk_home_shows_leadership_contact_button(client):
     response = client.get(reverse("kiosk-home"))
 
     assert response.status_code == 200
-    assert b"Lagerleitung" in response.content
+    assert b"Kontakt Lagerleitung" in response.content
     assert b"leitung@example.test" in response.content
+    assert b'href="tel:0123456"' in response.content
+    assert b"0123 / 456" in response.content
 
 
 @pytest.mark.django_db
@@ -147,6 +157,11 @@ def test_kiosk_home_shows_contact_hint_after_cutoff_before_order_sent(client, mo
 
     assert response.status_code == 200
     assert b"melde dich bitte bei der Lagerleitung" in response.content
+    content = response.content.decode()
+    meal_section_start = content.index("<h2>Essen anmelden</h2>")
+    status_start = content.index("Die Buchung ist geschlossen.")
+    calendar_start = content.index('<div class="meal-calendar"')
+    assert meal_section_start < status_start < calendar_start
 
 
 @pytest.mark.django_db

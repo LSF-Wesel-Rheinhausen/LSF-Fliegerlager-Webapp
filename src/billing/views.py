@@ -1015,7 +1015,7 @@ def kiosk_home(request):
         "sent_invites": sent_invites,
         "accepted_links": accepted_links,
         "kiosk_autologout": True,
-        "kiosk_contacts": admin_interface_contacts(User),
+        "kiosk_contacts": admin_interface_contacts(User, participant.camp),
         "next_order_date": next_order_date,
         "next_meal_order": next_meal_order,
         "next_order_locked": is_meal_change_locked(participant.camp, next_order_date),
