@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}Seite nicht gefunden{% endblock %}
+
+{% block content %}
+  <section class="panel stack">
+    <div>
+      <p class="eyebrow">404</p>
+      <h1>Seite nicht gefunden</h1>
+      <p>Die angeforderte Adresse existiert nicht oder wurde verschoben.</p>
+    </div>
+    <div class="form-actions">
+      {% if user.is_authenticated %}
+        <a class="button" href="{% url 'camp-list' %}">Zur Übersicht</a>
+      {% else %}
+        <a class="button" href="{% url 'kiosk-home' %}">Zum Kiosk</a>
+      {% endif %}
+    </div>
+  </section>
+{% endblock %}
