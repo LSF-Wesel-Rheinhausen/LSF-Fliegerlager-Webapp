@@ -6,6 +6,7 @@ from .models import (
     Charge,
     DrinkEntry,
     Expense,
+    MealOrder,
     MealSignup,
     Participant,
     ParticipantBookingLink,
@@ -106,6 +107,13 @@ class MealSignupAdmin(admin.ModelAdmin):
         "family_member__first_name",
         "family_member__last_name",
     )
+
+
+@admin.register(MealOrder)
+class MealOrderAdmin(admin.ModelAdmin):
+    list_display = ("camp", "meal_date", "ordered_at", "ordered_by")
+    list_filter = ("camp", "meal_date", "ordered_at")
+    search_fields = ("camp__name", "ordered_by__username", "ordered_by__email")
 
 
 admin.site.register(DrinkEntry)

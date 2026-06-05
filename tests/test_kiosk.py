@@ -5,7 +5,7 @@ import pytest
 from django.urls import reverse
 from django.utils import timezone
 
-from billing.models import Charge, MealSignup, ParticipantBookingLink, ParticipantFamilyMember, PriceRule
+from billing.models import Charge, MealOrder, MealSignup, ParticipantBookingLink, ParticipantFamilyMember, PriceRule
 from billing.views import KIOSK_PARTICIPANT_SESSION_KEY, KIOSK_PIN_SETUP_SESSION_KEY
 from tests.factories import CampFactory, ParticipantFactory, PriceRuleFactory, UserFactory
 
@@ -95,6 +95,58 @@ def test_kiosk_home_hides_normal_admin_header_and_renders_drink_dialog_controls(
     assert b'data-timeout-ms="120000"' in response.content
     assert reverse("kiosk-logout").encode() in response.content
     assert "Förderung anwenden".encode() not in response.content
+
+
+@pytest.mark.django_db
+def test_kiosk_home_shows_leadership_contact_button(client):
+    admin_user = UserFactory(username="leitung", email="leitung@example.test")
+    admin_user.is_superuser = True
+    admin_user.save()
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.get(reverse("kiosk-home"))
+
+    assert response.status_code == 200
+    assert b"Lagerleitung" in response.content
+    assert b"leitung@example.test" in response.content
+
+
+@pytest.mark.django_db
+def test_kiosk_home_shows_order_sent_for_next_day(client, monkeypatch):
+    fixed_now = timezone.make_aware(datetime(2026, 7, 1, 18, 30))
+    monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
+    camp = CampFactory(meal_booking_cutoff_time=time(12, 0))
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    MealOrder.objects.create(camp=camp, meal_date=date(2026, 7, 2))
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.get(reverse("kiosk-home"))
+
+    assert response.status_code == 200
+    assert b"Die Bestellung wurde abgeschickt." in response.content
+
+
+@pytest.mark.django_db
+def test_kiosk_home_shows_contact_hint_after_cutoff_before_order_sent(client, monkeypatch):
+    fixed_now = timezone.make_aware(datetime(2026, 7, 1, 18, 30))
+    monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
+    camp = CampFactory(meal_booking_cutoff_time=time(12, 0))
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.get(reverse("kiosk-home"))
+
+    assert response.status_code == 200
+    assert b"melde dich bitte bei der Lagerleitung" in response.content
 
 
 @pytest.mark.django_db

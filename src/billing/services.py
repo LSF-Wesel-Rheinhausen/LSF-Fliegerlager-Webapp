@@ -4,10 +4,11 @@ from decimal import Decimal
 from typing import Any
 
 from django.core.exceptions import ValidationError
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.utils import timezone
 
-from .models import BookingAuditLog, Camp, Charge, DrinkEntry, Expense, MealSignup, Participant, PriceRule
+from .models import BookingAuditLog, Camp, Charge, DrinkEntry, Expense, MealOrder, MealSignup, Participant, PriceRule
+from .permissions import ADMIN_GROUP, EDITOR_GROUP, HUEBERS_GROUP
 
 ZERO = Decimal("0.00")
 MEAL_VARIANT_ORDER = [
@@ -121,6 +122,28 @@ def camp_meal_dates(camp: Camp, include_dates: set[date] | None = None) -> list[
     if include_dates:
         return sorted(include_dates)
     return [timezone.localdate()]
+
+
+def next_catering_order_date() -> date:
+    """Return the date that should be ordered from the caterer today."""
+    return timezone.localdate() + timedelta(days=1)
+
+
+def meal_order_for_date(camp: Camp, meal_date: date) -> MealOrder | None:
+    """Return the sent catering order marker for a camp day, if present."""
+    return MealOrder.objects.select_related("ordered_by").filter(camp=camp, meal_date=meal_date).first()
+
+
+def admin_interface_contacts(user_model: Any) -> list[Any]:
+    """Return active users who can be contacted for admin-interface meal issues."""
+    return list(
+        user_model.objects.filter(is_active=True)
+        .filter(
+            Q(is_superuser=True) | Q(groups__name__in=[ADMIN_GROUP, EDITOR_GROUP, HUEBERS_GROUP]) | Q(is_staff=True)
+        )
+        .distinct()
+        .order_by("last_name", "first_name", "username")
+    )
 
 
 def calculate_meal_overview(camp: Camp) -> list[MealOverviewDay]:

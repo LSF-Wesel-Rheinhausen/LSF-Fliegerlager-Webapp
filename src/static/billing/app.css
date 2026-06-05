@@ -782,6 +782,19 @@ textarea {
   padding: 0 14px 14px;
 }
 
+.meal-order-panel,
+.meal-order-status {
+  margin-bottom: 20px;
+}
+
+.meal-order-metrics {
+  margin: 0;
+}
+
+.target-row--single {
+  grid-template-columns: 1fr;
+}
+
 .message {
   margin-bottom: 12px;
   padding: 11px 13px;

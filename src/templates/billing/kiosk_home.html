@@ -2,6 +2,7 @@
 {% load billing_format %}
 {% block title %}Kiosk{% endblock %}
 {% block kiosk_nav %}
+  <button type="button" class="button button-secondary" data-open-contact-dialog>Lagerleitung</button>
   <a class="button button-secondary" href="{% url 'kiosk-logout' %}">Abmelden</a>
 {% endblock %}
 {% block content %}
@@ -11,6 +12,17 @@
       <p>{{ participant.camp }} · {{ participant.get_status_display }}</p>
     </div>
   </div>
+
+  <section class="panel stack meal-order-status">
+    <h2>Essensbestellung für {{ next_order_date|date:"d.m.Y" }}</h2>
+    {% if next_meal_order %}
+      <p>Die Bestellung wurde abgeschickt.</p>
+    {% elif next_order_locked %}
+      <p>Die Buchung ist geschlossen. Falls du noch nicht bestellt hast, melde dich bitte bei der Lagerleitung.</p>
+    {% else %}
+      <p>Die Buchung ist bis zum Stichzeitpunkt noch offen.</p>
+    {% endif %}
+  </section>
 
   <dl class="metrics" aria-label="Kiosk-Abrechnungsübersicht">
     <div class="metric"><dt>Brutto</dt><dd><strong>{{ summary.total_gross|money_eur }}</strong></dd></div>
@@ -276,6 +288,25 @@
       </div>
     </form>
   </dialog>
+
+  <dialog id="contact-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="contact-dialog-title">
+    <form method="dialog" class="dialog-heading">
+      <h2 id="contact-dialog-title">Lagerleitung</h2>
+      <button class="button button-secondary">Schließen</button>
+    </form>
+    <div class="target-list">
+      {% for contact in kiosk_contacts %}
+        <article class="target-row target-row--single">
+          <div class="kiosk-list-row__content">
+            <strong>{{ contact.get_full_name|default:contact.username }}</strong>
+            <span>{% if contact.email %}<a href="mailto:{{ contact.email }}">{{ contact.email }}</a>{% else %}Kein Kontakt hinterlegt{% endif %}</span>
+          </div>
+        </article>
+      {% empty %}
+        <p class="hint">Keine Kontakte hinterlegt.</p>
+      {% endfor %}
+    </div>
+  </dialog>
 {% endblock %}
 {% block scripts %}
   <script>
@@ -291,6 +322,7 @@
       const mealInput = document.getElementById("id_meal-meal");
       const mealDialogTitle = document.getElementById("meal-dialog-title");
       const familyDialog = document.getElementById("family-dialog");
+      const contactDialog = document.getElementById("contact-dialog");
 
       document.querySelectorAll("[data-drink-button]").forEach((button) => {
         button.addEventListener("click", () => {
@@ -328,6 +360,7 @@
         });
       });
       document.querySelector("[data-open-family-dialog]")?.addEventListener("click", () => familyDialog.showModal());
+      document.querySelector("[data-open-contact-dialog]")?.addEventListener("click", () => contactDialog.showModal());
     })();
   </script>
 {% endblock %}

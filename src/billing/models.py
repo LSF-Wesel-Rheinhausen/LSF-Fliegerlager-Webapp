@@ -390,6 +390,30 @@ class MealSignup(TimeStampedModel):
         return f"{self.participant}: {self.meal_date} {self.meal}"
 
 
+class MealOrder(TimeStampedModel):
+    """Track that the catering meal order for one camp day has been sent."""
+
+    camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="meal_orders")
+    meal_date = models.DateField()
+    ordered_at = models.DateTimeField(default=timezone.now)
+    ordered_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sent_meal_orders",
+    )
+
+    class Meta:
+        ordering = ["-meal_date"]
+        constraints = [
+            models.UniqueConstraint(fields=["camp", "meal_date"], name="unique_meal_order_per_camp_date"),
+        ]
+
+    def __str__(self):
+        return f"{self.camp}: Bestellung {self.meal_date}"
+
+
 class DrinkEntry(TimeStampedModel):
     class Drink(models.TextChoices):
         ICED_TEA = "iced_tea", "Eistee"

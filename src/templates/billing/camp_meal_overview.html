@@ -16,6 +16,38 @@
     </div>
   </div>
 
+  <section class="panel stack meal-order-panel">
+    <div class="toolbar compact-toolbar">
+      <div>
+        <h2>Nächster Tag: {{ next_order_date|date:"d.m.Y" }}</h2>
+        {% if next_meal_order %}
+          <p>Bestellung wurde um {{ next_meal_order.ordered_at|date:"d.m.Y H:i" }} Uhr abgeschickt.</p>
+        {% else %}
+          <p>Prüfe die Abendessen-Zahlen und markiere die Caterer-Bestellung danach als abgeschickt.</p>
+        {% endif %}
+      </div>
+      <form method="post" action="{% url 'meal-order-mark-sent' camp.pk %}">
+        {% csrf_token %}
+        <button type="submit" {% if next_meal_order %}class="button-secondary"{% endif %}>
+          {% if next_meal_order %}Erneut als bestellt markieren{% else %}Bestellung ist abgeschickt{% endif %}
+        </button>
+      </form>
+    </div>
+    {% if next_order_day %}
+      {% for meal in next_order_day.meals %}
+        <dl class="metrics meal-order-metrics" aria-label="Bestellung für den nächsten Tag">
+          {% for variant, count in meal.variant_counts.items %}
+            <div class="metric"><dt>{{ variant }}</dt><dd><strong>{{ count }}</strong></dd></div>
+          {% endfor %}
+          <div class="metric"><dt>Aktiv</dt><dd><strong>{{ meal.active_total }}</strong></dd></div>
+          <div class="metric"><dt>Zurückgenommen</dt><dd><strong>{{ meal.retracted_total }}</strong></dd></div>
+        </dl>
+      {% endfor %}
+    {% else %}
+      <p class="hint">Für den nächsten Tag sind keine Lagerdaten vorhanden.</p>
+    {% endif %}
+  </section>
+
   <section class="panel stack">
     <div class="toolbar compact-toolbar">
       <div>

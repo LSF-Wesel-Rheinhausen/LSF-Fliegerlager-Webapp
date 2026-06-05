@@ -4,7 +4,7 @@ from decimal import Decimal
 import pytest
 from django.urls import reverse
 
-from billing.models import Charge, MealSignup, ParticipantFamilyMember
+from billing.models import Charge, MealOrder, MealSignup, ParticipantFamilyMember
 from billing.services import calculate_meal_overview
 from tests.factories import CampFactory, ParticipantFactory, SuperUserFactory
 
@@ -83,6 +83,20 @@ def test_camp_meal_overview_renders_counts_for_admin(client):
 
     assert response.status_code == 200
     assert b"Essens\xc3\xbcbersicht" in response.content
+    assert b"N\xc3\xa4chster Tag" in response.content
     assert b"Abendessen" in response.content
     assert b"Fr\xc3\xbchst\xc3\xbcck" not in response.content
     assert b"<strong>1</strong>" in response.content
+
+
+@pytest.mark.django_db
+def test_meal_overview_marks_next_day_order_as_sent(client):
+    camp = CampFactory()
+    user = SuperUserFactory()
+    client.force_login(user)
+
+    response = client.post(reverse("meal-order-mark-sent", args=[camp.pk]))
+
+    assert response.status_code == 302
+    order = MealOrder.objects.get(camp=camp)
+    assert order.ordered_by == user

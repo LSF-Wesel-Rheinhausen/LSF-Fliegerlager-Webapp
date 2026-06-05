@@ -41,7 +41,7 @@ from .forms import (
     UserPasswordResetForm,
 )
 from .importers import preview_participants, rows_from_payload, rows_to_payload, save_participants
-from .models import BookingAuditLog, Camp, Charge, MealSignup, Participant, ParticipantBookingLink, PriceRule
+from .models import BookingAuditLog, Camp, Charge, MealOrder, MealSignup, Participant, ParticipantBookingLink, PriceRule
 from .permissions import (
     ADMIN_GROUP,
     EDITOR_GROUP,
@@ -60,6 +60,7 @@ from .roles import (
     user_role,
 )
 from .services import (
+    admin_interface_contacts,
     calculate_camp_settlements,
     calculate_meal_overview,
     calculate_participant_settlement,
@@ -69,6 +70,8 @@ from .services import (
     create_booking_delete_audit_log,
     is_meal_change_locked,
     meal_change_lock_message,
+    meal_order_for_date,
+    next_catering_order_date,
     participant_kiosk_summary,
     restore_booking_from_audit_log,
 )
@@ -772,11 +775,34 @@ def meal_cutoff_edit(request, camp_id):
 def camp_meal_overview(request, camp_id):
     """Render the per-day meal counts used for caterer ordering."""
     camp = get_object_or_404(Camp, pk=camp_id)
+    next_order_date = next_catering_order_date()
+    meal_overview_days = calculate_meal_overview(camp)
     return render(
         request,
         "billing/camp_meal_overview.html",
-        {"camp": camp, "meal_overview_days": calculate_meal_overview(camp)},
+        {
+            "camp": camp,
+            "meal_overview_days": meal_overview_days,
+            "next_order_day": next((day for day in meal_overview_days if day.meal_date == next_order_date), None),
+            "next_order_date": next_order_date,
+            "next_meal_order": meal_order_for_date(camp, next_order_date),
+        },
     )
+
+
+@meal_manager_required
+@require_POST
+def meal_order_mark_sent(request, camp_id):
+    """Mark tomorrow's catering meal order as sent."""
+    camp = get_object_or_404(Camp, pk=camp_id)
+    meal_date = next_catering_order_date()
+    MealOrder.objects.update_or_create(
+        camp=camp,
+        meal_date=meal_date,
+        defaults={"ordered_at": timezone.now(), "ordered_by": request.user},
+    )
+    messages.success(request, f"Essensbestellung für {meal_date:%d.%m.%Y} wurde als abgeschickt markiert.")
+    return redirect("camp-meal-overview", camp_id=camp.pk)
 
 
 def kiosk_pin_setup(request):
@@ -808,6 +834,8 @@ def kiosk_home(request):
     if participant is None:
         return redirect("kiosk-login")
 
+    next_order_date = next_catering_order_date()
+    next_meal_order = meal_order_for_date(participant.camp, next_order_date)
     meal_targets = _kiosk_meal_targets(participant)
     drink_form = DrinkBookingForm(participant=participant, prefix="drink")
     meal_form = MealBookingForm(participant=participant, prefix="meal")
@@ -987,5 +1015,9 @@ def kiosk_home(request):
         "sent_invites": sent_invites,
         "accepted_links": accepted_links,
         "kiosk_autologout": True,
+        "kiosk_contacts": admin_interface_contacts(User),
+        "next_order_date": next_order_date,
+        "next_meal_order": next_meal_order,
+        "next_order_locked": is_meal_change_locked(participant.camp, next_order_date),
     }
     return render(request, "billing/kiosk_home.html", context)
