@@ -26,11 +26,22 @@
       </thead>
       <tbody>
         {% for p in participants %}
-          <tr>
+          <tr style="
+            {% if forloop.counter == 1 %}background: linear-gradient(90deg, rgba(255, 215, 0, 0.15) 0%, transparent 100%); border-left: 4px solid #FFD700;{% endif %}
+            {% if forloop.counter == 2 %}background: linear-gradient(90deg, rgba(192, 192, 192, 0.15) 0%, transparent 100%); border-left: 4px solid #C0C0C0;{% endif %}
+            {% if forloop.counter == 3 %}background: linear-gradient(90deg, rgba(205, 127, 50, 0.15) 0%, transparent 100%); border-left: 4px solid #CD7F32;{% endif %}
+            {% if p.completed_shifts == 0 and p.target_shifts > 0 %}background: rgba(var(--danger-rgb), 0.05);{% endif %}
+          ">
             <td>
-              <strong>{{ p.full_name }}</strong>
+              <strong style="font-size: 1.1em;">
+                {% if forloop.counter == 1 %}🥇{% endif %}
+                {% if forloop.counter == 2 %}🥈{% endif %}
+                {% if forloop.counter == 3 %}🥉{% endif %}
+                {% if forloop.counter > 3 %}<span style="display:inline-block; width:1.5em; color:var(--text-muted);">{{ forloop.counter }}.</span>{% endif %}
+                {{ p.full_name }}
+              </strong>
             </td>
-            <td>{{ p.completed_shifts }}</td>
+            <td style="font-size: 1.2em; font-weight: bold; color: {% if p.completed_shifts >= p.target_shifts and p.target_shifts > 0 %}var(--ok){% else %}inherit{% endif %};">{{ p.completed_shifts }}</td>
             <td>{{ p.target_shifts }}</td>
             <td>
               {% if p.target_shifts == 0 %}

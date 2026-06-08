@@ -37,9 +37,9 @@
     <h2>Dienste & Aufgaben</h2>
     <p>Hier kannst du Lagerdienste (wie Spülen, Kochen, Putzen) anlegen und Teilnehmern zuweisen.</p>
     <div class="actions" style="margin-top: 1rem;">
-      <a href="{% url 'shift-manage' camp.pk %}" class="button">Sonderdienste verwalten</a>
-      <a href="{% url 'admin:billing_dailyshifttemplate_changelist' %}" class="button button-secondary">Tägliche Dienst-Vorlagen</a>
-      <a href="{% url 'shift-report' camp.pk %}" class="button button-secondary">Dienst-Auswertung ansehen</a>
+      <a href="{% url 'shift-manage' camp.pk %}" class="button">Liste aller Dienste & Belegungen</a>
+      <a href="{% url 'shift-report' camp.pk %}" class="button button-secondary">Teilnehmer-Ranking (Auswertung)</a>
+      <a href="{% url 'admin:billing_dailyshifttemplate_changelist' %}" class="button button-secondary">Vorlagen verwalten</a>
     </div>
   </section>
 
