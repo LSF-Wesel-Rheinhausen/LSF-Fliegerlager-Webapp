@@ -18,6 +18,7 @@ from .models import (
     ParticipantPin,
     Payment,
     PriceRule,
+    UserProfile,
 )
 from .roles import ROLE_ADMIN, ROLE_CHOICES, user_role
 
@@ -90,7 +91,10 @@ class UserCreateForm(UserCreationForm):
     """
 
     username = forms.CharField(label="Benutzername")
+    first_name = forms.CharField(label="Vorname", required=False)
+    last_name = forms.CharField(label="Nachname", required=False)
     email = forms.EmailField(label="E-Mail-Adresse", required=True)
+    phone = forms.CharField(label="Telefon", max_length=80, required=False)
     role = forms.ChoiceField(label="Rolle", choices=ROLE_CHOICES)
     password1 = forms.CharField(
         label="Passwort", strip=False, widget=forms.PasswordInput(attrs={"autocomplete": "new-password"})
@@ -101,7 +105,7 @@ class UserCreateForm(UserCreationForm):
 
     class Meta:
         model = get_user_model()
-        fields = ["username", "email"]
+        fields = ["username", "first_name", "last_name", "email"]
 
     def save(self, commit: bool = True) -> Any:
         """Persist the user account without assigning groups.
@@ -113,29 +117,41 @@ class UserCreateForm(UserCreationForm):
             The created user instance.
         """
         user = super().save(commit=False)
+        user.first_name = self.cleaned_data["first_name"]
+        user.last_name = self.cleaned_data["last_name"]
         user.email = self.cleaned_data["email"]
         user.is_active = True
         user.is_staff = self.cleaned_data["role"] == ROLE_ADMIN
         user.is_superuser = False
         if commit:
             user.save()
+            UserProfile.objects.update_or_create(user=user, defaults={"phone": self.cleaned_data["phone"]})
         return user
 
 
 class UserEditForm(forms.ModelForm):
     """Edit non-password user account metadata and billing role."""
 
+    username = forms.CharField(label="Benutzername")
+    first_name = forms.CharField(label="Vorname", required=False)
+    last_name = forms.CharField(label="Nachname", required=False)
     email = forms.EmailField(label="E-Mail-Adresse", required=True)
+    phone = forms.CharField(label="Telefon", max_length=80, required=False)
     is_active = forms.BooleanField(label="Aktiv", required=False)
     role = forms.ChoiceField(label="Rolle", choices=ROLE_CHOICES)
 
     class Meta:
         model = get_user_model()
-        fields = ["email", "is_active"]
+        fields = ["username", "first_name", "last_name", "email", "is_active"]
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.fields["role"].initial = user_role(self.instance)
+        if self.instance.pk:
+            try:
+                self.fields["phone"].initial = self.instance.profile.phone
+            except UserProfile.DoesNotExist:
+                self.fields["phone"].initial = ""
 
     def clean_role(self) -> str:
         """Prevent misleading role changes for Django superusers."""
@@ -143,6 +159,13 @@ class UserEditForm(forms.ModelForm):
         if self.instance.is_superuser and role != ROLE_ADMIN:
             raise forms.ValidationError("Superuser bleiben immer Admins.", code="superuser_role")
         return role
+
+    def save(self, commit: bool = True) -> Any:
+        """Persist editable user metadata and the attached profile."""
+        user = super().save(commit=commit)
+        if commit:
+            UserProfile.objects.update_or_create(user=user, defaults={"phone": self.cleaned_data["phone"]})
+        return user
 
 
 class UserPasswordResetForm(SetPasswordForm):

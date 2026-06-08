@@ -1,9 +1,10 @@
+import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db.models import Q, Sum
 from django.utils import timezone
 
@@ -36,6 +37,16 @@ class MealOverviewDay:
 
     meal_date: date
     meals: list[MealCount]
+
+
+@dataclass(frozen=True)
+class AdminInterfaceContact:
+    """Represent a kiosk-visible leadership contact."""
+
+    name: str
+    email: str
+    phone: str
+    phone_href: str
 
 
 @dataclass(frozen=True)
@@ -134,16 +145,42 @@ def meal_order_for_date(camp: Camp, meal_date: date) -> MealOrder | None:
     return MealOrder.objects.select_related("ordered_by").filter(camp=camp, meal_date=meal_date).first()
 
 
-def admin_interface_contacts(user_model: Any) -> list[Any]:
+def _phone_href(phone: str) -> str:
+    """Return a sanitized telephone link target for a display phone number."""
+    return re.sub(r"(?!^\+)[^0-9]", "", phone)
+
+
+def _user_profile_phone(user: Any) -> str:
+    """Return the profile phone number for a user when one exists."""
+    try:
+        return user.profile.phone
+    except ObjectDoesNotExist:
+        return ""
+
+
+def admin_interface_contacts(user_model: Any) -> list[AdminInterfaceContact]:
     """Return active users who can be contacted for admin-interface meal issues."""
-    return list(
-        user_model.objects.filter(is_active=True)
+    users = list(
+        user_model.objects.select_related("profile")
+        .filter(is_active=True)
         .filter(
             Q(is_superuser=True) | Q(groups__name__in=[ADMIN_GROUP, EDITOR_GROUP, HUEBERS_GROUP]) | Q(is_staff=True)
         )
         .distinct()
         .order_by("last_name", "first_name", "username")
     )
+    contacts = []
+    for user in users:
+        phone = _user_profile_phone(user)
+        contacts.append(
+            AdminInterfaceContact(
+                name=user.get_full_name() or user.username,
+                email=user.email,
+                phone=phone,
+                phone_href=_phone_href(phone),
+            )
+        )
+    return contacts
 
 
 def calculate_meal_overview(camp: Camp) -> list[MealOverviewDay]:

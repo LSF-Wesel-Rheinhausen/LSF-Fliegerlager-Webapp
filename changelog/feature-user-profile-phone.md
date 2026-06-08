@@ -1,0 +1,3 @@
+- add persistent user profiles with editable phone numbers
+- allow admins to edit username, first name, last name, email, phone, active status and role in user management
+- use admin profile phone numbers for the kiosk leadership contact dialog

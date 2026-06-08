@@ -1,0 +1,3 @@
+- update the kiosk leadership contact dialog title to "Kontakt Lagerleitung"
+- show leadership phone numbers as telephone links when a matching participant contact exists
+- move the closed meal-order notice into the meal booking area

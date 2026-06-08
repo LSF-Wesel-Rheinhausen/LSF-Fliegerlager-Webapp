@@ -15,6 +15,7 @@ from .models import (
     Payment,
     PriceRule,
     Settlement,
+    UserProfile,
 )
 
 
@@ -32,6 +33,7 @@ class ParticipantAdmin(admin.ModelAdmin):
 
 
 admin.site.register(ParticipantPin)
+admin.site.register(UserProfile)
 
 
 @admin.register(ParticipantFamilyMember)

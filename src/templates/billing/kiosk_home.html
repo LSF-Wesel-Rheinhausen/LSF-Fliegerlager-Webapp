@@ -2,7 +2,7 @@
 {% load billing_format %}
 {% block title %}Kiosk{% endblock %}
 {% block kiosk_nav %}
-  <button type="button" class="button button-secondary" data-open-contact-dialog>Lagerleitung</button>
+  <button type="button" class="button button-secondary" data-open-contact-dialog>Kontakt Lagerleitung</button>
   <a class="button button-secondary" href="{% url 'kiosk-logout' %}">Abmelden</a>
 {% endblock %}
 {% block content %}
@@ -12,17 +12,6 @@
       <p>{{ participant.camp }} · {{ participant.get_status_display }}</p>
     </div>
   </div>
-
-  <section class="panel stack meal-order-status">
-    <h2>Essensbestellung für {{ next_order_date|date:"d.m.Y" }}</h2>
-    {% if next_meal_order %}
-      <p>Die Bestellung wurde abgeschickt.</p>
-    {% elif next_order_locked %}
-      <p>Die Buchung ist geschlossen. Falls du noch nicht bestellt hast, melde dich bitte bei der Lagerleitung.</p>
-    {% else %}
-      <p>Die Buchung ist bis zum Stichzeitpunkt noch offen.</p>
-    {% endif %}
-  </section>
 
   <dl class="metrics" aria-label="Kiosk-Abrechnungsübersicht">
     <div class="metric"><dt>Brutto</dt><dd><strong>{{ summary.total_gross|money_eur }}</strong></dd></div>
@@ -91,6 +80,16 @@
     <section class="panel">
       <h2>Essen anmelden</h2>
       <p class="hint">Wähle im Kalender die Mahlzeit und danach im Popup die Personen samt Variante.</p>
+      <div class="meal-order-status" aria-label="Essensbestellung für {{ next_order_date|date:'d.m.Y' }}">
+        <strong>Essensbestellung für {{ next_order_date|date:"d.m.Y" }}</strong>
+        {% if next_meal_order %}
+          <p>Die Bestellung wurde abgeschickt.</p>
+        {% elif next_order_locked %}
+          <p>Die Buchung ist geschlossen. Falls du noch nicht bestellt hast, melde dich bitte bei der Lagerleitung.</p>
+        {% else %}
+          <p>Die Buchung ist bis zum Stichzeitpunkt noch offen.</p>
+        {% endif %}
+      </div>
       {{ meal_form.non_field_errors }}
       <form method="post" class="form-grid kiosk-meal-form" id="meal-booking-form">
         {% csrf_token %}
@@ -291,15 +290,23 @@
 
   <dialog id="contact-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="contact-dialog-title">
     <form method="dialog" class="dialog-heading">
-      <h2 id="contact-dialog-title">Lagerleitung</h2>
+      <h2 id="contact-dialog-title">Kontakt Lagerleitung</h2>
       <button class="button button-secondary">Schließen</button>
     </form>
     <div class="target-list">
       {% for contact in kiosk_contacts %}
         <article class="target-row target-row--single">
           <div class="kiosk-list-row__content">
-            <strong>{{ contact.get_full_name|default:contact.username }}</strong>
-            <span>{% if contact.email %}<a href="mailto:{{ contact.email }}">{{ contact.email }}</a>{% else %}Kein Kontakt hinterlegt{% endif %}</span>
+            <strong>{{ contact.name }}</strong>
+            {% if contact.email %}
+              <span><a href="mailto:{{ contact.email }}">{{ contact.email }}</a></span>
+            {% endif %}
+            {% if contact.phone %}
+              <span><a href="tel:{{ contact.phone_href }}">{{ contact.phone }}</a></span>
+            {% endif %}
+            {% if not contact.email and not contact.phone %}
+              <span>Kein Kontakt hinterlegt</span>
+            {% endif %}
           </div>
         </article>
       {% empty %}
