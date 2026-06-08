@@ -5,6 +5,77 @@
   <a class="button button-secondary" href="{% url 'kiosk-home' %}">Zurück</a>
 {% endblock %}
 {% block content %}
+<style>
+/* Modernes Card-Design für den Kiosk */
+.shift-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+  margin-bottom: 0.75rem;
+}
+.shift-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 16px rgba(0,0,0,0.08);
+  border-color: var(--primary);
+}
+.shift-card--offer {
+  border: 2px solid var(--ok);
+  background: color-mix(in srgb, var(--ok) 5%, transparent);
+}
+.shift-card--offer:hover {
+  box-shadow: 0 8px 16px color-mix(in srgb, var(--ok) 15%, transparent);
+}
+.shift-card__info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.shift-card__title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.shift-card__meta {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.shift-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.shift-badge--ok {
+  background: color-mix(in srgb, var(--ok) 15%, transparent);
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 30%, transparent);
+}
+.shift-badge--danger {
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+}
+</style>
   <div class="toolbar">
     <div>
       <h1>Dienstplan</h1>
@@ -33,22 +104,27 @@
 
   <div class="kiosk-grid">
     {% if offered_shifts %}
-      <section class="panel stack" style="border: 2px solid var(--ok);">
+      <section class="panel stack" style="border: 2px solid var(--ok); background: color-mix(in srgb, var(--ok) 2%, transparent);">
         <h2>Tauschangebote</h2>
         {% for shift in offered_shifts %}
-          <div class="kiosk-list-row">
-            <div class="kiosk-list-row__content">
-              <strong>{{ shift.name }}</strong>
-              <span>{{ shift.date|date:"d.m.Y" }} {% if shift.start_time %}{{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}{% endif %}</span>
-              <span>Angeboten von: <strong>{{ shift.offered_by }}</strong></span>
-              <span>Besetzt: {{ shift.assignments.count }} / {{ shift.required_slots }}</span>
+          <div class="shift-card shift-card--offer">
+            <div class="shift-card__info">
+              <h3 class="shift-card__title">
+                {{ shift.name }}
+                <span class="shift-badge shift-badge--ok">Tauschangebot</span>
+              </h3>
+              <div class="shift-card__meta">
+                <span>📅 {{ shift.date|date:"d.m.Y" }}</span>
+                {% if shift.start_time %}<span>⏰ {{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}</span>{% endif %}
+                <span>👤 Angeboten von: <strong>{{ shift.offered_by }}</strong></span>
+              </div>
             </div>
-            <form method="post" class="kiosk-list-row__actions">
+            <form method="post" style="margin: 0;">
               {% csrf_token %}
               <input type="hidden" name="action" value="signup">
               <input type="hidden" name="shift_id" value="{{ shift.pk }}">
               {% if not shift.is_full %}
-                <button type="submit" class="button">Eintragen</button>
+                <button type="submit" class="button button-primary">Eintragen</button>
               {% else %}
                 <button type="submit" class="button" style="background-color: var(--ok); border-color: var(--ok);">Dienst übernehmen</button>
               {% endif %}
@@ -61,18 +137,23 @@
     <section class="panel stack">
       <h2>Offene Dienste</h2>
       {% for shift in open_shifts %}
-        <div class="kiosk-list-row">
-          <div class="kiosk-list-row__content">
-            <strong>{{ shift.name }}</strong>
-            <span>{{ shift.date|date:"d.m.Y" }} {% if shift.start_time %}{{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}{% endif %}</span>
-            <span>Besetzt: {{ shift.assignments.count }} / {{ shift.required_slots }}</span>
+        <div class="shift-card">
+          <div class="shift-card__info">
+            <h3 class="shift-card__title">{{ shift.name }}</h3>
+            <div class="shift-card__meta">
+              <span>📅 {{ shift.date|date:"d.m.Y" }}</span>
+              {% if shift.start_time %}<span>⏰ {{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}</span>{% endif %}
+              <span class="shift-badge {% if shift.is_full %}shift-badge--danger{% else %}shift-badge--ok{% endif %}">
+                Besetzt: {{ shift.assignments.count }} / {{ shift.required_slots }}
+              </span>
+            </div>
           </div>
-          <form method="post" class="kiosk-list-row__actions">
+          <form method="post" style="margin: 0;">
             {% csrf_token %}
             <input type="hidden" name="action" value="signup">
             <input type="hidden" name="shift_id" value="{{ shift.pk }}">
             {% if not shift.is_full %}
-              <button type="submit" class="button">Eintragen</button>
+              <button type="submit" class="button button-primary">Eintragen</button>
             {% else %}
               <button type="button" class="button button-secondary" disabled>Voll</button>
             {% endif %}
@@ -86,12 +167,18 @@
     <section class="panel stack">
       <h2>Meine übernommenen Dienste</h2>
       {% for shift in my_shifts %}
-        <div class="kiosk-list-row" style="flex-wrap: wrap; gap: 1rem;">
-          <div class="kiosk-list-row__content" style="flex: 1 1 auto;">
-            <strong>{{ shift.name }}</strong>
-            <span>{{ shift.date|date:"d.m.Y" }} {% if shift.start_time %}{{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}{% endif %}</span>
+        <div class="shift-card">
+          <div class="shift-card__info">
+            <h3 class="shift-card__title">{{ shift.name }}</h3>
+            <div class="shift-card__meta">
+              <span>📅 {{ shift.date|date:"d.m.Y" }}</span>
+              {% if shift.start_time %}<span>⏰ {{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}</span>{% endif %}
+              {% if shift.my_assignment.offered_for_exchange %}
+                <span class="shift-badge shift-badge--ok">Wird zum Tausch angeboten</span>
+              {% endif %}
+            </div>
           </div>
-          <div class="kiosk-list-row__actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
             <form method="post" style="margin: 0;">
               {% csrf_token %}
               <input type="hidden" name="shift_id" value="{{ shift.pk }}">
