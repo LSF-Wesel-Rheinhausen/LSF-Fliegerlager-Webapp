@@ -1,7 +1,7 @@
 import pytest
-from tests.factories import GroupFactory, UserFactory
 
 from billing.permissions import ADMIN_GROUP, EDITOR_GROUP, is_admin, is_editor
+from tests.factories import GroupFactory, UserFactory
 
 
 @pytest.mark.django_db

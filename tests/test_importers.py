@@ -2,7 +2,9 @@ from io import BytesIO
 
 import pytest
 from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
 
+from billing.forms import ParticipantImportForm
 from billing.importers import preview_participants, save_participants
 from billing.models import Participant
 from tests.factories import CampFactory
@@ -36,6 +38,23 @@ def test_save_participants_upserts_valid_rows():
 def test_xlsx_preview_rejects_invalid_magic_number():
     with pytest.raises(ValidationError, match="gültiges Excel"):
         preview_participants(BytesIO(b"not-an-xlsx"), "teilnehmer.xlsx")
+
+
+def test_csv_preview_rejects_non_utf8_content():
+    with pytest.raises(ValidationError, match="UTF-8"):
+        preview_participants(BytesIO(b"first_name,last_name\n\xff,Test\n"), "teilnehmer.csv")
+
+
+def test_participant_import_form_rejects_unsupported_extension_and_large_files():
+    unsupported = ParticipantImportForm(files={"file": SimpleUploadedFile("participants.txt", b"data")})
+    oversized = ParticipantImportForm(
+        files={"file": SimpleUploadedFile("participants.csv", b"x" * (5 * 1024 * 1024 + 1))}
+    )
+
+    assert unsupported.is_valid() is False
+    assert oversized.is_valid() is False
+    assert "file" in unsupported.errors
+    assert "file" in oversized.errors
 
 
 @pytest.mark.django_db

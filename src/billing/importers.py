@@ -2,14 +2,17 @@ import csv
 from dataclasses import asdict, dataclass, field
 from decimal import Decimal, InvalidOperation
 from io import BytesIO, TextIOWrapper
+from zipfile import BadZipFile
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from openpyxl import load_workbook
+from openpyxl.utils.exceptions import InvalidFileException
 
 from .models import Participant
 
 XLSX_MAGIC = b"PK\x03\x04"
+MAX_IMPORT_ROWS = 5000
 REQUIRED_PARTICIPANT_COLUMNS = ["first_name", "last_name"]
 PARTICIPANT_COLUMNS = [
     "first_name",
@@ -83,23 +86,41 @@ def normalize_row(raw, row_number):
 
 
 def read_csv(file_obj):
-    wrapper = TextIOWrapper(file_obj, encoding="utf-8-sig")
-    reader = csv.DictReader(wrapper)
-    return [normalize_row(row, index) for index, row in enumerate(reader, start=2)]
+    try:
+        wrapper = TextIOWrapper(file_obj, encoding="utf-8-sig")
+        reader = csv.DictReader(wrapper)
+        rows = []
+        for index, row in enumerate(reader, start=2):
+            if len(rows) >= MAX_IMPORT_ROWS:
+                raise ValidationError(f"Die Importdatei darf höchstens {MAX_IMPORT_ROWS} Datenzeilen enthalten.")
+            rows.append(normalize_row(row, index))
+        return rows
+    except UnicodeDecodeError as error:
+        raise ValidationError("Die CSV-Datei muss UTF-8-kodiert sein.") from error
 
 
 def read_xlsx(file_obj):
-    workbook = load_workbook(BytesIO(file_obj.read()), read_only=True, data_only=True)
-    sheet = workbook.active
-    rows = list(sheet.iter_rows(values_only=True))
-    if not rows:
-        return []
-    headers = [str(value).strip() if value is not None else "" for value in rows[0]]
-    parsed = []
-    for index, values in enumerate(rows[1:], start=2):
-        raw = dict(zip(headers, values, strict=False))
-        parsed.append(normalize_row(raw, index))
-    return parsed
+    try:
+        workbook = load_workbook(BytesIO(file_obj.read()), read_only=True, data_only=True)
+    except (BadZipFile, InvalidFileException, KeyError, OSError) as error:
+        raise ValidationError("Die XLSX-Datei konnte nicht sicher gelesen werden.") from error
+    try:
+        sheet = workbook.active
+        rows = sheet.iter_rows(values_only=True)
+        try:
+            header_row = next(rows)
+        except StopIteration:
+            return []
+        headers = [str(value).strip() if value is not None else "" for value in header_row]
+        parsed = []
+        for index, values in enumerate(rows, start=2):
+            if len(parsed) >= MAX_IMPORT_ROWS:
+                raise ValidationError(f"Die Importdatei darf höchstens {MAX_IMPORT_ROWS} Datenzeilen enthalten.")
+            raw = dict(zip(headers, values, strict=False))
+            parsed.append(normalize_row(raw, index))
+        return parsed
+    finally:
+        workbook.close()
 
 
 def _peek(file_obj, size=4):
