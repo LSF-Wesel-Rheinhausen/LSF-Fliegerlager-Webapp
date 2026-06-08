@@ -342,7 +342,8 @@ test("Daily shift template and kiosk shift flow", async ({ page }) => {
   await createParticipant(page, "Albert", "Einstein");
 
   // Create a daily shift template via Frontend
-  await page.getByRole("link", { name: "Zurück zum Lager" }).click();
+  await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
+  await page.getByRole("link", { name: "Sommerlager Dienste" }).click();
   await page.getByRole("link", { name: "Tägliche Vorlagen verwalten" }).click();
   await page.getByRole("button", { name: "Vorlage anlegen" }).click();
   await expect(page.locator("dialog#template-dialog")).toBeVisible();
