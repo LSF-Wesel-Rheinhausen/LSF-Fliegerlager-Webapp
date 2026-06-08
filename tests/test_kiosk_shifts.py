@@ -86,24 +86,38 @@ def test_kiosk_cannot_retract_same_day(kiosk_client, active_camp):
 
 
 @pytest.mark.django_db
-def test_kiosk_can_transfer_shift(kiosk_client, active_camp):
+def test_kiosk_can_offer_and_revoke_shift(kiosk_client, active_camp):
     shift = Shift.objects.create(
         camp=active_camp,
         name="Test Shift",
         date=datetime.date.today(),
         required_slots=1,
     )
-    ShiftAssignment.objects.create(shift=shift, participant=kiosk_client.kiosk_user)
-    other = Participant.objects.create(camp=active_camp, first_name="Other", last_name="User", status="active")
+    assignment = ShiftAssignment.objects.create(shift=shift, participant=kiosk_client.kiosk_user)
 
-    response = kiosk_client.post(
-        reverse("kiosk-shifts"),
-        {
-            "action": "transfer",
-            "shift_id": shift.pk,
-            "transfer_to": other.pk,
-        },
-    )
+    response = kiosk_client.post(reverse("kiosk-shifts"), {"action": "offer", "shift_id": shift.pk})
     assert response.status_code == 302
-    assert not ShiftAssignment.objects.filter(shift=shift, participant=kiosk_client.kiosk_user).exists()
-    assert ShiftAssignment.objects.filter(shift=shift, participant=other).exists()
+    assignment.refresh_from_db()
+    assert assignment.offered_for_exchange is True
+
+    response = kiosk_client.post(reverse("kiosk-shifts"), {"action": "revoke_offer", "shift_id": shift.pk})
+    assert response.status_code == 302
+    assignment.refresh_from_db()
+    assert assignment.offered_for_exchange is False
+
+
+@pytest.mark.django_db
+def test_kiosk_can_takeover_offered_shift(kiosk_client, active_camp):
+    shift = Shift.objects.create(
+        camp=active_camp,
+        name="Test Shift",
+        date=datetime.date.today(),
+        required_slots=1,
+    )
+    other = Participant.objects.create(camp=active_camp, first_name="Other", last_name="User", status="active")
+    assignment = ShiftAssignment.objects.create(shift=shift, participant=other, offered_for_exchange=True)
+
+    response = kiosk_client.post(reverse("kiosk-shifts"), {"action": "signup", "shift_id": shift.pk})
+    assert response.status_code == 302
+    assert not ShiftAssignment.objects.filter(shift=shift, participant=other).exists()
+    assert ShiftAssignment.objects.filter(shift=shift, participant=kiosk_client.kiosk_user).exists()

@@ -545,6 +545,7 @@ class Shift(TimeStampedModel):
 class ShiftAssignment(TimeStampedModel):
     shift = models.ForeignKey(Shift, on_delete=models.CASCADE, related_name="assignments")
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="shift_assignments")
+    offered_for_exchange = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["shift", "participant"]

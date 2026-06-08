@@ -1096,11 +1096,21 @@ def kiosk_shifts(request):
         shift = get_object_or_404(Shift, pk=shift_id, camp=participant.camp)
 
         if action == "signup":
-            if not shift.is_full:
-                ShiftAssignment.objects.get_or_create(shift=shift, participant=participant)
+            if ShiftAssignment.objects.filter(shift=shift, participant=participant).exists():
+                messages.error(request, "Du bist für diesen Dienst bereits eingetragen.")
+            elif not shift.is_full:
+                ShiftAssignment.objects.create(shift=shift, participant=participant)
                 messages.success(request, f"Du hast dich für '{shift.name}' eingetragen.")
             else:
-                messages.error(request, "Dieser Dienst ist leider schon voll.")
+                offered_assignment = shift.assignments.filter(offered_for_exchange=True).exclude(participant=participant).first()
+                if offered_assignment:
+                    old_participant = offered_assignment.participant
+                    offered_assignment.participant = participant
+                    offered_assignment.offered_for_exchange = False
+                    offered_assignment.save(update_fields=["participant", "offered_for_exchange"])
+                    messages.success(request, f"Du hast den Dienst von {old_participant.full_name} übernommen.")
+                else:
+                    messages.error(request, "Dieser Dienst ist voll und es wird aktuell kein Platz zum Tausch angeboten.")
         elif action == "retract":
             if shift.date <= today:
                 messages.error(
@@ -1111,16 +1121,17 @@ def kiosk_shifts(request):
             else:
                 ShiftAssignment.objects.filter(shift=shift, participant=participant).delete()
                 messages.success(request, f"Du hast dich aus '{shift.name}' ausgetragen.")
-        elif action == "transfer":
-            transfer_to_id = request.POST.get("transfer_to")
-            if transfer_to_id:
-                target_participant = get_object_or_404(Participant, pk=transfer_to_id, camp=participant.camp)
-                if not ShiftAssignment.objects.filter(shift=shift, participant=target_participant).exists():
-                    ShiftAssignment.objects.filter(shift=shift, participant=participant).delete()
-                    ShiftAssignment.objects.create(shift=shift, participant=target_participant)
-                    messages.success(request, f"Du hast den Dienst an {target_participant.full_name} übertragen.")
-                else:
-                    messages.error(request, "Dieser Teilnehmer ist bereits für den Dienst eingetragen.")
+        elif action == "offer":
+            if shift.date < today:
+                messages.error(request, "Du kannst keine vergangenen Dienste zum Tausch anbieten.")
+            else:
+                updated = ShiftAssignment.objects.filter(shift=shift, participant=participant).update(offered_for_exchange=True)
+                if updated:
+                    messages.success(request, f"Dein Dienst '{shift.name}' wird nun zum Tausch angeboten.")
+        elif action == "revoke_offer":
+            updated = ShiftAssignment.objects.filter(shift=shift, participant=participant).update(offered_for_exchange=False)
+            if updated:
+                messages.success(request, f"Du hast das Tauschangebot für '{shift.name}' zurückgezogen.")
 
         return redirect("kiosk-shifts")
 
@@ -1129,14 +1140,10 @@ def kiosk_shifts(request):
         .prefetch_related("assignments__participant")
         .order_by("date", "start_time")
     )
-    other_participants = (
-        Participant.objects.filter(camp=participant.camp, status=Participant.Status.ACTIVE)
-        .exclude(pk=participant.pk)
-        .order_by("first_name", "last_name")
-    )
-
     for shift in shifts:
-        shift.my_assignment = next((a for a in shift.assignments.all() if a.participant_id == participant.pk), None)
+        shift_assignments = list(shift.assignments.all())
+        shift.my_assignment = next((a for a in shift_assignments if a.participant_id == participant.pk), None)
+        shift.has_offers = any(a.offered_for_exchange and a.participant_id != participant.pk for a in shift_assignments)
 
     return render(
         request,
@@ -1145,6 +1152,5 @@ def kiosk_shifts(request):
             "participant": participant,
             "shifts": shifts,
             "today": today,
-            "other_participants": other_participants,
         },
     )
