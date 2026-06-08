@@ -3,8 +3,10 @@
 .codex/
 .DS_Store
 graphify-out/
+output/
 __pycache__/
 *.py[cod]
+*.bak
 *.sqlite3
 .env
 .env.*
