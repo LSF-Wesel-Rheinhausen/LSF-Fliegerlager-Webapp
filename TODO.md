@@ -1,3 +1,5 @@
-# TODO: Testabdeckung ausbauen
+# Aktuelle TODOs
 
-Alle Ziele für die Test-Suite (Parallelisierung, Kiosk- & Import-E2E-Stabilisierung, Coverage auf 89% in `src/billing/`) wurden erfolgreich abgeschlossen.
+*Die Meilensteine "Dienstpläne & Kiosk-Erweiterungen" sowie "Stabilisierung der E2E-Tests" (Behebung aller Playwright-Flakiness & Zombie-Prozesse) sind erfolgreich abgeschlossen.*
+
+- [ ] (Hier können neue Anforderungen oder Aufgaben eingetragen werden)

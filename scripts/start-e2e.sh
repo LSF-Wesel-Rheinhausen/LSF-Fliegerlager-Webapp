@@ -18,4 +18,4 @@ else
 fi
 
 $PYTHON src/manage.py migrate --noinput
-$PYTHON src/manage.py runserver "127.0.0.1:${port}" --noreload
+exec $PYTHON src/manage.py runserver "127.0.0.1:${port}" --noreload > "/tmp/django-e2e-${port}.log" 2>&1

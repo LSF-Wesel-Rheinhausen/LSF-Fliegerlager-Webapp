@@ -542,9 +542,42 @@ class Shift(TimeStampedModel):
         return f"{self.camp}: {self.date} {self.name}"
 
 
+class DailyShiftTemplate(TimeStampedModel):
+    camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="daily_shift_templates")
+    name = models.CharField(max_length=120)
+    start_time = models.TimeField(null=True, blank=True)
+    end_time = models.TimeField(null=True, blank=True)
+    required_slots = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        ordering = ["start_time", "name"]
+
+    def __str__(self):
+        return f"{self.camp}: Täglich {self.name}"
+
+
+class DailyShiftException(TimeStampedModel):
+    template = models.ForeignKey(DailyShiftTemplate, on_delete=models.CASCADE, related_name="exceptions")
+    date = models.DateField()
+    is_skipped = models.BooleanField(default=False)
+    custom_required_slots = models.PositiveIntegerField(null=True, blank=True)
+    custom_start_time = models.TimeField(null=True, blank=True)
+    custom_end_time = models.TimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["date", "template"]
+        constraints = [
+            models.UniqueConstraint(fields=["template", "date"], name="unique_shift_exception")
+        ]
+
+    def __str__(self):
+        return f"Ausnahme am {self.date} für {self.template.name}"
+
+
 class ShiftAssignment(TimeStampedModel):
     shift = models.ForeignKey(Shift, on_delete=models.CASCADE, related_name="assignments")
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="shift_assignments")
+    offered_for_exchange = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["shift", "participant"]

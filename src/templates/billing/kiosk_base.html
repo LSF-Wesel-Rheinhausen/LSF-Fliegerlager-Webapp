@@ -9,11 +9,22 @@
   </head>
   <body class="kiosk-shell">
     <header class="topbar kiosk-topbar">
-      <a class="brand" href="{% url 'kiosk-login' %}">
+      <a class="brand" href="{% url 'kiosk-login' %}" style="flex-shrink: 0;">
         <img src="{% static 'billing/logo.jpg' %}" alt="Luftsportfreunde Wesel-Rheinhausen e.V.">
         <span>Kiosk</span>
       </a>
-      <div class="kiosk-header-actions">
+      {% if participant %}
+        <div style="flex: 1 1 auto; text-align: center; padding: 0 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 1.15rem; font-weight: 600; color: var(--text-muted); pointer-events: none;">
+          <span id="kiosk-greeting">Hallo</span> <strong style="color: var(--text);">{{ participant.first_name }}</strong>
+          <script>
+            (function() {
+              const greetings = ["Hallo", "Moin", "Servus", "Willkommen", "Hey", "Gude", "Grüß dich"];
+              document.getElementById("kiosk-greeting").innerText = greetings[Math.floor(Math.random() * greetings.length)];
+            })();
+          </script>
+        </div>
+      {% endif %}
+      <div class="kiosk-header-actions" style="flex-shrink: 0;">
         {% if kiosk_autologout %}
           <div
             class="kiosk-timer"

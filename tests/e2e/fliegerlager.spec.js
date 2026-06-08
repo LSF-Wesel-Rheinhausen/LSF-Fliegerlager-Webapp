@@ -56,10 +56,7 @@ async function assertNoUnexpectedOverflow(page) {
 }
 
 async function setupFirstAdmin(page) {
-  await page.goto("/");
-  if (page.url().includes("/kiosk/")) {
-    await page.getByRole("link", { name: "Admin-Interface" }).click();
-  }
+  await page.goto("/setup/");
   if (page.url().includes("/login/")) {
     await loginAsAdmin(page);
     return;
@@ -74,7 +71,7 @@ async function setupFirstAdmin(page) {
   await page.locator("#id_password2").fill("strong-test-pass-123");
   await page.getByRole("button", { name: "Admin anlegen" }).click();
 
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/camps\/?$/);
   await expect(page.getByRole("heading", { name: "Lager" })).toBeVisible();
 }
 
@@ -334,6 +331,64 @@ test("Role flow: editor cannot see admin functions", async ({ page }) => {
 
   await expect(page.getByRole("link", { name: "Lager anlegen" })).toBeHidden();
   await expect(page.getByRole("link", { name: "Nutzer" })).toBeHidden();
+});
+
+test("Daily shift template and kiosk shift flow", async ({ page }) => {
+  await setupFirstAdmin(page);
+  await createCamp(page, "Sommerlager Dienste");
+  await createParticipant(page, "Albert", "Einstein");
+
+  // Create a daily shift template via Frontend
+  await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
+  await page.getByRole("link", { name: "Sommerlager Dienste" }).click();
+  await page.getByRole("link", { name: "Tägliche Vorlagen verwalten" }).click();
+  await page.getByRole("button", { name: "Vorlage anlegen" }).click();
+  await expect(page.locator("dialog#template-dialog")).toBeVisible();
+  await page.getByLabel("Name / Bezeichnung").fill("Spüldienst");
+  await page.getByLabel("Benötigte Personen").fill("2");
+  await page.getByRole("button", { name: "Speichern", exact: true }).click();
+  await expect(page.getByText("Spüldienst").first()).toBeVisible();
+
+  // Generate shifts
+  page.once("dialog", dialog => dialog.accept());
+  await page.getByRole("button", { name: "Dienste generieren" }).click();
+  await expect(page.getByText("Dienste generiert")).toBeVisible();
+
+  await logout(page);
+
+  // Login to kiosk
+  await page.goto("/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Albert Einstein" });
+  await page.getByLabel("PIN").fill("0000");
+  await page.getByRole("button", { name: "Anmelden" }).click();
+
+  // Set PIN
+  await page.getByLabel("Neuer PIN").fill("1234");
+  await page.getByLabel("PIN wiederholen").fill("1234");
+  await page.getByRole("button", { name: "Speichern" }).click();
+
+  // Go to Shifts
+  await page.getByRole("link", { name: "Dienstplan" }).click();
+  await expect(page.getByRole("heading", { name: "Dienstplan" })).toBeVisible();
+
+  // Check progress bar
+  await expect(page.getByText("Dein Fortschritt")).toBeVisible();
+  await expect(page.getByText("Super! Du hast alle Pflichtdienste übernommen.")).toBeVisible();
+
+  // Sign up for a shift
+  await page.getByRole("button", { name: "Eintragen" }).first().click();
+  await expect(page.getByText("Du hast dich für 'Spüldienst' eingetragen.")).toBeVisible();
+
+  // "Austragen" should not exist, only "Zum Tausch anbieten"
+  await expect(page.getByRole("button", { name: "Austragen" })).toBeHidden();
+  await page.getByRole("button", { name: "Zum Tausch anbieten" }).first().click();
+  await expect(page.getByText("wird nun zum Tausch angeboten.")).toBeVisible();
+
+  // The shift should now be in the "Meine übernommenen Dienste" and have "Angebot zurückziehen"
+  await expect(page.getByRole("button", { name: "Angebot zurückziehen" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Zurück" }).click();
+  await page.getByRole("link", { name: "Abmelden" }).click();
 });
 
 for (const viewport of VIEWPORTS) {
