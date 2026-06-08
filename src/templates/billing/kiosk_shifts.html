@@ -227,6 +227,16 @@
                   Besetzt: {{ shift.assignments.count }} / {{ shift.required_slots }}
                 </span>
               </div>
+              {% if shift.assignments.count > 0 %}
+                <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.5rem; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                  <span>Bereits eingetragen:</span>
+                  {% for assignment in shift.assignments.all %}
+                    <span style="background: var(--surface-2); border: 1px solid var(--border); padding: 0.1rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">
+                      {{ assignment.participant.full_name }}
+                    </span>
+                  {% endfor %}
+                </div>
+              {% endif %}
             </div>
             <form method="post" style="margin: 0;">
               {% csrf_token %}
