@@ -129,6 +129,14 @@
 
   <div class="kiosk-grid">
     <section class="panel stack">
+      <h2>Dienste</h2>
+      <p>Du hast <strong>{{ participant.completed_shifts }} von {{ participant.target_shifts }}</strong> Pflichtdiensten erledigt.</p>
+      <div class="form-actions" style="margin-top: 1rem;">
+        <a class="button" href="{% url 'kiosk-shifts' %}">Zum Dienstplan</a>
+      </div>
+    </section>
+
+    <section class="panel stack">
       <div class="toolbar compact-toolbar kiosk-section-heading">
         <div>
           <h2>Familie</h2>

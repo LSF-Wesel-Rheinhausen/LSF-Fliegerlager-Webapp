@@ -18,6 +18,7 @@ from .models import (
     ParticipantPin,
     Payment,
     PriceRule,
+    Shift,
     UserProfile,
 )
 from .roles import ROLE_ADMIN, ROLE_CHOICES, user_role
@@ -197,6 +198,7 @@ class CampForm(forms.ModelForm):
             "ends_on",
             "is_active",
             "meal_booking_cutoff_time",
+            "shift_ratio_per_night",
             "notes",
         ]
         labels = {
@@ -206,6 +208,7 @@ class CampForm(forms.ModelForm):
             "ends_on": "Ende",
             "is_active": "Aktiv",
             "meal_booking_cutoff_time": "Essens-Stichzeitpunkt",
+            "shift_ratio_per_night": "Dienste pro gebuchter Nacht",
             "notes": "Notizen",
         }
         widgets = {
@@ -742,3 +745,21 @@ class MealStandardPricesForm(forms.Form):
                             "applies_to_companions": False,
                         },
                     )
+
+
+class ShiftForm(forms.ModelForm):
+    class Meta:
+        model = Shift
+        fields = ["name", "date", "start_time", "end_time", "required_slots"]
+        labels = {
+            "name": "Name des Dienstes",
+            "date": "Datum",
+            "start_time": "Startzeit",
+            "end_time": "Endzeit",
+            "required_slots": "Benötigte Helfer",
+        }
+        widgets = {
+            "date": forms.DateInput(attrs={"type": "date"}),
+            "start_time": forms.TimeInput(attrs={"type": "time"}),
+            "end_time": forms.TimeInput(attrs={"type": "time"}),
+        }

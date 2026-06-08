@@ -1,0 +1,112 @@
+{% extends "billing/kiosk_base.html" %}
+{% load billing_format %}
+{% block title %}Dienstplan{% endblock %}
+{% block kiosk_nav %}
+  <a class="button button-secondary" href="{% url 'kiosk-home' %}">Zurück</a>
+{% endblock %}
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1>Dienstplan</h1>
+      <p>Hier kannst du dich für offene Dienste eintragen oder deine Dienste übertragen.</p>
+    </div>
+  </div>
+
+  <div class="kiosk-grid">
+    <section class="panel stack">
+      <h2>Offene Dienste</h2>
+      {% for shift in shifts %}
+        {% if not shift.my_assignment %}
+          <div class="kiosk-list-row">
+            <div class="kiosk-list-row__content">
+              <strong>{{ shift.name }}</strong>
+              <span>{{ shift.date|date:"d.m.Y" }} {% if shift.start_time %}{{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}{% endif %}</span>
+              <span>Besetzt: {{ shift.assignments.count }} / {{ shift.required_slots }}</span>
+            </div>
+            <form method="post" class="kiosk-list-row__actions">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="signup">
+              <input type="hidden" name="shift_id" value="{{ shift.pk }}">
+              {% if not shift.is_full %}
+                <button type="submit" class="button">Eintragen</button>
+              {% else %}
+                <button type="button" class="button button-secondary" disabled>Voll</button>
+              {% endif %}
+            </form>
+          </div>
+        {% endif %}
+      {% empty %}
+        <p class="hint">Es stehen aktuell keine Dienste an.</p>
+      {% endfor %}
+    </section>
+
+    <section class="panel stack">
+      <h2>Meine übernommenen Dienste</h2>
+      {% for shift in shifts %}
+        {% if shift.my_assignment %}
+          <div class="kiosk-list-row" style="flex-wrap: wrap; gap: 1rem;">
+            <div class="kiosk-list-row__content" style="flex: 1 1 auto;">
+              <strong>{{ shift.name }}</strong>
+              <span>{{ shift.date|date:"d.m.Y" }} {% if shift.start_time %}{{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}{% endif %}</span>
+            </div>
+            <div class="kiosk-list-row__actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              {% if shift.date > today %}
+                <form method="post" style="margin: 0;">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="retract">
+                  <input type="hidden" name="shift_id" value="{{ shift.pk }}">
+                  <button type="submit" class="button button-secondary" onclick="return confirm('Wirklich aus dem Dienst austragen?');">Austragen</button>
+                </form>
+              {% else %}
+                <span class="hint">Storno-Frist abgelaufen.</span>
+              {% endif %}
+
+              <button type="button" class="button button-secondary" onclick="openTransferDialog({{ shift.pk }}, '{{ shift.name|escapejs }}')">Übertragen</button>
+            </div>
+          </div>
+        {% endif %}
+      {% empty %}
+        <p class="hint">Du hast noch keine Dienste übernommen.</p>
+      {% endfor %}
+    </section>
+  </div>
+
+  <dialog id="transfer-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="transfer-dialog-title">
+    <form method="dialog" class="dialog-heading">
+      <h2 id="transfer-dialog-title">Dienst übertragen</h2>
+      <button class="button button-secondary">Schließen</button>
+    </form>
+    <p class="hint">Bitte wähle den Teilnehmer aus, der den Dienst "<span id="transfer-shift-name"></span>" übernimmt:</p>
+    <form method="post" class="form-grid">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="transfer">
+      <input type="hidden" name="shift_id" id="transfer-shift-id" value="">
+
+      <p>
+        <label for="transfer_to">Neuer Teilnehmer:</label>
+        <select name="transfer_to" id="transfer_to" required>
+          <option value="">Bitte wählen...</option>
+          {% for p in other_participants %}
+            <option value="{{ p.pk }}">{{ p.full_name }}</option>
+          {% endfor %}
+        </select>
+      </p>
+
+      <div class="form-actions">
+        <button type="submit">Dienst abgeben</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+    const transferDialog = document.getElementById("transfer-dialog");
+    const shiftIdInput = document.getElementById("transfer-shift-id");
+    const shiftNameSpan = document.getElementById("transfer-shift-name");
+
+    function openTransferDialog(shiftId, shiftName) {
+      shiftIdInput.value = shiftId;
+      shiftNameSpan.textContent = shiftName;
+      transferDialog.showModal();
+    }
+  </script>
+{% endblock %}
