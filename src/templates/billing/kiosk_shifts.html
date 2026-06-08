@@ -103,20 +103,87 @@
   </section>
 
   <div class="kiosk-grid" style="align-items: start;">
-    {% if offered_shifts %}
-      <section class="panel stack" style="border: 2px solid var(--ok); background: color-mix(in srgb, var(--ok) 2%, transparent);">
-        <h2>Tauschangebote</h2>
-        {% for shift in offered_shifts %}
-          <div class="shift-card shift-card--offer">
+    <!-- Linke Spalte -->
+    <div style="display: flex; flex-direction: column; gap: 22px;">
+      {% if offered_shifts %}
+        <section class="panel stack" style="border: 2px solid var(--ok); background: color-mix(in srgb, var(--ok) 2%, transparent);">
+          <h2>Tauschangebote</h2>
+          {% for shift in offered_shifts %}
+            <div class="shift-card shift-card--offer">
+              <div class="shift-card__info">
+                <h3 class="shift-card__title">
+                  {{ shift.name }}
+                  <span class="shift-badge shift-badge--ok">Tauschangebot</span>
+                </h3>
+                <div class="shift-card__meta">
+                  <span>📅 {{ shift.date|date:"d.m.Y" }}</span>
+                  {% if shift.start_time %}<span>⏰ {{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}</span>{% endif %}
+                  <span>👤 Angeboten von: <strong>{{ shift.offered_by }}</strong></span>
+                </div>
+              </div>
+              <form method="post" style="margin: 0;">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="signup">
+                <input type="hidden" name="shift_id" value="{{ shift.pk }}">
+                {% if not shift.is_full %}
+                  <button type="submit" class="button button-primary">Eintragen</button>
+                {% else %}
+                  <button type="submit" class="button" style="background-color: var(--ok); border-color: var(--ok);">Dienst übernehmen</button>
+                {% endif %}
+              </form>
+            </div>
+          {% endfor %}
+        </section>
+      {% endif %}
+
+      <section class="panel stack">
+        <h2>Meine übernommenen Dienste</h2>
+        {% for shift in my_shifts %}
+          <div class="shift-card">
             <div class="shift-card__info">
-              <h3 class="shift-card__title">
-                {{ shift.name }}
-                <span class="shift-badge shift-badge--ok">Tauschangebot</span>
-              </h3>
+              <h3 class="shift-card__title">{{ shift.name }}</h3>
               <div class="shift-card__meta">
                 <span>📅 {{ shift.date|date:"d.m.Y" }}</span>
                 {% if shift.start_time %}<span>⏰ {{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}</span>{% endif %}
-                <span>👤 Angeboten von: <strong>{{ shift.offered_by }}</strong></span>
+                {% if shift.my_assignment.offered_for_exchange %}
+                  <span class="shift-badge shift-badge--ok">Wird zum Tausch angeboten</span>
+                {% endif %}
+              </div>
+            </div>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <form method="post" style="margin: 0;">
+                {% csrf_token %}
+                <input type="hidden" name="shift_id" value="{{ shift.pk }}">
+                {% if shift.my_assignment.offered_for_exchange %}
+                  <input type="hidden" name="action" value="revoke_offer">
+                  <button type="submit" class="button button-secondary">Angebot zurückziehen</button>
+                {% else %}
+                  <input type="hidden" name="action" value="offer">
+                  <button type="submit" class="button button-secondary">Zum Tausch anbieten</button>
+                {% endif %}
+              </form>
+            </div>
+          </div>
+        {% empty %}
+          <p class="hint">Du hast noch keine Dienste übernommen.</p>
+        {% endfor %}
+      </section>
+    </div>
+
+    <!-- Rechte Spalte -->
+    <div style="display: flex; flex-direction: column; gap: 22px;">
+      <section class="panel stack">
+        <h2>Offene Dienste</h2>
+        {% for shift in open_shifts %}
+          <div class="shift-card">
+            <div class="shift-card__info">
+              <h3 class="shift-card__title">{{ shift.name }}</h3>
+              <div class="shift-card__meta">
+                <span>📅 {{ shift.date|date:"d.m.Y" }}</span>
+                {% if shift.start_time %}<span>⏰ {{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}</span>{% endif %}
+                <span class="shift-badge {% if shift.is_full %}shift-badge--danger{% else %}shift-badge--ok{% endif %}">
+                  Besetzt: {{ shift.assignments.count }} / {{ shift.required_slots }}
+                </span>
               </div>
             </div>
             <form method="post" style="margin: 0;">
@@ -126,76 +193,15 @@
               {% if not shift.is_full %}
                 <button type="submit" class="button button-primary">Eintragen</button>
               {% else %}
-                <button type="submit" class="button" style="background-color: var(--ok); border-color: var(--ok);">Dienst übernehmen</button>
+                <button type="button" class="button button-secondary" disabled>Voll</button>
               {% endif %}
             </form>
           </div>
+        {% empty %}
+          <p class="hint">Es stehen aktuell keine offenen Dienste zur Verfügung.</p>
         {% endfor %}
       </section>
-    {% endif %}
-
-    <section class="panel stack">
-      <h2>Offene Dienste</h2>
-      {% for shift in open_shifts %}
-        <div class="shift-card">
-          <div class="shift-card__info">
-            <h3 class="shift-card__title">{{ shift.name }}</h3>
-            <div class="shift-card__meta">
-              <span>📅 {{ shift.date|date:"d.m.Y" }}</span>
-              {% if shift.start_time %}<span>⏰ {{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}</span>{% endif %}
-              <span class="shift-badge {% if shift.is_full %}shift-badge--danger{% else %}shift-badge--ok{% endif %}">
-                Besetzt: {{ shift.assignments.count }} / {{ shift.required_slots }}
-              </span>
-            </div>
-          </div>
-          <form method="post" style="margin: 0;">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="signup">
-            <input type="hidden" name="shift_id" value="{{ shift.pk }}">
-            {% if not shift.is_full %}
-              <button type="submit" class="button button-primary">Eintragen</button>
-            {% else %}
-              <button type="button" class="button button-secondary" disabled>Voll</button>
-            {% endif %}
-          </form>
-        </div>
-      {% empty %}
-        <p class="hint">Es stehen aktuell keine offenen Dienste zur Verfügung.</p>
-      {% endfor %}
-    </section>
-
-    <section class="panel stack">
-      <h2>Meine übernommenen Dienste</h2>
-      {% for shift in my_shifts %}
-        <div class="shift-card">
-          <div class="shift-card__info">
-            <h3 class="shift-card__title">{{ shift.name }}</h3>
-            <div class="shift-card__meta">
-              <span>📅 {{ shift.date|date:"d.m.Y" }}</span>
-              {% if shift.start_time %}<span>⏰ {{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}</span>{% endif %}
-              {% if shift.my_assignment.offered_for_exchange %}
-                <span class="shift-badge shift-badge--ok">Wird zum Tausch angeboten</span>
-              {% endif %}
-            </div>
-          </div>
-          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-            <form method="post" style="margin: 0;">
-              {% csrf_token %}
-              <input type="hidden" name="shift_id" value="{{ shift.pk }}">
-              {% if shift.my_assignment.offered_for_exchange %}
-                <input type="hidden" name="action" value="revoke_offer">
-                <button type="submit" class="button button-secondary">Angebot zurückziehen</button>
-              {% else %}
-                <input type="hidden" name="action" value="offer">
-                <button type="submit" class="button button-secondary">Zum Tausch anbieten</button>
-              {% endif %}
-            </form>
-          </div>
-        </div>
-      {% empty %}
-        <p class="hint">Du hast noch keine Dienste übernommen.</p>
-      {% endfor %}
-    </section>
+    </div>
   </div>
 
 
