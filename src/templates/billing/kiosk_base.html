@@ -15,7 +15,7 @@
       </a>
       {% if participant %}
         <div style="flex: 1 1 auto; text-align: center; padding: 0 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 1.15rem; font-weight: 600; color: var(--text-muted); pointer-events: none;">
-          <span id="kiosk-greeting">Hallo</span> <strong style="color: var(--text);">{{ participant.full_name }}</strong>
+          <span id="kiosk-greeting">Hallo</span> <strong style="color: var(--text);">{{ participant.first_name }}</strong>
           <script>
             (function() {
               const greetings = ["Hallo", "Moin", "Servus", "Willkommen", "Hey", "Gude", "Grüß dich"];
