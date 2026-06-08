@@ -6,4 +6,4 @@ pre-commit>=4.0,<5
 ruff>=0.15.15,<1
 mypy>=1.13,<2
 django-stubs>=6.0.5,<7
-factory_boy>=3.3,<4
+factory_boy>=3.3.3,<4
