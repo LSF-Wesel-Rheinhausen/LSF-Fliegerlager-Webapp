@@ -12,7 +12,9 @@
     <thead>
       <tr>
         <th>Benutzer</th>
+        <th>Name</th>
         <th>E-Mail</th>
+        <th>Telefon</th>
         <th>Rolle</th>
         <th>Status</th>
         <th>Aktionen</th>
@@ -27,7 +29,9 @@
               <span class="status-badge">Superuser</span>
             {% endif %}
           </td>
+          <td>{{ row.user.get_full_name|default:"-" }}</td>
           <td>{{ row.user.email|default:"-" }}</td>
+          <td>{{ row.phone|default:"-" }}</td>
           <td>
             {% if row.role == "admin" %}
               Admin
@@ -52,7 +56,7 @@
           </td>
         </tr>
       {% empty %}
-        <tr><td colspan="5">Noch keine Nutzer vorhanden.</td></tr>
+        <tr><td colspan="7">Noch keine Nutzer vorhanden.</td></tr>
       {% endfor %}
     </tbody>
   </table>

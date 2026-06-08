@@ -5,7 +5,15 @@ import pytest
 from django.urls import reverse
 from django.utils import timezone
 
-from billing.models import Charge, MealOrder, MealSignup, ParticipantBookingLink, ParticipantFamilyMember, PriceRule
+from billing.models import (
+    Charge,
+    MealOrder,
+    MealSignup,
+    ParticipantBookingLink,
+    ParticipantFamilyMember,
+    PriceRule,
+    UserProfile,
+)
 from billing.views import KIOSK_PARTICIPANT_SESSION_KEY, KIOSK_PIN_SETUP_SESSION_KEY
 from tests.factories import CampFactory, ParticipantFactory, PriceRuleFactory, UserFactory
 
@@ -103,14 +111,8 @@ def test_kiosk_home_shows_leadership_contact_button(client):
     admin_user = UserFactory(username="leitung", email="leitung@example.test")
     admin_user.is_superuser = True
     admin_user.save()
+    UserProfile.objects.create(user=admin_user, phone="0123 / 456")
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
-    ParticipantFactory(
-        camp=camp,
-        first_name="Lager",
-        last_name="Leitung",
-        email="leitung@example.test",
-        phone="0123 / 456",
-    )
     session = client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session.save()

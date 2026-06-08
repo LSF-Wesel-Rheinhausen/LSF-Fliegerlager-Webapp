@@ -3,6 +3,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.urls import reverse
 
+from billing.models import UserProfile
 from billing.permissions import (
     ADMIN_GROUP,
     EDITOR_GROUP,
@@ -29,7 +30,10 @@ def test_admin_can_create_admin_user(client):
         reverse("user-create"),
         {
             "username": "second-admin",
+            "first_name": "Second",
+            "last_name": "Admin",
             "email": "second-admin@example.test",
+            "phone": "+49 281 123456",
             "role": "admin",
             "password1": "strong-test-pass-123",
             "password2": "strong-test-pass-123",
@@ -39,7 +43,10 @@ def test_admin_can_create_admin_user(client):
     user = User.objects.get(username="second-admin")
     assert response.status_code == 302
     assert response["Location"] == reverse("user-list")
+    assert user.first_name == "Second"
+    assert user.last_name == "Admin"
     assert user.email == "second-admin@example.test"
+    assert user.profile.phone == "+49 281 123456"
     assert user.is_staff is True
     assert user.is_superuser is False
     assert is_admin(user) is True
@@ -111,14 +118,28 @@ def test_admin_can_change_user_role(client):
     client.force_login(_admin_user())
     user = UserFactory(username="role-user", email="role-user@example.test")
     user.groups.add(GroupFactory(name=EDITOR_GROUP))
+    UserProfile.objects.create(user=user, phone="alt")
 
     response = client.post(
         reverse("user-edit", args=[user.pk]),
-        {"email": "role-user@example.test", "role": "admin", "is_active": "on"},
+        {
+            "username": "renamed-role-user",
+            "first_name": "Rollen",
+            "last_name": "Nutzer",
+            "email": "role-user-new@example.test",
+            "phone": "0123 / 456",
+            "role": "admin",
+            "is_active": "on",
+        },
     )
 
     user.refresh_from_db()
     assert response.status_code == 302
+    assert user.username == "renamed-role-user"
+    assert user.first_name == "Rollen"
+    assert user.last_name == "Nutzer"
+    assert user.email == "role-user-new@example.test"
+    assert user.profile.phone == "0123 / 456"
     assert user.groups.filter(name=ADMIN_GROUP).exists()
     assert user.groups.filter(name=EDITOR_GROUP).exists() is False
     assert user.is_staff is True
@@ -147,7 +168,14 @@ def test_deactivated_user_cannot_authenticate(client):
 
     response = client.post(
         reverse("user-edit", args=[user.pk]),
-        {"email": "inactive@example.test", "role": "editor"},
+        {
+            "username": "inactive-user",
+            "first_name": "",
+            "last_name": "",
+            "email": "inactive@example.test",
+            "phone": "",
+            "role": "editor",
+        },
     )
 
     user.refresh_from_db()
@@ -163,11 +191,26 @@ def test_last_active_admin_cannot_be_deactivated_or_demoted(client):
 
     deactivate_response = client.post(
         reverse("user-edit", args=[admin.pk]),
-        {"email": admin.email, "role": "admin"},
+        {
+            "username": admin.username,
+            "first_name": admin.first_name,
+            "last_name": admin.last_name,
+            "email": admin.email,
+            "phone": "",
+            "role": "admin",
+        },
     )
     demote_response = client.post(
         reverse("user-edit", args=[admin.pk]),
-        {"email": admin.email, "role": "editor", "is_active": "on"},
+        {
+            "username": admin.username,
+            "first_name": admin.first_name,
+            "last_name": admin.last_name,
+            "email": admin.email,
+            "phone": "",
+            "role": "editor",
+            "is_active": "on",
+        },
     )
 
     admin.refresh_from_db()

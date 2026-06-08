@@ -1,6 +1,7 @@
 from datetime import time
 from decimal import Decimal
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -14,6 +15,16 @@ class TimeStampedModel(models.Model):
 
     class Meta:
         abstract = True
+
+
+class UserProfile(TimeStampedModel):
+    """Store editable application metadata for a Django user account."""
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="profile")
+    phone = models.CharField(max_length=80, blank=True)
+
+    def __str__(self):
+        return f"Profil {self.user}"
 
 
 class Camp(TimeStampedModel):

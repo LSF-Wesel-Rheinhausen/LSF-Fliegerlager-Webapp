@@ -7,7 +7,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.core.signing import BadSignature, Signer
 from django.db import transaction
 from django.db.models import Q
@@ -128,7 +128,7 @@ def _would_remove_last_active_admin(
 @admin_required
 def user_list(request: HttpRequest) -> HttpResponse:
     """Render the application user management overview."""
-    users = User.objects.prefetch_related("groups").order_by("username")
+    users = User.objects.select_related("profile").prefetch_related("groups").order_by("username")
     user_rows = []
     for managed_user in users:
         group_names = {group.name for group in managed_user.groups.all()}
@@ -140,7 +140,11 @@ def user_list(request: HttpRequest) -> HttpResponse:
             role = ROLE_EDITOR
         else:
             role = ROLE_EDITOR
-        user_rows.append({"user": managed_user, "role": role})
+        try:
+            phone = managed_user.profile.phone
+        except ObjectDoesNotExist:
+            phone = ""
+        user_rows.append({"user": managed_user, "role": role, "phone": phone})
     return render(request, "billing/user_list.html", {"user_rows": user_rows})
 
 
@@ -1015,7 +1019,7 @@ def kiosk_home(request):
         "sent_invites": sent_invites,
         "accepted_links": accepted_links,
         "kiosk_autologout": True,
-        "kiosk_contacts": admin_interface_contacts(User, participant.camp),
+        "kiosk_contacts": admin_interface_contacts(User),
         "next_order_date": next_order_date,
         "next_meal_order": next_meal_order,
         "next_order_locked": is_meal_change_locked(participant.camp, next_order_date),
