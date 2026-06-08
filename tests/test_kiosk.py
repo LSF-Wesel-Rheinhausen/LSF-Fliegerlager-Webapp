@@ -179,7 +179,7 @@ def test_kiosk_books_drink_with_camp_drink_price_and_subsidy_flag(client):
         kind=PriceRule.Kind.DRINK,
         name="Getränk",
         unit_price=Decimal("2.50"),
-        foerderfaehig=True,
+        foerdersatz=Decimal("1.0000"),
     )
     session = client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
@@ -199,7 +199,7 @@ def test_kiosk_books_drink_with_camp_drink_price_and_subsidy_flag(client):
     assert entry.description == "Getränk"
     assert entry.quantity == Decimal("2.00")
     assert entry.unit_price == Decimal("2.50")
-    assert entry.foerderfaehig is True
+    assert entry.foerdersatz == Decimal("1.0000")
 
 
 @pytest.mark.django_db
@@ -215,7 +215,7 @@ def test_kiosk_meal_signup_updates_existing_signup_and_creates_charge(client):
         applies_to_adults=True,
         name="Abendessen",
         unit_price=Decimal("7.00"),
-        foerderfaehig=False,
+        foerdersatz=Decimal("0"),
     )
     session = client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk

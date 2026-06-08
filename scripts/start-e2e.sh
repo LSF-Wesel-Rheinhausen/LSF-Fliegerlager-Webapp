@@ -18,4 +18,4 @@ else
 fi
 
 $PYTHON src/manage.py migrate --noinput
-$PYTHON src/manage.py runserver "127.0.0.1:${port}"
+$PYTHON src/manage.py runserver "127.0.0.1:${port}" --noreload

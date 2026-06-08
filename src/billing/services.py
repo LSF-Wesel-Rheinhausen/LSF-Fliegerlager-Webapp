@@ -190,7 +190,7 @@ def _rule_applies(rule, participant):
     return True
 
 
-def charge_audit_snapshot(charge: Charge) -> dict[str, str | bool | None]:
+def charge_audit_snapshot(charge: Charge) -> dict[str, str | None]:
     """Return the auditable business fields for a booking charge.
 
     Args:
@@ -205,14 +205,14 @@ def charge_audit_snapshot(charge: Charge) -> dict[str, str | bool | None]:
         "description": charge.description,
         "quantity": str(money(charge.quantity)),
         "unit_price": str(money(charge.unit_price)),
-        "foerderfaehig": charge.foerderfaehig,
+        "foerdersatz": str(rate(charge.foerdersatz)),
         "occurred_on": charge.occurred_on.isoformat() if charge.occurred_on else None,
     }
 
 
 def create_booking_audit_log(
     charge: Charge,
-    before: dict[str, str | bool | None],
+    before: dict[str, str | None],
     changed_by: Any,
 ) -> BookingAuditLog | None:
     """Persist an audit entry when editable booking fields changed.
@@ -242,7 +242,7 @@ def create_booking_audit_log(
 
 def create_booking_delete_audit_log(
     charge: Charge,
-    before: dict[str, str | bool | None],
+    before: dict[str, str | None],
     changed_by: Any,
 ) -> BookingAuditLog:
     """Persist an audit entry before a booking charge is deleted.
@@ -319,24 +319,24 @@ def participant_camp_flat_role(participant):
     return PriceRule.CampFlatRole.PARTICIPANT
 
 
-def participant_subsidy_rate(participant):
+def participant_subsidy_rate(participant, subsidy_rate):
     if not participant.is_youth_group:
         return ZERO
-    raw_rate = participant.camp.foerdersatz * participant.hilfssatz * participant.berufssatz
+    raw_rate = subsidy_rate * participant.hilfssatz * participant.berufssatz
     return min(rate(raw_rate), Decimal("1.0000"))
 
 
-def build_settlement_line(label, quantity, unit_price, source, eligible, participant):
+def build_settlement_line(label, quantity, unit_price, source, subsidy_rate, participant):
     gross_total = money(quantity * unit_price)
-    subsidy_rate = participant_subsidy_rate(participant) if eligible else ZERO
-    subsidy_amount = money(gross_total * subsidy_rate)
+    effective_subsidy_rate = participant_subsidy_rate(participant, subsidy_rate)
+    subsidy_amount = money(gross_total * effective_subsidy_rate)
     total = money(gross_total - subsidy_amount)
     return SettlementLine(
         label=label,
         quantity=quantity,
         unit_price=money(unit_price),
         gross_total=gross_total,
-        subsidy_rate=subsidy_rate,
+        subsidy_rate=effective_subsidy_rate,
         subsidy_amount=subsidy_amount,
         total=total,
         source=source,
@@ -368,7 +368,7 @@ def default_charge_lines(participant):
                 quantity=quantity,
                 unit_price=rule.unit_price,
                 source=f"price_rule:{rule.pk}",
-                eligible=rule.foerderfaehig,
+                subsidy_rate=rule.foerdersatz,
                 participant=participant,
             )
         )
@@ -382,7 +382,7 @@ def manual_charge_lines(participant):
             quantity=money(charge.quantity),
             unit_price=charge.unit_price,
             source=f"charge:{charge.pk}",
-            eligible=charge.foerderfaehig,
+            subsidy_rate=charge.foerdersatz,
             participant=participant,
         )
         for charge in Charge.objects.filter(participant=participant, deleted_at__isnull=True)
@@ -393,9 +393,9 @@ def drink_charge_lines(participant):
     lines = []
     entries = (
         DrinkEntry.objects.filter(participant=participant)
-        .values("drink", "unit_price", "foerderfaehig")
+        .values("drink", "unit_price", "foerdersatz")
         .annotate(quantity_sum=Sum("quantity"))
-        .order_by("drink", "foerderfaehig")
+        .order_by("drink", "foerdersatz")
     )
     for entry in entries:
         quantity = Decimal(entry["quantity_sum"] or 0)
@@ -406,7 +406,7 @@ def drink_charge_lines(participant):
                 quantity=quantity,
                 unit_price=unit_price,
                 source=f"drink:{entry['drink']}",
-                eligible=entry["foerderfaehig"],
+                subsidy_rate=entry["foerdersatz"],
                 participant=participant,
             )
         )

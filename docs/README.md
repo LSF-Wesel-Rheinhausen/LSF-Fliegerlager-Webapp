@@ -8,7 +8,7 @@ Die Anwendung ist eine Django-Webapp zur Verwaltung und Abrechnung eines Vereins
 
 Der typische Ablauf:
 
-1. Ein Admin legt ein Lager an und pflegt den Lager-Fördersatz.
+1. Ein Admin legt ein Lager an und pflegt Preise mit individuellen Fördersätzen.
 2. Teilnehmer werden manuell angelegt oder per CSV/XLSX importiert.
 3. Preisregeln werden im Adminbereich gepflegt, inklusive Lagerpauschalen für 1/2 Wochen und Teilnehmer/Begleitpersonen.
 4. Teilnehmer buchen im Kiosk Getränke und Essen per PIN.
@@ -20,7 +20,7 @@ Der typische Ablauf:
 - Rollen: `Admin` und `Bearbeiter` über Django-Gruppen.
 - Ersteinrichtung: Beim ersten Start kann der erste Admin im Browser angelegt werden; danach verwalten Admins Nutzer, Rollen und Passwörter in der Anwendung.
 - Preisverwaltung: eigene Admin-Route für Lagerpauschalen, Getränke, Standard-Mahlzeitenpreise, abweichende Tagespreise und sonstige Preisregeln.
-- Förderlogik: Jugendgruppenmitglieder erhalten Förderung über `Lager-Fördersatz * Hilfssatz * Berufssatz`.
+- Förderlogik: Jugendgruppenmitglieder erhalten je Position Förderung über `Element-Fördersatz * Hilfssatz * Berufssatz`.
 - Kiosk: separater PIN-Login, PIN-Ersteinrichtung, Tablet-/Mobiloberfläche, automatische Abmeldung nach Inaktivität, Getränkebuchung und Essensanmeldung.
 - Buchungsbearbeitung: Admins können Kostenpositionen korrigieren; geänderte abrechnungsrelevante Felder werden im Audit-Protokoll gespeichert.
 - Abrechnung: serverseitig in `src/billing/services.py`, damit UI, Export und Kiosk dieselbe Logik nutzen. Aktuell werden Abrechnungen on-demand berechnet; persistierte `Settlement`-Datensätze sind modellseitig vorbereitet.

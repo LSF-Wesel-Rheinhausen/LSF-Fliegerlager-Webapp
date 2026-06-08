@@ -4,6 +4,7 @@ from decimal import Decimal
 import pytest
 from django.apps import apps
 from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
 
 from billing.models import BookingAuditLog, Charge
 from tests.factories import ChargeFactory, UserFactory
@@ -81,3 +82,42 @@ def test_legacy_charge_cleanup_removes_a_partial_legacy_schema() -> None:
         migration.remove_legacy_charge_cancellation_columns(apps, schema_editor)
 
     assert "cancellation_note" not in charge_columns()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_price_element_subsidy_migration_preserves_existing_camp_rate() -> None:
+    executor = MigrationExecutor(connection)
+    old_target = [("billing", "0013_remove_legacy_charge_cancellation_columns")]
+    executor.migrate(old_target)
+    old_apps = executor.loader.project_state(old_target).apps
+
+    Camp = old_apps.get_model("billing", "Camp")
+    Participant = old_apps.get_model("billing", "Participant")
+    PriceRule = old_apps.get_model("billing", "PriceRule")
+    OldCharge = old_apps.get_model("billing", "Charge")
+    camp = Camp.objects.create(name="Migration", year=2030, foerdersatz=Decimal("0.4000"))
+    participant = Participant.objects.create(camp=camp, first_name="Mia", last_name="Migration")
+    eligible_rule = PriceRule.objects.create(
+        camp=camp,
+        kind="drink",
+        name="Getränk",
+        unit_price=Decimal("2.50"),
+        foerderfaehig=True,
+    )
+    ineligible_charge = OldCharge.objects.create(
+        participant=participant,
+        kind="other",
+        description="Ohne Förderung",
+        unit_price=Decimal("5.00"),
+        foerderfaehig=False,
+    )
+
+    new_target = [("billing", "0014_subsidy_rate_per_price_element")]
+    executor = MigrationExecutor(connection)
+    executor.migrate(new_target)
+    new_apps = executor.loader.project_state(new_target).apps
+
+    NewPriceRule = new_apps.get_model("billing", "PriceRule")
+    NewCharge = new_apps.get_model("billing", "Charge")
+    assert NewPriceRule.objects.get(pk=eligible_rule.pk).foerdersatz == Decimal("0.4000")
+    assert NewCharge.objects.get(pk=ineligible_charge.pk).foerdersatz == Decimal("0")

@@ -18,11 +18,13 @@ def test_admin_can_manage_camp_flat_rates_without_dropdowns(client):
         {
             "action": "camp_flat",
             "participant_1w_price": "120.00",
-            "participant_1w_foerderfaehig": "on",
+            "participant_1w_foerdersatz": "40",
             "participant_2w_price": "220.00",
-            "participant_2w_foerderfaehig": "on",
+            "participant_2w_foerdersatz": "50",
             "companion_1w_price": "80.00",
+            "companion_1w_foerdersatz": "20",
             "companion_2w_price": "150.00",
+            "companion_2w_foerdersatz": "0",
         },
     )
 
@@ -34,7 +36,7 @@ def test_admin_can_manage_camp_flat_rates_without_dropdowns(client):
         camp_flat_duration=PriceRule.CampFlatDuration.TWO_WEEKS,
     )
     assert companion_two_weeks.unit_price == Decimal("150.00")
-    assert companion_two_weeks.foerderfaehig is False
+    assert companion_two_weeks.foerdersatz == Decimal("0")
     assert companion_two_weeks.is_default is True
 
 
@@ -65,7 +67,7 @@ def test_price_rule_create_redirects_to_manage_page(client):
             "kind": PriceRule.Kind.DRINK,
             "name": "Fanta",
             "unit_price": "2.50",
-            "foerderfaehig": "on",
+            "foerdersatz": "100",
             "applies_to_children": "on",
             "applies_to_adults": "on",
         },
@@ -91,6 +93,7 @@ def test_price_rule_edit_redirects_to_manage_page(client):
             "kind": PriceRule.Kind.DRINK,
             "name": "Cola Light",
             "unit_price": "2.20",
+            "foerdersatz": "0",
             "applies_to_children": "on",
             "applies_to_adults": "on",
         },
@@ -112,6 +115,7 @@ def test_price_rule_form_validates_camp_flat_fields():
             "kind": PriceRule.Kind.CAMP_FLAT,
             "name": "Pauschale",
             "unit_price": "100.00",
+            "foerdersatz": "0",
             "camp_flat_duration": PriceRule.CampFlatDuration.ONE_WEEK,
             "camp_flat_role": PriceRule.CampFlatRole.PARTICIPANT,
         }
@@ -124,6 +128,7 @@ def test_price_rule_form_validates_camp_flat_fields():
             "kind": PriceRule.Kind.CAMP_FLAT,
             "name": "Pauschale",
             "unit_price": "100.00",
+            "foerdersatz": "0",
             "camp_flat_duration": "",
             "camp_flat_role": "",
         }
