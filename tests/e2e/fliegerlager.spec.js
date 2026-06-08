@@ -344,8 +344,8 @@ test("Daily shift template and kiosk shift flow", async ({ page }) => {
   // Create a daily shift template via Frontend
   await page.getByRole("link", { name: "Tägliche Vorlagen verwalten" }).click();
   await page.getByRole("button", { name: "Vorlage anlegen" }).click();
-  await expect(page.locator("dialog#shift-template-dialog")).toBeVisible();
-  await page.getByLabel("Bezeichnung").fill("Spüldienst");
+  await expect(page.locator("dialog#template-dialog")).toBeVisible();
+  await page.getByLabel("Name / Bezeichnung").fill("Spüldienst");
   await page.getByLabel("Benötigte Personen").fill("2");
   await page.getByRole("button", { name: "Speichern", exact: true }).click();
   await expect(page.getByText("Spüldienst").first()).toBeVisible();
