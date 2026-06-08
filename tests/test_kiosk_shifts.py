@@ -65,25 +65,11 @@ def test_kiosk_cannot_signup_for_full_shift(kiosk_client, active_camp):
 
 
 @pytest.mark.django_db
-def test_kiosk_can_retract_from_future_shift(kiosk_client, active_camp):
+def test_kiosk_cannot_retract(kiosk_client, active_camp):
     shift = Shift.objects.create(
         camp=active_camp,
         name="Test Shift",
         date=datetime.date.today() + datetime.timedelta(days=2),
-        required_slots=1,
-    )
-    ShiftAssignment.objects.create(shift=shift, participant=kiosk_client.kiosk_user)
-    response = kiosk_client.post(reverse("kiosk-shifts"), {"action": "retract", "shift_id": shift.pk})
-    assert response.status_code == 302
-    assert not ShiftAssignment.objects.filter(shift=shift, participant=kiosk_client.kiosk_user).exists()
-
-
-@pytest.mark.django_db
-def test_kiosk_cannot_retract_same_day(kiosk_client, active_camp):
-    shift = Shift.objects.create(
-        camp=active_camp,
-        name="Test Shift",
-        date=datetime.date.today(),
         required_slots=1,
     )
     ShiftAssignment.objects.create(shift=shift, participant=kiosk_client.kiosk_user)

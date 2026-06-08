@@ -14,9 +14,12 @@
 
   <section class="panel" style="margin-bottom: 2rem;">
     <h2>Dein Fortschritt</h2>
-    <p>Du hast <strong>{{ participant.completed_shifts }} von {{ participant.target_shifts }}</strong> Pflichtdiensten erledigt.</p>
-    <div style="background: var(--surface-2); border-radius: 999px; height: 12px; width: 100%; overflow: hidden; margin-top: 0.5rem;">
-      <div style="background: var(--primary); height: 100%; width: {% widthratio participant.completed_shifts participant.target_shifts|default:1 100 %}%; max-width: 100%;"></div>
+    <p style="margin-bottom: 0.5rem;">Du hast <strong>{{ participant.completed_shifts }} von {{ participant.target_shifts }}</strong> Pflichtdiensten erledigt.</p>
+    <div style="background: var(--surface-2); border-radius: 4px; height: 24px; width: 100%; overflow: hidden; position: relative; display: flex; align-items: center; border: 1px solid var(--border);">
+      <div style="background: var(--ok); height: 100%; width: {% widthratio participant.completed_shifts participant.target_shifts|default:1 100 %}%; max-width: 100%; transition: width 0.3s ease;"></div>
+      <span style="position: absolute; left: 50%; transform: translateX(-50%); font-size: 0.85rem; font-weight: bold; color: var(--text); mix-blend-mode: difference;">
+        {% widthratio participant.completed_shifts participant.target_shifts|default:1 100 %} %
+      </span>
     </div>
   </section>
 
@@ -81,17 +84,6 @@
             <span>{{ shift.date|date:"d.m.Y" }} {% if shift.start_time %}{{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}{% endif %}</span>
           </div>
           <div class="kiosk-list-row__actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-            {% if shift.date > today %}
-              <form method="post" style="margin: 0;">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="retract">
-                <input type="hidden" name="shift_id" value="{{ shift.pk }}">
-                <button type="submit" class="button button-secondary" onclick="return confirm('Wirklich aus dem Dienst austragen?');">Austragen</button>
-              </form>
-            {% else %}
-              <span class="hint">Storno-Frist abgelaufen.</span>
-            {% endif %}
-
             <form method="post" style="margin: 0;">
               {% csrf_token %}
               <input type="hidden" name="shift_id" value="{{ shift.pk }}">

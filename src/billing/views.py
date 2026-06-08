@@ -1112,15 +1112,7 @@ def kiosk_shifts(request):
                 else:
                     messages.error(request, "Dieser Dienst ist voll und es wird aktuell kein Platz zum Tausch angeboten.")
         elif action == "retract":
-            if shift.date <= today:
-                messages.error(
-                    request,
-                    "Du kannst dich am selben Tag (oder nachträglich) nicht mehr aus einem Dienst austragen. "
-                    "Bitte nutze die Tauschen-Funktion oder kläre dies mit der Lagerleitung.",
-                )
-            else:
-                ShiftAssignment.objects.filter(shift=shift, participant=participant).delete()
-                messages.success(request, f"Du hast dich aus '{shift.name}' ausgetragen.")
+            messages.error(request, "Das direkte Austragen aus Diensten ist nicht mehr möglich. Bitte biete deinen Dienst zum Tausch an oder wende dich an die Lagerleitung.")
         elif action == "offer":
             if shift.date < today:
                 messages.error(request, "Du kannst keine vergangenen Dienste zum Tausch anbieten.")

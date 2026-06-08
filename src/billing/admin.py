@@ -15,6 +15,10 @@ from .models import (
     Payment,
     PriceRule,
     Settlement,
+    Shift,
+    ShiftAssignment,
+    DailyShiftTemplate,
+    DailyShiftException,
     UserProfile,
 )
 
@@ -120,3 +124,65 @@ class MealOrderAdmin(admin.ModelAdmin):
 
 admin.site.register(DrinkEntry)
 admin.site.register(Settlement)
+
+
+class DailyShiftExceptionInline(admin.TabularInline):
+    model = DailyShiftException
+    extra = 1
+
+
+@admin.register(DailyShiftTemplate)
+class DailyShiftTemplateAdmin(admin.ModelAdmin):
+    list_display = ("name", "camp", "start_time", "end_time", "required_slots")
+    list_filter = ("camp",)
+    inlines = [DailyShiftExceptionInline]
+    actions = ["generate_shifts_for_templates"]
+
+    @admin.action(description="Dienste für ausgewählte Vorlagen generieren")
+    def generate_shifts_for_templates(self, request, queryset):
+        import datetime
+        from .models import Shift
+
+        generated_count = 0
+        skipped_count = 0
+        for template in queryset:
+            camp = template.camp
+            current_date = camp.starts_on
+            exceptions_by_date = {ex.date: ex for ex in template.exceptions.all()}
+            
+            while current_date <= camp.ends_on:
+                exception = exceptions_by_date.get(current_date)
+                
+                if exception and exception.is_skipped:
+                    skipped_count += 1
+                else:
+                    slots = exception.custom_required_slots if exception and exception.custom_required_slots is not None else template.required_slots
+                    start_t = exception.custom_start_time if exception and exception.custom_start_time is not None else template.start_time
+                    end_t = exception.custom_end_time if exception and exception.custom_end_time is not None else template.end_time
+                    
+                    Shift.objects.update_or_create(
+                        camp=camp,
+                        date=current_date,
+                        name=template.name,
+                        defaults={
+                            "start_time": start_t,
+                            "end_time": end_t,
+                            "required_slots": slots,
+                        }
+                    )
+                    generated_count += 1
+                current_date += datetime.timedelta(days=1)
+                
+        self.message_user(request, f"{generated_count} Dienste generiert, {skipped_count} wegen Ausnahmen übersprungen.")
+
+
+class ShiftAssignmentInline(admin.TabularInline):
+    model = ShiftAssignment
+    extra = 0
+
+
+@admin.register(Shift)
+class ShiftAdmin(admin.ModelAdmin):
+    list_display = ("name", "camp", "date", "start_time", "end_time", "required_slots", "is_full")
+    list_filter = ("camp", "date")
+    inlines = [ShiftAssignmentInline]
