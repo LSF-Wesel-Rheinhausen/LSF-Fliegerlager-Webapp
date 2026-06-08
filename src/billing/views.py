@@ -1140,17 +1140,31 @@ def kiosk_shifts(request):
         .prefetch_related("assignments__participant")
         .order_by("date", "start_time")
     )
+    open_shifts = []
+    offered_shifts = []
+    my_shifts = []
+
     for shift in shifts:
         shift_assignments = list(shift.assignments.all())
         shift.my_assignment = next((a for a in shift_assignments if a.participant_id == participant.pk), None)
         shift.has_offers = any(a.offered_for_exchange and a.participant_id != participant.pk for a in shift_assignments)
+
+        if shift.my_assignment:
+            my_shifts.append(shift)
+        elif shift.has_offers:
+            offered_shifts.append(shift)
+        else:
+            open_shifts.append(shift)
 
     return render(
         request,
         "billing/kiosk_shifts.html",
         {
             "participant": participant,
-            "shifts": shifts,
+            "open_shifts": open_shifts,
+            "offered_shifts": offered_shifts,
+            "my_shifts": my_shifts,
             "today": today,
+            "kiosk_autologout": True,
         },
     )
