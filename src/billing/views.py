@@ -1130,7 +1130,7 @@ def kiosk_shifts(request):
         .order_by("date", "start_time")
     )
     other_participants = (
-        Participant.objects.filter(camp=participant.camp, status=Participant.Status.PRESENT)
+        Participant.objects.filter(camp=participant.camp, status=Participant.Status.ACTIVE)
         .exclude(pk=participant.pk)
         .order_by("first_name", "last_name")
     )

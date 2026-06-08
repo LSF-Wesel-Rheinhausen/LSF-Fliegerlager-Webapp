@@ -94,7 +94,7 @@ def test_kiosk_can_transfer_shift(kiosk_client, active_camp):
         required_slots=1,
     )
     ShiftAssignment.objects.create(shift=shift, participant=kiosk_client.kiosk_user)
-    other = Participant.objects.create(camp=active_camp, first_name="Other", last_name="User", status="present")
+    other = Participant.objects.create(camp=active_camp, first_name="Other", last_name="User", status="active")
 
     response = kiosk_client.post(
         reverse("kiosk-shifts"),
