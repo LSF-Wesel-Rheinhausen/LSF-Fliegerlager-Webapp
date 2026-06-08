@@ -13,6 +13,85 @@
   </div>
 </div>
 
+<style>
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.03);
+}
+.pie-chart {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: conic-gradient(var(--ok) 0% {{ total_percent }}%, var(--surface-2) {{ total_percent }}% 100%);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+}
+.pie-chart::after {
+  content: "";
+  position: absolute;
+  width: 65px;
+  height: 65px;
+  background: var(--surface);
+  border-radius: 50%;
+}
+.pie-chart-text {
+  position: relative;
+  z-index: 2;
+  font-weight: bold;
+  font-size: 1.1rem;
+  color: var(--text);
+}
+.stat-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.stat-title {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.stat-value {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1;
+}
+.stat-sub {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+</style>
+
+<div class="dashboard-grid">
+  <div class="stat-card">
+    <div class="pie-chart">
+      <span class="pie-chart-text">{{ total_percent }}%</span>
+    </div>
+    <div class="stat-info">
+      <span class="stat-title">Lager-Fortschritt</span>
+      <span class="stat-value">{{ total_completed }} / {{ total_target }}</span>
+      <span class="stat-sub">Pflichtdienste besetzt</span>
+    </div>
+  </div>
+</div>
+
 <section class="panel">
   <div class="table-responsive">
     <table class="data-table">

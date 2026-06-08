@@ -477,7 +477,18 @@ def shift_report(request, camp_id):
     participants = list(camp.participants.all())
     # Sort by completed / target ratio
     participants.sort(key=lambda p: (p.completed_shifts / p.target_shifts if p.target_shifts > 0 else 0, p.completed_shifts), reverse=True)
-    return render(request, "billing/shift_report.html", {"camp": camp, "participants": participants})
+    
+    total_target = sum(p.target_shifts for p in participants)
+    total_completed = sum(p.completed_shifts for p in participants)
+    total_percent = int((total_completed / total_target * 100)) if total_target > 0 else 0
+    
+    return render(request, "billing/shift_report.html", {
+        "camp": camp,
+        "participants": participants,
+        "total_target": total_target,
+        "total_completed": total_completed,
+        "total_percent": total_percent,
+    })
 
 
 @editor_required
