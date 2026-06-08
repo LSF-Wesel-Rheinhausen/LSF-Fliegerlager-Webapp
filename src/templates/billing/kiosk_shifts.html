@@ -162,6 +162,18 @@
                   {% if shift.start_time %}<span>⏰ {{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}</span>{% endif %}
                   <span>👤 Angeboten von: <strong>{{ shift.offered_by }}</strong></span>
                 </div>
+                {% if shift.assignments.count > 1 %}
+                  <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.5rem; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                    <span>Weitere Einteilungen:</span>
+                    {% for assignment in shift.assignments.all %}
+                      {% if assignment.participant.full_name != shift.offered_by %}
+                        <span style="background: var(--surface); border: 1px solid var(--border); padding: 0.1rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">
+                          {{ assignment.participant.first_name }}
+                        </span>
+                      {% endif %}
+                    {% endfor %}
+                  </div>
+                {% endif %}
               </div>
               <form method="post" style="margin: 0;">
                 {% csrf_token %}
