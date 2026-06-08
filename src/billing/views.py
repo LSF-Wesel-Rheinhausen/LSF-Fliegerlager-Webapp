@@ -521,6 +521,11 @@ def shift_templates_generate(request, camp_id):
     import datetime
     from .models import Shift
     camp = get_object_or_404(Camp, pk=camp_id)
+    
+    if not camp.starts_on or not camp.ends_on:
+        messages.error(request, "Das Lager hat kein Start- oder Enddatum. Bitte setze diese zuerst in den Lagereinstellungen, bevor du Dienste generierst.")
+        return redirect("shift-templates-manage", camp_id=camp.pk)
+
     templates = camp.daily_shift_templates.all()
     
     generated_count = 0
