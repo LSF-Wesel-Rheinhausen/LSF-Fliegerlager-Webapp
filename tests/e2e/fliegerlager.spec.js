@@ -355,7 +355,7 @@ test("Daily shift template and kiosk shift flow", async ({ page }) => {
   // Generate shifts
   page.once("dialog", dialog => dialog.accept());
   await page.getByRole("button", { name: "Dienste generieren" }).click();
-  await expect(page.getByText("erfolgreich für alle Vorlagen generiert")).toBeVisible();
+  await expect(page.getByText("Dienste generiert")).toBeVisible();
 
   await logout(page);
 
