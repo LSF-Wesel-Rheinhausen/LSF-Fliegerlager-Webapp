@@ -472,6 +472,15 @@ def shift_manage(request, camp_id):
 
 
 @editor_required
+def shift_report(request, camp_id):
+    camp = get_object_or_404(Camp, pk=camp_id)
+    participants = list(camp.participants.all())
+    # Sort by completed / target ratio
+    participants.sort(key=lambda p: (p.completed_shifts / p.target_shifts if p.target_shifts > 0 else 0, p.completed_shifts), reverse=True)
+    return render(request, "billing/shift_report.html", {"camp": camp, "participants": participants})
+
+
+@editor_required
 def shift_create(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
     form = ShiftForm(request.POST or None)

@@ -33,6 +33,16 @@
     <a href="{% url 'camp-meal-overview' camp.pk %}">Essensübersicht öffnen</a>
   </nav>
 
+  <section class="panel">
+    <h2>Dienste & Aufgaben</h2>
+    <p>Hier kannst du Lagerdienste (wie Spülen, Kochen, Putzen) anlegen und Teilnehmern zuweisen.</p>
+    <div class="actions" style="margin-top: 1rem;">
+      <a href="{% url 'shift-manage' camp.pk %}" class="button">Sonderdienste verwalten</a>
+      <a href="{% url 'admin:billing_dailyshifttemplate_changelist' %}" class="button button-secondary">Tägliche Dienst-Vorlagen</a>
+      <a href="{% url 'shift-report' camp.pk %}" class="button button-secondary">Dienst-Auswertung ansehen</a>
+    </div>
+  </section>
+
   <section class="panel stack">
     <div class="toolbar compact-toolbar">
       <div>

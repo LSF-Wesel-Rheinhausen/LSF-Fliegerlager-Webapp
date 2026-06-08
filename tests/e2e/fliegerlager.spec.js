@@ -336,6 +336,61 @@ test("Role flow: editor cannot see admin functions", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Nutzer" })).toBeHidden();
 });
 
+test("Daily shift template and kiosk shift flow", async ({ page }) => {
+  await setupFirstAdmin(page);
+  const campName = await createCamp(page, "Sommerlager Dienste");
+  await createParticipant(page, "Albert", "Einstein");
+
+  // Create a daily shift template via Django Admin
+  await page.goto("/admin/billing/dailyshifttemplate/add/");
+  await page.getByLabel("Camp:").selectOption({ label: `${campName} (2026)` });
+  await page.getByLabel("Name:").fill("Spüldienst");
+  await page.getByLabel("Required slots:").fill("2");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByText("The daily shift template")).toBeVisible();
+
+  // Generate shifts
+  await page.getByLabel("Select this object for an action").check();
+  await page.locator("select[name='action']").selectOption("generate_shifts_for_templates");
+  await page.getByRole("button", { name: "Go" }).click();
+  await expect(page.getByText("Dienste generiert")).toBeVisible();
+
+  await logout(page);
+
+  // Login to kiosk
+  await page.goto("/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Albert Einstein" });
+  await page.getByLabel("PIN").fill("0000");
+  await page.getByRole("button", { name: "Anmelden" }).click();
+
+  // Set PIN
+  await page.getByLabel("Neuer PIN").fill("1234");
+  await page.getByLabel("PIN wiederholen").fill("1234");
+  await page.getByRole("button", { name: "Speichern" }).click();
+
+  // Go to Shifts
+  await page.getByRole("link", { name: "Dienstplan" }).click();
+  await expect(page.getByRole("heading", { name: "Dienstplan" })).toBeVisible();
+
+  // Check progress bar
+  await expect(page.getByText("Dein Fortschritt")).toBeVisible();
+  await expect(page.locator("text=0 von 0 Pflichtdiensten")).toBeVisible();
+
+  // Sign up for a shift
+  await page.getByRole("button", { name: "Eintragen" }).first().click();
+  await expect(page.getByText("Du hast dich für 'Spüldienst' eingetragen.")).toBeVisible();
+
+  // "Austragen" should not exist, only "Zum Tausch anbieten"
+  await expect(page.getByRole("button", { name: "Austragen" })).toBeHidden();
+  await page.getByRole("button", { name: "Zum Tausch anbieten" }).first().click();
+  await expect(page.getByText("Dein Dienst wird nun zum Tausch angeboten.")).toBeVisible();
+
+  // The shift should now be in the "Meine übernommenen Dienste" and have "Angebot zurückziehen"
+  await expect(page.getByRole("button", { name: "Angebot zurückziehen" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Abmelden" }).click();
+});
+
 for (const viewport of VIEWPORTS) {
   test(`Layout has no unexpected overflow at ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });

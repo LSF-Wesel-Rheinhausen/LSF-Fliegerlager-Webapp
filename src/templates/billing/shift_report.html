@@ -1,0 +1,54 @@
+{% extends "billing/base.html" %}
+
+{% block title %}Dienst-Auswertung - {{ camp.name }}{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+  <div>
+    <h1>Dienst-Auswertung</h1>
+    <p>Übersicht der absolvierten Dienste für <strong>{{ camp.name }}</strong></p>
+  </div>
+  <div class="actions">
+    <a href="{% url 'camp-detail' camp.pk %}" class="button button-secondary">Zurück zum Lager</a>
+  </div>
+</div>
+
+<section class="panel">
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Teilnehmer</th>
+          <th>Dienste erledigt</th>
+          <th>Soll-Dienste</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in participants %}
+          <tr>
+            <td>
+              <strong>{{ p.full_name }}</strong>
+            </td>
+            <td>{{ p.completed_shifts }}</td>
+            <td>{{ p.target_shifts }}</td>
+            <td>
+              {% if p.target_shifts == 0 %}
+                <span class="status-badge" style="background: var(--surface-2); color: var(--text-muted);">Keine Pflichtdienste</span>
+              {% elif p.completed_shifts >= p.target_shifts %}
+                <span class="status-badge" style="background: var(--ok); color: white;">Erledigt ✓</span>
+              {% else %}
+                <span class="status-badge" style="background: var(--warning); color: black;">Offen ({{ p.target_shifts|add:"-"|add:p.completed_shifts }} fehlen)</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="4">Keine Teilnehmer im Lager.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
