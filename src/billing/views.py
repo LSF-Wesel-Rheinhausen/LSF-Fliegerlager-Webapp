@@ -1152,6 +1152,8 @@ def kiosk_shifts(request):
         if shift.my_assignment:
             my_shifts.append(shift)
         elif shift.has_offers:
+            offered_assignment = next(a for a in shift_assignments if a.offered_for_exchange and a.participant_id != participant.pk)
+            shift.offered_by = offered_assignment.participant.full_name
             offered_shifts.append(shift)
         else:
             open_shifts.append(shift)

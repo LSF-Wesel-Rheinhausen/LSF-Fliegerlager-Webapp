@@ -29,6 +29,7 @@
             <div class="kiosk-list-row__content">
               <strong>{{ shift.name }}</strong>
               <span>{{ shift.date|date:"d.m.Y" }} {% if shift.start_time %}{{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}{% endif %}</span>
+              <span>Angeboten von: <strong>{{ shift.offered_by }}</strong></span>
               <span>Besetzt: {{ shift.assignments.count }} / {{ shift.required_slots }}</span>
             </div>
             <form method="post" class="kiosk-list-row__actions">
