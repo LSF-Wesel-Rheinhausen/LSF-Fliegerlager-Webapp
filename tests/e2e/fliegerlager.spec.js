@@ -341,19 +341,19 @@ test("Daily shift template and kiosk shift flow", async ({ page }) => {
   const campName = await createCamp(page, "Sommerlager Dienste");
   await createParticipant(page, "Albert", "Einstein");
 
-  // Create a daily shift template via Django Admin
-  await page.goto("/admin/billing/dailyshifttemplate/add/");
-  await page.getByLabel("Camp:").selectOption({ label: `${campName} (2026)` });
-  await page.getByLabel("Name:").fill("Spüldienst");
-  await page.getByLabel("Required slots:").fill("2");
-  await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByText("The daily shift template")).toBeVisible();
+  // Create a daily shift template via Frontend
+  await page.getByRole("link", { name: "Tägliche Vorlagen verwalten" }).click();
+  await page.getByRole("button", { name: "Vorlage anlegen" }).click();
+  await expect(page.locator("dialog#shift-template-dialog")).toBeVisible();
+  await page.getByLabel("Bezeichnung").fill("Spüldienst");
+  await page.getByLabel("Benötigte Personen").fill("2");
+  await page.getByRole("button", { name: "Speichern", exact: true }).click();
+  await expect(page.getByText("Spüldienst").first()).toBeVisible();
 
   // Generate shifts
-  await page.getByLabel("Select this object for an action").check();
-  await page.locator("select[name='action']").selectOption("generate_shifts_for_templates");
-  await page.getByRole("button", { name: "Go" }).click();
-  await expect(page.getByText("Dienste generiert")).toBeVisible();
+  page.once("dialog", dialog => dialog.accept());
+  await page.getByRole("button", { name: "Dienste generieren" }).click();
+  await expect(page.getByText("erfolgreich für alle Vorlagen generiert")).toBeVisible();
 
   await logout(page);
 

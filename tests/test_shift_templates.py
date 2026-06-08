@@ -39,7 +39,7 @@ def test_shift_template_create(admin_client, active_camp):
 @pytest.mark.django_db
 def test_shift_template_edit(admin_client, active_camp):
     template = DailyShiftTemplate.objects.create(camp=active_camp, name="Old Name", required_slots=2)
-    url = reverse("shift-template-edit", args=[active_camp.pk, template.pk])
+    url = reverse("shift-template-edit", args=[template.pk])
     data = {
         "name": "New Name",
         "required_slots": 5,
