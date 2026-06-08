@@ -557,8 +557,8 @@ def shift_templates_generate(request, camp_id):
                         camp=camp,
                         date=current_date,
                         name=template.name,
+                        start_time=start_t,
                         defaults={
-                            "start_time": start_t,
                             "end_time": end_t,
                             "required_slots": slots,
                         }

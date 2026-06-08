@@ -147,6 +147,8 @@ class DailyShiftTemplateAdmin(admin.ModelAdmin):
         skipped_count = 0
         for template in queryset:
             camp = template.camp
+            if not camp.starts_on or not camp.ends_on:
+                continue
             current_date = camp.starts_on
             exceptions_by_date = {ex.date: ex for ex in template.exceptions.all()}
             
@@ -164,8 +166,8 @@ class DailyShiftTemplateAdmin(admin.ModelAdmin):
                         camp=camp,
                         date=current_date,
                         name=template.name,
+                        start_time=start_t,
                         defaults={
-                            "start_time": start_t,
                             "end_time": end_t,
                             "required_slots": slots,
                         }

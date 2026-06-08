@@ -338,7 +338,7 @@ test("Role flow: editor cannot see admin functions", async ({ page }) => {
 
 test("Daily shift template and kiosk shift flow", async ({ page }) => {
   await setupFirstAdmin(page);
-  const campName = await createCamp(page, "Sommerlager Dienste");
+  await createCamp(page, "Sommerlager Dienste");
   await createParticipant(page, "Albert", "Einstein");
 
   // Create a daily shift template via Frontend

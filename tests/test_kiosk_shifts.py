@@ -108,7 +108,7 @@ def test_kiosk_can_takeover_offered_shift(kiosk_client, active_camp):
         required_slots=1,
     )
     other = Participant.objects.create(camp=active_camp, first_name="Other", last_name="User", status="active")
-    assignment = ShiftAssignment.objects.create(shift=shift, participant=other, offered_for_exchange=True)
+    ShiftAssignment.objects.create(shift=shift, participant=other, offered_for_exchange=True)
 
     response = kiosk_client.post(reverse("kiosk-shifts"), {"action": "signup", "shift_id": shift.pk})
     assert response.status_code == 302
