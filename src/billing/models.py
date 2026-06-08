@@ -34,6 +34,13 @@ class Camp(TimeStampedModel):
     ends_on = models.DateField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     meal_booking_cutoff_time = models.TimeField(default=time(12, 0))
+    shift_ratio_per_night = models.DecimalField(
+        max_digits=5,
+        decimal_places=4,
+        default=Decimal("0.0000"),
+        validators=[MinValueValidator(Decimal("0"))],
+        help_text="Anzahl benötigter Dienste pro gebuchter Nacht, z.B. 0.2 für 1 Dienst pro 5 Nächte.",
+    )
     notes = models.TextField(blank=True)
 
     class Meta:
@@ -92,6 +99,16 @@ class Participant(TimeStampedModel):
     @property
     def full_name(self):
         return f"{self.first_name} {self.last_name}".strip()
+
+    @property
+    def target_shifts(self) -> int:
+        return int(round(Decimal(self.booked_nights) * self.camp.shift_ratio_per_night))
+
+    @property
+    def completed_shifts(self) -> int:
+        if hasattr(self, "_completed_shifts_count"):
+            return self._completed_shifts_count
+        return self.shift_assignments.count()
 
     def __str__(self):
         return self.full_name
@@ -502,3 +519,38 @@ class Settlement(TimeStampedModel):
 
     def __str__(self):
         return f"{self.participant}: {self.balance}"
+
+
+class Shift(TimeStampedModel):
+    camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="shifts")
+    name = models.CharField(max_length=120)
+    date = models.DateField()
+    start_time = models.TimeField(null=True, blank=True)
+    end_time = models.TimeField(null=True, blank=True)
+    required_slots = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        ordering = ["date", "start_time", "name"]
+
+    @property
+    def is_full(self) -> bool:
+        if hasattr(self, "assignments_count"):
+            return self.assignments_count >= self.required_slots
+        return self.assignments.count() >= self.required_slots
+
+    def __str__(self):
+        return f"{self.camp}: {self.date} {self.name}"
+
+
+class ShiftAssignment(TimeStampedModel):
+    shift = models.ForeignKey(Shift, on_delete=models.CASCADE, related_name="assignments")
+    participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="shift_assignments")
+
+    class Meta:
+        ordering = ["shift", "participant"]
+        constraints = [
+            models.UniqueConstraint(fields=["shift", "participant"], name="unique_shift_assignment"),
+        ]
+
+    def __str__(self):
+        return f"{self.participant} -> {self.shift}"

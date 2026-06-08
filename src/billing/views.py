@@ -36,12 +36,23 @@ from .forms import (
     ParticipantPinForm,
     PaymentForm,
     PriceRuleForm,
+    ShiftForm,
     UserCreateForm,
     UserEditForm,
     UserPasswordResetForm,
 )
 from .importers import preview_participants, rows_from_payload, rows_to_payload, save_participants
-from .models import BookingAuditLog, Camp, Charge, MealOrder, MealSignup, Participant, ParticipantBookingLink, PriceRule
+from .models import (
+    BookingAuditLog,
+    Camp,
+    Charge,
+    MealOrder,
+    MealSignup,
+    Participant,
+    ParticipantBookingLink,
+    PriceRule,
+    Shift,
+)
 from .permissions import (
     ADMIN_GROUP,
     EDITOR_GROUP,
@@ -451,6 +462,50 @@ def price_rule_edit(request, price_rule_id):
         messages.success(request, "Preisregel wurde gespeichert.")
         return redirect("price-rules-manage", camp_id=rule.camp.pk)
     return render(request, "billing/form.html", {"form": form, "title": "Preisregel bearbeiten", "camp": rule.camp})
+
+
+@editor_required
+def shift_manage(request, camp_id):
+    camp = get_object_or_404(Camp, pk=camp_id)
+    shifts = camp.shifts.prefetch_related("assignments__participant").order_by("date", "start_time", "name")
+    return render(request, "billing/shift_manage.html", {"camp": camp, "shifts": shifts})
+
+
+@editor_required
+def shift_create(request, camp_id):
+    camp = get_object_or_404(Camp, pk=camp_id)
+    form = ShiftForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            shift = form.save(commit=False)
+            shift.camp = camp
+            shift.save()
+        messages.success(request, "Dienst wurde angelegt.")
+        return redirect("shift-manage", camp_id=camp.pk)
+    return render(request, "billing/form.html", {"form": form, "title": "Dienst anlegen", "camp": camp})
+
+
+@editor_required
+def shift_edit(request, shift_id):
+    shift = get_object_or_404(Shift.objects.select_related("camp"), pk=shift_id)
+    form = ShiftForm(request.POST or None, instance=shift)
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            form.save()
+        messages.success(request, "Dienst wurde gespeichert.")
+        return redirect("shift-manage", camp_id=shift.camp.pk)
+    return render(request, "billing/form.html", {"form": form, "title": "Dienst bearbeiten", "camp": shift.camp})
+
+
+@editor_required
+@require_POST
+def shift_delete(request, shift_id):
+    shift = get_object_or_404(Shift.objects.select_related("camp"), pk=shift_id)
+    camp_id = shift.camp_id
+    with transaction.atomic():
+        shift.delete()
+    messages.success(request, "Dienst wurde gelöscht.")
+    return redirect("shift-manage", camp_id=camp_id)
 
 
 @editor_required
@@ -1025,3 +1080,71 @@ def kiosk_home(request):
         "next_order_locked": is_meal_change_locked(participant.camp, next_order_date),
     }
     return render(request, "billing/kiosk_home.html", context)
+
+
+def kiosk_shifts(request):
+    participant = _kiosk_participant(request)
+    if not participant:
+        return redirect("kiosk-login")
+
+    today = timezone.localdate()
+    from .models import Shift, ShiftAssignment
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        shift_id = request.POST.get("shift_id")
+        shift = get_object_or_404(Shift, pk=shift_id, camp=participant.camp)
+
+        if action == "signup":
+            if not shift.is_full:
+                ShiftAssignment.objects.get_or_create(shift=shift, participant=participant)
+                messages.success(request, f"Du hast dich für '{shift.name}' eingetragen.")
+            else:
+                messages.error(request, "Dieser Dienst ist leider schon voll.")
+        elif action == "retract":
+            if shift.date <= today:
+                messages.error(
+                    request,
+                    "Du kannst dich am selben Tag (oder nachträglich) nicht mehr aus einem Dienst austragen. "
+                    "Bitte nutze die Tauschen-Funktion oder kläre dies mit der Lagerleitung.",
+                )
+            else:
+                ShiftAssignment.objects.filter(shift=shift, participant=participant).delete()
+                messages.success(request, f"Du hast dich aus '{shift.name}' ausgetragen.")
+        elif action == "transfer":
+            transfer_to_id = request.POST.get("transfer_to")
+            if transfer_to_id:
+                target_participant = get_object_or_404(Participant, pk=transfer_to_id, camp=participant.camp)
+                if not ShiftAssignment.objects.filter(shift=shift, participant=target_participant).exists():
+                    ShiftAssignment.objects.filter(shift=shift, participant=participant).delete()
+                    ShiftAssignment.objects.create(shift=shift, participant=target_participant)
+                    messages.success(request, f"Du hast den Dienst an {target_participant.full_name} übertragen.")
+                else:
+                    messages.error(request, "Dieser Teilnehmer ist bereits für den Dienst eingetragen.")
+
+        return redirect("kiosk-shifts")
+
+    shifts = (
+        participant.camp.shifts.filter(date__gte=today)
+        .prefetch_related("assignments__participant")
+        .order_by("date", "start_time")
+    )
+    other_participants = (
+        Participant.objects.filter(camp=participant.camp, status=Participant.Status.ACTIVE)
+        .exclude(pk=participant.pk)
+        .order_by("first_name", "last_name")
+    )
+
+    for shift in shifts:
+        shift.my_assignment = next((a for a in shift.assignments.all() if a.participant_id == participant.pk), None)
+
+    return render(
+        request,
+        "billing/kiosk_shifts.html",
+        {
+            "participant": participant,
+            "shifts": shifts,
+            "today": today,
+            "other_participants": other_participants,
+        },
+    )

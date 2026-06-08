@@ -19,6 +19,7 @@ def test_camp_form_saves_meal_booking_cutoff_time():
             "ends_on": "",
             "is_active": "on",
             "meal_booking_cutoff_time": "11:30",
+            "shift_ratio_per_night": "0.0",
             "notes": "",
         },
     )

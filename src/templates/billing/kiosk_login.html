@@ -8,11 +8,9 @@
       {% csrf_token %}
       {{ form.as_p }}
       <div class="form-actions">
-        <button type="submit">Anmelden</button>
+        <a class="button button-secondary" href="{% url 'login' %}">Admin-Interface</a>
+        <button type="submit" class="button">Anmelden</button>
       </div>
     </form>
-    <div class="form-actions">
-      <a class="button button-secondary" href="{% url 'login' %}">Admin-Interface</a>
-    </div>
   </section>
 {% endblock %}

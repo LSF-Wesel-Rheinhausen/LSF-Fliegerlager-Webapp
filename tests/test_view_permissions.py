@@ -313,7 +313,7 @@ def test_editor_post_views_allow_editor_and_admin(
         (
             "camp-create",
             lambda data: [],
-            {"name": "Adminlager", "year": "2027"},
+            {"name": "Adminlager", "year": "2027", "shift_ratio_per_night": "0.0"},
             Camp,
         ),
         (

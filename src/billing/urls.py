@@ -28,6 +28,10 @@ urlpatterns = [
     path("camps/<int:camp_id>/prices/", views.price_rules_manage, name="price-rules-manage"),
     path("camps/<int:camp_id>/prices/new/", views.price_rule_create, name="price-rule-create"),
     path("prices/<int:price_rule_id>/edit/", views.price_rule_edit, name="price-rule-edit"),
+    path("camps/<int:camp_id>/shifts/", views.shift_manage, name="shift-manage"),
+    path("camps/<int:camp_id>/shifts/new/", views.shift_create, name="shift-create"),
+    path("shifts/<int:shift_id>/edit/", views.shift_edit, name="shift-edit"),
+    path("shifts/<int:shift_id>/delete/", views.shift_delete, name="shift-delete"),
     path("camps/<int:camp_id>/expenses/new/", views.expense_create, name="expense-create"),
     path("camps/<int:camp_id>/import/", views.participant_import, name="participant-import"),
     path("camps/<int:camp_id>/export/settlements.csv", views.export_settlements_csv, name="export-settlements-csv"),
@@ -40,6 +44,7 @@ urlpatterns = [
     ),
     path("kiosk/", views.kiosk_home, name="kiosk-home"),
     path("kiosk/login/", views.kiosk_login, name="kiosk-login"),
+    path("kiosk/shifts/", views.kiosk_shifts, name="kiosk-shifts"),
     path("kiosk/pin/", views.kiosk_pin_setup, name="kiosk-pin-setup"),
     path("kiosk/logout/", views.kiosk_logout, name="kiosk-logout"),
 ]

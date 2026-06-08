@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+  <nav class="breadcrumbs" aria-label="Breadcrumbs">
+    <a href="{% url 'camp-list' %}">Lager</a> ›
+    <a href="{% url 'camp-detail' camp.pk %}">{{ camp.name }}</a> ›
+    <span>Dienste verwalten</span>
+  </nav>
+
+  <div class="toolbar">
+    <h1>Dienste für {{ camp.name }}</h1>
+    <div class="actions">
+      <a class="button" href="{% url 'shift-create' camp.pk %}">Neuen Dienst anlegen</a>
+    </div>
+  </div>
+
+  <section class="panel stack">
+    <h2>Alle Dienste</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Datum</th>
+          <th>Zeit</th>
+          <th>Name</th>
+          <th>Benötigt</th>
+          <th>Eingetragen</th>
+          <th>Aktionen</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for shift in shifts %}
+          <tr>
+            <td>{{ shift.date|date:"d.m.Y" }}</td>
+            <td>
+              {% if shift.start_time %}{{ shift.start_time|time:"H:i" }}{% endif %}
+              {% if shift.start_time and shift.end_time %} - {% endif %}
+              {% if shift.end_time %}{{ shift.end_time|time:"H:i" }}{% endif %}
+            </td>
+            <td>{{ shift.name }}</td>
+            <td>{{ shift.required_slots }}</td>
+            <td>
+              {% if shift.assignments.all %}
+                <ul style="margin: 0; padding-left: 1.2rem;">
+                  {% for assignment in shift.assignments.all %}
+                    <li><a href="{% url 'participant-detail' assignment.participant.pk %}">{{ assignment.participant.full_name }}</a></li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                <em>Niemand</em>
+              {% endif %}
+            </td>
+            <td class="actions-cell" style="display: flex; gap: 0.5rem; align-items: center;">
+              <a href="{% url 'shift-edit' shift.pk %}">Bearbeiten</a>
+              <form action="{% url 'shift-delete' shift.pk %}" method="post" class="inline-form" onsubmit="return confirm('Möchtest du diesen Dienst wirklich löschen?');" style="margin: 0;">
+                {% csrf_token %}
+                <button type="submit" class="button-text text-danger" style="padding: 0; border: none; background: none; color: var(--color-danger); cursor: pointer; text-decoration: underline;">Löschen</button>
+              </form>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6">Noch keine Dienste angelegt.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endblock %}
