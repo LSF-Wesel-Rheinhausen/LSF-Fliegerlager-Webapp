@@ -56,10 +56,7 @@ async function assertNoUnexpectedOverflow(page) {
 }
 
 async function setupFirstAdmin(page) {
-  await page.goto("/");
-  if (page.url().includes("/kiosk/")) {
-    await page.getByRole("link", { name: "Admin-Interface" }).click();
-  }
+  await page.goto("/setup/");
   if (page.url().includes("/login/")) {
     await loginAsAdmin(page);
     return;
@@ -74,7 +71,7 @@ async function setupFirstAdmin(page) {
   await page.locator("#id_password2").fill("strong-test-pass-123");
   await page.getByRole("button", { name: "Admin anlegen" }).click();
 
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/camps\/?$/);
   await expect(page.getByRole("heading", { name: "Lager" })).toBeVisible();
 }
 
@@ -376,7 +373,7 @@ test("Daily shift template and kiosk shift flow", async ({ page }) => {
 
   // Check progress bar
   await expect(page.getByText("Dein Fortschritt")).toBeVisible();
-  await expect(page.locator("text=0 von 0 Pflichtdiensten")).toBeVisible();
+  await expect(page.getByText("Super! Du hast alle Pflichtdienste übernommen.")).toBeVisible();
 
   // Sign up for a shift
   await page.getByRole("button", { name: "Eintragen" }).first().click();
@@ -385,11 +382,12 @@ test("Daily shift template and kiosk shift flow", async ({ page }) => {
   // "Austragen" should not exist, only "Zum Tausch anbieten"
   await expect(page.getByRole("button", { name: "Austragen" })).toBeHidden();
   await page.getByRole("button", { name: "Zum Tausch anbieten" }).first().click();
-  await expect(page.getByText("Dein Dienst wird nun zum Tausch angeboten.")).toBeVisible();
+  await expect(page.getByText("wird nun zum Tausch angeboten.")).toBeVisible();
 
   // The shift should now be in the "Meine übernommenen Dienste" and have "Angebot zurückziehen"
   await expect(page.getByRole("button", { name: "Angebot zurückziehen" })).toBeVisible();
 
+  await page.getByRole("link", { name: "Zurück" }).click();
   await page.getByRole("link", { name: "Abmelden" }).click();
 });
 
