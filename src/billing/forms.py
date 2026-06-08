@@ -20,6 +20,7 @@ from .models import (
     Payment,
     PriceRule,
     Shift,
+    DailyShiftTemplate,
     UserProfile,
 )
 from .roles import ROLE_ADMIN, ROLE_CHOICES, user_role
@@ -773,6 +774,22 @@ class ShiftForm(forms.ModelForm):
         }
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
+            "start_time": forms.TimeInput(attrs={"type": "time"}),
+            "end_time": forms.TimeInput(attrs={"type": "time"}),
+        }
+
+
+class DailyShiftTemplateForm(forms.ModelForm):
+    class Meta:
+        model = DailyShiftTemplate
+        fields = ["name", "required_slots", "start_time", "end_time"]
+        labels = {
+            "name": "Bezeichnung",
+            "required_slots": "Benötigte Personen",
+            "start_time": "Startzeit",
+            "end_time": "Endzeit",
+        }
+        widgets = {
             "start_time": forms.TimeInput(attrs={"type": "time"}),
             "end_time": forms.TimeInput(attrs={"type": "time"}),
         }

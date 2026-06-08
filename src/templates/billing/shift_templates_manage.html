@@ -1,0 +1,128 @@
+{% extends "billing/base.html" %}
+
+{% block title %}Dienstvorlagen verwalten - {{ camp.name }}{% endblock %}
+
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1>Tägliche Dienstvorlagen</h1>
+      <p>Verwalte Dienste, die an jedem Tag des Lagers automatisch generiert werden sollen.</p>
+    </div>
+    <div class="actions">
+      <a class="button button-secondary" href="{% url 'camp-detail' camp.pk %}">Zurück zum Lager</a>
+    </div>
+  </div>
+
+  <section class="panel stack">
+    <div class="toolbar compact-toolbar">
+      <div>
+        <h2>Vorlagen</h2>
+      </div>
+      <div style="display: flex; gap: 1rem;">
+        <form method="post" action="{% url 'shift-templates-generate' camp.pk %}" style="margin: 0;">
+          {% csrf_token %}
+          <button type="submit" class="button button-secondary" onclick="return confirm('Dienste für alle Vorlagen über den gesamten Lagerzeitraum generieren? Bereits manuell generierte Dienste werden dabei nicht überschrieben, solange sich Start/Endzeit nicht geändert haben.');">Dienste generieren</button>
+        </form>
+        <button type="button" class="button" onclick="openCreateDialog()">Vorlage anlegen</button>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Benötigte Personen</th>
+            <th>Startzeit</th>
+            <th>Endzeit</th>
+            <th class="text-right">Aktionen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in templates %}
+            <tr>
+              <td><strong>{{ t.name }}</strong></td>
+              <td>{{ t.required_slots }}</td>
+              <td>{{ t.start_time|time:"H:i"|default:"-" }}</td>
+              <td>{{ t.end_time|time:"H:i"|default:"-" }}</td>
+              <td class="text-right">
+                <button type="button" class="button button-secondary" onclick="openEditDialog('{{ t.pk }}', '{{ t.name|escapejs }}', '{{ t.required_slots }}', '{{ t.start_time|time:"H:i"|default:"" }}', '{{ t.end_time|time:"H:i"|default:"" }}')">Bearbeiten</button>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5">Keine Dienstvorlagen vorhanden.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <dialog id="template-dialog" closedby="any" class="panel">
+    <div class="toolbar compact-toolbar" style="margin-bottom: 16px;">
+      <h2 id="dialog-title" style="margin: 0;">Vorlage anlegen</h2>
+      <form method="dialog">
+        <button class="button button-secondary" style="min-height: 32px; padding: 6px 10px;">Schließen</button>
+      </form>
+    </div>
+    <form id="dialog-form" method="post" class="form-grid">
+      {% csrf_token %}
+
+      <p>
+        <label for="id_name">Name / Bezeichnung</label>
+        <input type="text" name="name" id="id_name" required>
+      </p>
+
+      <p>
+        <label for="id_required_slots">Benötigte Personen</label>
+        <input type="number" name="required_slots" id="id_required_slots" min="1" required>
+      </p>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
+        <label for="id_start_time">
+          Startzeit
+          <input type="time" name="start_time" id="id_start_time">
+        </label>
+        <label for="id_end_time">
+          Endzeit
+          <input type="time" name="end_time" id="id_end_time">
+        </label>
+      </div>
+
+      <div class="form-actions" style="margin-top: 14px;">
+        <button type="submit" class="button">Speichern</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+    function openCreateDialog() {
+      const dialog = document.getElementById('template-dialog');
+      const form = document.getElementById('dialog-form');
+      const title = document.getElementById('dialog-title');
+
+      form.action = "{% url 'shift-template-create' camp.pk %}";
+      form.reset();
+
+      title.textContent = 'Vorlage anlegen';
+      dialog.showModal();
+    }
+
+    function openEditDialog(templateId, name, requiredSlots, startTime, endTime) {
+      const dialog = document.getElementById('template-dialog');
+      const form = document.getElementById('dialog-form');
+      const title = document.getElementById('dialog-title');
+
+      let urlPattern = "{% url 'shift-template-edit' '999' %}";
+      form.action = urlPattern.replace('999', templateId);
+
+      document.getElementById('id_name').value = name;
+      document.getElementById('id_required_slots').value = requiredSlots;
+      document.getElementById('id_start_time').value = startTime;
+      document.getElementById('id_end_time').value = endTime;
+
+      title.textContent = 'Vorlage bearbeiten';
+      dialog.showModal();
+    }
+  </script>
+{% endblock %}

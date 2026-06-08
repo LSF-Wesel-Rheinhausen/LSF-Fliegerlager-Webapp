@@ -481,6 +481,80 @@ def shift_report(request, camp_id):
 
 
 @editor_required
+def shift_templates_manage(request, camp_id):
+    camp = get_object_or_404(Camp, pk=camp_id)
+    templates = camp.daily_shift_templates.all()
+    return render(request, "billing/shift_templates_manage.html", {"camp": camp, "templates": templates})
+
+
+@editor_required
+def shift_template_create(request, camp_id):
+    camp = get_object_or_404(Camp, pk=camp_id)
+    from .forms import DailyShiftTemplateForm
+    form = DailyShiftTemplateForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        template = form.save(commit=False)
+        template.camp = camp
+        template.save()
+        messages.success(request, "Dienstvorlage angelegt.")
+    return redirect("shift-templates-manage", camp_id=camp.pk)
+
+
+@editor_required
+def shift_template_edit(request, template_id):
+    from .models import DailyShiftTemplate
+    from .forms import DailyShiftTemplateForm
+    template = get_object_or_404(DailyShiftTemplate, pk=template_id)
+    form = DailyShiftTemplateForm(request.POST or None, instance=template)
+    if request.method == "POST":
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Dienstvorlage aktualisiert.")
+        else:
+            messages.error(request, "Fehler beim Aktualisieren der Dienstvorlage.")
+    return redirect("shift-templates-manage", camp_id=template.camp_id)
+
+
+@editor_required
+@require_POST
+def shift_templates_generate(request, camp_id):
+    import datetime
+    from .models import Shift
+    camp = get_object_or_404(Camp, pk=camp_id)
+    templates = camp.daily_shift_templates.all()
+    
+    generated_count = 0
+    skipped_count = 0
+    with transaction.atomic():
+        for template in templates:
+            current_date = camp.starts_on
+            exceptions_by_date = {ex.date: ex for ex in template.exceptions.all()}
+            while current_date <= camp.ends_on:
+                exception = exceptions_by_date.get(current_date)
+                if exception and exception.is_skipped:
+                    skipped_count += 1
+                else:
+                    slots = exception.custom_required_slots if exception and exception.custom_required_slots is not None else template.required_slots
+                    start_t = exception.custom_start_time if exception and exception.custom_start_time is not None else template.start_time
+                    end_t = exception.custom_end_time if exception and exception.custom_end_time is not None else template.end_time
+                    Shift.objects.update_or_create(
+                        camp=camp,
+                        date=current_date,
+                        name=template.name,
+                        defaults={
+                            "start_time": start_t,
+                            "end_time": end_t,
+                            "required_slots": slots,
+                        }
+                    )
+                    generated_count += 1
+                current_date += datetime.timedelta(days=1)
+    
+    messages.success(request, f"{generated_count} Dienste generiert, {skipped_count} übersprungen.")
+    return redirect("shift-templates-manage", camp_id=camp.pk)
+
+
+@editor_required
 def shift_create(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
     form = ShiftForm(request.POST or None)
