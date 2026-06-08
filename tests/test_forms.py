@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import pytest
 
 from billing.forms import CampForm, FirstAdminSetupForm, UserCreateForm, UserEditForm
@@ -17,7 +19,6 @@ def test_camp_form_saves_meal_booking_cutoff_time():
             "ends_on": "",
             "is_active": "on",
             "meal_booking_cutoff_time": "11:30",
-            "foerdersatz": "0.5000",
             "notes": "",
         },
     )
@@ -105,18 +106,23 @@ def test_camp_flat_rate_settings_form_updates_and_creates_rules():
         camp=camp,
         data={
             "participant_1w_price": "15.00",
-            "participant_1w_foerderfaehig": True,
+            "participant_1w_foerdersatz": "40",
             "participant_2w_price": "25.00",
-            "participant_2w_foerderfaehig": True,
+            "participant_2w_foerdersatz": "50",
             "companion_1w_price": "12.00",
-            "companion_1w_foerderfaehig": False,
+            "companion_1w_foerdersatz": "20",
             "companion_2w_price": "22.00",
-            "companion_2w_foerderfaehig": False,
+            "companion_2w_foerdersatz": "0",
         },
     )
     assert form.is_valid(), form.errors
     form.save()
     assert PriceRule.objects.filter(camp=camp).count() == 4
+    assert PriceRule.objects.get(
+        camp=camp,
+        camp_flat_role=PriceRule.CampFlatRole.PARTICIPANT,
+        camp_flat_duration=PriceRule.CampFlatDuration.ONE_WEEK,
+    ).foerdersatz == Decimal("0.4000")
 
 
 @pytest.mark.django_db
@@ -131,13 +137,13 @@ def test_meal_standard_prices_form_save():
         camp=camp,
         data={
             "breakfast_adult_price": "5.00",
-            "breakfast_adult_foerderfaehig": True,
+            "breakfast_adult_foerdersatz": "100",
             "breakfast_child_price": "3.00",
-            "breakfast_child_foerderfaehig": True,
+            "breakfast_child_foerdersatz": "75",
             "dinner_adult_price": "8.00",
-            "dinner_adult_foerderfaehig": False,
+            "dinner_adult_foerdersatz": "40",
             "dinner_child_price": "4.00",
-            "dinner_child_foerderfaehig": False,
+            "dinner_child_foerdersatz": "0",
         },
     )
     assert form.is_valid(), form.errors
@@ -149,15 +155,35 @@ def test_meal_standard_prices_form_save():
         camp=camp,
         data={
             "breakfast_adult_price": "6.00",
-            "breakfast_adult_foerderfaehig": True,
+            "breakfast_adult_foerdersatz": "90",
             "breakfast_child_price": "4.00",
-            "breakfast_child_foerderfaehig": True,
+            "breakfast_child_foerdersatz": "70",
             "dinner_adult_price": "9.00",
-            "dinner_adult_foerderfaehig": False,
+            "dinner_adult_foerdersatz": "30",
             "dinner_child_price": "5.00",
-            "dinner_child_foerderfaehig": False,
+            "dinner_child_foerdersatz": "0",
         },
     )
     assert form2.is_valid()
     form2.save()
     assert PriceRule.objects.filter(camp=camp).count() == 4
+
+
+def test_subsidy_percent_field_rejects_values_outside_percentage_range():
+    from billing.forms import PriceRuleForm
+    from billing.models import PriceRule
+
+    form = PriceRuleForm(
+        data={
+            "kind": PriceRule.Kind.DRINK,
+            "name": "Cola",
+            "unit_price": "2.50",
+            "foerdersatz": "100.01",
+            "applies_to_children": "on",
+            "applies_to_adults": "on",
+            "applies_to_companions": "on",
+        }
+    )
+
+    assert not form.is_valid()
+    assert "foerdersatz" in form.errors

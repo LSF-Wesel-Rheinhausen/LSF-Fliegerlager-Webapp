@@ -669,7 +669,7 @@ def _book_meal_for_target(target, meal_date, meal, variant, price_rule):
     signup_defaults = {
         "variant": variant,
         "status": MealSignup.Status.ACTIVE,
-        "foerderfaehig": price_rule.foerderfaehig,
+        "foerdersatz": price_rule.foerdersatz,
         "retracted_at": None,
     }
     charge_description = f"{price_rule.name} {meal_display}"
@@ -691,7 +691,7 @@ def _book_meal_for_target(target, meal_date, meal, variant, price_rule):
     charge.description = charge_description
     charge.quantity = 1
     charge.unit_price = price_rule.unit_price
-    charge.foerderfaehig = price_rule.foerderfaehig
+    charge.foerdersatz = price_rule.foerdersatz
     charge.deleted_at = None
     charge.deleted_by = None
     charge.save()
@@ -857,7 +857,7 @@ def kiosk_home(request):
                         description=price_rule.name,
                         quantity=drink_form.cleaned_data["quantity"],
                         unit_price=price_rule.unit_price,
-                        foerderfaehig=price_rule.foerderfaehig,
+                        foerdersatz=price_rule.foerdersatz,
                     )
                 messages.success(request, "Getränk wurde gebucht.")
                 return redirect("kiosk-home")

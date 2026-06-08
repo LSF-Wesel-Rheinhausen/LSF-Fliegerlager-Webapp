@@ -34,13 +34,6 @@ class Camp(TimeStampedModel):
     ends_on = models.DateField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     meal_booking_cutoff_time = models.TimeField(default=time(12, 0))
-    foerdersatz = models.DecimalField(
-        max_digits=6,
-        decimal_places=4,
-        default=Decimal("0.5000"),
-        validators=[MinValueValidator(Decimal("0")), MaxValueValidator(Decimal("1"))],
-        help_text="0 bis 1, zum Beispiel 0,5000 fuer 50 Prozent.",
-    )
     notes = models.TextField(blank=True)
 
     class Meta:
@@ -222,7 +215,12 @@ class PriceRule(TimeStampedModel):
     applies_to_children = models.BooleanField(default=True)
     applies_to_adults = models.BooleanField(default=True)
     applies_to_companions = models.BooleanField(default=True)
-    foerderfaehig = models.BooleanField(default=True)
+    foerdersatz = models.DecimalField(
+        max_digits=5,
+        decimal_places=4,
+        default=Decimal("0"),
+        validators=[MinValueValidator(Decimal("0")), MaxValueValidator(Decimal("1"))],
+    )
     is_default = models.BooleanField(default=False)
 
     class Meta:
@@ -244,7 +242,12 @@ class Charge(TimeStampedModel):
     description = models.CharField(max_length=180)
     quantity = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("1.00"))
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
-    foerderfaehig = models.BooleanField(default=True)
+    foerdersatz = models.DecimalField(
+        max_digits=5,
+        decimal_places=4,
+        default=Decimal("0"),
+        validators=[MinValueValidator(Decimal("0")), MaxValueValidator(Decimal("1"))],
+    )
     occurred_on = models.DateField(null=True, blank=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
     deleted_by = models.ForeignKey(
@@ -372,7 +375,12 @@ class MealSignup(TimeStampedModel):
     meal = models.CharField(max_length=20, choices=Meal.choices)
     variant = models.CharField(max_length=20, choices=Variant.choices)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
-    foerderfaehig = models.BooleanField(default=True)
+    foerdersatz = models.DecimalField(
+        max_digits=5,
+        decimal_places=4,
+        default=Decimal("0"),
+        validators=[MinValueValidator(Decimal("0")), MaxValueValidator(Decimal("1"))],
+    )
     retracted_at = models.DateTimeField(null=True, blank=True)
     charge = models.ForeignKey(
         Charge,
@@ -436,7 +444,12 @@ class DrinkEntry(TimeStampedModel):
     drink = models.CharField(max_length=20, choices=Drink.choices)
     quantity = models.PositiveIntegerField(default=1)
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
-    foerderfaehig = models.BooleanField(default=True)
+    foerdersatz = models.DecimalField(
+        max_digits=5,
+        decimal_places=4,
+        default=Decimal("0"),
+        validators=[MinValueValidator(Decimal("0")), MaxValueValidator(Decimal("1"))],
+    )
     booked_at = models.DateTimeField(default=timezone.now)
 
     class Meta:

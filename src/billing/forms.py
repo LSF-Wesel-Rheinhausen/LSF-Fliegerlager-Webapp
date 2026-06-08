@@ -1,4 +1,5 @@
 from datetime import time
+from decimal import Decimal
 from typing import Any
 
 from django import forms
@@ -20,6 +21,32 @@ from .models import (
     UserProfile,
 )
 from .roles import ROLE_ADMIN, ROLE_CHOICES, user_role
+
+PERCENT_PLACES = Decimal("0.01")
+
+
+def subsidy_percentage(value: Decimal) -> Decimal:
+    return (value * Decimal("100")).quantize(PERCENT_PLACES)
+
+
+class SubsidyPercentField(forms.DecimalField):
+    """Expose a normalized subsidy rate as a percentage in forms."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        kwargs.setdefault("label", "Fördersatz (%)")
+        kwargs.setdefault("min_value", 0)
+        kwargs.setdefault("max_value", 100)
+        kwargs.setdefault("max_digits", 5)
+        kwargs.setdefault("decimal_places", 2)
+        kwargs.setdefault("required", False)
+        kwargs.setdefault("widget", forms.NumberInput(attrs={"step": "0.01", "min": "0", "max": "100"}))
+        super().__init__(*args, **kwargs)
+
+    def to_python(self, value: Any) -> Any:
+        percentage = super().to_python(value)
+        if percentage is None:
+            return Decimal("0")
+        return percentage / Decimal("100")
 
 
 class EmailOrUsernameAuthenticationForm(AuthenticationForm):
@@ -170,7 +197,6 @@ class CampForm(forms.ModelForm):
             "ends_on",
             "is_active",
             "meal_booking_cutoff_time",
-            "foerdersatz",
             "notes",
         ]
         labels = {
@@ -180,14 +206,12 @@ class CampForm(forms.ModelForm):
             "ends_on": "Ende",
             "is_active": "Aktiv",
             "meal_booking_cutoff_time": "Essens-Stichzeitpunkt",
-            "foerdersatz": "Fördersatz",
             "notes": "Notizen",
         }
         widgets = {
             "starts_on": forms.DateInput(attrs={"type": "date"}),
             "ends_on": forms.DateInput(attrs={"type": "date"}),
             "meal_booking_cutoff_time": forms.TimeInput(attrs={"type": "time"}),
-            "foerdersatz": forms.NumberInput(attrs={"step": "0.0001", "min": "0", "max": "1"}),
         }
 
     def clean_meal_booking_cutoff_time(self):
@@ -249,6 +273,13 @@ class ParticipantForm(forms.ModelForm):
 
 
 class PriceRuleForm(forms.ModelForm):
+    foerdersatz = SubsidyPercentField()
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        if not self.is_bound and self.instance.pk:
+            self.initial["foerdersatz"] = subsidy_percentage(self.instance.foerdersatz)
+
     class Meta:
         model = PriceRule
         fields = [
@@ -260,7 +291,7 @@ class PriceRuleForm(forms.ModelForm):
             "applies_to_children",
             "applies_to_adults",
             "applies_to_companions",
-            "foerderfaehig",
+            "foerdersatz",
             "is_default",
             "meal_type",
             "meal_date",
@@ -274,7 +305,7 @@ class PriceRuleForm(forms.ModelForm):
             "applies_to_children": "Gilt für Kinder",
             "applies_to_adults": "Gilt für Erwachsene",
             "applies_to_companions": "Gilt für Begleitpersonen",
-            "foerderfaehig": "Förderfähig",
+            "foerdersatz": "Fördersatz (%)",
             "is_default": "Standardregel",
             "meal_type": "Mahlzeit",
             "meal_date": "Datum",
@@ -301,18 +332,18 @@ class PriceRuleForm(forms.ModelForm):
 
 class CampFlatRateSettingsForm(forms.Form):
     participant_1w_price = forms.DecimalField(label="Teilnehmer 1 Woche", min_value=0, max_digits=10, decimal_places=2)
-    participant_1w_foerderfaehig = forms.BooleanField(label="Förderfähig", required=False)
+    participant_1w_foerdersatz = SubsidyPercentField()
     participant_2w_price = forms.DecimalField(label="Teilnehmer 2 Wochen", min_value=0, max_digits=10, decimal_places=2)
-    participant_2w_foerderfaehig = forms.BooleanField(label="Förderfähig", required=False)
+    participant_2w_foerdersatz = SubsidyPercentField()
     companion_1w_price = forms.DecimalField(label="Begleitperson 1 Woche", min_value=0, max_digits=10, decimal_places=2)
-    companion_1w_foerderfaehig = forms.BooleanField(label="Förderfähig", required=False)
+    companion_1w_foerdersatz = SubsidyPercentField()
     companion_2w_price = forms.DecimalField(
         label="Begleitperson 2 Wochen",
         min_value=0,
         max_digits=10,
         decimal_places=2,
     )
-    companion_2w_foerderfaehig = forms.BooleanField(label="Förderfähig", required=False)
+    companion_2w_foerdersatz = SubsidyPercentField()
 
     variants = [
         (
@@ -358,10 +389,10 @@ class CampFlatRateSettingsForm(forms.Form):
             rule = rules.get((role, duration))
             if rule is not None:
                 self.fields[f"{prefix}_price"].initial = rule.unit_price
-                self.fields[f"{prefix}_foerderfaehig"].initial = rule.foerderfaehig
+                self.fields[f"{prefix}_foerdersatz"].initial = subsidy_percentage(rule.foerdersatz)
             else:
                 self.fields[f"{prefix}_price"].initial = 0
-                self.fields[f"{prefix}_foerderfaehig"].initial = True
+                self.fields[f"{prefix}_foerdersatz"].initial = Decimal("0")
 
     def rows(self):
         return [
@@ -369,7 +400,7 @@ class CampFlatRateSettingsForm(forms.Form):
                 "role": role_label,
                 "duration": duration_label,
                 "price": self[f"{prefix}_price"],
-                "foerderfaehig": self[f"{prefix}_foerderfaehig"],
+                "foerdersatz": self[f"{prefix}_foerdersatz"],
             }
             for prefix, role_label, _role, duration_label, _duration in self.variants
         ]
@@ -401,7 +432,7 @@ class CampFlatRateSettingsForm(forms.Form):
                 rule.applies_to_children = True
                 rule.applies_to_adults = True
                 rule.applies_to_companions = True
-                rule.foerderfaehig = self.cleaned_data[f"{prefix}_foerderfaehig"]
+                rule.foerdersatz = self.cleaned_data[f"{prefix}_foerdersatz"]
                 rule.is_default = True
                 rule.save()
                 PriceRule.objects.filter(
@@ -413,15 +444,22 @@ class CampFlatRateSettingsForm(forms.Form):
 
 
 class ChargeForm(forms.ModelForm):
+    foerdersatz = SubsidyPercentField()
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        if not self.is_bound and self.instance.pk:
+            self.initial["foerdersatz"] = subsidy_percentage(self.instance.foerdersatz)
+
     class Meta:
         model = Charge
-        fields = ["kind", "description", "quantity", "unit_price", "foerderfaehig", "occurred_on"]
+        fields = ["kind", "description", "quantity", "unit_price", "foerdersatz", "occurred_on"]
         labels = {
             "kind": "Art",
             "description": "Beschreibung",
             "quantity": "Menge",
             "unit_price": "Einzelpreis",
-            "foerderfaehig": "Förderfähig",
+            "foerdersatz": "Fördersatz (%)",
             "occurred_on": "Datum",
         }
         widgets = {"occurred_on": forms.DateInput(attrs={"type": "date"})}
@@ -628,20 +666,20 @@ class MealStandardPricesForm(forms.Form):
     breakfast_adult_price = forms.DecimalField(
         label="Frühstück Erwachsene", max_digits=6, decimal_places=2, min_value=0, required=False
     )
-    breakfast_adult_foerderfaehig = forms.BooleanField(label="Förderfähig", required=False)
+    breakfast_adult_foerdersatz = SubsidyPercentField()
     breakfast_child_price = forms.DecimalField(
         label="Frühstück Kinder", max_digits=6, decimal_places=2, min_value=0, required=False
     )
-    breakfast_child_foerderfaehig = forms.BooleanField(label="Förderfähig", required=False)
+    breakfast_child_foerdersatz = SubsidyPercentField()
 
     dinner_adult_price = forms.DecimalField(
         label="Abendessen Erwachsene", max_digits=6, decimal_places=2, min_value=0, required=False
     )
-    dinner_adult_foerderfaehig = forms.BooleanField(label="Förderfähig", required=False)
+    dinner_adult_foerdersatz = SubsidyPercentField()
     dinner_child_price = forms.DecimalField(
         label="Abendessen Kinder", max_digits=6, decimal_places=2, min_value=0, required=False
     )
-    dinner_child_foerderfaehig = forms.BooleanField(label="Förderfähig", required=False)
+    dinner_child_foerdersatz = SubsidyPercentField()
 
     def __init__(self, *args, **kwargs):
         self.camp = kwargs.pop("camp")
@@ -659,18 +697,18 @@ class MealStandardPricesForm(forms.Form):
             for rule in qs:
                 if rule.applies_to_adults:
                     self.initial[f"{meal_type}_adult_price"] = rule.unit_price
-                    self.initial[f"{meal_type}_adult_foerderfaehig"] = rule.foerderfaehig
+                    self.initial[f"{meal_type}_adult_foerdersatz"] = subsidy_percentage(rule.foerdersatz)
                 if rule.applies_to_children:
                     self.initial[f"{meal_type}_child_price"] = rule.unit_price
-                    self.initial[f"{meal_type}_child_foerderfaehig"] = rule.foerderfaehig
+                    self.initial[f"{meal_type}_child_foerdersatz"] = subsidy_percentage(rule.foerdersatz)
 
     def save(self):
         with transaction.atomic():
             for meal_type in ["breakfast", "dinner"]:
                 adult_price = self.cleaned_data.get(f"{meal_type}_adult_price")
-                adult_ff = self.cleaned_data.get(f"{meal_type}_adult_foerderfaehig")
+                adult_subsidy_rate = self.cleaned_data.get(f"{meal_type}_adult_foerdersatz")
                 child_price = self.cleaned_data.get(f"{meal_type}_child_price")
-                child_ff = self.cleaned_data.get(f"{meal_type}_child_foerderfaehig")
+                child_subsidy_rate = self.cleaned_data.get(f"{meal_type}_child_foerdersatz")
 
                 if adult_price is not None:
                     PriceRule.objects.update_or_create(
@@ -683,7 +721,7 @@ class MealStandardPricesForm(forms.Form):
                         defaults={
                             "name": f"Standard {dict(PriceRule.MealType.choices).get(meal_type)}",
                             "unit_price": adult_price,
-                            "foerderfaehig": adult_ff,
+                            "foerdersatz": adult_subsidy_rate,
                             "applies_to_children": False,
                             "applies_to_companions": True,  # adults include companions for now
                         },
@@ -699,7 +737,7 @@ class MealStandardPricesForm(forms.Form):
                         defaults={
                             "name": f"Standard {dict(PriceRule.MealType.choices).get(meal_type)} (Kind)",
                             "unit_price": child_price,
-                            "foerderfaehig": child_ff,
+                            "foerdersatz": child_subsidy_rate,
                             "applies_to_adults": False,
                             "applies_to_companions": False,
                         },
