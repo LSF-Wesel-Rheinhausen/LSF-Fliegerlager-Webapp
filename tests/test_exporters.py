@@ -5,6 +5,9 @@ from io import BytesIO, StringIO
 import pytest
 from django.urls import reverse
 from openpyxl import load_workbook
+
+from billing.models import Charge
+from billing.permissions import EDITOR_GROUP
 from tests.factories import (
     CampFactory,
     ChargeFactory,
@@ -16,9 +19,6 @@ from tests.factories import (
     SuperUserFactory,
     UserFactory,
 )
-
-from billing.models import Charge
-from billing.permissions import EDITOR_GROUP
 
 
 @pytest.fixture

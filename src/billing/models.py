@@ -1,4 +1,4 @@
-from datetime import time
+from datetime import time, timedelta
 from decimal import Decimal
 
 from django.conf import settings
@@ -115,9 +115,14 @@ class Participant(TimeStampedModel):
 
 
 class ParticipantPin(TimeStampedModel):
+    MAX_FAILED_ATTEMPTS = 5
+    LOCK_MINUTES = 5
+
     participant = models.OneToOneField(Participant, on_delete=models.CASCADE, related_name="pin")
     pin_hash = models.CharField(max_length=256, blank=True)
     must_set_pin = models.BooleanField(default=True)
+    failed_attempts = models.PositiveSmallIntegerField(default=0)
+    locked_until = models.DateTimeField(null=True, blank=True)
     changed_by = models.ForeignKey(
         get_user_model(),
         on_delete=models.SET_NULL,
@@ -129,17 +134,37 @@ class ParticipantPin(TimeStampedModel):
     def set_pin(self, raw_pin, changed_by=None):
         self.pin_hash = make_password(raw_pin)
         self.must_set_pin = False
+        self.failed_attempts = 0
+        self.locked_until = None
         self.changed_by = changed_by
 
     def reset_pin(self, changed_by=None):
         self.pin_hash = ""
         self.must_set_pin = True
+        self.failed_attempts = 0
+        self.locked_until = None
         self.changed_by = changed_by
 
+    @property
+    def is_locked(self):
+        return self.locked_until is not None and self.locked_until > timezone.now()
+
     def check_pin(self, raw_pin):
-        if not self.pin_hash:
+        if not self.pin_hash or self.is_locked:
             return False
-        return check_password(raw_pin, self.pin_hash)
+        if check_password(raw_pin, self.pin_hash):
+            if self.failed_attempts or self.locked_until is not None:
+                self.failed_attempts = 0
+                self.locked_until = None
+                self.save(update_fields=["failed_attempts", "locked_until", "updated_at"])
+            return True
+
+        self.failed_attempts += 1
+        if self.failed_attempts >= self.MAX_FAILED_ATTEMPTS:
+            self.locked_until = timezone.now() + timedelta(minutes=self.LOCK_MINUTES)
+            self.failed_attempts = 0
+        self.save(update_fields=["failed_attempts", "locked_until", "updated_at"])
+        return False
 
     def __str__(self):
         return f"PIN {self.participant}"

@@ -46,6 +46,9 @@ python src/manage.py runserver</code></pre>
           <li><code>DJANGO_DEBUG</code>: <code>1</code> lokal, <code>0</code> für Docker/Deployment.</li>
           <li><code>DJANGO_ALLOWED_HOSTS</code>: kommaseparierte Hostnamen.</li>
           <li><code>CSRF_TRUSTED_ORIGINS</code>: kommaseparierte Origins inklusive Schema.</li>
+          <li><code>DJANGO_HTTPS=1</code>: aktiviert HTTPS-Redirect sowie sichere Session- und CSRF-Cookies.</li>
+          <li><code>DJANGO_TRUST_PROXY_SSL_HEADER=1</code>: nur hinter einem kontrollierten Proxy aktivieren, der <code>X-Forwarded-Proto</code> bereinigt.</li>
+          <li><code>DJANGO_HSTS_SECONDS</code>: HSTS erst nach verifiziertem HTTPS-Betrieb schrittweise aktivieren.</li>
           <li><code>DATABASE_URL</code>: Datenbank-URL; Docker nutzt PostgreSQL, E2E nutzt SQLite.</li>
         </ul>
       </section>
@@ -109,6 +112,8 @@ npm run test:local</code></pre>
           <li>pre-commit führt lokale Checks und Secret-Scanning aus.</li>
           <li>Neue Python-Funktionen sollen Type Hints nutzen.</li>
           <li><code>.env</code>-Dateien und echte Secrets dürfen nicht ins Repository.</li>
+          <li>Produktionsstarts schlagen ohne starken Secret Key und explizite Hostliste fehl.</li>
+          <li>Der Teilnehmer-Kiosk mit PIN-Selbstvergabe ist nur für kontrollierte Geräte beziehungsweise Netze vorgesehen.</li>
           <li>Abrechnungs- und Kiosk-Operationen sollen transaktional und ORM-effizient umgesetzt werden.</li>
           <li>Templates sollen semantisches HTML, mobile-first CSS und barrierearme Formulare nutzen.</li>
           <li>Dynamisches Verhalten soll mit modernem Vanilla JavaScript oder bewusst ausgewählten leichten Tools umgesetzt werden.</li>

@@ -65,6 +65,24 @@ def test_kiosk_login_rejects_invalid_pin_for_existing_pin(client):
 
 
 @pytest.mark.django_db
+def test_kiosk_login_locks_pin_after_repeated_failures(client):
+    participant = ParticipantFactory(first_name="Grace", last_name="Hopper")
+    participant.pin.set_pin("1234")
+    participant.pin.save()
+
+    for _ in range(participant.pin.MAX_FAILED_ATTEMPTS):
+        client.post(reverse("kiosk-login"), {"participant": participant.pk, "pin": "9999"})
+
+    participant.pin.refresh_from_db()
+    response = client.post(reverse("kiosk-login"), {"participant": participant.pk, "pin": "1234"})
+
+    assert participant.pin.is_locked is True
+    assert response.status_code == 200
+    assert b"Zu viele Fehlversuche" in response.content
+    assert KIOSK_PARTICIPANT_SESSION_KEY not in client.session
+
+
+@pytest.mark.django_db
 def test_kiosk_login_links_to_admin_interface(client):
     response = client.get(reverse("kiosk-login"))
 

@@ -5,6 +5,7 @@ from typing import Any
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, SetPasswordForm, UserCreationForm
+from django.core.validators import FileExtensionValidator
 from django.db import models, transaction
 
 from .models import (
@@ -24,6 +25,7 @@ from .models import (
 from .roles import ROLE_ADMIN, ROLE_CHOICES, user_role
 
 PERCENT_PLACES = Decimal("0.01")
+MAX_IMPORT_FILE_SIZE = 5 * 1024 * 1024
 
 
 def subsidy_percentage(value: Decimal) -> Decimal:
@@ -500,7 +502,14 @@ class ParticipantImportForm(forms.Form):
     file = forms.FileField(
         label="Importdatei",
         help_text="CSV oder XLSX mit den Spalten first_name, last_name, hilfssatz und berufssatz",
+        validators=[FileExtensionValidator(allowed_extensions=["csv", "xlsx"])],
     )
+
+    def clean_file(self):
+        upload = self.cleaned_data["file"]
+        if upload.size > MAX_IMPORT_FILE_SIZE:
+            raise forms.ValidationError("Die Importdatei darf höchstens 5 MB groß sein.", code="file_too_large")
+        return upload
 
 
 class ParticipantPinForm(forms.Form):
@@ -538,6 +547,10 @@ class KioskLoginForm(forms.Form):
             if participant_pin is None or participant_pin.must_set_pin or not participant_pin.pin_hash:
                 self.missing_pin_participant = participant
                 raise forms.ValidationError("Für diesen Teilnehmer ist noch kein PIN gesetzt.", code="missing_pin")
+            if participant_pin.is_locked:
+                raise forms.ValidationError(
+                    "Zu viele Fehlversuche. Bitte warte fünf Minuten und versuche es erneut.", code="pin_locked"
+                )
             if pin and not participant_pin.check_pin(pin):
                 raise forms.ValidationError("Teilnehmer oder PIN ist ungültig.", code="invalid_pin")
         return cleaned_data
