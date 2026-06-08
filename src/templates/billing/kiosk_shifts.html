@@ -117,6 +117,29 @@
   0% { background-position: 0 0; }
   100% { background-position: 20px 0; }
 }
+
+/* Dynamische Namen via Container Queries */
+.shift-card {
+  container-type: inline-size;
+  container-name: shiftcard;
+}
+.coworker-badge {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 0.1rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+.shift-card--offer .coworker-badge {
+  background: var(--surface);
+}
+.coworker-short { display: none; }
+
+@container shiftcard (max-width: 380px) {
+  .coworker-full { display: none; }
+  .coworker-short { display: inline; }
+}
 </style>
   <div class="toolbar">
     <div>
@@ -167,8 +190,9 @@
                     <span>Weitere Einteilungen:</span>
                     {% for assignment in shift.assignments.all %}
                       {% if assignment.participant.full_name != shift.offered_by %}
-                        <span style="background: var(--surface); border: 1px solid var(--border); padding: 0.1rem 0.5rem; border-radius: 4px; font-size: 0.8rem; white-space: nowrap;">
-                          {{ assignment.participant.first_name }} {{ assignment.participant.last_name|make_list|first }}.
+                        <span class="coworker-badge">
+                          <span class="coworker-full">{{ assignment.participant.full_name }}</span>
+                          <span class="coworker-short">{{ assignment.participant.first_name }} {{ assignment.participant.last_name|make_list|first }}.</span>
                         </span>
                       {% endif %}
                     {% endfor %}
@@ -208,8 +232,9 @@
                   <span>Zusammen mit:</span>
                   {% for assignment in shift.assignments.all %}
                     {% if assignment.participant != participant %}
-                      <span style="background: var(--surface-2); border: 1px solid var(--border); padding: 0.1rem 0.5rem; border-radius: 4px; font-size: 0.8rem; white-space: nowrap;">
-                        {{ assignment.participant.first_name }} {{ assignment.participant.last_name|make_list|first }}.
+                      <span class="coworker-badge">
+                        <span class="coworker-full">{{ assignment.participant.full_name }}</span>
+                        <span class="coworker-short">{{ assignment.participant.first_name }} {{ assignment.participant.last_name|make_list|first }}.</span>
                       </span>
                     {% endif %}
                   {% endfor %}
@@ -255,8 +280,9 @@
                 <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.5rem; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
                   <span>Bereits eingetragen:</span>
                   {% for assignment in shift.assignments.all %}
-                    <span style="background: var(--surface-2); border: 1px solid var(--border); padding: 0.1rem 0.5rem; border-radius: 4px; font-size: 0.8rem; white-space: nowrap;">
-                      {{ assignment.participant.first_name }} {{ assignment.participant.last_name|make_list|first }}.
+                    <span class="coworker-badge">
+                      <span class="coworker-full">{{ assignment.participant.full_name }}</span>
+                      <span class="coworker-short">{{ assignment.participant.first_name }} {{ assignment.participant.last_name|make_list|first }}.</span>
                     </span>
                   {% endfor %}
                 </div>
