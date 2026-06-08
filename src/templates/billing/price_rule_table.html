@@ -1,10 +1,11 @@
+{% load billing_format %}
 <table>
   <thead>
     <tr>
       <th>Name</th>
       <th>Art</th>
       <th>Preis</th>
-      <th>Förderfähig</th>
+      <th>Fördersatz</th>
       <th>Standard</th>
       <th></th>
     </tr>
@@ -15,10 +16,10 @@
         <td>{{ rule.name }}</td>
         <td>{{ rule.get_kind_display }}</td>
         <td>{{ rule.unit_price }} EUR</td>
-        <td>{% if rule.foerderfaehig %}Ja{% else %}Nein{% endif %}</td>
+        <td>{{ rule.foerdersatz|percent }}</td>
         <td>{% if rule.is_default %}Ja{% else %}Nein{% endif %}</td>
         <td>
-          <a class="button-link" href="{% url 'price-rule-edit' rule.pk %}" onclick="openEditDialog('{{ rule.pk }}', '{{ rule.kind }}', '{{ rule.name|escapejs }}', '{{ rule.unit_price }}', '{{ rule.foerderfaehig }}', '{{ rule.is_default }}', '{{ rule.applies_to_children }}', '{{ rule.applies_to_adults }}', '{{ rule.applies_to_companions }}', '{{ rule.meal_type|escapejs }}', '{% if rule.meal_date %}{{ rule.meal_date|date:'Y-m-d' }}{% endif %}'); return false;">Bearbeiten</a>
+          <a class="button-link" href="{% url 'price-rule-edit' rule.pk %}" onclick="openEditDialog('{{ rule.pk }}', '{{ rule.kind }}', '{{ rule.name|escapejs }}', '{{ rule.unit_price }}', '{{ rule.foerdersatz }}', '{{ rule.is_default }}', '{{ rule.applies_to_children }}', '{{ rule.applies_to_adults }}', '{{ rule.applies_to_companions }}', '{{ rule.meal_type|escapejs }}', '{% if rule.meal_date %}{{ rule.meal_date|date:'Y-m-d' }}{% endif %}'); return false;">Bearbeiten</a>
         </td>
       </tr>
     {% empty %}

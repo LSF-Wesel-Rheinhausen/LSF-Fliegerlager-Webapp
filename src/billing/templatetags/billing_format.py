@@ -24,6 +24,16 @@ def money_eur(value: Any) -> str:
 
 
 @register.filter
+def percent(value: Any) -> str:
+    try:
+        percentage = Decimal(value or 0) * Decimal("100")
+    except (InvalidOperation, TypeError, ValueError):
+        percentage = ZERO
+    formatted = format(percentage.quantize(TWOPLACES, rounding=ROUND_HALF_UP), "f").rstrip("0").rstrip(".")
+    return f"{formatted} %"
+
+
+@register.filter
 def can_manage_users(user: Any) -> bool:
     """Return whether a template user may access user management."""
     return is_admin(user)

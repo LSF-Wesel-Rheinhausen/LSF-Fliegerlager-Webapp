@@ -144,7 +144,7 @@ test("Admin edits a booking and sees the change log", async ({ page }) => {
   await page.getByLabel("Beschreibung").fill("Cola");
   await page.getByLabel("Menge").fill("2");
   await page.getByLabel("Einzelpreis").fill("2.50");
-  await page.getByLabel("Förderfähig").check();
+  await page.getByLabel("Fördersatz (%)").fill("100");
   await page.getByRole("button", { name: "Speichern" }).click();
 
   await expect(page.getByRole("heading", { name: "Ada Lovelace" })).toBeVisible();

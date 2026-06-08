@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load billing_format %}
 {% block content %}
   <div class="toolbar">
     <div>
@@ -26,7 +27,7 @@
             <th>Personengruppe</th>
             <th>Dauer</th>
             <th>Preis</th>
-            <th>Förderfähig</th>
+            <th>Fördersatz</th>
           </tr>
         </thead>
         <tbody>
@@ -40,9 +41,9 @@
                   <span class="helptext error">{{ error }}</span>
                 {% endfor %}
               </td>
-              <td class="checkbox-cell">
-                <label for="{{ row.foerderfaehig.id_for_label }}">{{ row.foerderfaehig }} Förderfähig</label>
-                {% for error in row.foerderfaehig.errors %}
+              <td>
+                <label for="{{ row.foerdersatz.id_for_label }}">{{ row.foerdersatz }}</label>
+                {% for error in row.foerdersatz.errors %}
                   <span class="helptext error">{{ error }}</span>
                 {% endfor %}
               </td>
@@ -91,22 +92,22 @@
             <td>Frühstück</td>
             <td>
               {{ meal_form.breakfast_adult_price }}
-              <label for="{{ meal_form.breakfast_adult_foerderfaehig.id_for_label }}">{{ meal_form.breakfast_adult_foerderfaehig }} Förderfähig</label>
+              <label for="{{ meal_form.breakfast_adult_foerdersatz.id_for_label }}">Fördersatz {{ meal_form.breakfast_adult_foerdersatz }}</label>
             </td>
             <td>
               {{ meal_form.breakfast_child_price }}
-              <label for="{{ meal_form.breakfast_child_foerderfaehig.id_for_label }}">{{ meal_form.breakfast_child_foerderfaehig }} Förderfähig</label>
+              <label for="{{ meal_form.breakfast_child_foerdersatz.id_for_label }}">Fördersatz {{ meal_form.breakfast_child_foerdersatz }}</label>
             </td>
           </tr>
           <tr>
             <td>Abendessen</td>
             <td>
               {{ meal_form.dinner_adult_price }}
-              <label for="{{ meal_form.dinner_adult_foerderfaehig.id_for_label }}">{{ meal_form.dinner_adult_foerderfaehig }} Förderfähig</label>
+              <label for="{{ meal_form.dinner_adult_foerdersatz.id_for_label }}">Fördersatz {{ meal_form.dinner_adult_foerdersatz }}</label>
             </td>
             <td>
               {{ meal_form.dinner_child_price }}
-              <label for="{{ meal_form.dinner_child_foerderfaehig.id_for_label }}">{{ meal_form.dinner_child_foerderfaehig }} Förderfähig</label>
+              <label for="{{ meal_form.dinner_child_foerdersatz.id_for_label }}">Fördersatz {{ meal_form.dinner_child_foerdersatz }}</label>
             </td>
           </tr>
         </tbody>
@@ -172,9 +173,9 @@
       </p>
 
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; margin-top: 10px;">
-        <label for="id_foerderfaehig" style="display: inline-flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
-          <input type="checkbox" name="foerderfaehig" id="id_foerderfaehig" checked>
-          <span>Förderfähig</span>
+        <label for="id_foerdersatz">
+          Fördersatz (%)
+          <input type="number" name="foerdersatz" id="id_foerdersatz" step="0.01" min="0" max="100" value="0" required>
         </label>
         <label for="id_is_default" style="display: inline-flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
           <input type="checkbox" name="is_default" id="id_is_default">
@@ -215,7 +216,7 @@
       form.reset();
 
       document.getElementById('id_kind').value = kind;
-      document.getElementById('id_foerderfaehig').checked = true;
+      document.getElementById('id_foerdersatz').value = '0';
       document.getElementById('id_is_default').checked = false;
       document.getElementById('id_applies_to_children').checked = true;
       document.getElementById('id_applies_to_adults').checked = true;
@@ -237,7 +238,7 @@
       dialog.showModal();
     }
 
-    function openEditDialog(ruleId, kind, name, unitPrice, isFoerderfaehig, isDefault, appliesToChildren, appliesToAdults, appliesToCompanions, mealType, mealDate) {
+    function openEditDialog(ruleId, kind, name, unitPrice, subsidyRate, isDefault, appliesToChildren, appliesToAdults, appliesToCompanions, mealType, mealDate) {
       const dialog = document.getElementById('price-rule-dialog');
       const form = document.getElementById('dialog-form');
       const title = document.getElementById('dialog-title');
@@ -253,7 +254,7 @@
       let cleanedPrice = parseFloat(unitPrice.replace(',', '.')).toFixed(2);
       document.getElementById('id_unit_price').value = cleanedPrice;
 
-      document.getElementById('id_foerderfaehig').checked = isFoerderfaehig === 'True';
+      document.getElementById('id_foerdersatz').value = (parseFloat(subsidyRate.replace(',', '.')) * 100).toFixed(2);
       document.getElementById('id_is_default').checked = isDefault === 'True';
       document.getElementById('id_applies_to_children').checked = appliesToChildren === 'True';
       document.getElementById('id_applies_to_adults').checked = appliesToAdults === 'True';

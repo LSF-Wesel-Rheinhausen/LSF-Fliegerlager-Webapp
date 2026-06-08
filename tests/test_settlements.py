@@ -2,6 +2,9 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+
+from billing.models import Charge, PriceRule
+from billing.services import calculate_participant_settlement
 from tests.factories import (
     CampFactory,
     ChargeFactory,
@@ -11,9 +14,6 @@ from tests.factories import (
     PaymentFactory,
     PriceRuleFactory,
 )
-
-from billing.models import Charge, PriceRule
-from billing.services import calculate_participant_settlement
 
 
 @pytest.mark.django_db
@@ -88,8 +88,8 @@ def test_settlement_allows_overpayment():
 
 
 @pytest.mark.django_db
-def test_settlement_applies_subsidy_factor_for_youth_group_members():
-    camp = CampFactory(foerdersatz=Decimal("0.5000"))
+def test_settlement_applies_price_element_subsidy_rates_for_youth_group_members():
+    camp = CampFactory()
     participant = ParticipantFactory(
         camp=camp,
         first_name="Mia",
@@ -104,14 +104,21 @@ def test_settlement_applies_subsidy_factor_for_youth_group_members():
         name="Lagerpauschale",
         unit_price=Decimal("100.00"),
         is_default=True,
-        foerderfaehig=True,
+        foerdersatz=Decimal("0.4000"),
+    )
+    ChargeFactory(
+        participant=participant,
+        kind=Charge.Kind.DRINK,
+        description="Getränk",
+        unit_price=Decimal("10.00"),
+        foerdersatz=Decimal("1.0000"),
     )
 
     result = calculate_participant_settlement(participant)
 
-    assert result.total_gross == Decimal("100.00")
+    assert result.total_gross == Decimal("110.00")
     assert result.total_subsidy == Decimal("8.25")
-    assert result.total_due == Decimal("91.75")
+    assert result.total_due == Decimal("101.75")
 
 
 @pytest.mark.django_db

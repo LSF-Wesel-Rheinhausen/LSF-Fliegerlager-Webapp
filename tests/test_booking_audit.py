@@ -35,7 +35,7 @@ def test_admin_can_edit_booking_and_creates_audit_log(client):
         description="Cola",
         quantity=Decimal("2.00"),
         unit_price=Decimal("2.50"),
-        foerderfaehig=True,
+        foerdersatz=Decimal("0.5000"),
     )
     client.force_login(admin)
 
@@ -46,7 +46,7 @@ def test_admin_can_edit_booking_and_creates_audit_log(client):
             "description": "Cola korrigiert",
             "quantity": "3.00",
             "unit_price": "2.50",
-            "foerderfaehig": "on",
+            "foerdersatz": "50",
             "occurred_on": "2026-07-01",
         },
     )
@@ -65,7 +65,7 @@ def test_admin_can_edit_booking_and_creates_audit_log(client):
         "description": "Cola",
         "quantity": "2.00",
         "unit_price": "2.50",
-        "foerderfaehig": True,
+        "foerdersatz": "0.5000",
         "occurred_on": None,
     }
     assert audit_log.after == {
@@ -74,7 +74,7 @@ def test_admin_can_edit_booking_and_creates_audit_log(client):
         "description": "Cola korrigiert",
         "quantity": "3.00",
         "unit_price": "2.50",
-        "foerderfaehig": True,
+        "foerdersatz": "0.5000",
         "occurred_on": "2026-07-01",
     }
 
@@ -112,7 +112,7 @@ def test_admin_can_delete_booking_and_keeps_audit_log(client):
         description="Fehlbuchung",
         quantity=Decimal("1.00"),
         unit_price=Decimal("9.50"),
-        foerderfaehig=False,
+        foerdersatz=Decimal("0"),
     )
     participant = charge.participant
     client.force_login(admin)
@@ -136,7 +136,7 @@ def test_admin_can_delete_booking_and_keeps_audit_log(client):
         "description": "Fehlbuchung",
         "quantity": "1.00",
         "unit_price": "9.50",
-        "foerderfaehig": False,
+        "foerdersatz": "0.0000",
         "occurred_on": None,
     }
     assert audit_log.after == {}
@@ -206,7 +206,7 @@ def test_participant_detail_renders_booking_audit_history_for_admin(client):
             "description": "Abendessen",
             "quantity": "1.00",
             "unit_price": "10.00",
-            "foerderfaehig": True,
+            "foerdersatz": "0.5000",
             "occurred_on": None,
         },
         after={
@@ -214,7 +214,7 @@ def test_participant_detail_renders_booking_audit_history_for_admin(client):
             "description": "Abendessen korrigiert",
             "quantity": "2.00",
             "unit_price": "10.00",
-            "foerderfaehig": True,
+            "foerdersatz": "0.5000",
             "occurred_on": None,
         },
     )
@@ -249,7 +249,7 @@ def test_participant_detail_renders_deleted_booking_audit_history(client):
             "description": "Doppelte Buchung",
             "quantity": "1.00",
             "unit_price": "4.00",
-            "foerderfaehig": False,
+            "foerdersatz": "0.0000",
             "occurred_on": None,
         },
         after={},
@@ -274,7 +274,7 @@ def test_admin_can_restore_deleted_booking_from_audit_log(client):
         description="Frühstück",
         quantity=Decimal("2.00"),
         unit_price=Decimal("4.50"),
-        foerderfaehig=True,
+        foerdersatz=Decimal("0.5000"),
         occurred_on="2026-07-02",
     )
     deleted_charge.deleted_at = timezone.now()
@@ -291,7 +291,7 @@ def test_admin_can_restore_deleted_booking_from_audit_log(client):
             "description": "Frühstück",
             "quantity": "2.00",
             "unit_price": "4.50",
-            "foerderfaehig": True,
+            "foerdersatz": "0.5000",
             "occurred_on": "2026-07-02",
         },
         after={},
@@ -315,7 +315,7 @@ def test_admin_can_restore_deleted_booking_from_audit_log(client):
     assert restored_charge.description == "Frühstück"
     assert restored_charge.quantity == Decimal("2.00")
     assert restored_charge.unit_price == Decimal("4.50")
-    assert restored_charge.foerderfaehig is True
+    assert restored_charge.foerdersatz == Decimal("0.5000")
     assert restored_charge.occurred_on.isoformat() == "2026-07-02"
     assert deleted_log.charge == restored_charge
     assert restored_log.participant == participant
@@ -328,7 +328,7 @@ def test_admin_can_restore_deleted_booking_from_audit_log(client):
         "description": "Frühstück",
         "quantity": "2.00",
         "unit_price": "4.50",
-        "foerderfaehig": True,
+        "foerdersatz": "0.5000",
         "occurred_on": "2026-07-02",
     }
     assert restored_log.after == {
@@ -337,7 +337,7 @@ def test_admin_can_restore_deleted_booking_from_audit_log(client):
         "description": "Frühstück",
         "quantity": "2.00",
         "unit_price": "4.50",
-        "foerderfaehig": True,
+        "foerdersatz": "0.5000",
         "occurred_on": "2026-07-02",
     }
 
@@ -359,7 +359,7 @@ def test_editor_cannot_restore_deleted_booking(client):
             "description": "Doppelte Buchung",
             "quantity": "1.00",
             "unit_price": "4.00",
-            "foerderfaehig": False,
+            "foerdersatz": "0.0000",
             "occurred_on": None,
         },
         after={},
@@ -391,7 +391,7 @@ def test_admin_cannot_restore_deleted_booking_without_participant(client):
             "description": "Nicht zuordenbar",
             "quantity": "1.00",
             "unit_price": "4.00",
-            "foerderfaehig": False,
+            "foerdersatz": "0.0000",
             "occurred_on": None,
         },
         after={},

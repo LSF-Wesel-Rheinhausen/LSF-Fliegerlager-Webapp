@@ -36,7 +36,7 @@
 
       <section>
         <h2>Domain-Modell</h2>
-        <p><code>Camp</code> hält Lagerdaten und den generellen Lager-Fördersatz. <code>Participant</code> hält Teilnehmerdaten inklusive Hilfssatz, Berufssatz, Nächten und Begleitstatus.</p>
+        <p><code>Camp</code> hält die Lagerdaten. <code>PriceRule</code> und gebuchte <code>Charge</code>-Positionen speichern ihren eigenen Fördersatz. <code>Participant</code> hält Teilnehmerdaten inklusive Hilfssatz, Berufssatz, Nächten und Begleitstatus.</p>
         <p><code>PriceRule</code> bildet Preisregeln ab. Für Lagerpauschalen gibt es strukturierte Felder für Dauer (<code>1w</code>/<code>2w</code>) und Rolle (<code>participant</code>/<code>companion</code>); für Mahlzeiten gibt es Typ, optionales Tagesdatum und Standardregeln.</p>
         <p><code>Charge</code>, <code>Payment</code> und <code>Expense</code> bilden Kosten, Zahlungen und vorgestreckte Beträge ab. <code>ParticipantPin</code> schützt den Kiosk-Zugang.</p>
         <p><code>MealSignup</code> speichert Essensanmeldungen eindeutig pro Teilnehmer, Datum und Mahlzeit. <code>DrinkEntry</code> bleibt für ältere Getränkedaten erhalten; aktuelle Kiosk-Getränke werden als <code>Charge</code> gespeichert.</p>
@@ -48,7 +48,7 @@
         <p>Die zentrale Logik liegt in <code>src/billing/services.py</code>. Views und Exporte greifen auf dieselben Services zu, damit die Ergebnisse konsistent bleiben.</p>
         <ul>
           <li>Lagerpauschale: Auswahl nach Begleitstatus und tatsächlichen bzw. gebuchten Nächten.</li>
-          <li>Förderung: nur für Jugendgruppenmitglieder; Berechnung über <code>Lager-Fördersatz * Hilfssatz * Berufssatz</code>.</li>
+          <li>Förderung: nur für Jugendgruppenmitglieder; Berechnung je Position über <code>Element-Fördersatz * Hilfssatz * Berufssatz</code>.</li>
           <li>Gesamtbetrag: Brutto minus Förderung, danach Abzug von Zahlungen und vorgestreckten Beträgen.</li>
           <li>Buchungs-Audit: vor und nach einer Admin-Korrektur werden die abrechnungsrelevanten Felder als JSON-Snapshot gespeichert.</li>
         </ul>

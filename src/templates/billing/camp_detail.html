@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load billing_format %}
 {% block content %}
   <div class="toolbar">
     <div>
@@ -42,7 +43,7 @@
     <table>
       <thead>
         <tr>
-          <th>Art</th><th>Name</th><th>Preis</th><th>Lagerpauschale</th><th>Förderfähig</th><th>Standard</th><th></th>
+          <th>Art</th><th>Name</th><th>Preis</th><th>Lagerpauschale</th><th>Fördersatz</th><th>Standard</th><th></th>
         </tr>
       </thead>
       <tbody>
@@ -58,7 +59,7 @@
                 -
               {% endif %}
             </td>
-            <td>{% if rule.foerderfaehig %}Ja{% else %}Nein{% endif %}</td>
+            <td>{{ rule.foerdersatz|percent }}</td>
             <td>{% if rule.is_default %}Ja{% else %}Nein{% endif %}</td>
             <td><a href="{% url 'price-rule-edit' rule.pk %}">Bearbeiten</a></td>
           </tr>

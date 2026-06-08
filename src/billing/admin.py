@@ -20,7 +20,7 @@ from .models import (
 
 @admin.register(Camp)
 class CampAdmin(admin.ModelAdmin):
-    list_display = ("name", "year", "foerdersatz", "meal_booking_cutoff_time", "is_active", "starts_on", "ends_on")
+    list_display = ("name", "year", "meal_booking_cutoff_time", "is_active", "starts_on", "ends_on")
     search_fields = ("name",)
 
 
@@ -57,10 +57,10 @@ class PriceRuleAdmin(admin.ModelAdmin):
         "unit_price",
         "camp_flat_duration",
         "camp_flat_role",
-        "foerderfaehig",
+        "foerdersatz",
         "is_default",
     )
-    list_filter = ("camp", "kind", "camp_flat_duration", "camp_flat_role", "foerderfaehig", "is_default")
+    list_filter = ("camp", "kind", "camp_flat_duration", "camp_flat_role", "is_default")
 
 
 @admin.register(Charge)
@@ -71,11 +71,11 @@ class ChargeAdmin(admin.ModelAdmin):
         "kind",
         "description",
         "unit_price",
-        "foerderfaehig",
+        "foerdersatz",
         "occurred_on",
         "deleted_at",
     )
-    list_filter = ("kind", "foerderfaehig", "deleted_at")
+    list_filter = ("kind", "deleted_at")
     search_fields = ("id", "description", "participant__first_name", "participant__last_name")
     readonly_fields = ("deleted_at", "deleted_by")
 
