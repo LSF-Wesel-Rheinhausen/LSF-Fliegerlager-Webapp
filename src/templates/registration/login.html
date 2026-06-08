@@ -7,7 +7,10 @@
       {% csrf_token %}
       <p class="hint">Anmeldung mit E-Mail-Adresse oder Benutzername.</p>
       {{ form.as_p }}
-      <button type="submit">Anmelden</button>
+      <div class="form-actions">
+        <a class="button button-secondary" href="{% url 'kiosk-login' %}">Zurück zum Kiosk</a>
+        <button type="submit" class="button">Anmelden</button>
+      </div>
     </form>
   </section>
 {% endblock %}
