@@ -2,7 +2,7 @@
 
 Web-App zur Verwaltung und Abrechnung des Vereins-Fliegerlagers der Luftsportfreunde Wesel-Rheinhausen e.V.
 
-Die Anwendung ist eine Django-App mit Teilnehmerverwaltung, Preisregeln, Förderlogik, Kiosk-Modus, Import/Export und Abrechnungsauswertung.
+Die Anwendung ist eine Django-App mit Nutzer- und Teilnehmerverwaltung, Preisregeln, Förderlogik, Mahlzeiten- und Dienstplanung, Kiosk-Modus, Import/Export und Abrechnungsauswertung.
 
 ## Funktionen
 
@@ -13,6 +13,8 @@ Die Anwendung ist eine Django-App mit Teilnehmerverwaltung, Preisregeln, Förder
 - Lagerpauschalen automatisch nach 1/2 Wochen und Teilnehmer/Begleitperson berechnen
 - Förderung über Lager-Fördersatz, Hilfssatz und Berufssatz berücksichtigen
 - Kiosk mit PIN-Login, PIN-Ersteinrichtung, Getränke- und Essensbuchung
+- Dienstvorlagen und einzelne Dienste im Adminbereich sowie Dienstübernahme und -tausch im Kiosk
+- temporäre Kiosk-Sperre nach wiederholten falschen PIN-Eingaben
 - automatische Kiosk-Abmeldung nach Inaktivität
 - CSV-/XLSX-Import mit Vorschau und Validierung
 - CSV-, Excel- und PDF-Export für Abrechnungen
@@ -59,6 +61,7 @@ Danach läuft die App unter `http://localhost:8000`.
 .venv/bin/python -m pytest
 .venv/bin/python -m ruff check .
 .venv/bin/python -m ruff format --check .
+.venv/bin/python -m mypy src
 ```
 
 End-to-End-Tests:

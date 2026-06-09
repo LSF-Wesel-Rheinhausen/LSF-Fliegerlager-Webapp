@@ -69,7 +69,9 @@ docker compose up --build</code></pre>
           <li>Getränkepreise, Standardpreise für Frühstück/Abendessen und bei Bedarf abweichende Tagespreise anlegen.</li>
           <li>Teilnehmer importieren oder manuell anlegen.</li>
           <li>PINs setzen oder Teilnehmer im Kiosk ihre PIN beim ersten Login setzen lassen.</li>
+          <li>Tägliche Dienstvorlagen pflegen, Dienste für den Lagerzeitraum erzeugen und die Besetzungsauswertung kontrollieren.</li>
           <li>Während des Lagers Kiosk für Buchungen nutzen: Getränke per großer Ein-Tap-Taste buchen, Essen anmelden, Countdown zur automatischen Abmeldung im Blick behalten.</li>
+          <li>Teilnehmer Dienste übernehmen, zurückgeben oder zum Tausch anbieten lassen.</li>
           <li>Falsche Buchungen als Admin korrigieren und Audit-Protokoll prüfen.</li>
           <li>Abrechnung prüfen und Exporte erzeugen: Lager-CSV, Getränke-CSV, Excel-Arbeitsmappe und Einzel-PDF.</li>
         </ol>
@@ -90,7 +92,7 @@ docker compose up --build</code></pre>
 .venv/bin/python -m mypy src
 npm run test:e2e
 npm run test:local</code></pre>
-        <p>Die Tests decken Authentifizierung, Rollen, Nutzerverwaltung, Import, Export, Abrechnung, Kiosk, Preisverwaltung, Buchungs-Audit und View-Berechtigungen ab. <code>npm run test:local</code> schreibt Logs nach <code>.test-local-logs/&lt;timestamp&gt;/</code>.</p>
+        <p>Die Tests decken Authentifizierung, Rollen, Nutzerverwaltung, Migrationen, Import, Export, Abrechnung, Kiosk, Mahlzeiten, Dienstplanung, Preisverwaltung, Buchungs-Audit und View-Berechtigungen ab. <code>npm run test:local</code> schreibt Logs nach <code>.test-local-logs/&lt;timestamp&gt;/</code>.</p>
       </section>
 
       <section>
@@ -114,10 +116,17 @@ npm run test:local</code></pre>
           <li><code>.env</code>-Dateien und echte Secrets dürfen nicht ins Repository.</li>
           <li>Produktionsstarts schlagen ohne starken Secret Key und explizite Hostliste fehl.</li>
           <li>Der Teilnehmer-Kiosk mit PIN-Selbstvergabe ist nur für kontrollierte Geräte beziehungsweise Netze vorgesehen.</li>
+          <li>Nach fünf falschen PIN-Eingaben wird der Teilnehmerzugang vorübergehend gesperrt.</li>
           <li>Abrechnungs- und Kiosk-Operationen sollen transaktional und ORM-effizient umgesetzt werden.</li>
           <li>Templates sollen semantisches HTML, mobile-first CSS und barrierearme Formulare nutzen.</li>
           <li>Dynamisches Verhalten soll mit modernem Vanilla JavaScript oder bewusst ausgewählten leichten Tools umgesetzt werden.</li>
         </ul>
+      </section>
+
+      <section>
+        <h2>Dienstplanung</h2>
+        <p>Der Lager-Faktor <code>shift_ratio_per_night</code> bestimmt die Soll-Dienste pro gebuchter Nacht. Tägliche Vorlagen können über den Lagerzeitraum generiert werden; erneutes Generieren aktualisiert vorhandene Dienste statt Duplikate anzulegen.</p>
+        <p>Im Kiosk sehen Teilnehmer Fortschritt, eigene Dienste, offene Plätze und Tauschangebote. Admins sehen die vollständige Belegung sowie eine Soll-/Ist-Auswertung pro Teilnehmer.</p>
       </section>
 
       <section>

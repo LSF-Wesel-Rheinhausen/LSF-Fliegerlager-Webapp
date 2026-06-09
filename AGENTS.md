@@ -4,7 +4,7 @@
 
 Application code resides in `src/`. The core Django project configuration is located in `src/config/`, and the main domain application is in `src/billing/`.
 
-- `src/billing/models.py`: models for camp, participant, pricing, payment, expense, kiosk preparation, and settlement. If this file grows too large, refactor it into a `models/` package with cohesive modules.
+- `src/billing/models.py`: models for camps, user profiles, participants, pricing, payments, expenses, meals, kiosk access, shifts, and settlements. If this file grows too large, refactor it into a `models/` package with cohesive modules.
 - `src/billing/services.py`: core business logic, including settlement and kiosk-summary logic. Keep views thin and share calculations through services.
 - `src/billing/importers.py` and `src/billing/exporters.py`: CSV/XLSX/PDF import and export helpers.
 - `src/templates/`: server-rendered HTML templates.
@@ -80,6 +80,7 @@ Critical paths require strong test coverage:
 - permission checks
 - data exports
 - kiosk booking flows
+- meal ordering and shift assignment flows
 
 ## 5. Commit & Pull Request Guidelines
 

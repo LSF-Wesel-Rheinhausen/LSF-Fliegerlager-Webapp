@@ -12,6 +12,8 @@ Die Tests pruefen:
 - Deutsche Aktionslabels und Exportlinks.
 - Admin-Bearbeitung einer Buchung inklusive sichtbarem Änderungsprotokoll.
 - Native Dialoge fuer das Anlegen und Bearbeiten von Preisregeln.
+- Dienstvorlagen, Dienstgenerierung sowie Uebernahme und Tausch im Teilnehmer-Kiosk.
+- Kiosk-Buchungen fuer Getraenke und Mahlzeiten inklusive PIN-Ersteinrichtung.
 - Sichtbares Vereinslogo und geladenes CSS.
 - Desktop- und iPhone-Viewports ohne unerwarteten horizontalen Overflow.
 
@@ -23,4 +25,4 @@ npx playwright install
 npm run test:e2e
 ```
 
-Playwright startet standardmaessig einen isolierten Django-Testserver ueber `scripts/start-e2e.sh` und nutzt `tmp/e2e.sqlite3`. Mit `PLAYWRIGHT_USE_EXTERNAL_SERVER=1` kann stattdessen ein bereits laufender Server gegen `PLAYWRIGHT_BASE_URL` verwendet werden.
+Playwright startet standardmaessig einen isolierten Django-Testserver ueber `scripts/start-e2e.sh` und nutzt `tmp/e2e.sqlite3`. Die Suite laeuft voll parallel in Chromium, Firefox und WebKit; in CI werden zwei Worker und ein Retry verwendet. Das Startskript entfernt veraltete Server-/Datenbankreste, damit keine Zombie-Prozesse Folgelaeufe blockieren. Mit `PLAYWRIGHT_USE_EXTERNAL_SERVER=1` kann stattdessen ein bereits laufender Server gegen `PLAYWRIGHT_BASE_URL` verwendet werden.

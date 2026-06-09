@@ -1,6 +1,10 @@
 # Fliegerlager-Abrechnung
 
 [![Tests](https://github.com/LSF-Wesel-Rheinhausen/LSF-Fliegerlager-Webapp/actions/workflows/ci.yml/badge.svg)](https://github.com/LSF-Wesel-Rheinhausen/LSF-Fliegerlager-Webapp/actions/workflows/ci.yml)
+[![Pytest](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white)](#tests)
+[![Playwright](https://img.shields.io/badge/E2E-Playwright-2EAD33?logo=playwright&logoColor=white)](#tests)
+[![Python 3.13](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Django 5.2](https://img.shields.io/badge/Django-5.2-092E20?logo=django&logoColor=white)](https://www.djangoproject.com/)
 [![Docker](https://github.com/LSF-Wesel-Rheinhausen/LSF-Fliegerlager-Webapp/actions/workflows/docker.yml/badge.svg)](https://github.com/LSF-Wesel-Rheinhausen/LSF-Fliegerlager-Webapp/actions/workflows/docker.yml)
 [![Security Scan](https://github.com/LSF-Wesel-Rheinhausen/LSF-Fliegerlager-Webapp/actions/workflows/security.yml/badge.svg)](https://github.com/LSF-Wesel-Rheinhausen/LSF-Fliegerlager-Webapp/actions/workflows/security.yml)
 [![PR Title Check](https://github.com/LSF-Wesel-Rheinhausen/LSF-Fliegerlager-Webapp/actions/workflows/pr-title.yml/badge.svg)](https://github.com/LSF-Wesel-Rheinhausen/LSF-Fliegerlager-Webapp/actions/workflows/pr-title.yml)
@@ -22,6 +26,16 @@ Web-App zur Verwaltung und Abrechnung eines Vereins-Fliegerlagers. Die Anwendung
 - Admin-Bearbeitung, Löschung und Wiederherstellung von Buchungen mit Änderungsprotokoll der abrechnungsrelevanten Felder
 - CSV-/Excel-Import mit Vorschau und Validierung
 - CSV-, Excel- und PDF-Export für Lager- und Einzelabrechnungen sowie Getränkeauswertungen
+
+## Einblicke in das Tool
+
+### Lagerübersicht für Admins und Bearbeiter
+
+![Lagerübersicht mit Kennzahlen, Exporten, Dienstplanung und Teilnehmerabrechnung](docs/images/admin-camp-overview.png)
+
+### Dienstplanung im Teilnehmer-Kiosk
+
+![Kiosk-Dienstplan mit Pflichtdienst-Fortschritt, Tauschangeboten und offenen Diensten](docs/images/kiosk-shift-planning.png)
 
 ## Lokale Entwicklung
 
@@ -132,10 +146,9 @@ Beitrags- und Agentenregeln stehen in [`CONTRIBUTING.md`](CONTRIBUTING.md) und [
 
 - Installierbare Webapp/PWA: Web App Manifest, App-Icons, Theme-/Hintergrundfarben, Service Worker für Shell-/Asset-Caching und Installationshinweise für iOS, Android und Desktop.
 - Teilnehmer-Kiosk: PWA-Ausbau, Offline-Hinweise und weitere Tablet-Optimierungen.
-- Getränke-/Essens-Workflow: Tages-/Mahlzeitenübersichten, Storno-Flüsse und optionale Schnellerfassung.
+- Getränke-/Essens-Workflow: optionale Schnellerfassung und weitere Auswertungen auf Basis der vorhandenen Tages-, Bestell- und Storno-Flüsse.
 - Persistierte Abrechnungsläufe: den vorhandenen `Settlement`-Speicher als produktiven Bedienworkflow ausbauen, inklusive Verlauf/Versionierung und Nachvollziehbarkeit von Zeitpunkt und Bearbeiter.
-- Mehr Tests: View-/Permission-Integrationstests, Exporttests für CSV/XLSX/PDF, Import-Edge-Cases und zusätzliche Settlement-Regressionsfälle.
+- Mehr Tests: zusätzliche Regressionstests für komplexe Settlement-, Dienstplan-, Import- und Export-Randfälle.
 - UI-Ausbau: Bearbeiten-/Löschen-Flows, bessere Leerzustände, Druck-/PDF-Ansichten und Dashboard-Auswertungen.
 - Deployment und Betrieb: Produktionscheckliste, Backup-/Restore-Dokumentation, Monitoring/Healthcheck und sichere Env-Konfiguration.
 - KI-Auslese: Automatisierte KI-Auslese für Rechnungen aus Auslagen implementieren.
-- Dienstpläne, Einstellen der Dienstpläne für den Admin und eintragen für einen Dienst als Teilnehmer, inklusive der Anhzahl noch zu erledigenden Dienste

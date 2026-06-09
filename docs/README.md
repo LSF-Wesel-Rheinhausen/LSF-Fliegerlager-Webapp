@@ -4,16 +4,17 @@ Diese Dokumentation fasst die Fliegerlager-Webapp zusammen und verweist auf die 
 
 ## Überblick
 
-Die Anwendung ist eine Django-Webapp zur Verwaltung und Abrechnung eines Vereins-Fliegerlagers. Sie unterstützt Lager, Teilnehmer, Preisregeln, Förderlogik, Zahlungen, Auslagen, Import/Export und einen Kiosk-Modus für Teilnehmer.
+Die Anwendung ist eine Django-Webapp zur Verwaltung und Abrechnung eines Vereins-Fliegerlagers. Sie unterstützt Lager, Nutzer und Teilnehmer, Preisregeln, Förderlogik, Zahlungen, Auslagen, Import/Export, Dienstplanung und einen Kiosk-Modus für Teilnehmer.
 
 Der typische Ablauf:
 
 1. Ein Admin legt ein Lager an und pflegt Preise mit individuellen Fördersätzen.
 2. Teilnehmer werden manuell angelegt oder per CSV/XLSX importiert.
 3. Preisregeln werden im Adminbereich gepflegt, inklusive Lagerpauschalen für 1/2 Wochen und Teilnehmer/Begleitpersonen.
-4. Teilnehmer buchen im Kiosk Getränke und Essen per PIN.
-5. Die Abrechnung berechnet Brutto, Förderung, Soll, Zahlungen, vorgestreckte Beträge und offenen Saldo.
-6. Ergebnisse können als CSV, Excel-Arbeitsmappe oder PDF exportiert werden.
+4. Admins erzeugen Dienste aus täglichen Vorlagen oder pflegen einzelne Dienste; Teilnehmer übernehmen oder tauschen Dienste im Kiosk.
+5. Teilnehmer buchen im Kiosk Getränke und Essen per PIN.
+6. Die Abrechnung berechnet Brutto, Förderung, Soll, Zahlungen, vorgestreckte Beträge und offenen Saldo.
+7. Ergebnisse können als CSV, Excel-Arbeitsmappe oder PDF exportiert werden.
 
 ## Wichtige Funktionen
 
@@ -21,8 +22,9 @@ Der typische Ablauf:
 - Ersteinrichtung: Beim ersten Start kann der erste Admin im Browser angelegt werden; danach verwalten Admins Nutzer, Rollen und Passwörter in der Anwendung.
 - Preisverwaltung: eigene Admin-Route für Lagerpauschalen, Getränke, Standard-Mahlzeitenpreise, abweichende Tagespreise und sonstige Preisregeln.
 - Förderlogik: Jugendgruppenmitglieder erhalten je Position Förderung über `Element-Fördersatz * Hilfssatz * Berufssatz`.
-- Kiosk: separater PIN-Login, PIN-Ersteinrichtung, Tablet-/Mobiloberfläche, automatische Abmeldung nach Inaktivität, Getränkebuchung und Essensanmeldung.
-- Buchungsbearbeitung: Admins können Kostenpositionen korrigieren; geänderte abrechnungsrelevante Felder werden im Audit-Protokoll gespeichert.
+- Kiosk: separater PIN-Login mit temporärer Sperre nach wiederholten Fehlversuchen, PIN-Ersteinrichtung, Tablet-/Mobiloberfläche, automatische Abmeldung nach Inaktivität, Getränkebuchung, Essensanmeldung und Dienstwahl.
+- Dienstplanung: tägliche Vorlagen, automatische Generierung über den Lagerzeitraum, manuelle Dienste, Soll-Dienste anhand gebuchter Nächte, Fortschrittsanzeige, Besetzungsauswertung und Tauschangebote.
+- Buchungsbearbeitung: Admins können Kostenpositionen stornieren, wiederherstellen und korrigieren; abrechnungsrelevante Änderungen werden im Audit-Protokoll gespeichert.
 - Abrechnung: serverseitig in `src/billing/services.py`, damit UI, Export und Kiosk dieselbe Logik nutzen. Aktuell werden Abrechnungen on-demand berechnet; persistierte `Settlement`-Datensätze sind modellseitig vorbereitet.
 - Import/Export: Teilnehmerimport per CSV/XLSX, Abrechnungsexporte als Lager-CSV, Getränke-CSV, Excel-Arbeitsmappe und Einzelabrechnung als PDF.
 
@@ -40,13 +42,18 @@ Der typische Ablauf:
 
 ## Zentrale Codebereiche
 
-`src/billing/models.py` enthält das Datenmodell für Lager, Teilnehmer, Preisregeln, Kosten, Zahlungen, Auslagen, Kiosk-PINs und Abrechnungsläufe.
+`src/billing/models.py` enthält das Datenmodell für Lager, Nutzerprofile, Teilnehmer, Preisregeln, Kosten, Zahlungen, Auslagen, Kiosk-PINs, Mahlzeiten, Dienstpläne und Abrechnungsläufe.
 
 `src/billing/services.py` enthält die Abrechnungslogik und Audit-Helfer. Hier werden Lagerpauschalen automatisch ausgewählt, Förderung berechnet, Kiosk-Zusammenfassungen erzeugt und Buchungsänderungen vergleichbar protokolliert.
 
 `src/billing/forms.py` enthält die Formulare für Admin, Bearbeiter und Kiosk. Die Preisverwaltung nutzt eine eigene Matrix für die vier Lagerpauschalen und ein separates Formular für Standardpreise von Frühstück und Abendessen.
 
-`src/billing/views.py` enthält die servergerenderten Seiten für Setup, Nutzerverwaltung, Lager, Teilnehmer, Preisverwaltung, Import/Export und Kiosk.
+`src/billing/views.py` enthält die servergerenderten Seiten für Setup, Nutzerverwaltung, Lager, Teilnehmer, Preisverwaltung, Mahlzeiten, Dienstplanung, Import/Export und Kiosk.
+
+## Screenshots
+
+- [Admin-Lagerübersicht](images/admin-camp-overview.png)
+- [Dienstplanung im Kiosk](images/kiosk-shift-planning.png)
 
 ## Importformat
 

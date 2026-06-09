@@ -70,12 +70,13 @@
 
       <section>
         <h2>Überblick</h2>
-        <p>Die Anwendung ist eine Django-Webapp zur Verwaltung und Abrechnung eines Vereins-Fliegerlagers. Sie unterstützt Lager, Nutzerverwaltung, Teilnehmer, Preisregeln, Förderlogik, Zahlungen, Auslagen, Import/Export, Buchungs-Audit und einen Kiosk-Modus für Teilnehmer.</p>
+        <p>Die Anwendung ist eine Django-Webapp zur Verwaltung und Abrechnung eines Vereins-Fliegerlagers. Sie unterstützt Lager, Nutzerverwaltung, Teilnehmer, Preisregeln, Förderlogik, Zahlungen, Auslagen, Import/Export, Buchungs-Audit, Dienstplanung und einen Kiosk-Modus für Teilnehmer.</p>
         <ol>
           <li>Admin legt Lager und Preise mit individuellen Fördersätzen an.</li>
           <li>Teilnehmer werden manuell oder per CSV/XLSX importiert.</li>
           <li>Preisregeln werden gepflegt, inklusive Lagerpauschalen, Getränke, Standard-Mahlzeitenpreise und abweichende Tagespreise.</li>
           <li>Teilnehmer buchen Getränke und Essen im Kiosk per PIN.</li>
+          <li>Admins erzeugen Dienste aus Vorlagen; Teilnehmer übernehmen oder tauschen sie im Kiosk.</li>
           <li>Die Abrechnung berechnet Brutto, Förderung, Soll, Zahlungen, Auslagen und offenen Saldo.</li>
           <li>Admins korrigieren Buchungen bei Bedarf; Änderungen werden im Audit-Protokoll sichtbar.</li>
         </ol>
@@ -86,11 +87,11 @@
         <div class="grid">
           <div>
             <h3>Admin</h3>
-            <p>Lager, Nutzer, Rollen, Teilnehmer-PINs, Preisregeln mit eigenem Fördersatz, Buchungskorrekturen und Exporte.</p>
+            <p>Lager, Nutzerprofile, Rollen, Teilnehmer-PINs, Preisregeln, Mahlzeiten, Dienstvorlagen, Buchungskorrekturen und Exporte.</p>
           </div>
           <div>
             <h3>Kiosk</h3>
-            <p>PIN-Login, PIN-Ersteinrichtung, große Getränketasten mit Ein-Tap-Buchung, Essensanmeldung und sichtbarer Auto-Logout-Timer.</p>
+            <p>PIN-Login mit Fehlversuchssperre, Getränkebuchung, Essensanmeldung, Dienstwahl und sichtbarer Auto-Logout-Timer.</p>
           </div>
           <div>
             <h3>Abrechnung</h3>
@@ -101,6 +102,11 @@
             <p>Teilnehmerimport per CSV/XLSX und Exporte als Lager-CSV, Getränke-CSV, Excel-Arbeitsmappe oder Einzel-PDF.</p>
           </div>
         </div>
+      </section>
+
+      <section>
+        <h2>Screenshots</h2>
+        <p><a href="images/admin-camp-overview.png">Admin-Lagerübersicht</a> · <a href="images/kiosk-shift-planning.png">Dienstplanung im Kiosk</a></p>
       </section>
 
       <section>
