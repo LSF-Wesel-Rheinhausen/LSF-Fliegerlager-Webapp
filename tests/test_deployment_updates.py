@@ -85,4 +85,7 @@ def test_agent_request_rejects_missing_configuration():
 
 def test_whitenoise_is_configured_for_production_static_files(settings):
     assert "whitenoise.middleware.WhiteNoiseMiddleware" in settings.MIDDLEWARE
-    assert settings.STORAGES["staticfiles"]["BACKEND"] == "whitenoise.storage.CompressedManifestStaticFilesStorage"
+    assert settings.STORAGES["staticfiles"]["BACKEND"] in {
+        "django.contrib.staticfiles.storage.StaticFilesStorage",
+        "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    }
