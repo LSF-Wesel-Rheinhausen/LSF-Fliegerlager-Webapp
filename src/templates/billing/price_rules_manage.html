@@ -42,7 +42,9 @@
                 {% endfor %}
               </td>
               <td>
-                <label for="{{ row.foerdersatz.id_for_label }}">{{ row.foerdersatz }}</label>
+                <label for="{{ row.foerdersatz.id_for_label }}" style="display: flex; align-items: center; gap: 0.25rem;">
+                  {{ row.foerdersatz }} %
+                </label>
                 {% for error in row.foerdersatz.errors %}
                   <span class="helptext error">{{ error }}</span>
                 {% endfor %}
@@ -92,22 +94,22 @@
             <td>Frühstück</td>
             <td>
               {{ meal_form.breakfast_adult_price }}
-              <label for="{{ meal_form.breakfast_adult_foerdersatz.id_for_label }}">Fördersatz {{ meal_form.breakfast_adult_foerdersatz }}</label>
+              <label for="{{ meal_form.breakfast_adult_foerdersatz.id_for_label }}">Fördersatz {{ meal_form.breakfast_adult_foerdersatz }} %</label>
             </td>
             <td>
               {{ meal_form.breakfast_child_price }}
-              <label for="{{ meal_form.breakfast_child_foerdersatz.id_for_label }}">Fördersatz {{ meal_form.breakfast_child_foerdersatz }}</label>
+              <label for="{{ meal_form.breakfast_child_foerdersatz.id_for_label }}">Fördersatz {{ meal_form.breakfast_child_foerdersatz }} %</label>
             </td>
           </tr>
           <tr>
             <td>Abendessen</td>
             <td>
               {{ meal_form.dinner_adult_price }}
-              <label for="{{ meal_form.dinner_adult_foerdersatz.id_for_label }}">Fördersatz {{ meal_form.dinner_adult_foerdersatz }}</label>
+              <label for="{{ meal_form.dinner_adult_foerdersatz.id_for_label }}">Fördersatz {{ meal_form.dinner_adult_foerdersatz }} %</label>
             </td>
             <td>
               {{ meal_form.dinner_child_price }}
-              <label for="{{ meal_form.dinner_child_foerdersatz.id_for_label }}">Fördersatz {{ meal_form.dinner_child_foerdersatz }}</label>
+              <label for="{{ meal_form.dinner_child_foerdersatz.id_for_label }}">Fördersatz {{ meal_form.dinner_child_foerdersatz }} %</label>
             </td>
           </tr>
         </tbody>
@@ -174,8 +176,10 @@
 
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; margin-top: 10px;">
         <label for="id_foerdersatz">
-          Fördersatz (%)
-          <input type="number" name="foerdersatz" id="id_foerdersatz" step="0.01" min="0" max="100" value="0" required>
+          Fördersatz
+          <div style="display: flex; align-items: center; gap: 0.25rem;">
+            <input type="number" name="foerdersatz" id="id_foerdersatz" step="0.01" min="0" max="100" value="0" required> %
+          </div>
         </label>
         <label for="id_is_default" style="display: inline-flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
           <input type="checkbox" name="is_default" id="id_is_default">
