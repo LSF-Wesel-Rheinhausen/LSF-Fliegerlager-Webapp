@@ -15,5 +15,5 @@
 
 ## Tests
 
-- Django-Systemcheck, Pytest, Ruff und MyPy
+- Django-Systemcheck, Pytest, Playwright, Ruff und Pre-Commit
 - Image- und Compose-Validierung in GitHub Actions
