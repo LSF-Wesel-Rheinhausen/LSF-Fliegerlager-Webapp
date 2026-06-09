@@ -579,9 +579,3 @@ def participant_kiosk_summary(participant):
         ],
     }
 
-
-def default_drink_price(camp):
-    rule = PriceRule.objects.filter(camp=camp, kind=PriceRule.Kind.DRINK, is_default=True).order_by("name").first()
-    if rule is None:
-        rule = PriceRule.objects.filter(camp=camp, kind=PriceRule.Kind.DRINK).order_by("name").first()
-    return money(rule.unit_price if rule else ZERO)

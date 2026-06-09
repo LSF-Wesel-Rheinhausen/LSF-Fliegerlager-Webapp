@@ -181,7 +181,7 @@
             <input type="number" name="foerdersatz" id="id_foerdersatz" step="0.01" min="0" max="100" value="0" required> %
           </div>
         </label>
-        <label for="id_is_default" style="display: inline-flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
+        <label for="id_is_default" id="label-is-default" style="display: inline-flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
           <input type="checkbox" name="is_default" id="id_is_default">
           <span>Standardregel</span>
         </label>
@@ -228,8 +228,10 @@
 
       if (kind === 'drink') {
         participantTypes.style.display = 'none';
+        document.getElementById('label-is-default').style.visibility = 'hidden';
       } else {
         participantTypes.style.display = 'grid';
+        document.getElementById('label-is-default').style.visibility = 'visible';
       }
 
       if (kind === 'meal') {
@@ -271,8 +273,10 @@
 
       if (kind === 'drink') {
         participantTypes.style.display = 'none';
+        document.getElementById('label-is-default').style.visibility = 'hidden';
       } else {
         participantTypes.style.display = 'grid';
+        document.getElementById('label-is-default').style.visibility = 'visible';
       }
 
       if (kind === 'meal') {
