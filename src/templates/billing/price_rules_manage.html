@@ -67,7 +67,7 @@
       </div>
       <button type="button" class="button" onclick="openCreateDialog('drink', 'Getränk')">Getränk anlegen</button>
     </div>
-    {% include "billing/price_rule_table.html" with rules=grouped_rules.drinks empty_text="Noch keine Getränkepreise vorhanden." %}
+    {% include "billing/price_rule_table.html" with rules=grouped_rules.drinks empty_text="Noch keine Getränkepreise vorhanden." hide_default=True %}
   </section>
 
   <section class="panel stack">
@@ -228,10 +228,10 @@
 
       if (kind === 'drink') {
         participantTypes.style.display = 'none';
-        document.getElementById('label-is-default').style.visibility = 'hidden';
+        document.getElementById('label-is-default').style.display = 'none';
       } else {
         participantTypes.style.display = 'grid';
-        document.getElementById('label-is-default').style.visibility = 'visible';
+        document.getElementById('label-is-default').style.display = 'inline-flex';
       }
 
       if (kind === 'meal') {
@@ -273,10 +273,10 @@
 
       if (kind === 'drink') {
         participantTypes.style.display = 'none';
-        document.getElementById('label-is-default').style.visibility = 'hidden';
+        document.getElementById('label-is-default').style.display = 'none';
       } else {
         participantTypes.style.display = 'grid';
-        document.getElementById('label-is-default').style.visibility = 'visible';
+        document.getElementById('label-is-default').style.display = 'inline-flex';
       }
 
       if (kind === 'meal') {
