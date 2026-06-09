@@ -1,7 +1,15 @@
-from django.db.models.signals import post_save
+from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
-from .models import Participant, ParticipantPin
+from .models import Camp, Participant, ParticipantPin
+
+
+@receiver(post_delete, sender=Camp)
+def activate_remaining_camp(sender, **kwargs):
+    if not Camp.objects.filter(is_active=True).exists():
+        remaining = Camp.objects.order_by("-updated_at", "-pk").first()
+        if remaining is not None:
+            Camp.objects.filter(pk=remaining.pk).update(is_active=True)
 
 
 @receiver(post_save, sender=Participant)

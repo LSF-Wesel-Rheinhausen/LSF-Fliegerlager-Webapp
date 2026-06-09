@@ -70,6 +70,13 @@ class Camp(TimeStampedModel):
                 raise ValidationError("Das einzige Lager kann nicht deaktiviert werden.")
             return super().save(*args, **kwargs)
 
+    def validate_constraints(self, exclude: list[str] | None = None) -> None:
+        """Exclude unique_active_camp from pre-save model validation since save() deactivates other camps."""
+        if exclude is None:
+            exclude = []
+        exclude = list(exclude) + ["is_active"]
+        super().validate_constraints(exclude=exclude)
+
     def __str__(self):
         return f"{self.name} ({self.year})"
 
@@ -572,7 +579,7 @@ class Settlement(TimeStampedModel):
         null=True,
         blank=True,
     )
-    participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="settlements")
+    participant = models.ForeignKey(Participant, on_delete=models.RESTRICT, related_name="settlements")
     calculated_by = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True)
     participant_name = models.CharField(max_length=250, blank=True)
     participant_status = models.CharField(max_length=20, blank=True)

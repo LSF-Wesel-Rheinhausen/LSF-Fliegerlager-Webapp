@@ -26,4 +26,4 @@ Wichtige Modelle:
 - `DrinkEntry` ist ein historisches Getraenke-Modell; aktuelle Kiosk-Getraenkebuchungen werden als `Charge` mit Art `DRINK` gespeichert.
 - `BookingAuditLog` protokolliert Admin-Korrekturen an Buchungen.
 - `Shift`, `DailyShiftTemplate`, `DailyShiftException` und `ShiftAssignment` bilden Dienste, tägliche Vorlagen, Tagesausnahmen, Besetzungen und Tauschangebote ab.
-- `Settlement` ist modellseitig vorbereitet; die sichtbaren Abrechnungen werden derzeit on-demand in `services.py` berechnet.
+- `SettlementRun` versioniert unveränderliche Lagerabrechnungen; `Settlement` speichert darin den jeweiligen Teilnehmer-Snapshot mit Positionen und Summen.

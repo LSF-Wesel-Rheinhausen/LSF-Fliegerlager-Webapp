@@ -226,15 +226,18 @@ def settlement_run_workbook_response(run: SettlementRun) -> HttpResponse:
 
 
 def settlement_snapshot_pdf_response(snapshot: Settlement) -> HttpResponse:
+    run = snapshot.run
+    if run is None:
+        raise ValueError("Historical settlement PDF requires a versioned run.")
     output = BytesIO()
     pdf = canvas.Canvas(output, pagesize=A4)
     _width, height = A4
     y = height - 60
     pdf.setFont("Helvetica-Bold", 16)
-    pdf.drawString(50, y, f"Einzelabrechnung {snapshot.run.camp.name} {snapshot.run.camp.year}")
+    pdf.drawString(50, y, f"Einzelabrechnung {run.camp.name} {run.camp.year}")
     y -= 24
     pdf.setFont("Helvetica", 10)
-    pdf.drawString(50, y, f"Version {snapshot.run.version} vom {snapshot.run.created_at:%d.%m.%Y %H:%M}")
+    pdf.drawString(50, y, f"Version {run.version} vom {run.created_at:%d.%m.%Y %H:%M}")
     y -= 28
     pdf.drawString(50, y, f"Teilnehmer: {snapshot.participant_name}")
     y -= 28
@@ -262,5 +265,5 @@ def settlement_snapshot_pdf_response(snapshot: Settlement) -> HttpResponse:
     pdf.showPage()
     pdf.save()
     response = HttpResponse(output.getvalue(), content_type="application/pdf")
-    response["Content-Disposition"] = f'attachment; filename="abrechnung-{snapshot.pk}-v{snapshot.run.version}.pdf"'
+    response["Content-Disposition"] = f'attachment; filename="abrechnung-{snapshot.pk}-v{run.version}.pdf"'
     return response

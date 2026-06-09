@@ -7,3 +7,5 @@ Lokale Hilfsskripte nach dem Muster des Windenbuch-Projekts.
 - `codex-cleanup.sh`: Entfernt lokale Caches und Testartefakte.
 - `start-e2e.sh`: Bereinigt veraltete Testserver, startet den isolierten Django-Server fuer Playwright mit SQLite-Testdatenbank und beendet ihn nach dem Lauf kontrolliert.
 - `test-local.sh`: Fuehrt Ruff-Lint, Ruff-Formatcheck, Django-Check, Pytest und Playwright aus. Ergebnisse und Einzel-Logs landen unter `.test-local-logs/<timestamp>/`.
+- `postgres-backup.sh`: Erstellt ein komprimiertes, zeitgestempeltes PostgreSQL-Backup unter `BACKUP_DIR`.
+- `postgres-restore.sh`: Spielt nach expliziter Freigabe mit `RESTORE_CONFIRM=YES` ein Backup aus `BACKUP_DIR` ein.

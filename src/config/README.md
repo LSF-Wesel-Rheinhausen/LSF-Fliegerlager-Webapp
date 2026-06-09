@@ -5,7 +5,7 @@ Django-Projektkonfiguration.
 Die aktuell unterstützte Laufzeit ist Python 3.13 mit Django 5.2. Authentifizierung akzeptiert E-Mail-Adresse oder Benutzername; anwendungsspezifische Nutzerdaten liegen im separaten `UserProfile` der Billing-App.
 
 - `settings.py`: Apps, Middleware, Datenbank, Auth-Backends, Static-/Media-Dateien und Login-Redirects.
-- `urls.py`: Projektweites Routing fuer Admin, Login, Logout und die Billing-App.
+- `urls.py`: Projektweites Routing fuer Healthcheck, Admin, Login, Logout und die Billing-App.
 - `asgi.py` und `wsgi.py`: Deployment-Einstiege fuer ASGI/WSGI-Server.
 
 Lokale Entwicklung nutzt standardmaessig `DJANGO_DEBUG=1`, damit `runserver` statische Dateien ausliefert. Deployment sollte `DJANGO_DEBUG=0` setzen.
@@ -21,3 +21,5 @@ Unterstuetzte Umgebungsvariablen:
 - `DJANGO_HSTS_INCLUDE_SUBDOMAINS` und `DJANGO_HSTS_PRELOAD`: nur nach separater Pruefung aktivieren.
 - `CSRF_TRUSTED_ORIGINS`: kommaseparierte Origins inklusive Schema.
 - `DATABASE_URL`: Datenbank-URL via `dj-database-url`; ohne Wert wird `src/db.sqlite3` genutzt.
+
+`GET /healthz/` prüft die Anwendungs- und Datenbankbereitschaft. Der Endpunkt liefert ausschließlich `{"status":"ok"}` oder bei Datenbankfehlern `{"status":"unavailable"}`.

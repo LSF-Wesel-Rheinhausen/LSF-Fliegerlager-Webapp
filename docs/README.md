@@ -25,7 +25,8 @@ Der typische Ablauf:
 - Kiosk: separater PIN-Login mit temporärer Sperre nach wiederholten Fehlversuchen, PIN-Ersteinrichtung, Tablet-/Mobiloberfläche, automatische Abmeldung nach Inaktivität, Getränkebuchung, Essensanmeldung und Dienstwahl.
 - Dienstplanung: tägliche Vorlagen, automatische Generierung über den Lagerzeitraum, manuelle Dienste, Soll-Dienste anhand gebuchter Nächte, Fortschrittsanzeige, Besetzungsauswertung und Tauschangebote.
 - Buchungsbearbeitung: Admins können Kostenpositionen stornieren, wiederherstellen und korrigieren; abrechnungsrelevante Änderungen werden im Audit-Protokoll gespeichert.
-- Abrechnung: serverseitig in `src/billing/services.py`, damit UI, Export und Kiosk dieselbe Logik nutzen. Aktuell werden Abrechnungen on-demand berechnet; persistierte `Settlement`-Datensätze sind modellseitig vorbereitet.
+- Teilnehmerverwaltung: Bearbeiten, verlustfreies Archivieren und Wiederherstellen; archivierte Teilnehmer bleiben historisch nachvollziehbar, sind aber nicht im Kiosk oder in neuen Abrechnungsläufen sichtbar.
+- Abrechnung: Live-Berechnung in `src/billing/services.py` sowie unveränderliche, versionierte Lagerläufe mit Bearbeiter, Zeitpunkt und historischen Exporten.
 - Import/Export: Teilnehmerimport per CSV/XLSX, Abrechnungsexporte als Lager-CSV, Getränke-CSV, Excel-Arbeitsmappe und Einzelabrechnung als PDF.
 
 ## Projektstruktur
@@ -67,6 +68,7 @@ Boolesche Werte akzeptieren unter anderem `1`, `true`, `ja`, `yes` und `x`. Dezi
 - Getränke als CSV: historische `DrinkEntry`-Daten und aktuelle Kiosk-Getränkebuchungen aus `Charge`.
 - Excel-Arbeitsmappe: Blatt `Abrechnung` plus Blatt `Teilnehmer`.
 - Einzelabrechnung als PDF: Positionen und Summen für einen Teilnehmer.
+- Gespeicherte Lagerläufe: versionsgebundene CSV- und Excel-Dateien sowie PDF-Snapshots je Teilnehmer.
 
 ## Lokaler Start
 

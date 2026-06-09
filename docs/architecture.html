@@ -40,7 +40,7 @@
         <p><code>PriceRule</code> bildet Preisregeln ab. Für Lagerpauschalen gibt es strukturierte Felder für Dauer (<code>1w</code>/<code>2w</code>) und Rolle (<code>participant</code>/<code>companion</code>); für Mahlzeiten gibt es Typ, optionales Tagesdatum und Standardregeln.</p>
         <p><code>UserProfile</code> ergänzt Django-Nutzer um Anwendungsdaten. <code>Charge</code>, <code>Payment</code> und <code>Expense</code> bilden Kosten, Zahlungen und vorgestreckte Beträge ab. <code>ParticipantPin</code> schützt den Kiosk-Zugang mit gehashtem PIN, Fehlversuchszähler und zeitlich begrenzter Sperre.</p>
         <p><code>MealSignup</code> speichert Essensanmeldungen eindeutig pro Teilnehmer, Datum und Mahlzeit. <code>DrinkEntry</code> bleibt für ältere Getränkedaten erhalten; aktuelle Kiosk-Getränke werden als <code>Charge</code> gespeichert.</p>
-        <p><code>BookingAuditLog</code> protokolliert Admin-Korrekturen an Buchungen. <code>Settlement</code> ist modellseitig vorbereitet; die sichtbaren Abrechnungen werden derzeit on-demand berechnet.</p>
+        <p><code>BookingAuditLog</code> protokolliert Admin-Korrekturen an Buchungen. <code>SettlementRun</code> hält fortlaufend versionierte Lagerläufe; zugehörige <code>Settlement</code>-Datensätze speichern unveränderliche Teilnehmer-Snapshots.</p>
         <p><code>Shift</code>, <code>DailyShiftTemplate</code>, <code>DailyShiftException</code> und <code>ShiftAssignment</code> bilden einzelne Dienste, tägliche Vorlagen, Tagesausnahmen, Besetzungen und Tauschangebote ab.</p>
       </section>
 
@@ -52,6 +52,7 @@
           <li>Förderung: nur für Jugendgruppenmitglieder; Berechnung je Position über <code>Element-Fördersatz * Hilfssatz * Berufssatz</code>.</li>
           <li>Gesamtbetrag: Brutto minus Förderung, danach Abzug von Zahlungen und vorgestreckten Beträgen.</li>
           <li>Buchungs-Audit: vor und nach einer Admin-Korrektur werden die abrechnungsrelevanten Felder als JSON-Snapshot gespeichert.</li>
+          <li>Abrechnungslauf: ein atomarer Lauf friert Teilnehmernamen, Status, Positionen und Summen ein; spätere Live-Änderungen erzeugen bei Bedarf eine neue Version.</li>
         </ul>
       </section>
 

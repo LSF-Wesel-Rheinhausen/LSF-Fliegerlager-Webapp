@@ -42,6 +42,17 @@ def test_only_one_camp_remains_active():
 
 
 @pytest.mark.django_db
+def test_deleting_active_camp_activates_remaining_camp():
+    active = CampFactory(is_active=True)
+    remaining = CampFactory(name="Winterlager", is_active=False)
+
+    active.delete()
+
+    remaining.refresh_from_db()
+    assert remaining.is_active is True
+
+
+@pytest.mark.django_db
 def test_kiosk_login_form_only_lists_non_archived_participants_from_active_camp():
     active_camp = CampFactory(is_active=True)
     visible = ParticipantFactory(camp=active_camp)

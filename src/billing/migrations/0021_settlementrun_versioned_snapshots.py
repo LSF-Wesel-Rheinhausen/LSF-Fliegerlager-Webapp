@@ -52,6 +52,15 @@ class Migration(migrations.Migration):
             name="participant_name",
             field=models.CharField(blank=True, max_length=250),
         ),
+        migrations.AlterField(
+            model_name="settlement",
+            name="participant",
+            field=models.ForeignKey(
+                on_delete=django.db.models.deletion.RESTRICT,
+                related_name="settlements",
+                to="billing.participant",
+            ),
+        ),
         migrations.AddField(
             model_name="settlement",
             name="participant_status",

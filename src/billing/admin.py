@@ -36,6 +36,9 @@ class ParticipantAdmin(admin.ModelAdmin):
     list_filter = ("camp", "status", "is_child", "is_youth_group", "is_companion")
     search_fields = ("first_name", "last_name", "email")
 
+    def has_delete_permission(self, request, obj=None):
+        return False
+
 
 admin.site.register(ParticipantPin)
 admin.site.register(UserProfile)

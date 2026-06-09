@@ -1,7 +1,26 @@
+from unittest.mock import patch
+
+from django.db import OperationalError
 from django.test import override_settings
 from django.urls import reverse
 
 from tests.factories import UserFactory
+
+
+def test_healthcheck_reports_ready(client, db):
+    response = client.get(reverse("healthcheck"))
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_healthcheck_reports_database_failure_without_details(client):
+    with patch("config.views.connection.cursor", side_effect=OperationalError("secret database detail")):
+        response = client.get(reverse("healthcheck"))
+
+    assert response.status_code == 503
+    assert response.json() == {"status": "unavailable"}
+    assert b"secret" not in response.content
 
 
 @override_settings(DEBUG=False, ALLOWED_HOSTS=["testserver"])
