@@ -538,9 +538,46 @@ class DrinkEntry(TimeStampedModel):
         return f"{self.participant}: {self.get_drink_display()} x {self.quantity}"
 
 
+class SettlementRun(TimeStampedModel):
+    camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="settlement_runs")
+    version = models.PositiveIntegerField()
+    calculated_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="calculated_settlement_runs",
+    )
+    participant_count = models.PositiveIntegerField(default=0)
+    total_gross = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
+    total_subsidy = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
+    total_due = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
+    total_paid = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
+    total_advanced = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
+    balance = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
+
+    class Meta:
+        ordering = ["-version"]
+        constraints = [models.UniqueConstraint(fields=["camp", "version"], name="unique_settlement_run_version")]
+
+    def __str__(self):
+        return f"{self.camp}: Abrechnung V{self.version}"
+
+
 class Settlement(TimeStampedModel):
+    run = models.ForeignKey(
+        SettlementRun,
+        on_delete=models.CASCADE,
+        related_name="settlements",
+        null=True,
+        blank=True,
+    )
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="settlements")
     calculated_by = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True)
+    participant_name = models.CharField(max_length=250, blank=True)
+    participant_status = models.CharField(max_length=20, blank=True)
+    total_gross = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0"))
+    total_subsidy = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0"))
     total_due = models.DecimalField(max_digits=10, decimal_places=2)
     total_paid = models.DecimalField(max_digits=10, decimal_places=2)
     total_advanced = models.DecimalField(max_digits=10, decimal_places=2)
@@ -549,6 +586,13 @@ class Settlement(TimeStampedModel):
 
     class Meta:
         ordering = ["participant", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["run", "participant"],
+                condition=models.Q(run__isnull=False),
+                name="unique_participant_per_settlement_run",
+            )
+        ]
 
     def __str__(self):
         return f"{self.participant}: {self.balance}"
@@ -599,9 +643,7 @@ class DailyShiftException(TimeStampedModel):
 
     class Meta:
         ordering = ["date", "template"]
-        constraints = [
-            models.UniqueConstraint(fields=["template", "date"], name="unique_shift_exception")
-        ]
+        constraints = [models.UniqueConstraint(fields=["template", "date"], name="unique_shift_exception")]
 
     def __str__(self):
         return f"Ausnahme am {self.date} für {self.template.name}"

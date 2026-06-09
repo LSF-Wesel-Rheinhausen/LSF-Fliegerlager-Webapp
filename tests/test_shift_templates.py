@@ -1,4 +1,5 @@
 import datetime
+
 import pytest
 from django.urls import reverse
 
@@ -60,6 +61,6 @@ def test_shift_templates_generate(admin_client, active_camp):
     url = reverse("shift-templates-generate", args=[active_camp.pk])
     response = admin_client.post(url)
     assert response.status_code == 302
-    
+
     # 3 days total (starts_on to ends_on inclusive), 2 templates -> 6 shifts total
     assert Shift.objects.filter(camp=active_camp).count() == 6
