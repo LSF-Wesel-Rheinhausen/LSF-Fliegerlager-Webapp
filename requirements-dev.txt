@@ -1,4 +1,5 @@
 -r requirements.txt
+-r requirements-updater.txt
 pytest>=9.0.3,<10
 pytest-cov>=5.0.0,<6
 pytest-django>=4.12.0,<5

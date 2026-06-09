@@ -21,5 +21,10 @@ Unterstuetzte Umgebungsvariablen:
 - `DJANGO_HSTS_INCLUDE_SUBDOMAINS` und `DJANGO_HSTS_PRELOAD`: nur nach separater Pruefung aktivieren.
 - `CSRF_TRUSTED_ORIGINS`: kommaseparierte Origins inklusive Schema.
 - `DATABASE_URL`: Datenbank-URL via `dj-database-url`; ohne Wert wird `src/db.sqlite3` genutzt.
+- `UPDATE_AGENT_URL` und `UPDATE_AGENT_TOKEN`: interne, nur für Superuser-Aktionen verwendete Update-Agent-Verbindung.
+- `APP_VERSION`, `APP_REVISION`, `APP_BUILD_DATE` und `APP_CHANGE`: vom Container-Build gesetzte Versionsmetadaten.
+
+WhiteNoise liefert die durch `collectstatic` erzeugten Dateien direkt über Gunicorn aus. Der Update-Agent bleibt ein
+separater Container; der Django-Prozess erhält keinen Zugriff auf den Docker-Socket.
 
 `GET /healthz/` prüft die Anwendungs- und Datenbankbereitschaft. Der Endpunkt liefert ausschließlich `{"status":"ok"}` oder bei Datenbankfehlern `{"status":"unavailable"}`.

@@ -12,18 +12,56 @@ permissions:
 
 jobs:
   docker:
-    name: Build and test Docker container
+    name: Build, test and publish containers
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Build Docker image
-        run: docker build -t lsf-webapp:latest .
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Test Docker image
-        run: docker run --rm lsf-webapp:latest python manage.py check
+      - name: Read build metadata
+        id: metadata
+        run: |
+          echo "change=$(git log -1 --pretty=%s)" >> "$GITHUB_OUTPUT"
+          echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Build application image for tests
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: lsf-webapp:test
+          build-args: |
+            APP_VERSION=${{ github.sha }}
+            APP_REVISION=${{ github.sha }}
+            APP_BUILD_DATE=${{ steps.metadata.outputs.created }}
+            APP_CHANGE=${{ steps.metadata.outputs.change }}
+
+      - name: Build updater image for tests
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.updater
+          load: true
+          tags: lsf-webapp-updater:test
+
+      - name: Test application image
+        run: >-
+          docker run --rm
+          -e DJANGO_DEBUG=1
+          lsf-webapp:test python manage.py check
+
+      - name: Test updater image
+        run: docker run --rm --entrypoint python lsf-webapp-updater:test -m py_compile deployment_agent.py
+
+      - name: Validate deployment example
+        run: |
+          cp deploy/.env.example deploy/.env
+          cp deploy/docker-compose.example.yml deploy/docker-compose.yml
+          docker compose --project-directory deploy config --quiet
 
       - name: Log in to the Container registry
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -33,15 +71,30 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Tag and push Docker image
+      - name: Publish application image
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          IMAGE_ID=ghcr.io/${{ github.repository }}
-          # Convert repository name to lowercase (Docker requirement)
-          IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest
+            ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:${{ github.sha }}
+          build-args: |
+            APP_VERSION=${{ github.sha }}
+            APP_REVISION=${{ github.sha }}
+            APP_BUILD_DATE=${{ steps.metadata.outputs.created }}
+            APP_CHANGE=${{ steps.metadata.outputs.change }}
 
-          docker tag lsf-webapp:latest $IMAGE_ID:latest
-          docker tag lsf-webapp:latest $IMAGE_ID:${{ github.sha }}
-
-          docker push $IMAGE_ID:latest
-          docker push $IMAGE_ID:${{ github.sha }}
+      - name: Publish updater image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.updater
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater:latest
+            ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater:${{ github.sha }}

@@ -3,6 +3,7 @@ import json
 from datetime import timedelta
 from typing import Any
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.decorators import login_required
@@ -16,6 +17,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from .deployment_updates import UpdateAgentError, check_for_update, deployment_status, install_update
 from .exporters import (
     camp_settlement_csv,
     camp_workbook_response,
@@ -70,6 +72,7 @@ from .permissions import (
     admin_required,
     editor_required,
     meal_manager_required,
+    superuser_required,
 )
 from .roles import (
     ROLE_ADMIN,
@@ -102,6 +105,57 @@ signer = Signer()
 User = get_user_model()
 KIOSK_PARTICIPANT_SESSION_KEY = "kiosk_participant_id"
 KIOSK_PIN_SETUP_SESSION_KEY = "kiosk_pin_setup_participant_id"
+
+
+@superuser_required
+def deployment_update(request: HttpRequest) -> HttpResponse:
+    """Show image metadata and the latest deployment-agent state."""
+    status: dict[str, Any] | None = None
+    agent_error = ""
+    try:
+        status = deployment_status()
+    except UpdateAgentError as error:
+        agent_error = str(error)
+    current = {
+        "version": settings.APP_VERSION,
+        "revision": settings.APP_REVISION,
+        "build_date": settings.APP_BUILD_DATE,
+        "change": settings.APP_CHANGE,
+    }
+    return render(
+        request,
+        "billing/deployment_update.html",
+        {"deployment_status": status, "agent_error": agent_error, "current": current},
+    )
+
+
+@superuser_required
+@require_POST
+def deployment_update_check(request: HttpRequest) -> HttpResponse:
+    """Pull the configured latest image and compare it with the running image."""
+    try:
+        result = check_for_update()
+    except UpdateAgentError as error:
+        messages.error(request, str(error))
+    else:
+        if result.get("update_available"):
+            messages.success(request, "Ein neues Container-Image ist verfügbar.")
+        else:
+            messages.info(request, "Die Anwendung verwendet bereits das neueste Image.")
+    return redirect("deployment-update")
+
+
+@superuser_required
+@require_POST
+def deployment_update_install(request: HttpRequest) -> HttpResponse:
+    """Ask the isolated agent to install the latest image asynchronously."""
+    try:
+        install_update()
+    except UpdateAgentError as error:
+        messages.error(request, str(error))
+    else:
+        messages.success(request, "Update gestartet. Die Anwendung wird in Kürze neu gestartet.")
+    return redirect("deployment-update")
 
 
 class FirstLaunchLoginView(LoginView):
