@@ -821,7 +821,10 @@ def _kiosk_participant_from_session(request, session_key):
 
 def kiosk_login(request):
     if request.session.get(KIOSK_PARTICIPANT_SESSION_KEY):
-        return redirect("kiosk-home")
+        if _kiosk_participant(request) is not None:
+            return redirect("kiosk-home")
+        else:
+            request.session.pop(KIOSK_PARTICIPANT_SESSION_KEY, None)
 
     form = KioskLoginForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
