@@ -11,6 +11,7 @@ from django.db import models, transaction
 from .models import (
     Camp,
     Charge,
+    DailyShiftTemplate,
     Expense,
     MealSignup,
     Participant,
@@ -20,7 +21,6 @@ from .models import (
     Payment,
     PriceRule,
     Shift,
-    DailyShiftTemplate,
     UserProfile,
 )
 from .roles import ROLE_ADMIN, ROLE_CHOICES, user_role
@@ -223,6 +223,12 @@ class CampForm(forms.ModelForm):
     def clean_meal_booking_cutoff_time(self):
         """Return the default noon cutoff when the form field is omitted."""
         return self.cleaned_data["meal_booking_cutoff_time"] or time(12, 0)
+
+    def clean_is_active(self):
+        is_active = self.cleaned_data["is_active"]
+        if self.instance.pk and self.instance.is_active and not is_active:
+            raise forms.ValidationError("Aktiviere stattdessen ein anderes Lager.")
+        return is_active
 
 
 class MealCutoffForm(forms.ModelForm):
@@ -533,7 +539,9 @@ class KioskLoginForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["participant"].queryset = Participant.objects.filter(camp__is_active=True).select_related("camp")
+        self.fields["participant"].queryset = Participant.objects.filter(
+            camp__is_active=True, archived_at__isnull=True
+        ).select_related("camp")
         self.missing_pin_participant = None
 
     def clean(self):
@@ -633,7 +641,7 @@ class KioskBookingLinkInviteForm(forms.Form):
         self.inviter = kwargs.pop("inviter")
         super().__init__(*args, **kwargs)
         self.fields["participant"].queryset = (
-            Participant.objects.filter(camp=self.inviter.camp, camp__is_active=True)
+            Participant.objects.filter(camp=self.inviter.camp, camp__is_active=True, archived_at__isnull=True)
             .exclude(pk=self.inviter.pk)
             .order_by("last_name", "first_name")
         )

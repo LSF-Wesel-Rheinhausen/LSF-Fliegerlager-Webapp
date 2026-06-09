@@ -478,7 +478,7 @@ def calculate_participant_settlement(participant):
 
 
 def calculate_camp_settlements(camp):
-    participants = Participant.objects.filter(camp=camp).order_by("last_name", "first_name")
+    participants = Participant.objects.filter(camp=camp, archived_at__isnull=True).order_by("last_name", "first_name")
     return [calculate_participant_settlement(participant) for participant in participants]
 
 

@@ -2,9 +2,9 @@ from decimal import Decimal
 
 import pytest
 
-from billing.forms import CampForm, FirstAdminSetupForm, UserCreateForm, UserEditForm
+from billing.forms import CampForm, FirstAdminSetupForm, KioskLoginForm, UserCreateForm, UserEditForm
 from billing.roles import ROLE_EDITOR
-from tests.factories import CampFactory, SuperUserFactory
+from tests.factories import CampFactory, ParticipantFactory, SuperUserFactory
 
 
 @pytest.mark.django_db
@@ -29,6 +29,31 @@ def test_camp_form_saves_meal_booking_cutoff_time():
 
     assert saved_camp.meal_booking_cutoff_time.hour == 11
     assert saved_camp.meal_booking_cutoff_time.minute == 30
+
+
+@pytest.mark.django_db
+def test_only_one_camp_remains_active():
+    first = CampFactory(is_active=True)
+    second = CampFactory(name="Winterlager", is_active=True)
+
+    first.refresh_from_db()
+    assert first.is_active is False
+    assert second.is_active is True
+
+
+@pytest.mark.django_db
+def test_kiosk_login_form_only_lists_non_archived_participants_from_active_camp():
+    active_camp = CampFactory(is_active=True)
+    visible = ParticipantFactory(camp=active_camp)
+    archived = ParticipantFactory(camp=active_camp, archived_at="2026-06-09T12:00:00Z")
+    inactive_camp = CampFactory(name="Altes Lager", is_active=False)
+    hidden = ParticipantFactory(camp=inactive_camp)
+
+    form = KioskLoginForm()
+
+    assert list(form.fields["participant"].queryset) == [visible]
+    assert archived not in form.fields["participant"].queryset
+    assert hidden not in form.fields["participant"].queryset
 
 
 @pytest.mark.django_db

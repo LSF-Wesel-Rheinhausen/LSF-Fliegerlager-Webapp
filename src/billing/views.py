@@ -241,6 +241,7 @@ def camp_edit(request, camp_id):
 def camp_detail(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
     settlements = calculate_camp_settlements(camp)
+    archived_participants = camp.participants.filter(archived_at__isnull=False).order_by("last_name", "first_name")
     totals = {
         "gross": sum(result.total_gross for result in settlements),
         "subsidy": sum(result.total_subsidy for result in settlements),
@@ -253,7 +254,13 @@ def camp_detail(request, camp_id):
     return render(
         request,
         "billing/camp_detail.html",
-        {"camp": camp, "settlements": settlements, "totals": totals, "price_rules": price_rules},
+        {
+            "camp": camp,
+            "settlements": settlements,
+            "totals": totals,
+            "price_rules": price_rules,
+            "archived_participants": archived_participants,
+        },
     )
 
 
@@ -269,6 +276,43 @@ def participant_create(request, camp_id):
         messages.success(request, "Teilnehmer wurde gespeichert.")
         return redirect("participant-detail", participant_id=participant.pk)
     return render(request, "billing/form.html", {"form": form, "title": "Teilnehmer anlegen", "camp": camp})
+
+
+@editor_required
+def participant_edit(request, participant_id):
+    participant = get_object_or_404(Participant.objects.select_related("camp"), pk=participant_id)
+    form = ParticipantForm(request.POST or None, instance=participant)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Teilnehmer wurde gespeichert.")
+        return redirect("participant-detail", participant_id=participant.pk)
+    return render(
+        request,
+        "billing/form.html",
+        {"form": form, "title": "Teilnehmer bearbeiten", "camp": participant.camp},
+    )
+
+
+@admin_required
+@require_POST
+def participant_archive(request, participant_id):
+    participant = get_object_or_404(Participant, pk=participant_id, archived_at__isnull=True)
+    participant.archived_at = timezone.now()
+    participant.archived_by = request.user
+    participant.save(update_fields=["archived_at", "archived_by", "updated_at"])
+    messages.success(request, "Teilnehmer wurde archiviert.")
+    return redirect("camp-detail", camp_id=participant.camp_id)
+
+
+@admin_required
+@require_POST
+def participant_restore(request, participant_id):
+    participant = get_object_or_404(Participant, pk=participant_id, archived_at__isnull=False)
+    participant.archived_at = None
+    participant.archived_by = None
+    participant.save(update_fields=["archived_at", "archived_by", "updated_at"])
+    messages.success(request, "Teilnehmer wurde wiederhergestellt.")
+    return redirect("participant-detail", participant_id=participant.pk)
 
 
 @editor_required
@@ -293,7 +337,7 @@ def participant_detail(request, participant_id):
 
 @editor_required
 def charge_create(request, participant_id):
-    participant = get_object_or_404(Participant, pk=participant_id)
+    participant = get_object_or_404(Participant, pk=participant_id, archived_at__isnull=True)
     form = ChargeForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
@@ -371,7 +415,7 @@ def booking_audit_restore(request: HttpRequest, audit_log_id: int) -> HttpRespon
 
 @editor_required
 def payment_create(request, participant_id):
-    participant = get_object_or_404(Participant, pk=participant_id)
+    participant = get_object_or_404(Participant, pk=participant_id, archived_at__isnull=True)
     form = PaymentForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
@@ -385,7 +429,7 @@ def payment_create(request, participant_id):
 
 @admin_required
 def pin_reset(request, participant_id):
-    participant = get_object_or_404(Participant, pk=participant_id)
+    participant = get_object_or_404(Participant, pk=participant_id, archived_at__isnull=True)
     if request.method == "POST":
         with transaction.atomic():
             participant.pin.reset_pin(changed_by=request.user)
@@ -396,7 +440,7 @@ def pin_reset(request, participant_id):
 
 @admin_required
 def pin_set(request, participant_id):
-    participant = get_object_or_404(Participant, pk=participant_id)
+    participant = get_object_or_404(Participant, pk=participant_id, archived_at__isnull=True)
     form = ParticipantPinForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
@@ -611,7 +655,7 @@ def shift_delete(request, shift_id):
 def expense_create(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
     form = ExpenseForm(request.POST or None)
-    form.fields["participant"].queryset = Participant.objects.filter(camp=camp)
+    form.fields["participant"].queryset = Participant.objects.filter(camp=camp, archived_at__isnull=True)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
             expense = form.save(commit=False)
@@ -637,7 +681,11 @@ def participant_import(request, camp_id):
             messages.error(request, "Importdaten konnten nicht gelesen werden.")
             return redirect("participant-import", camp_id=camp.pk)
         valid_rows = [row for row in rows if row.valid]
-        save_participants(camp, valid_rows)
+        try:
+            save_participants(camp, valid_rows)
+        except ValidationError as error:
+            messages.error(request, "; ".join(error.messages))
+            return redirect("participant-import", camp_id=camp.pk)
         messages.success(request, f"{len(valid_rows)} Teilnehmer wurden importiert.")
         return redirect("camp-detail", camp_id=camp.pk)
 
@@ -686,7 +734,11 @@ def _kiosk_participant_from_session(request, session_key):
     participant_id = request.session.get(session_key)
     if not participant_id:
         return None
-    return Participant.objects.select_related("camp").filter(pk=participant_id, camp__is_active=True).first()
+    return (
+        Participant.objects.select_related("camp")
+        .filter(pk=participant_id, camp__is_active=True, archived_at__isnull=True)
+        .first()
+    )
 
 
 def kiosk_login(request):
@@ -724,6 +776,8 @@ def _accepted_booking_links(participant):
     return ParticipantBookingLink.objects.select_related("inviter", "invitee").filter(
         Q(inviter=participant) | Q(invitee=participant),
         status=ParticipantBookingLink.Status.ACCEPTED,
+        inviter__archived_at__isnull=True,
+        invitee__archived_at__isnull=True,
     )
 
 

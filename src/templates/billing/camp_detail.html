@@ -103,4 +103,29 @@
       {% endfor %}
     </tbody>
   </table>
+
+  {% if archived_participants %}
+    <section class="panel stack">
+      <h2>Archivierte Teilnehmer</h2>
+      <table>
+        <thead><tr><th>Teilnehmer</th><th>Archiviert am</th><th></th></tr></thead>
+        <tbody>
+          {% for participant in archived_participants %}
+            <tr>
+              <td><a href="{% url 'participant-detail' participant.pk %}">{{ participant.full_name }}</a></td>
+              <td>{{ participant.archived_at }}</td>
+              <td>
+                {% if user|can_manage_users %}
+                  <form method="post" action="{% url 'participant-restore' participant.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="button-link">Wiederherstellen</button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  {% endif %}
 {% endblock %}

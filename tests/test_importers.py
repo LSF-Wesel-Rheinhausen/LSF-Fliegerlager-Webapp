@@ -7,7 +7,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from billing.forms import ParticipantImportForm
 from billing.importers import preview_participants, save_participants
 from billing.models import Participant
-from tests.factories import CampFactory
+from tests.factories import CampFactory, ParticipantFactory
 
 
 def test_csv_preview_validates_required_fields_and_numbers():
@@ -33,6 +33,16 @@ def test_save_participants_upserts_valid_rows():
 
     assert Participant.objects.count() == 1
     assert Participant.objects.get().email == "ada@example.org"
+
+
+@pytest.mark.django_db
+def test_save_participants_rejects_archived_name_conflict():
+    camp = CampFactory()
+    ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace", archived_at="2026-06-09T12:00:00Z")
+    rows = preview_participants(BytesIO(b"first_name,last_name\nAda,Lovelace\n"), "teilnehmer.csv")
+
+    with pytest.raises(ValidationError, match="archiviert"):
+        save_participants(camp, rows)
 
 
 def test_xlsx_preview_rejects_invalid_magic_number():

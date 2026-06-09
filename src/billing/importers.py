@@ -157,6 +157,17 @@ def save_participants(camp, rows):
         for row in rows:
             if not row.valid:
                 continue
+            archived = Participant.objects.filter(
+                camp=camp,
+                first_name=row.data["first_name"],
+                last_name=row.data["last_name"],
+                archived_at__isnull=False,
+            ).exists()
+            if archived:
+                raise ValidationError(
+                    f"{row.data['first_name']} {row.data['last_name']} ist archiviert "
+                    "und muss zuerst wiederhergestellt werden."
+                )
             participant, _ = Participant.objects.update_or_create(
                 camp=camp,
                 first_name=row.data["first_name"],

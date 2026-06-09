@@ -4,8 +4,9 @@ from decimal import Decimal
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import check_password, make_password
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
 
@@ -47,7 +48,27 @@ class Camp(TimeStampedModel):
         ordering = ["-year", "name"]
         constraints = [
             models.UniqueConstraint(fields=["name", "year"], name="unique_camp_name_year"),
+            models.UniqueConstraint(
+                fields=["is_active"],
+                condition=models.Q(is_active=True),
+                name="unique_active_camp",
+            ),
         ]
+
+    def save(self, *args, **kwargs):
+        with transaction.atomic():
+            camps = Camp.objects.select_for_update()
+            if self._state.adding and not camps.exists():
+                self.is_active = True
+            if self.is_active:
+                camps.exclude(pk=self.pk).filter(is_active=True).update(is_active=False)
+            elif (
+                self.pk
+                and camps.filter(pk=self.pk, is_active=True).exists()
+                and not camps.exclude(pk=self.pk).filter(is_active=True).exists()
+            ):
+                raise ValidationError("Das einzige Lager kann nicht deaktiviert werden.")
+            return super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.name} ({self.year})"
@@ -86,6 +107,14 @@ class Participant(TimeStampedModel):
     booked_nights = models.PositiveIntegerField(default=0)
     actual_nights = models.PositiveIntegerField(default=0)
     notes = models.TextField(blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+    archived_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="archived_participants",
+    )
 
     class Meta:
         ordering = ["last_name", "first_name"]
@@ -109,6 +138,10 @@ class Participant(TimeStampedModel):
         if hasattr(self, "_completed_shifts_count"):
             return self._completed_shifts_count
         return self.shift_assignments.count()
+
+    @property
+    def is_archived(self) -> bool:
+        return self.archived_at is not None
 
     def __str__(self):
         return self.full_name

@@ -7,16 +7,39 @@
       <p>{{ participant.get_status_display }}</p>
     </div>
     <div class="actions">
-      <a class="button" href="{% url 'charge-create' participant.pk %}">Kosten erfassen</a>
-      <a class="button" href="{% url 'payment-create' participant.pk %}">Zahlung erfassen</a>
+      <a class="button button-secondary" href="{% url 'participant-edit' participant.pk %}">Teilnehmer bearbeiten</a>
+      {% if user|can_manage_users %}
+        {% if participant.is_archived %}
+          <form method="post" action="{% url 'participant-restore' participant.pk %}">
+            {% csrf_token %}
+            <button type="submit">Teilnehmer wiederherstellen</button>
+          </form>
+        {% else %}
+          <form method="post" action="{% url 'participant-archive' participant.pk %}" onsubmit="return confirm('Teilnehmer archivieren? Alle Finanzdaten bleiben erhalten.');">
+            {% csrf_token %}
+            <button type="submit" class="button-danger">Teilnehmer archivieren</button>
+          </form>
+        {% endif %}
+      {% endif %}
+      {% if not participant.is_archived %}
+        <a class="button" href="{% url 'charge-create' participant.pk %}">Kosten erfassen</a>
+        <a class="button" href="{% url 'payment-create' participant.pk %}">Zahlung erfassen</a>
+        <a class="button" href="{% url 'pin-set' participant.pk %}">PIN setzen</a>
+        <form method="post" action="{% url 'pin-reset' participant.pk %}">
+          {% csrf_token %}
+          <button type="submit">PIN zurücksetzen</button>
+        </form>
+      {% endif %}
       <a class="button" href="{% url 'export-participant-pdf' participant.pk %}">Einzelabrechnung als PDF herunterladen</a>
-      <a class="button" href="{% url 'pin-set' participant.pk %}">PIN setzen</a>
-      <form method="post" action="{% url 'pin-reset' participant.pk %}">
-        {% csrf_token %}
-        <button type="submit">PIN zurücksetzen</button>
-      </form>
     </div>
   </div>
+
+  {% if participant.is_archived %}
+    <section class="panel notice notice-warning">
+      <strong>Archiviert</strong>
+      <p>Dieser Teilnehmer ist im Kiosk und in neuen Abrechnungsläufen nicht mehr verfügbar.</p>
+    </section>
+  {% endif %}
 
   <section class="metrics" aria-label="Teilnehmerkennzahlen">
     <article class="metric"><span>Brutto</span><strong>{{ settlement.total_gross }} EUR</strong></article>
