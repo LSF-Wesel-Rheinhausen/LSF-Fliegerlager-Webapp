@@ -4,8 +4,9 @@ from decimal import Decimal
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import check_password, make_password
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
 
@@ -47,7 +48,34 @@ class Camp(TimeStampedModel):
         ordering = ["-year", "name"]
         constraints = [
             models.UniqueConstraint(fields=["name", "year"], name="unique_camp_name_year"),
+            models.UniqueConstraint(
+                fields=["is_active"],
+                condition=models.Q(is_active=True),
+                name="unique_active_camp",
+            ),
         ]
+
+    def save(self, *args, **kwargs):
+        with transaction.atomic():
+            camps = Camp.objects.select_for_update()
+            if self._state.adding and not camps.exists():
+                self.is_active = True
+            if self.is_active:
+                camps.exclude(pk=self.pk).filter(is_active=True).update(is_active=False)
+            elif (
+                self.pk
+                and camps.filter(pk=self.pk, is_active=True).exists()
+                and not camps.exclude(pk=self.pk).filter(is_active=True).exists()
+            ):
+                raise ValidationError("Das einzige Lager kann nicht deaktiviert werden.")
+            return super().save(*args, **kwargs)
+
+    def validate_constraints(self, exclude: list[str] | None = None) -> None:
+        """Exclude unique_active_camp from pre-save model validation since save() deactivates other camps."""
+        if exclude is None:
+            exclude = []
+        exclude = list(exclude) + ["is_active"]
+        super().validate_constraints(exclude=exclude)
 
     def __str__(self):
         return f"{self.name} ({self.year})"
@@ -86,6 +114,14 @@ class Participant(TimeStampedModel):
     booked_nights = models.PositiveIntegerField(default=0)
     actual_nights = models.PositiveIntegerField(default=0)
     notes = models.TextField(blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+    archived_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="archived_participants",
+    )
 
     class Meta:
         ordering = ["last_name", "first_name"]
@@ -109,6 +145,10 @@ class Participant(TimeStampedModel):
         if hasattr(self, "_completed_shifts_count"):
             return self._completed_shifts_count
         return self.shift_assignments.count()
+
+    @property
+    def is_archived(self) -> bool:
+        return self.archived_at is not None
 
     def __str__(self):
         return self.full_name
@@ -505,9 +545,46 @@ class DrinkEntry(TimeStampedModel):
         return f"{self.participant}: {self.get_drink_display()} x {self.quantity}"
 
 
+class SettlementRun(TimeStampedModel):
+    camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="settlement_runs")
+    version = models.PositiveIntegerField()
+    calculated_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="calculated_settlement_runs",
+    )
+    participant_count = models.PositiveIntegerField(default=0)
+    total_gross = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
+    total_subsidy = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
+    total_due = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
+    total_paid = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
+    total_advanced = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
+    balance = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
+
+    class Meta:
+        ordering = ["-version"]
+        constraints = [models.UniqueConstraint(fields=["camp", "version"], name="unique_settlement_run_version")]
+
+    def __str__(self):
+        return f"{self.camp}: Abrechnung V{self.version}"
+
+
 class Settlement(TimeStampedModel):
-    participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="settlements")
+    run = models.ForeignKey(
+        SettlementRun,
+        on_delete=models.CASCADE,
+        related_name="settlements",
+        null=True,
+        blank=True,
+    )
+    participant = models.ForeignKey(Participant, on_delete=models.RESTRICT, related_name="settlements")
     calculated_by = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True)
+    participant_name = models.CharField(max_length=250, blank=True)
+    participant_status = models.CharField(max_length=20, blank=True)
+    total_gross = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0"))
+    total_subsidy = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0"))
     total_due = models.DecimalField(max_digits=10, decimal_places=2)
     total_paid = models.DecimalField(max_digits=10, decimal_places=2)
     total_advanced = models.DecimalField(max_digits=10, decimal_places=2)
@@ -516,6 +593,13 @@ class Settlement(TimeStampedModel):
 
     class Meta:
         ordering = ["participant", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["run", "participant"],
+                condition=models.Q(run__isnull=False),
+                name="unique_participant_per_settlement_run",
+            )
+        ]
 
     def __str__(self):
         return f"{self.participant}: {self.balance}"
@@ -566,9 +650,7 @@ class DailyShiftException(TimeStampedModel):
 
     class Meta:
         ordering = ["date", "template"]
-        constraints = [
-            models.UniqueConstraint(fields=["template", "date"], name="unique_shift_exception")
-        ]
+        constraints = [models.UniqueConstraint(fields=["template", "date"], name="unique_shift_exception")]
 
     def __str__(self):
         return f"Ausnahme am {self.date} für {self.template.name}"

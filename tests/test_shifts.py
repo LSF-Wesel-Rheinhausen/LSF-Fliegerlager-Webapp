@@ -65,14 +65,14 @@ def test_admin_can_delete_shift(admin_client, shift):
 
 @pytest.mark.django_db
 def test_generate_shifts_from_templates(admin_client, active_camp):
-    from billing.models import DailyShiftTemplate, DailyShiftException
+    from billing.models import DailyShiftException, DailyShiftTemplate
 
     template = DailyShiftTemplate.objects.create(
         camp=active_camp,
         name="Abendessen kochen",
         required_slots=3,
     )
-    
+
     # Create exception to skip the first day
     DailyShiftException.objects.create(
         template=template,
@@ -100,7 +100,7 @@ def test_generate_shifts_from_templates(admin_client, active_camp):
     # Active camp spans 12 days (starts_on to ends_on)
     # One day is skipped, so 11 shifts should be generated
     assert Shift.objects.filter(name="Abendessen kochen").count() == 11
-    
+
     # Check the exception day slots
     last_day_shift = Shift.objects.get(name="Abendessen kochen", date=active_camp.ends_on)
     assert last_day_shift.required_slots == 1

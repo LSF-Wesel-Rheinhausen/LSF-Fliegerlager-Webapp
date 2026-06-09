@@ -4,6 +4,8 @@ from .models import (
     BookingAuditLog,
     Camp,
     Charge,
+    DailyShiftException,
+    DailyShiftTemplate,
     DrinkEntry,
     Expense,
     MealOrder,
@@ -15,10 +17,9 @@ from .models import (
     Payment,
     PriceRule,
     Settlement,
+    SettlementRun,
     Shift,
     ShiftAssignment,
-    DailyShiftTemplate,
-    DailyShiftException,
     UserProfile,
 )
 
@@ -34,6 +35,9 @@ class ParticipantAdmin(admin.ModelAdmin):
     list_display = ("last_name", "first_name", "camp", "status", "hilfssatz", "berufssatz", "actual_nights", "is_child")
     list_filter = ("camp", "status", "is_child", "is_youth_group", "is_companion")
     search_fields = ("first_name", "last_name", "email")
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 admin.site.register(ParticipantPin)
@@ -123,7 +127,29 @@ class MealOrderAdmin(admin.ModelAdmin):
 
 
 admin.site.register(DrinkEntry)
-admin.site.register(Settlement)
+
+
+class ReadOnlySnapshotAdmin(admin.ModelAdmin):
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(SettlementRun)
+class SettlementRunAdmin(ReadOnlySnapshotAdmin):
+    list_display = ("camp", "version", "created_at", "calculated_by", "participant_count", "balance")
+    list_filter = ("camp", "created_at")
+
+
+@admin.register(Settlement)
+class SettlementAdmin(ReadOnlySnapshotAdmin):
+    list_display = ("participant_name", "run", "total_due", "balance", "created_at")
+    list_filter = ("run__camp", "run__version")
 
 
 class DailyShiftExceptionInline(admin.TabularInline):
@@ -141,6 +167,7 @@ class DailyShiftTemplateAdmin(admin.ModelAdmin):
     @admin.action(description="Dienste für ausgewählte Vorlagen generieren")
     def generate_shifts_for_templates(self, request, queryset):
         import datetime
+
         from .models import Shift
 
         generated_count = 0
@@ -151,17 +178,29 @@ class DailyShiftTemplateAdmin(admin.ModelAdmin):
                 continue
             current_date = camp.starts_on
             exceptions_by_date = {ex.date: ex for ex in template.exceptions.all()}
-            
+
             while current_date <= camp.ends_on:
                 exception = exceptions_by_date.get(current_date)
-                
+
                 if exception and exception.is_skipped:
                     skipped_count += 1
                 else:
-                    slots = exception.custom_required_slots if exception and exception.custom_required_slots is not None else template.required_slots
-                    start_t = exception.custom_start_time if exception and exception.custom_start_time is not None else template.start_time
-                    end_t = exception.custom_end_time if exception and exception.custom_end_time is not None else template.end_time
-                    
+                    slots = (
+                        exception.custom_required_slots
+                        if exception and exception.custom_required_slots is not None
+                        else template.required_slots
+                    )
+                    start_t = (
+                        exception.custom_start_time
+                        if exception and exception.custom_start_time is not None
+                        else template.start_time
+                    )
+                    end_t = (
+                        exception.custom_end_time
+                        if exception and exception.custom_end_time is not None
+                        else template.end_time
+                    )
+
                     Shift.objects.update_or_create(
                         camp=camp,
                         date=current_date,
@@ -170,12 +209,14 @@ class DailyShiftTemplateAdmin(admin.ModelAdmin):
                         defaults={
                             "end_time": end_t,
                             "required_slots": slots,
-                        }
+                        },
                     )
                     generated_count += 1
                 current_date += datetime.timedelta(days=1)
-                
-        self.message_user(request, f"{generated_count} Dienste generiert, {skipped_count} wegen Ausnahmen übersprungen.")
+
+        self.message_user(
+            request, f"{generated_count} Dienste generiert, {skipped_count} wegen Ausnahmen übersprungen."
+        )
 
 
 class ShiftAssignmentInline(admin.TabularInline):

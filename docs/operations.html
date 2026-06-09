@@ -58,6 +58,30 @@ python src/manage.py runserver</code></pre>
         <pre><code>cp .env.example .env
 docker compose up --build</code></pre>
         <p>Danach läuft die App unter <code>http://localhost:8000</code>. Der Compose-Start führt Migrationen, <code>bootstrap_roles</code>, <code>collectstatic</code> und anschließend Gunicorn aus.</p>
+        <p>PostgreSQL und Django besitzen Compose-Healthchecks. <code>docker compose ps</code> zeigt den Zustand; <code>curl http://localhost:8000/healthz/</code> prüft die Bereitschaft ohne fachliche Daten offenzulegen.</p>
+      </section>
+
+      <section>
+        <h2>Backup und Wiederherstellung</h2>
+        <p><code>BACKUP_DIR</code> bestimmt das lokale, persistente Backup-Verzeichnis und ist standardmäßig <code>./backups</code>. Dieses Verzeichnis wird nicht versioniert.</p>
+        <pre><code>./scripts/postgres-backup.sh
+ls -lh "${BACKUP_DIR:-./backups}"
+
+docker compose stop app
+RESTORE_CONFIRM=YES ./scripts/postgres-restore.sh fliegerlager-YYYYMMDDTHHMMSSZ.sql.gz
+docker compose start app
+curl http://localhost:8000/healthz/</code></pre>
+        <p>Ein Restore überschreibt den Datenbankstand. Vor jedem Restore muss ein aktuelles Backup erzeugt und die Anwendung gestoppt werden.</p>
+      </section>
+
+      <section>
+        <h2>Produktionscheckliste</h2>
+        <ul>
+          <li>Starken <code>DJANGO_SECRET_KEY</code>, Datenbankpasswort, erlaubte Hosts und vertrauenswürdige Origins setzen.</li>
+          <li>HTTPS, sichere Cookies und nach erfolgreicher Prüfung HSTS aktivieren.</li>
+          <li><code>docker compose ps</code>, <code>/healthz/</code> und <code>docker compose logs --tail=200 app db</code> überwachen.</li>
+          <li>Backups regelmäßig automatisiert ausführen und Wiederherstellungen in einer Testumgebung erproben.</li>
+        </ul>
       </section>
 
       <section>

@@ -4,11 +4,12 @@ from django.urls import include, path, re_path
 
 from billing.forms import EmailOrUsernameAuthenticationForm
 from billing.views import FirstLaunchLoginView
-from config.views import page_not_found
+from config.views import healthcheck, page_not_found
 
 handler404 = "config.views.page_not_found"
 
 urlpatterns = [
+    path("healthz/", healthcheck, name="healthcheck"),
     path("admin/", admin.site.urls),
     path(
         "login/",

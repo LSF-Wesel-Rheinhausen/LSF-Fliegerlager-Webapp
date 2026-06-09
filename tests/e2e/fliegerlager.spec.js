@@ -147,7 +147,7 @@ test("Admin edits a booking and sees the change log", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Ada Lovelace" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Buchungen", exact: true })).toBeVisible();
   await expect(page.getByText(/^B#\d{5}$/).first()).toBeVisible();
-  await page.getByRole("link", { name: "Bearbeiten" }).click();
+  await page.getByRole("link", { name: "Bearbeiten", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Buchung bearbeiten" })).toBeVisible();
   await page.getByLabel("Beschreibung").fill("Cola korrigiert");
   await page.getByLabel("Menge").fill("3");
@@ -161,6 +161,31 @@ test("Admin edits a booking and sees the change log", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Änderungsprotokoll" })).toBeVisible();
   await expect(page.getByText("Cola · 2.00 x 2.50")).toBeVisible();
   await expect(page.getByText("Cola korrigiert · 3.00 x 2.50")).toBeVisible();
+});
+
+test("Admin archives a participant and creates a versioned settlement run", async ({ page }) => {
+  await setupFirstAdmin(page);
+  const campName = await createCamp(page, "Abrechnungslager");
+  await createParticipant(page, "Ada", "Lovelace");
+
+  await page.getByRole("link", { name: "Teilnehmer bearbeiten" }).click();
+  await page.getByLabel("Vorname").fill("Augusta Ada");
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByRole("heading", { name: "Augusta Ada Lovelace" })).toBeVisible();
+
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Teilnehmer archivieren" }).click();
+  await expect(page.getByRole("heading", { name: "Archivierte Teilnehmer" })).toBeVisible();
+  await page.getByRole("button", { name: "Wiederherstellen" }).click();
+  await expect(page.getByRole("heading", { name: "Augusta Ada Lovelace" })).toBeVisible();
+
+  await page.goto("/camps/");
+  await page.getByRole("link", { name: campName }).click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Abrechnungslauf erstellen" }).click();
+  await expect(page.getByRole("heading", { name: /Abrechnung .* V1/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: "CSV herunterladen" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Excel herunterladen" })).toBeVisible();
 });
 
 test("Admin can open and close price rule dialogs natively", async ({ page }) => {

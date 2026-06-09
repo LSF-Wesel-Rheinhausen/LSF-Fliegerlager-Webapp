@@ -18,6 +18,22 @@ urlpatterns = [
     path("camps/<int:camp_id>/meals/order-sent/", views.meal_order_mark_sent, name="meal-order-mark-sent"),
     path("camps/<int:camp_id>/participants/new/", views.participant_create, name="participant-create"),
     path("participants/<int:participant_id>/", views.participant_detail, name="participant-detail"),
+    path("participants/<int:participant_id>/edit/", views.participant_edit, name="participant-edit"),
+    path("participants/<int:participant_id>/archive/", views.participant_archive, name="participant-archive"),
+    path("participants/<int:participant_id>/restore/", views.participant_restore, name="participant-restore"),
+    path("camps/<int:camp_id>/settlements/runs/new/", views.settlement_run_create, name="settlement-run-create"),
+    path("settlements/runs/<int:run_id>/", views.settlement_run_detail, name="settlement-run-detail"),
+    path("settlements/runs/<int:run_id>/export.csv", views.settlement_run_export_csv, name="settlement-run-csv"),
+    path(
+        "settlements/runs/<int:run_id>/export.xlsx",
+        views.settlement_run_export_workbook,
+        name="settlement-run-workbook",
+    ),
+    path(
+        "settlements/<int:settlement_id>/export.pdf",
+        views.settlement_snapshot_export_pdf,
+        name="settlement-snapshot-pdf",
+    ),
     path("participants/<int:participant_id>/charges/new/", views.charge_create, name="charge-create"),
     path("charges/<int:charge_id>/edit/", views.charge_edit, name="charge-edit"),
     path("charges/<int:charge_id>/delete/", views.charge_delete, name="charge-delete"),
@@ -33,7 +49,9 @@ urlpatterns = [
     path("camps/<int:camp_id>/shifts/report/", views.shift_report, name="shift-report"),
     path("camps/<int:camp_id>/shift-templates/", views.shift_templates_manage, name="shift-templates-manage"),
     path("camps/<int:camp_id>/shift-templates/new/", views.shift_template_create, name="shift-template-create"),
-    path("camps/<int:camp_id>/shift-templates/generate/", views.shift_templates_generate, name="shift-templates-generate"),
+    path(
+        "camps/<int:camp_id>/shift-templates/generate/", views.shift_templates_generate, name="shift-templates-generate"
+    ),
     path("shift-templates/<int:template_id>/edit/", views.shift_template_edit, name="shift-template-edit"),
     path("shifts/<int:shift_id>/edit/", views.shift_edit, name="shift-edit"),
     path("shifts/<int:shift_id>/delete/", views.shift_delete, name="shift-delete"),

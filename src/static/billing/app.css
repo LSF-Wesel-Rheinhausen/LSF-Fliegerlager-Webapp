@@ -175,6 +175,17 @@ button:hover,
   color: var(--accent-dark);
 }
 
+.button-danger {
+  border-color: var(--danger);
+  background: var(--danger);
+}
+
+.notice-warning {
+  margin-bottom: 20px;
+  border-color: #f7c96b;
+  background: #fffaeb;
+}
+
 .nav-link {
   min-height: 32px;
   padding: 6px 10px;

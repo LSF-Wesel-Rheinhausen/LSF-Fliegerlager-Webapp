@@ -16,7 +16,15 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .exporters import camp_settlement_csv, camp_workbook_response, drink_entries_csv, participant_pdf_response
+from .exporters import (
+    camp_settlement_csv,
+    camp_workbook_response,
+    drink_entries_csv,
+    participant_pdf_response,
+    settlement_run_csv,
+    settlement_run_workbook_response,
+    settlement_snapshot_pdf_response,
+)
 from .forms import (
     CampFlatRateSettingsForm,
     CampForm,
@@ -51,6 +59,8 @@ from .models import (
     Participant,
     ParticipantBookingLink,
     PriceRule,
+    Settlement,
+    SettlementRun,
     Shift,
 )
 from .permissions import (
@@ -79,6 +89,7 @@ from .services import (
     charge_audit_snapshot,
     create_booking_audit_log,
     create_booking_delete_audit_log,
+    create_settlement_run,
     is_meal_change_locked,
     meal_change_lock_message,
     meal_order_for_date,
@@ -241,6 +252,8 @@ def camp_edit(request, camp_id):
 def camp_detail(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
     settlements = calculate_camp_settlements(camp)
+    archived_participants = camp.participants.filter(archived_at__isnull=False).order_by("last_name", "first_name")
+    settlement_runs = camp.settlement_runs.select_related("calculated_by").all()
     totals = {
         "gross": sum(result.total_gross for result in settlements),
         "subsidy": sum(result.total_subsidy for result in settlements),
@@ -253,7 +266,14 @@ def camp_detail(request, camp_id):
     return render(
         request,
         "billing/camp_detail.html",
-        {"camp": camp, "settlements": settlements, "totals": totals, "price_rules": price_rules},
+        {
+            "camp": camp,
+            "settlements": settlements,
+            "totals": totals,
+            "price_rules": price_rules,
+            "archived_participants": archived_participants,
+            "settlement_runs": settlement_runs,
+        },
     )
 
 
@@ -272,6 +292,43 @@ def participant_create(request, camp_id):
 
 
 @editor_required
+def participant_edit(request, participant_id):
+    participant = get_object_or_404(Participant.objects.select_related("camp"), pk=participant_id)
+    form = ParticipantForm(request.POST or None, instance=participant)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Teilnehmer wurde gespeichert.")
+        return redirect("participant-detail", participant_id=participant.pk)
+    return render(
+        request,
+        "billing/form.html",
+        {"form": form, "title": "Teilnehmer bearbeiten", "camp": participant.camp},
+    )
+
+
+@admin_required
+@require_POST
+def participant_archive(request, participant_id):
+    participant = get_object_or_404(Participant, pk=participant_id, archived_at__isnull=True)
+    participant.archived_at = timezone.now()
+    participant.archived_by = request.user
+    participant.save(update_fields=["archived_at", "archived_by", "updated_at"])
+    messages.success(request, "Teilnehmer wurde archiviert.")
+    return redirect("camp-detail", camp_id=participant.camp_id)
+
+
+@admin_required
+@require_POST
+def participant_restore(request, participant_id):
+    participant = get_object_or_404(Participant, pk=participant_id, archived_at__isnull=False)
+    participant.archived_at = None
+    participant.archived_by = None
+    participant.save(update_fields=["archived_at", "archived_by", "updated_at"])
+    messages.success(request, "Teilnehmer wurde wiederhergestellt.")
+    return redirect("participant-detail", participant_id=participant.pk)
+
+
+@editor_required
 def participant_detail(request, participant_id):
     participant = get_object_or_404(Participant.objects.select_related("camp"), pk=participant_id)
     settlement = calculate_participant_settlement(participant)
@@ -279,6 +336,7 @@ def participant_detail(request, participant_id):
     audit_logs = BookingAuditLog.objects.filter(
         Q(participant=participant) | Q(charge__participant=participant)
     ).select_related("changed_by", "charge")
+    settlement_snapshots = participant.settlements.filter(run__isnull=False).select_related("run", "run__camp")
     return render(
         request,
         "billing/participant_detail.html",
@@ -287,13 +345,50 @@ def participant_detail(request, participant_id):
             "settlement": settlement,
             "charges": charges,
             "audit_logs": audit_logs,
+            "settlement_snapshots": settlement_snapshots,
         },
     )
 
 
+@admin_required
+@require_POST
+def settlement_run_create(request, camp_id):
+    camp = get_object_or_404(Camp, pk=camp_id)
+    run = create_settlement_run(camp, request.user)
+    messages.success(request, f"Abrechnungslauf V{run.version} wurde gespeichert.")
+    return redirect("settlement-run-detail", run_id=run.pk)
+
+
+@editor_required
+def settlement_run_detail(request, run_id):
+    run = get_object_or_404(SettlementRun.objects.select_related("camp", "calculated_by"), pk=run_id)
+    snapshots = run.settlements.select_related("participant").all()
+    return render(request, "billing/settlement_run_detail.html", {"run": run, "snapshots": snapshots})
+
+
+@editor_required
+def settlement_run_export_csv(request, run_id):
+    run = get_object_or_404(SettlementRun.objects.select_related("camp"), pk=run_id)
+    return settlement_run_csv(run)
+
+
+@editor_required
+def settlement_run_export_workbook(request, run_id):
+    run = get_object_or_404(SettlementRun.objects.select_related("camp"), pk=run_id)
+    return settlement_run_workbook_response(run)
+
+
+@editor_required
+def settlement_snapshot_export_pdf(request, settlement_id):
+    snapshot = get_object_or_404(
+        Settlement.objects.select_related("run", "run__camp").filter(run__isnull=False), pk=settlement_id
+    )
+    return settlement_snapshot_pdf_response(snapshot)
+
+
 @editor_required
 def charge_create(request, participant_id):
-    participant = get_object_or_404(Participant, pk=participant_id)
+    participant = get_object_or_404(Participant, pk=participant_id, archived_at__isnull=True)
     form = ChargeForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
@@ -371,7 +466,7 @@ def booking_audit_restore(request: HttpRequest, audit_log_id: int) -> HttpRespon
 
 @editor_required
 def payment_create(request, participant_id):
-    participant = get_object_or_404(Participant, pk=participant_id)
+    participant = get_object_or_404(Participant, pk=participant_id, archived_at__isnull=True)
     form = PaymentForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
@@ -385,7 +480,7 @@ def payment_create(request, participant_id):
 
 @admin_required
 def pin_reset(request, participant_id):
-    participant = get_object_or_404(Participant, pk=participant_id)
+    participant = get_object_or_404(Participant, pk=participant_id, archived_at__isnull=True)
     if request.method == "POST":
         with transaction.atomic():
             participant.pin.reset_pin(changed_by=request.user)
@@ -396,7 +491,7 @@ def pin_reset(request, participant_id):
 
 @admin_required
 def pin_set(request, participant_id):
-    participant = get_object_or_404(Participant, pk=participant_id)
+    participant = get_object_or_404(Participant, pk=participant_id, archived_at__isnull=True)
     form = ParticipantPinForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
@@ -476,19 +571,26 @@ def shift_report(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
     participants = list(camp.participants.all())
     # Sort by completed / target ratio
-    participants.sort(key=lambda p: (p.completed_shifts / p.target_shifts if p.target_shifts > 0 else 0, p.completed_shifts), reverse=True)
-    
+    participants.sort(
+        key=lambda p: (p.completed_shifts / p.target_shifts if p.target_shifts > 0 else 0, p.completed_shifts),
+        reverse=True,
+    )
+
     total_target = sum(p.target_shifts for p in participants)
     total_completed = sum(p.completed_shifts for p in participants)
-    total_percent = int((total_completed / total_target * 100)) if total_target > 0 else 0
-    
-    return render(request, "billing/shift_report.html", {
-        "camp": camp,
-        "participants": participants,
-        "total_target": total_target,
-        "total_completed": total_completed,
-        "total_percent": total_percent,
-    })
+    total_percent = int(total_completed / total_target * 100) if total_target > 0 else 0
+
+    return render(
+        request,
+        "billing/shift_report.html",
+        {
+            "camp": camp,
+            "participants": participants,
+            "total_target": total_target,
+            "total_completed": total_completed,
+            "total_percent": total_percent,
+        },
+    )
 
 
 @editor_required
@@ -502,6 +604,7 @@ def shift_templates_manage(request, camp_id):
 def shift_template_create(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
     from .forms import DailyShiftTemplateForm
+
     form = DailyShiftTemplateForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         template = form.save(commit=False)
@@ -513,8 +616,9 @@ def shift_template_create(request, camp_id):
 
 @editor_required
 def shift_template_edit(request, template_id):
-    from .models import DailyShiftTemplate
     from .forms import DailyShiftTemplateForm
+    from .models import DailyShiftTemplate
+
     template = get_object_or_404(DailyShiftTemplate, pk=template_id)
     form = DailyShiftTemplateForm(request.POST or None, instance=template)
     if request.method == "POST":
@@ -530,15 +634,21 @@ def shift_template_edit(request, template_id):
 @require_POST
 def shift_templates_generate(request, camp_id):
     import datetime
+
     from .models import Shift
+
     camp = get_object_or_404(Camp, pk=camp_id)
-    
+
     if not camp.starts_on or not camp.ends_on:
-        messages.error(request, "Das Lager hat kein Start- oder Enddatum. Bitte setze diese zuerst in den Lagereinstellungen, bevor du Dienste generierst.")
+        messages.error(
+            request,
+            "Das Lager hat kein Start- oder Enddatum. Bitte setze diese zuerst in den Lagereinstellungen, "
+            "bevor du Dienste generierst.",
+        )
         return redirect("shift-templates-manage", camp_id=camp.pk)
 
     templates = camp.daily_shift_templates.all()
-    
+
     generated_count = 0
     skipped_count = 0
     with transaction.atomic():
@@ -550,9 +660,21 @@ def shift_templates_generate(request, camp_id):
                 if exception and exception.is_skipped:
                     skipped_count += 1
                 else:
-                    slots = exception.custom_required_slots if exception and exception.custom_required_slots is not None else template.required_slots
-                    start_t = exception.custom_start_time if exception and exception.custom_start_time is not None else template.start_time
-                    end_t = exception.custom_end_time if exception and exception.custom_end_time is not None else template.end_time
+                    slots = (
+                        exception.custom_required_slots
+                        if exception and exception.custom_required_slots is not None
+                        else template.required_slots
+                    )
+                    start_t = (
+                        exception.custom_start_time
+                        if exception and exception.custom_start_time is not None
+                        else template.start_time
+                    )
+                    end_t = (
+                        exception.custom_end_time
+                        if exception and exception.custom_end_time is not None
+                        else template.end_time
+                    )
                     Shift.objects.update_or_create(
                         camp=camp,
                         date=current_date,
@@ -561,11 +683,11 @@ def shift_templates_generate(request, camp_id):
                         defaults={
                             "end_time": end_t,
                             "required_slots": slots,
-                        }
+                        },
                     )
                     generated_count += 1
                 current_date += datetime.timedelta(days=1)
-    
+
     messages.success(request, f"{generated_count} Dienste generiert, {skipped_count} übersprungen.")
     return redirect("shift-templates-manage", camp_id=camp.pk)
 
@@ -611,7 +733,7 @@ def shift_delete(request, shift_id):
 def expense_create(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
     form = ExpenseForm(request.POST or None)
-    form.fields["participant"].queryset = Participant.objects.filter(camp=camp)
+    form.fields["participant"].queryset = Participant.objects.filter(camp=camp, archived_at__isnull=True)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
             expense = form.save(commit=False)
@@ -637,7 +759,11 @@ def participant_import(request, camp_id):
             messages.error(request, "Importdaten konnten nicht gelesen werden.")
             return redirect("participant-import", camp_id=camp.pk)
         valid_rows = [row for row in rows if row.valid]
-        save_participants(camp, valid_rows)
+        try:
+            save_participants(camp, valid_rows)
+        except ValidationError as error:
+            messages.error(request, "; ".join(error.messages))
+            return redirect("participant-import", camp_id=camp.pk)
         messages.success(request, f"{len(valid_rows)} Teilnehmer wurden importiert.")
         return redirect("camp-detail", camp_id=camp.pk)
 
@@ -686,12 +812,19 @@ def _kiosk_participant_from_session(request, session_key):
     participant_id = request.session.get(session_key)
     if not participant_id:
         return None
-    return Participant.objects.select_related("camp").filter(pk=participant_id, camp__is_active=True).first()
+    return (
+        Participant.objects.select_related("camp")
+        .filter(pk=participant_id, camp__is_active=True, archived_at__isnull=True)
+        .first()
+    )
 
 
 def kiosk_login(request):
     if request.session.get(KIOSK_PARTICIPANT_SESSION_KEY):
-        return redirect("kiosk-home")
+        if _kiosk_participant(request) is not None:
+            return redirect("kiosk-home")
+        else:
+            request.session.pop(KIOSK_PARTICIPANT_SESSION_KEY, None)
 
     form = KioskLoginForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
@@ -724,6 +857,8 @@ def _accepted_booking_links(participant):
     return ParticipantBookingLink.objects.select_related("inviter", "invitee").filter(
         Q(inviter=participant) | Q(invitee=participant),
         status=ParticipantBookingLink.Status.ACCEPTED,
+        inviter__archived_at__isnull=True,
+        invitee__archived_at__isnull=True,
     )
 
 
@@ -1201,7 +1336,9 @@ def kiosk_shifts(request):
                 ShiftAssignment.objects.create(shift=shift, participant=participant)
                 messages.success(request, f"Du hast dich für '{shift.name}' eingetragen.")
             else:
-                offered_assignment = shift.assignments.filter(offered_for_exchange=True).exclude(participant=participant).first()
+                offered_assignment = (
+                    shift.assignments.filter(offered_for_exchange=True).exclude(participant=participant).first()
+                )
                 if offered_assignment:
                     old_participant = offered_assignment.participant
                     offered_assignment.participant = participant
@@ -1209,18 +1346,28 @@ def kiosk_shifts(request):
                     offered_assignment.save(update_fields=["participant", "offered_for_exchange"])
                     messages.success(request, f"Du hast den Dienst von {old_participant.full_name} übernommen.")
                 else:
-                    messages.error(request, "Dieser Dienst ist voll und es wird aktuell kein Platz zum Tausch angeboten.")
+                    messages.error(
+                        request, "Dieser Dienst ist voll und es wird aktuell kein Platz zum Tausch angeboten."
+                    )
         elif action == "retract":
-            messages.error(request, "Das direkte Austragen aus Diensten ist nicht mehr möglich. Bitte biete deinen Dienst zum Tausch an oder wende dich an die Lagerleitung.")
+            messages.error(
+                request,
+                "Das direkte Austragen aus Diensten ist nicht mehr möglich. Bitte biete deinen Dienst zum Tausch an "
+                "oder wende dich an die Lagerleitung.",
+            )
         elif action == "offer":
             if shift.date < today:
                 messages.error(request, "Du kannst keine vergangenen Dienste zum Tausch anbieten.")
             else:
-                updated = ShiftAssignment.objects.filter(shift=shift, participant=participant).update(offered_for_exchange=True)
+                updated = ShiftAssignment.objects.filter(shift=shift, participant=participant).update(
+                    offered_for_exchange=True
+                )
                 if updated:
                     messages.success(request, f"Dein Dienst '{shift.name}' wird nun zum Tausch angeboten.")
         elif action == "revoke_offer":
-            updated = ShiftAssignment.objects.filter(shift=shift, participant=participant).update(offered_for_exchange=False)
+            updated = ShiftAssignment.objects.filter(shift=shift, participant=participant).update(
+                offered_for_exchange=False
+            )
             if updated:
                 messages.success(request, f"Du hast das Tauschangebot für '{shift.name}' zurückgezogen.")
 
@@ -1243,7 +1390,9 @@ def kiosk_shifts(request):
         if shift.my_assignment:
             my_shifts.append(shift)
         elif shift.has_offers:
-            offered_assignment = next(a for a in shift_assignments if a.offered_for_exchange and a.participant_id != participant.pk)
+            offered_assignment = next(
+                a for a in shift_assignments if a.offered_for_exchange and a.participant_id != participant.pk
+            )
             shift.offered_by = offered_assignment.participant.full_name
             offered_shifts.append(shift)
         else:

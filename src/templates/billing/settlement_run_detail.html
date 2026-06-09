@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% load billing_format %}
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1>Abrechnung {{ run.camp }} · V{{ run.version }}</h1>
+      <p>Gespeichert am {{ run.created_at }} durch {{ run.calculated_by.email|default:run.calculated_by.username|default:"System" }}</p>
+    </div>
+    <div class="actions">
+      <a class="button button-secondary" href="{% url 'camp-detail' run.camp.pk %}">Zur Lagerübersicht</a>
+      <a class="button" href="{% url 'settlement-run-csv' run.pk %}">CSV herunterladen</a>
+      <a class="button" href="{% url 'settlement-run-workbook' run.pk %}">Excel herunterladen</a>
+    </div>
+  </div>
+
+  <dl class="metrics" aria-label="Gespeicherte Abrechnungssummen">
+    <div class="metric"><dt>Brutto</dt><dd><strong>{{ run.total_gross|money_eur }}</strong></dd></div>
+    <div class="metric"><dt>Förderung</dt><dd><strong>{{ run.total_subsidy|money_eur }}</strong></dd></div>
+    <div class="metric"><dt>Soll</dt><dd><strong>{{ run.total_due|money_eur }}</strong></dd></div>
+    <div class="metric"><dt>Gezahlt</dt><dd><strong>{{ run.total_paid|money_eur }}</strong></dd></div>
+    <div class="metric"><dt>Vorgestreckt</dt><dd><strong>{{ run.total_advanced|money_eur }}</strong></dd></div>
+    <div class="metric"><dt>Offen</dt><dd><strong>{{ run.balance|money_eur }}</strong></dd></div>
+  </dl>
+
+  <table>
+    <thead><tr><th>Teilnehmer</th><th>Status</th><th>Soll</th><th>Gezahlt</th><th>Vorgestreckt</th><th>Offen</th><th></th></tr></thead>
+    <tbody>
+      {% for snapshot in snapshots %}
+        <tr>
+          <td>{{ snapshot.participant_name }}</td>
+          <td>{{ snapshot.data.participant.status_label }}</td>
+          <td>{{ snapshot.total_due|money_eur }}</td>
+          <td>{{ snapshot.total_paid|money_eur }}</td>
+          <td>{{ snapshot.total_advanced|money_eur }}</td>
+          <td>{{ snapshot.balance|money_eur }}</td>
+          <td><a href="{% url 'settlement-snapshot-pdf' snapshot.pk %}">PDF</a></td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="7">Dieser Lauf enthält keine Teilnehmer.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}

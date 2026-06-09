@@ -22,4 +22,5 @@ node_modules/
 playwright-report/
 test-results/
 .test-local-logs/
+backups/
 tmp/

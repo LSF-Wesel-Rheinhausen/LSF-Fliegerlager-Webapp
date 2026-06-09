@@ -33,6 +33,37 @@
     <a href="{% url 'camp-meal-overview' camp.pk %}">Essensübersicht öffnen</a>
   </nav>
 
+  <section class="panel stack">
+    <div class="toolbar compact-toolbar">
+      <div>
+        <h2>Gespeicherte Abrechnungsläufe</h2>
+        <p>Jede Version ist ein unveränderlicher Stand der Abrechnung.</p>
+      </div>
+      {% if user|can_manage_users %}
+        <form method="post" action="{% url 'settlement-run-create' camp.pk %}" onsubmit="return confirm('Neuen Abrechnungslauf aus den aktuellen Daten erstellen?');">
+          {% csrf_token %}
+          <button type="submit">Abrechnungslauf erstellen</button>
+        </form>
+      {% endif %}
+    </div>
+    <table>
+      <thead><tr><th>Version</th><th>Zeitpunkt</th><th>Bearbeiter</th><th>Teilnehmer</th><th>Offen</th></tr></thead>
+      <tbody>
+        {% for run in settlement_runs %}
+          <tr>
+            <td><a href="{% url 'settlement-run-detail' run.pk %}">V{{ run.version }}</a></td>
+            <td>{{ run.created_at }}</td>
+            <td>{{ run.calculated_by.email|default:run.calculated_by.username|default:"System" }}</td>
+            <td>{{ run.participant_count }}</td>
+            <td>{{ run.balance|money_eur }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5">Noch keine Abrechnungsläufe gespeichert.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
   <section class="panel">
     <h2>Dienste & Aufgaben</h2>
     <p>Hier kannst du Lagerdienste (wie Spülen, Kochen, Putzen) anlegen und Teilnehmern zuweisen.</p>
@@ -103,4 +134,29 @@
       {% endfor %}
     </tbody>
   </table>
+
+  {% if archived_participants %}
+    <section class="panel stack">
+      <h2>Archivierte Teilnehmer</h2>
+      <table>
+        <thead><tr><th>Teilnehmer</th><th>Archiviert am</th><th></th></tr></thead>
+        <tbody>
+          {% for participant in archived_participants %}
+            <tr>
+              <td><a href="{% url 'participant-detail' participant.pk %}">{{ participant.full_name }}</a></td>
+              <td>{{ participant.archived_at }}</td>
+              <td>
+                {% if user|can_manage_users %}
+                  <form method="post" action="{% url 'participant-restore' participant.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="button-link">Wiederherstellen</button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  {% endif %}
 {% endblock %}

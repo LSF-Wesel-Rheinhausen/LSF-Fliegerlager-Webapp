@@ -5,10 +5,23 @@ from decimal import Decimal
 from typing import Any
 
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
-from django.db.models import Q, Sum
+from django.db import transaction
+from django.db.models import Max, Q, Sum
 from django.utils import timezone
 
-from .models import BookingAuditLog, Camp, Charge, DrinkEntry, Expense, MealOrder, MealSignup, Participant, PriceRule
+from .models import (
+    BookingAuditLog,
+    Camp,
+    Charge,
+    DrinkEntry,
+    Expense,
+    MealOrder,
+    MealSignup,
+    Participant,
+    PriceRule,
+    Settlement,
+    SettlementRun,
+)
 from .permissions import ADMIN_GROUP, EDITOR_GROUP, HUEBERS_GROUP
 
 ZERO = Decimal("0.00")
@@ -478,8 +491,70 @@ def calculate_participant_settlement(participant):
 
 
 def calculate_camp_settlements(camp):
-    participants = Participant.objects.filter(camp=camp).order_by("last_name", "first_name")
+    participants = Participant.objects.filter(camp=camp, archived_at__isnull=True).order_by("last_name", "first_name")
     return [calculate_participant_settlement(participant) for participant in participants]
+
+
+def _settlement_snapshot_data(result: SettlementResult) -> dict[str, Any]:
+    return {
+        "participant": {
+            "name": result.participant.full_name,
+            "status": result.participant.status,
+            "status_label": result.participant.get_status_display(),
+        },
+        "lines": [
+            {
+                "label": line.label,
+                "quantity": str(line.quantity),
+                "unit_price": str(line.unit_price),
+                "gross_total": str(line.gross_total),
+                "subsidy_rate": str(line.subsidy_rate),
+                "subsidy_amount": str(line.subsidy_amount),
+                "total": str(line.total),
+                "source": line.source,
+            }
+            for line in result.lines
+        ],
+    }
+
+
+@transaction.atomic
+def create_settlement_run(camp: Camp, calculated_by: Any) -> SettlementRun:
+    locked_camp = Camp.objects.select_for_update().get(pk=camp.pk)
+    latest_version = locked_camp.settlement_runs.aggregate(value=Max("version"))["value"] or 0
+    results = calculate_camp_settlements(locked_camp)
+    run = SettlementRun.objects.create(
+        camp=locked_camp,
+        version=latest_version + 1,
+        calculated_by=calculated_by,
+        participant_count=len(results),
+        total_gross=money(sum((result.total_gross for result in results), ZERO)),
+        total_subsidy=money(sum((result.total_subsidy for result in results), ZERO)),
+        total_due=money(sum((result.total_due for result in results), ZERO)),
+        total_paid=money(sum((result.total_paid for result in results), ZERO)),
+        total_advanced=money(sum((result.total_advanced for result in results), ZERO)),
+        balance=money(sum((result.balance for result in results), ZERO)),
+    )
+    Settlement.objects.bulk_create(
+        [
+            Settlement(
+                run=run,
+                participant=result.participant,
+                calculated_by=calculated_by,
+                participant_name=result.participant.full_name,
+                participant_status=result.participant.status,
+                total_gross=result.total_gross,
+                total_subsidy=result.total_subsidy,
+                total_due=result.total_due,
+                total_paid=result.total_paid,
+                total_advanced=result.total_advanced,
+                balance=result.balance,
+                data=_settlement_snapshot_data(result),
+            )
+            for result in results
+        ]
+    )
+    return run
 
 
 def participant_kiosk_summary(participant):
@@ -504,9 +579,3 @@ def participant_kiosk_summary(participant):
         ],
     }
 
-
-def default_drink_price(camp):
-    rule = PriceRule.objects.filter(camp=camp, kind=PriceRule.Kind.DRINK, is_default=True).order_by("name").first()
-    if rule is None:
-        rule = PriceRule.objects.filter(camp=camp, kind=PriceRule.Kind.DRINK).order_by("name").first()
-    return money(rule.unit_price if rule else ZERO)

@@ -17,8 +17,10 @@ Web-App zur Verwaltung und Abrechnung eines Vereins-Fliegerlagers. Die Anwendung
 - Lager/Jahre mit Preisen und Abrechnungsregeln verwalten
 - Vereinsnutzer mit E-Mail-/Passwort-Login, Nutzerverwaltung, Passwort-Reset durch Admins und Rollen `Admin` und `Bearbeiter`
 - Teilnehmer, Zahlungen, Kostenpositionen und vorgestreckte Beträge pflegen
+- Teilnehmer bearbeiten, ohne Datenverlust archivieren und wiederherstellen; im Kiosk ist ausschließlich das aktive Lager sichtbar
 - Menschenlesbare Buchungsnummern im Format `B#00001`
 - Server-seitige Abrechnung je Teilnehmer und Gesamtauswertung je Lager, inklusive individuellem Fördersatz je Preiselement sowie Hilfs- und Berufssatz
+- Unveränderliche, versionierte Lager-Abrechnungsläufe mit Verlauf und historischen CSV-, Excel- und PDF-Exporten
 - Übersichtliche Preisverwaltung mit Lagerpauschalen für 1/2 Wochen und Teilnehmer/Begleitpersonen, Getränke, Standardpreise für Mahlzeiten und abweichende Tagespreise
 - Native Dialoge für Preisregelanlage und -bearbeitung, damit Admins im Kontext der Preisübersicht bleiben
 - Teilnehmer-Kiosk: PIN-Login, PIN-Ersteinrichtung, sichtbarer Auto-Logout-Timer, große Getränketasten (Ein-Tap-Buchung) und Essensanmeldungen mit Tablet-/Mobilbedienung
@@ -147,8 +149,6 @@ Beitrags- und Agentenregeln stehen in [`CONTRIBUTING.md`](CONTRIBUTING.md) und [
 - Installierbare Webapp/PWA: Web App Manifest, App-Icons, Theme-/Hintergrundfarben, Service Worker für Shell-/Asset-Caching und Installationshinweise für iOS, Android und Desktop.
 - Teilnehmer-Kiosk: PWA-Ausbau, Offline-Hinweise und weitere Tablet-Optimierungen.
 - Getränke-/Essens-Workflow: optionale Schnellerfassung und weitere Auswertungen auf Basis der vorhandenen Tages-, Bestell- und Storno-Flüsse.
-- Persistierte Abrechnungsläufe: den vorhandenen `Settlement`-Speicher als produktiven Bedienworkflow ausbauen, inklusive Verlauf/Versionierung und Nachvollziehbarkeit von Zeitpunkt und Bearbeiter.
 - Mehr Tests: zusätzliche Regressionstests für komplexe Settlement-, Dienstplan-, Import- und Export-Randfälle.
-- UI-Ausbau: Bearbeiten-/Löschen-Flows, bessere Leerzustände, Druck-/PDF-Ansichten und Dashboard-Auswertungen.
-- Deployment und Betrieb: Produktionscheckliste, Backup-/Restore-Dokumentation, Monitoring/Healthcheck und sichere Env-Konfiguration.
+- UI-Ausbau: weitere Bearbeiten-/Löschen-Flows, Druckansichten und zusätzliche Dashboard-Auswertungen.
 - KI-Auslese: Automatisierte KI-Auslese für Rechnungen aus Auslagen implementieren.
