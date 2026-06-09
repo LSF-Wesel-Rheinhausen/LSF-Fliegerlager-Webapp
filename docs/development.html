@@ -51,7 +51,7 @@
           <li>Tests dürfen keine externen Netzwerke, echten APIs oder echten Mailversand nutzen.</li>
           <li>Externe Abhängigkeiten werden mit <code>unittest.mock</code> oder <code>pytest-mock</code> gepatcht.</li>
           <li>Wiederverwendbare Testdaten werden über <code>factory_boy</code> in <code>tests/factories.py</code> erzeugt.</li>
-          <li>Import-, Export-, Permission-, Nutzerverwaltungs-, Kiosk-, Audit- und Abrechnungspfade brauchen Edge-Case-Tests.</li>
+          <li>Import-, Export-, Permission-, Nutzerverwaltungs-, Kiosk-, Mahlzeiten-, Dienstplan-, Audit- und Abrechnungspfade brauchen Edge-Case-Tests.</li>
           <li>Playwright-Tests nutzen role-/label-basierte Selektoren, prüfen native Dialoge und laufen in Chromium, Firefox und WebKit.</li>
         </ul>
       </section>
@@ -75,7 +75,13 @@
           <li>Keine <code>.env</code>-Dateien committen; nur <code>.env.example</code> mit Platzhaltern pflegen.</li>
           <li>Für sicherheitsrelevante Zufallswerte das Modul <code>secrets</code> verwenden.</li>
           <li>Dateiuploads nicht anhand der Endung allein verarbeiten; Inhalt und Format validieren.</li>
+          <li>PINs werden nur gehasht gespeichert; Fehlversuche und Sperrzeiten dürfen nicht durch UI- oder Importpfade umgangen werden.</li>
         </ul>
+      </section>
+
+      <section>
+        <h2>Graphify und Agentenkontext</h2>
+        <p>Der generierte Wissensgraph liegt unter <code>graphify-out/</code>. Vor Codebase-Fragen wird <code>graphify query</code> verwendet; nach Code- oder Dokumentationsänderungen hält <code>graphify update .</code> die strukturelle Sicht aktuell.</p>
       </section>
 
       <section>

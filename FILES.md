@@ -5,7 +5,8 @@ Diese Datei gibt spaeteren Chats einen schnellen Einstieg in die Projektstruktur
 - `README.md`: Projektbeschreibung, Setup, Tests, Rollen und Roadmap.
 - `CONTRIBUTING.md`: Beitragsregeln, Tooling, Security-, ORM- und Agentenrichtlinien.
 - `AGENTS.md`: Arbeitsregeln fuer Agenten im Repository.
-- `docs/`: zentrale Projektdokumentation als Markdown und statische HTML-Seiten inklusive Architektur, Betrieb, Import/Export, Konfiguration und Entwicklung.
+- `docs/`: zentrale Projektdokumentation als Markdown und statische HTML-Seiten inklusive Architektur, Betrieb, Import/Export, Dienstplanung, Konfiguration und Entwicklung.
+- `docs/images/`: Screenshots der Admin-Lagerübersicht und der Dienstplanung im Teilnehmer-Kiosk.
 - `.pre-commit-config.yaml`: pre-commit-Konfiguration fuer Basischecks, Ruff und gitleaks.
 - `pyproject.toml`: Ruff- und mypy-Konfiguration.
 - `.env.example`: Beispielkonfiguration fuer Docker/Deployment.
@@ -27,7 +28,8 @@ Diese Datei gibt spaeteren Chats einen schnellen Einstieg in die Projektstruktur
 - `.github/dependabot.yml`: Automatisierte Updates fuer npm, pip und GitHub Actions.
 - `src/manage.py`: Django-CLI-Einstieg.
 - `src/config/`: Django-Projektkonfiguration, URL-Routing, ASGI/WSGI.
-- `src/billing/`: Domain-App fuer Lager, Teilnehmer, Abrechnung, Importe, Exporte und Rollen.
+- `src/billing/`: Domain-App fuer Lager, Nutzerprofile, Teilnehmer, Mahlzeiten, Dienstplaene, Abrechnung, Importe, Exporte und Rollen.
 - `src/static/billing/`: Stylesheet und Vereinslogo.
 - `src/templates/`: Servergerenderte Django-Templates inklusive Kiosk und Preisverwaltung.
-- `tests/`: Pytest-Tests, `factory_boy`-Factories und Playwright-E2E-Tests fuer Auth, Rollen, Nutzerverwaltung, Import/Export, Abrechnung, Kiosk, Preisverwaltung, Buchungs-Audit und View-Berechtigungen.
+- `tests/`: Pytest-Tests, `factory_boy`-Factories und Playwright-E2E-Tests fuer Auth, Rollen, Nutzerverwaltung, Migrationen, Import/Export, Abrechnung, Kiosk, Preisverwaltung, Mahlzeiten, Dienstplaene, Buchungs-Audit und View-Berechtigungen.
+- `graphify-out/`: generierter Wissensgraph, HTML-Visualisierung, Wiki und Architekturbericht fuer Agentenabfragen.

@@ -2,10 +2,10 @@
 
 Domain-App fuer die Fliegerlager-Abrechnung.
 
-- `models.py`: Datenmodell fuer Lager, Teilnehmer, Preisregeln, Lagerpauschalen, Kosten, Zahlungen, Auslagen, Kiosk-Vorbereitung und Abrechnungen.
+- `models.py`: Datenmodell fuer Lager, Nutzerprofile, Teilnehmer, Preisregeln, Kosten, Zahlungen, Auslagen, Mahlzeiten, Kiosk-PINs, Dienstplaene und Abrechnungen.
 - `services.py`: Rechenlogik fuer Teilnehmer- und Lagerabrechnungen, Foerderung, automatische Lagerpauschalen-Auswahl, Kiosk-Zusammenfassung und Buchungs-Audit-Snapshots.
-- `forms.py`: Django-Formulare mit deutschen Labels fuer Weboberflaeche, Nutzerverwaltung, Preisverwaltung, Mahlzeiten-Standardpreise, Kiosk, Login und Ersteinrichtung.
-- `views.py`: Servergerenderte Views fuer Setup, Login-Weiterleitung, Nutzerverwaltung, Lager, Preisverwaltung, Kiosk, Teilnehmer, Imports und Exports.
+- `forms.py`: Django-Formulare mit deutschen Labels fuer Weboberflaeche, Nutzerverwaltung, Preisverwaltung, Mahlzeiten, Dienstvorlagen, Dienste, Kiosk, Login und Ersteinrichtung.
+- `views.py`: Servergerenderte Views fuer Setup, Nutzerverwaltung, Lager, Preisverwaltung, Mahlzeiten, Dienstplanung, Kiosk, Teilnehmer, Imports und Exports.
 - `urls.py`: URL-Routing der Billing-App.
 - `permissions.py`: Rollenpruefung fuer `Admin` und `Bearbeiter`.
 - `roles.py`: Gemeinsame Rollenanlage fuer Websetup und Management-Command.
@@ -20,8 +20,10 @@ Domain-App fuer die Fliegerlager-Abrechnung.
 Wichtige Modelle:
 
 - `Camp`, `Participant`, `PriceRule`, `Charge`, `Payment` und `Expense` bilden Lager, Personen, Preise, Kosten, Zahlungen und Auslagen ab.
-- `ParticipantPin` speichert gehashte Kiosk-PINs und den Status der PIN-Ersteinrichtung.
+- `UserProfile` ergänzt Nutzerkonten um bearbeitbare Anwendungsdaten wie Telefonnummern.
+- `ParticipantPin` speichert gehashte Kiosk-PINs, PIN-Ersteinrichtung, Fehlversuche und zeitlich begrenzte Sperren.
 - `MealSignup` speichert Essensanmeldungen eindeutig pro Teilnehmer, Datum und Mahlzeit.
 - `DrinkEntry` ist ein historisches Getraenke-Modell; aktuelle Kiosk-Getraenkebuchungen werden als `Charge` mit Art `DRINK` gespeichert.
 - `BookingAuditLog` protokolliert Admin-Korrekturen an Buchungen.
+- `Shift`, `DailyShiftTemplate`, `DailyShiftException` und `ShiftAssignment` bilden Dienste, tägliche Vorlagen, Tagesausnahmen, Besetzungen und Tauschangebote ab.
 - `Settlement` ist modellseitig vorbereitet; die sichtbaren Abrechnungen werden derzeit on-demand in `services.py` berechnet.

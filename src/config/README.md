@@ -2,6 +2,8 @@
 
 Django-Projektkonfiguration.
 
+Die aktuell unterstützte Laufzeit ist Python 3.13 mit Django 5.2. Authentifizierung akzeptiert E-Mail-Adresse oder Benutzername; anwendungsspezifische Nutzerdaten liegen im separaten `UserProfile` der Billing-App.
+
 - `settings.py`: Apps, Middleware, Datenbank, Auth-Backends, Static-/Media-Dateien und Login-Redirects.
 - `urls.py`: Projektweites Routing fuer Admin, Login, Logout und die Billing-App.
 - `asgi.py` und `wsgi.py`: Deployment-Einstiege fuer ASGI/WSGI-Server.
