@@ -46,8 +46,8 @@ class SubsidyPercentField(forms.DecimalField):
         kwargs.setdefault("widget", forms.NumberInput(attrs={"step": "0.01", "min": "0", "max": "100"}))
         super().__init__(*args, **kwargs)
 
-    def to_python(self, value: Any) -> Any:
-        percentage = super().to_python(value)
+    def clean(self, value: Any) -> Any:
+        percentage = super().clean(value)
         if percentage is None:
             return Decimal("0")
         return percentage / Decimal("100")
