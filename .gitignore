@@ -23,4 +23,5 @@ playwright-report/
 test-results/
 .test-local-logs/
 backups/
+docker-config/
 tmp/

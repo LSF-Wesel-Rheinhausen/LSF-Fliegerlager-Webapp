@@ -57,10 +57,18 @@ Beim ersten Aufruf der Weboberfläche führt die App durch die Ersteinrichtung u
 
 ```bash
 cp .env.example .env
-docker compose up --build
+# Secrets, Domain und Datenbankpasswort in .env setzen
+docker compose pull
+docker compose up -d
 ```
 
-Danach läuft die App unter `http://localhost:8000`.
+Danach läuft die App standardmäßig unter `http://127.0.0.1:8000`. Compose verwendet direkt das aktuelle Image
+`ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest`; ein Checkout und lokaler Image-Build sind auf dem
+Deployment-Host nicht erforderlich. Eine eigenständige Beispielkonfiguration liegt unter [`deploy/`](deploy/README.md).
+
+Superuser können unter **Updates** das neueste Image samt letztem Change prüfen und nach Bestätigung installieren.
+Vor dem Containerwechsel erstellt der isolierte Update-Agent ein PostgreSQL-Backup und prüft anschließend den
+Healthcheck. Der Docker-Socket ist ausschließlich im nicht öffentlich erreichbaren Agent-Container eingebunden.
 
 ## Tests
 
@@ -106,7 +114,7 @@ git config core.hooksPath .githooks
 
 Das Repository nutzt GitHub Actions für verschiedene Automatisierungen:
 - **Tests (`ci.yml`)**: Führt bei jedem Push und PR die lokalen Python- und Playwright-Tests aus.
-- **Docker (`docker.yml`)**: Baut das Container-Image, testet es intern und pusht es beim Merge in den `main`-Branch in die GitHub Container Registry (`ghcr.io`).
+- **Docker (`docker.yml`)**: Baut und testet App- sowie Update-Agent-Image und pusht beide beim Merge in den `main`-Branch in die GitHub Container Registry (`ghcr.io`).
 - **Security (`security.yml`)**: Scannt den Code und die Abhängigkeiten mit Trivy auf bekannte Schwachstellen.
 - **PR Title & Changelog (`pr-title.yml`, `changelog-check.yml`)**: Erzwingen *Semantic Pull Requests* und fordern Changelog-Einträge bei Änderungen im Code.
 - **Dependabot**: Hält `pip`-, `npm`- und `github-actions`-Abhängigkeiten automatisch aktuell.
@@ -121,6 +129,9 @@ Die wichtigsten Umgebungsvariablen stehen mit sicheren Platzhaltern in [`.env.ex
 - `CSRF_TRUSTED_ORIGINS`: kommaseparierte vertrauenswürdige Origins mit Schema.
 - `DATABASE_URL`: Datenbank-URL; lokal kann SQLite genutzt werden, Docker nutzt PostgreSQL.
 - `DJANGO_HTTPS`: aktiviert in Produktion HTTPS-Redirect sowie sichere Session- und CSRF-Cookies.
+- `UPDATE_AGENT_TOKEN`: separates langes Secret für die interne Update-API.
+- `UPDATE_AGENT_URL`: interne Agent-Adresse; im Beispiel-Compose `http://updater:8080`.
+- `APP_IMAGE`: zu installierendes App-Image, standardmäßig das veröffentlichte `latest`-Image.
 
 Bei `DJANGO_DEBUG=0` startet die Anwendung nur mit einem mindestens 50 Zeichen langen `DJANGO_SECRET_KEY` und expliziten `DJANGO_ALLOWED_HOSTS`.
 

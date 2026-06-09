@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Container-Update{% endblock %}
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1>Container-Update</h1>
+      <p>Prüft und installiert das neueste veröffentlichte GHCR-Image.</p>
+    </div>
+    <form method="post" action="{% url 'deployment-update-check' %}">
+      {% csrf_token %}
+      <button type="submit">Auf Update prüfen</button>
+    </form>
+  </div>
+
+  {% if agent_error %}
+    <section class="panel notice-warning" role="alert">
+      <h2>Update-Agent nicht verfügbar</h2>
+      <p>{{ agent_error }}</p>
+    </section>
+  {% endif %}
+
+  <section class="deployment-grid">
+    <article class="panel">
+      <h2>Installierte Version</h2>
+      <dl class="metadata-list">
+        <div><dt>Version</dt><dd>{{ current.version }}</dd></div>
+        <div><dt>Revision</dt><dd><code>{{ current.revision }}</code></dd></div>
+        <div><dt>Build</dt><dd>{{ current.build_date }}</dd></div>
+        <div><dt>Letzter Change</dt><dd>{{ current.change }}</dd></div>
+      </dl>
+    </article>
+
+    <article class="panel">
+      <h2>Verfügbares Image</h2>
+      {% if deployment_status.latest %}
+        <dl class="metadata-list">
+          <div><dt>Version</dt><dd>{{ deployment_status.latest.version }}</dd></div>
+          <div><dt>Revision</dt><dd><code>{{ deployment_status.latest.revision }}</code></dd></div>
+          <div><dt>Build</dt><dd>{{ deployment_status.latest.build_date }}</dd></div>
+          <div><dt>Letzter Change</dt><dd>{{ deployment_status.latest.change }}</dd></div>
+        </dl>
+      {% else %}
+        <p>Noch nicht geprüft.</p>
+      {% endif %}
+    </article>
+  </section>
+
+  {% if deployment_status %}
+    <section class="panel deployment-status">
+      <div>
+        <h2>Deployment-Status</h2>
+        <p>{{ deployment_status.message }}</p>
+        {% if deployment_status.backup %}<p>Backup: <code>{{ deployment_status.backup }}</code></p>{% endif %}
+        {% if deployment_status.error %}<p class="error-text">{{ deployment_status.error }}</p>{% endif %}
+      </div>
+      <span class="status-badge{% if deployment_status.phase == 'complete' or deployment_status.phase == 'checked' %} status-badge--ok{% endif %}">
+        {{ deployment_status.phase }}
+      </span>
+    </section>
+
+    {% if deployment_status.update_available and deployment_status.phase != "installing" and deployment_status.phase != "preparing" and deployment_status.phase != "rollback" %}
+      <section class="panel update-action">
+        <div>
+          <h2>Update installieren</h2>
+          <p>Vor dem Neustart wird automatisch ein PostgreSQL-Backup erzeugt. Die Anwendung ist kurzzeitig nicht erreichbar.</p>
+        </div>
+        <button type="button" class="button-danger" data-dialog-open="update-confirmation">Update installieren</button>
+      </section>
+    {% endif %}
+  {% endif %}
+
+  <dialog id="update-confirmation" aria-labelledby="update-confirmation-title">
+    <div class="dialog-heading">
+      <div>
+        <h2 id="update-confirmation-title">Container-Update bestätigen</h2>
+        <p>Das neueste Image wird installiert und der App-Container neu gestartet.</p>
+      </div>
+      <button type="button" class="button-secondary" data-dialog-close aria-label="Dialog schließen">Schließen</button>
+    </div>
+    <form method="post" action="{% url 'deployment-update-install' %}" class="dialog-actions">
+      {% csrf_token %}
+      <button type="button" class="button-secondary" data-dialog-close>Abbrechen</button>
+      <button type="submit" class="button-danger">Backup erstellen und installieren</button>
+    </form>
+  </dialog>
+
+  <script>
+    document.querySelectorAll("[data-dialog-open]").forEach((button) => {
+      button.addEventListener("click", () => document.getElementById(button.dataset.dialogOpen).showModal());
+    });
+    document.querySelectorAll("[data-dialog-close]").forEach((button) => {
+      button.addEventListener("click", () => button.closest("dialog").close());
+    });
+  </script>
+{% endblock %}

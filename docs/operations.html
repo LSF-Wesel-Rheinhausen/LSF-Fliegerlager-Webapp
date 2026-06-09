@@ -50,15 +50,19 @@ python src/manage.py runserver</code></pre>
           <li><code>DJANGO_TRUST_PROXY_SSL_HEADER=1</code>: nur hinter einem kontrollierten Proxy aktivieren, der <code>X-Forwarded-Proto</code> bereinigt.</li>
           <li><code>DJANGO_HSTS_SECONDS</code>: HSTS erst nach verifiziertem HTTPS-Betrieb schrittweise aktivieren.</li>
           <li><code>DATABASE_URL</code>: Datenbank-URL; Docker nutzt PostgreSQL, E2E nutzt SQLite.</li>
+          <li><code>UPDATE_AGENT_TOKEN</code>: separates langes Secret für die interne Update-API.</li>
+          <li><code>APP_IMAGE</code>: freigegebenes GHCR-App-Image, standardmäßig <code>latest</code>.</li>
         </ul>
       </section>
 
       <section>
         <h2>Docker</h2>
         <pre><code>cp .env.example .env
-docker compose up --build</code></pre>
-        <p>Danach läuft die App unter <code>http://localhost:8000</code>. Der Compose-Start führt Migrationen, <code>bootstrap_roles</code>, <code>collectstatic</code> und anschließend Gunicorn aus.</p>
+docker compose pull
+docker compose up -d</code></pre>
+        <p>Danach läuft die App standardmäßig unter <code>http://127.0.0.1:8000</code>. Compose zieht das veröffentlichte Image <code>ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest</code>; ein lokaler Build ist nicht erforderlich. Der Container-Start führt Migrationen, <code>bootstrap_roles</code>, <code>collectstatic</code> und anschließend Gunicorn aus.</p>
         <p>PostgreSQL und Django besitzen Compose-Healthchecks. <code>docker compose ps</code> zeigt den Zustand; <code>curl http://localhost:8000/healthz/</code> prüft die Bereitschaft ohne fachliche Daten offenzulegen.</p>
+        <p>Superuser können über den Menüpunkt <strong>Updates</strong> das neueste Image und dessen letzten Change prüfen. Der interne Update-Agent erstellt vor der Installation ein Datenbank-Backup, startet nur den App-Container neu und rollt bei fehlgeschlagenem Healthcheck auf das vorherige Image zurück. Der Agent-Port wird nicht veröffentlicht.</p>
       </section>
 
       <section>

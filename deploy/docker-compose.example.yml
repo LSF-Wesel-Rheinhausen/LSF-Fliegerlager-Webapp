@@ -12,9 +12,7 @@ services:
         condition: service_healthy
     labels:
       io.lsf-fliegerlager.update-target: "true"
-    networks:
-      - frontend
-      - backend
+    networks: [frontend, backend]
 
   db:
     image: postgres:16-alpine
@@ -32,8 +30,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-    networks:
-      - backend
+    networks: [backend]
 
   updater:
     image: ${UPDATER_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater:latest}
@@ -61,8 +58,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
-    networks:
-      - backend
+    networks: [backend]
 
 volumes:
   postgres_data:

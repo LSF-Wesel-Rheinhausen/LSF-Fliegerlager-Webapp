@@ -28,6 +28,10 @@ def admin_required(view_func):
     return user_passes_test(is_admin)(view_func)
 
 
+def superuser_required(view_func):
+    return user_passes_test(lambda user: user.is_authenticated and user.is_active and user.is_superuser)(view_func)
+
+
 def editor_required(view_func):
     return user_passes_test(is_editor)(view_func)
 

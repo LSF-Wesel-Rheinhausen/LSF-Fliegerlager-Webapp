@@ -43,6 +43,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -98,6 +99,16 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"] if (BASE_DIR / "static").exists() else []
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": (
+            "django.contrib.staticfiles.storage.StaticFilesStorage"
+            if DEBUG
+            else "whitenoise.storage.CompressedManifestStaticFilesStorage"
+        )
+    },
+}
 
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
@@ -106,3 +117,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "camp-list"
 LOGOUT_REDIRECT_URL = "login"
+
+UPDATE_AGENT_URL = os.getenv("UPDATE_AGENT_URL", "").rstrip("/")
+UPDATE_AGENT_TOKEN = os.getenv("UPDATE_AGENT_TOKEN", "")
+APP_VERSION = os.getenv("APP_VERSION", "development")
+APP_REVISION = os.getenv("APP_REVISION", "unknown")
+APP_BUILD_DATE = os.getenv("APP_BUILD_DATE", "unknown")
+APP_CHANGE = os.getenv("APP_CHANGE", "Lokaler Entwicklungsstand")
