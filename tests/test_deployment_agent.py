@@ -114,3 +114,24 @@ def test_perform_update_records_compose_and_rollback_diagnostics(monkeypatch):
     assert "image unavailable" in failed_state["rollback_error"]
     assert "backup.sql.gz" in failed_state["recovery"]
     assert "sha256:old" in failed_state["recovery"]
+
+
+def test_perform_update_clears_stale_rollback_state(monkeypatch):
+    states = []
+    old_container = Mock()
+    old_container.image.id = "sha256:old"
+    latest = Mock(id="sha256:old", labels={})
+
+    monkeypatch.setattr(deployment_agent, "save_state", lambda **values: states.append(values) or values)
+    monkeypatch.setattr(deployment_agent, "service_container", lambda _service: old_container)
+    monkeypatch.setattr(deployment_agent, "docker_client", lambda: Mock(images=Mock(pull=Mock(return_value=latest))))
+
+    deployment_agent.update_lock.acquire()
+    deployment_agent.perform_update()
+
+    assert states[0]["rollback_error"] == ""
+    assert states[0]["recovery"] == ""
+    complete_state = states[-1]
+    assert complete_state["phase"] == "complete"
+    assert complete_state["rollback_error"] == ""
+    assert complete_state["recovery"] == ""

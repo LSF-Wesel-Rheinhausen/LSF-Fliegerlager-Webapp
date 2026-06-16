@@ -160,6 +160,9 @@ def check_update() -> dict[str, Any]:
     state = save_state(
         phase="checked",
         message="Image-Prüfung abgeschlossen.",
+        error="",
+        rollback_error="",
+        recovery="",
         latest=latest_data,
         checked_at=utc_now(),
     )
@@ -277,19 +280,33 @@ def perform_update() -> None:
     backup_name = ""
     step = "Update vorbereiten"
     try:
-        save_state(phase="preparing", message="Update wird vorbereitet.", error="")
+        save_state(phase="preparing", message="Update wird vorbereitet.", error="", rollback_error="", recovery="")
         step = "Laufenden App-Container ermitteln"
         old_container = service_container(TARGET_SERVICE)
         old_image_id = old_container.image.id
         step = "Neuestes Image laden"
         latest = docker_client().images.pull(TARGET_IMAGE)
         if latest.id == old_image_id:
-            save_state(phase="complete", message="Die Anwendung ist bereits aktuell.", latest=image_metadata(latest))
+            save_state(
+                phase="complete",
+                message="Die Anwendung ist bereits aktuell.",
+                error="",
+                rollback_error="",
+                recovery="",
+                latest=image_metadata(latest),
+            )
             return
 
         step = "Datenbank-Backup erstellen"
         backup_name = create_backup()
-        save_state(phase="installing", message="Neues Image wird gestartet.", backup=backup_name)
+        save_state(
+            phase="installing",
+            message="Neues Image wird gestartet.",
+            error="",
+            rollback_error="",
+            recovery="",
+            backup=backup_name,
+        )
         step = "Neuen App-Container starten"
         compose_up(TARGET_IMAGE, step=step)
         step = "Healthcheck abwarten"
@@ -297,6 +314,9 @@ def perform_update() -> None:
         save_state(
             phase="complete",
             message="Update erfolgreich installiert.",
+            error="",
+            rollback_error="",
+            recovery="",
             installed=image_metadata(latest),
             backup=backup_name,
             completed_at=utc_now(),
