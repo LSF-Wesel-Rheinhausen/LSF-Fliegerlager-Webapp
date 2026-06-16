@@ -4,7 +4,7 @@ import django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
 
-from billing.models import Participant, Camp, MealOrder
+from billing.models import Participant, Camp
 from django.contrib.auth.hashers import make_password
 from datetime import date, timedelta
 

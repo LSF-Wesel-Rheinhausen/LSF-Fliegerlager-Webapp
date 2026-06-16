@@ -630,12 +630,20 @@ def approve_shared_expense(expense: Expense, approved_by: Any, participant_ids: 
         raise ValidationError("Es konnten keine Teilnehmer für die Umlage ermittelt werden.")
 
     count = len(participants)
-    amount_per_person = money(expense.amount / Decimal(count))
+    base_amount_per_person = money(expense.amount / Decimal(count))
+    remainder = expense.amount - (base_amount_per_person * count)
 
-    allocations = [
-        ExpenseAllocation(expense=expense, participant=p, amount=amount_per_person)
-        for p in participants
-    ]
+    allocations = []
+    for i, p in enumerate(participants):
+        amount = base_amount_per_person
+        if remainder > 0:
+            amount += Decimal("0.01")
+            remainder -= Decimal("0.01")
+        elif remainder < 0:
+            amount -= Decimal("0.01")
+            remainder += Decimal("0.01")
+        allocations.append(ExpenseAllocation(expense=expense, participant=p, amount=amount))
+
     ExpenseAllocation.objects.bulk_create(allocations)
     expense.save(update_fields=["status", "approved_by", "approved_at", "allocation_method", "cost_center"])
 
