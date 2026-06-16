@@ -658,3 +658,23 @@ def reject_shared_expense(expense: Expense, rejected_by: Any, rejection_reason: 
     expense.rejection_reason = rejection_reason
     expense.save(update_fields=["status", "approved_by", "approved_at", "rejection_reason"])
 
+
+def get_cost_center_evaluation(camp):
+    expenses = Expense.objects.filter(
+        camp=camp, 
+        allocation_method=Expense.AllocationMethod.COST_CENTER, 
+        status=Expense.Status.APPROVED
+    ).select_related("participant")
+    
+    evaluation = {}
+    for exp in expenses:
+        cc = exp.cost_center or "Ohne Kostenstelle"
+        if cc not in evaluation:
+            evaluation[cc] = {"total": Decimal("0.00"), "count": 0, "expenses": []}
+        
+        evaluation[cc]["total"] += exp.amount
+        evaluation[cc]["count"] += 1
+        evaluation[cc]["expenses"].append(exp)
+        
+    return evaluation
+

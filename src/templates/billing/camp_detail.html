@@ -97,6 +97,32 @@
   </section>
   {% endif %}
 
+  <section class="panel stack">
+    <h2>Kostenstellenauswertung</h2>
+    {% if cost_centers %}
+      <table>
+        <thead>
+          <tr>
+            <th>Kostenstelle</th>
+            <th class="number">Anzahl Ausgaben</th>
+            <th class="number">Gesamtsumme</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for cc, data in cost_centers.items %}
+            <tr>
+              <td>{{ cc }}</td>
+              <td class="number">{{ data.count }}</td>
+              <td class="number">{{ data.total }} €</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="hint">Bisher gibt es keine freigegebenen Ausgaben auf Kostenstellen.</p>
+    {% endif %}
+  </section>
+
   <section class="panel">
     <h2>Dienste & Aufgaben</h2>
     <p>Hier kannst du Lagerdienste (wie Spülen, Kochen, Putzen) anlegen und Teilnehmern zuweisen.</p>

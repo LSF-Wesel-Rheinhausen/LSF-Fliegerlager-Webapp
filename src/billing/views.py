@@ -322,6 +322,9 @@ def camp_detail(request, camp_id):
     }
     price_rules = camp.price_rules.all()
     pending_expenses = camp.expenses.filter(status=Expense.Status.PENDING)
+    from .services import get_cost_center_evaluation
+    cost_centers = get_cost_center_evaluation(camp)
+    
     return render(
         request,
         "billing/camp_detail.html",
@@ -333,6 +336,7 @@ def camp_detail(request, camp_id):
             "archived_participants": archived_participants,
             "settlement_runs": settlement_runs,
             "pending_expenses": pending_expenses,
+            "cost_centers": cost_centers,
         },
     )
 

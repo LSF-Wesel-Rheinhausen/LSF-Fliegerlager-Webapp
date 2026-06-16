@@ -178,7 +178,7 @@ def test_workbook_export_contains_settlement_and_participant_sheets(client, expo
     assert response["Content-Disposition"] == 'attachment; filename="fliegerlager-2026.xlsx"'
 
     workbook = load_workbook(BytesIO(response.content), data_only=True)
-    assert workbook.sheetnames == ["Abrechnung", "Teilnehmer"]
+    assert workbook.sheetnames == ["Abrechnung", "Teilnehmer", "Kostenstellen"]
     settlement_sheet = workbook["Abrechnung"]
     assert [cell.value for cell in settlement_sheet[1]] == [
         "Nachname",
