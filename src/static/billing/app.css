@@ -391,8 +391,11 @@ textarea {
 }
 
 .helptext {
+  display: block;
   color: var(--muted);
   font-size: 13px;
+  line-height: 1.4;
+  margin-top: 4px;
 }
 
 .helptext.error {
