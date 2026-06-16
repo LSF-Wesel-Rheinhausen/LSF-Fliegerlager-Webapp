@@ -494,6 +494,14 @@ class PaymentForm(forms.ModelForm):
         widgets = {"paid_on": forms.DateInput(attrs={"type": "date"})}
 
 
+EXPENSE_CATEGORY_CHOICES = [
+    ("Unterkunft/Verpflegung", "Unterkunft/Verpflegung"),
+    ("Fahrtkosten", "Fahrtkosten"),
+    ("Verbrauchsmaterial", "Verbrauchsmaterial"),
+    ("Miete/sonstiges", "Miete/sonstiges"),
+]
+
+
 class ExpenseForm(forms.ModelForm):
     class Meta:
         model = Expense
@@ -507,7 +515,10 @@ class ExpenseForm(forms.ModelForm):
             "paid_on": "Zahlungsdatum",
             "reimbursable": "Erstattungsfähig",
         }
-        widgets = {"paid_on": forms.DateInput(attrs={"type": "date"})}
+        widgets = {
+            "paid_on": forms.DateInput(attrs={"type": "date"}),
+            "category": forms.Select(choices=EXPENSE_CATEGORY_CHOICES),
+        }
 
 
 class SharedExpenseRequestForm(forms.ModelForm):
@@ -521,7 +532,10 @@ class SharedExpenseRequestForm(forms.ModelForm):
             "receipt": "Rechnungsbeleg",
             "paid_on": "Zahlungsdatum",
         }
-        widgets = {"paid_on": forms.DateInput(attrs={"type": "date"})}
+        widgets = {
+            "paid_on": forms.DateInput(attrs={"type": "date"}),
+            "category": forms.Select(choices=EXPENSE_CATEGORY_CHOICES),
+        }
 
 
 class SharedExpenseApprovalForm(forms.ModelForm):
