@@ -15,7 +15,7 @@
 
 ## Phase 3: Import und Dokumentation
 
-- [ ] #66 Teilnehmerimport um Teilnahmezeitraum erweitern; Hilfs-/Berufssatz validieren und Importformat dokumentieren.
+- [x] #66 Teilnehmerimport um Teilnahmezeitraum erweitern; Hilfs-/Berufssatz validieren und Importformat dokumentieren.
 - [ ] #71 Userdoku für Kiosk, Hübers, Bearbeiter und Admins erstellen; Screenshots und In-App-Kurzhilfen ergänzen.
 
 ## Phase 4: Finanzfeature Gemeinschaftsausgaben
