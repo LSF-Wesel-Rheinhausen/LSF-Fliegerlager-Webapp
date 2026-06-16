@@ -1470,3 +1470,9 @@ def kiosk_shifts(request):
             "kiosk_autologout": True,
         },
     )
+
+
+@login_required
+def user_guide(request: HttpRequest) -> HttpResponse:
+    """Render the built-in user documentation."""
+    return render(request, "billing/user_guide.html")
