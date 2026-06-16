@@ -470,6 +470,7 @@
           mealDialogTitle.textContent = `${button.dataset.mealLabel || "Mahlzeit"} buchen`;
           mealDialog.showModal();
         });
+      });
       document.querySelector("[data-open-family-dialog]")?.addEventListener("click", () => familyDialog.showModal());
       document.querySelector("[data-open-contact-dialog]")?.addEventListener("click", () => contactDialog.showModal());
       
