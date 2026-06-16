@@ -929,11 +929,12 @@ textarea {
   }
 
   .kiosk-header-actions {
-    justify-content: stretch;
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .kiosk-timer {
-    justify-content: space-between;
+    justify-content: center;
   }
 
   button,
