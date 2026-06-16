@@ -131,6 +131,7 @@ Die Beitragsregeln stehen in [`../CONTRIBUTING.md`](../CONTRIBUTING.md), die Age
 Die wichtigsten Übersichten liegen zusätzlich als HTML vor:
 
 - [`index.html`](index.html): Gesamtübersicht.
+- [`user_guide.html`](user_guide.html): Benutzerhandbuch für Teilnehmer, Abrechner, Bearbeiter und Admins.
 - [`architecture.html`](architecture.html): Architektur, Datenfluss und Abrechnungslogik.
 - [`operations.html`](operations.html): Setup, Betrieb, Tests und typische Admin-Abläufe.
 - [`development.html`](development.html): Beitragsregeln, Tooling, Security, ORM, Tests und UI-Konventionen.

@@ -11,6 +11,9 @@
       <br>
       <a href="{% url 'participant-import-template' camp.pk %}">Hier kannst du eine Beispiel-Excel-Vorlage mit Anleitungen und allen Fällen herunterladen.</a>
     </p>
+    <div style="padding: 12px; background: #eef2f6; border-left: 4px solid var(--accent); border-radius: 0 4px 4px 0; margin-bottom: 16px; font-size: 0.9em;">
+      <strong>Kurzhilfe:</strong> Pflichtfelder sind <em>Vorname</em> und <em>Nachname</em>. Alle weiteren Spalten (wie E-Mail, Anreise, Abreise, Förderstatus) sind optional. Unbekannte Spalten werden nicht verworfen, sondern automatisch in das <em>Notizfeld</em> des Teilnehmers übernommen.
+    </div>
     <form method="post" enctype="multipart/form-data" class="stack">
       {% csrf_token %}
       {{ form.as_p }}
