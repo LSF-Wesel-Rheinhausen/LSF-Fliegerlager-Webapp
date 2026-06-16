@@ -21,6 +21,7 @@
         {% endif %}
       </div>
       <nav>
+        <a class="button button-secondary nav-link" href="{% url 'user-guide' %}">Hilfe</a>
         {% if user.is_authenticated %}
           {% if user|can_manage_users %}
             <a class="button button-secondary nav-link" href="{% url 'user-list' %}">Nutzer</a>
@@ -28,7 +29,6 @@
           {% if user.is_superuser %}
             <a class="button button-secondary nav-link" href="{% url 'deployment-update' %}">Updates</a>
           {% endif %}
-          <a class="button button-secondary nav-link" href="{% url 'user-guide' %}">Hilfe</a>
           <span>{{ user.email|default:user.username }}</span>
           <form method="post" action="{% url 'logout' %}">
             {% csrf_token %}
