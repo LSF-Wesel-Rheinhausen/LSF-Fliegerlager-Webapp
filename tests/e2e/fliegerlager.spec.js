@@ -428,3 +428,33 @@ for (const viewport of VIEWPORTS) {
     await assertNoUnexpectedOverflow(page);
   });
 }
+
+test("Kiosk meal and drink layout has no mobile overflow", async ({ page }) => {
+  await page.setViewportSize({ width: 430, height: 932 });
+  await setupFirstAdmin(page);
+  await createCamp(page, "Sommerlager Kiosk Mobile");
+  await createParticipant(page, "Mobile", "ExtremLangerUngetrennterTeilnehmername");
+
+  await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
+  await page.getByText("Sommerlager Kiosk Mobile").click();
+  await page.getByRole("link", { name: "Preise verwalten" }).first().click();
+  await page.locator('input[name="meal-breakfast_adult_price"]').fill("5.00");
+  await page.locator('input[name="meal-dinner_adult_price"]').fill("7.00");
+  await page.getByRole("button", { name: "Standardpreise speichern" }).click();
+  await logout(page);
+
+  await page.goto("/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Mobile ExtremLangerUngetrennterTeilnehmername" });
+  await page.getByLabel("PIN").fill("0000");
+  await page.getByRole("button", { name: "Anmelden" }).click();
+  await page.getByLabel("Neuer PIN").fill("1234");
+  await page.getByLabel("PIN wiederholen").fill("1234");
+  await page.getByRole("button", { name: "Speichern" }).click();
+
+  await expect(page.getByRole("heading", { name: "Getränk buchen" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Essen anmelden" })).toBeVisible();
+  await page.getByText("Zukünftige Buchungen anzeigen").click();
+  await page.getByRole("button", { name: "Buchen" }).first().click();
+  await expect(page.locator("dialog#meal-dialog")).toBeVisible();
+  await assertNoUnexpectedOverflow(page);
+});
