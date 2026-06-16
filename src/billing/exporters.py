@@ -130,48 +130,79 @@ def camp_workbook_response(camp):
 
 def _draw_page_framework(pdf, title, subtitle, participant_name):
     width, height = A4
-    y = height - 60
+    y = height - 50
     
     logo_path = settings.BASE_DIR / "static" / "billing" / "logo.jpg"
     if logo_path.exists():
-        pdf.drawImage(str(logo_path), width - 150, height - 100, width=100, height=50, preserveAspectRatio=True, anchor='ne', mask='auto')
+        pdf.drawImage(str(logo_path), 50, height - 100, width=160, height=50, preserveAspectRatio=True, anchor='nw', mask='auto')
+
+    pdf.setFont("Helvetica", 8)
+    pdf.setFillColorRGB(0.3, 0.3, 0.3)
+    pdf.drawString(50, height - 115, "Luftsportfreunde Wesel-Rheinhausen e.V., Postfach 100240, 46462 Wesel")
+    pdf.setFillColorRGB(0, 0, 0)
+
+    pdf.setFont("Helvetica", 10)
+    pdf.drawString(50, height - 150, "An:")
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(50, height - 165, participant_name)
 
     pdf.setFont("Helvetica-Bold", 16)
-    pdf.drawString(50, y, title)
-    y -= 24
+    pdf.drawRightString(width - 50, height - 70, title)
+    
     if subtitle:
         pdf.setFont("Helvetica", 10)
-        pdf.drawString(50, y, subtitle)
-        y -= 24
-    pdf.setFont("Helvetica", 11)
-    pdf.drawString(50, y, f"Teilnehmer: {participant_name}")
-    y -= 30
+        pdf.setFillColorRGB(0.3, 0.3, 0.3)
+        pdf.drawRightString(width - 50, height - 90, subtitle)
+        pdf.setFillColorRGB(0, 0, 0)
+        
+    y = height - 210
 
+    pdf.setFillColorRGB(0.95, 0.95, 0.95)
+    pdf.rect(50, y - 6, width - 100, 20, stroke=0, fill=1)
+    pdf.setFillColorRGB(0, 0, 0)
+    
     pdf.setFont("Helvetica-Bold", 10)
-    pdf.drawString(50, y, "Position")
-    pdf.drawRightString(420, y, "Menge")
-    pdf.drawRightString(500, y, "Summe")
-    y -= 8
-    pdf.line(50, y, 500, y)
-    y -= 18
+    pdf.drawString(55, y, "Position")
+    pdf.drawRightString(width - 120, y, "Menge")
+    pdf.drawRightString(width - 55, y, "Summe")
+    y -= 15
     
     footer_y = 30
     pdf.setFont("Helvetica", 8)
     pdf.setFillColorRGB(0.5, 0.5, 0.5)
-    pdf.drawCentredString(width / 2.0, footer_y, "Erstellt mit der Fliegerlagerabrechnung | Luftsportfreunde 2000 e.V.")
+    pdf.drawCentredString(width / 2.0, footer_y, "Erstellt mit der Fliegerlagerabrechnung | Luftsportfreunde Wesel-Rheinhausen e.V.")
     pdf.setFillColorRGB(0, 0, 0)
     
     return y
 
 
 def _draw_sum_block(pdf, y, items):
-    y -= 6
-    pdf.line(250, y + 16, 500, y + 16)
-    pdf.setFont("Helvetica-Bold", 11)
+    width, _ = A4
+    y -= 10
+    
+    pdf.setStrokeColorRGB(0.5, 0.5, 0.5)
+    pdf.line(width - 250, y + 16, width - 50, y + 16)
+    pdf.setStrokeColorRGB(0, 0, 0)
+    
     for label, value in items:
-        pdf.drawString(300, y, f"{label}:")
-        pdf.drawRightString(500, y, f"{value:.2f} EUR")
+        if label == "Offen":
+            y -= 4
+            pdf.setStrokeColorRGB(0.2, 0.2, 0.2)
+            pdf.line(width - 250, y + 14, width - 50, y + 14)
+            pdf.setStrokeColorRGB(0, 0, 0)
+            pdf.setFont("Helvetica-Bold", 12)
+        else:
+            pdf.setFont("Helvetica", 11)
+        
+        pdf.drawString(width - 220, y, f"{label}:")
+        pdf.drawRightString(width - 50, y, f"{value:.2f} EUR")
         y -= 18
+        
+        if label == "Offen":
+            pdf.setStrokeColorRGB(0.2, 0.2, 0.2)
+            pdf.line(width - 250, y + 14, width - 50, y + 14)
+            pdf.setStrokeColorRGB(0, 0, 0)
+            
     return y
 
 
@@ -179,6 +210,7 @@ def participant_pdf_response(participant):
     result = calculate_participant_settlement(participant)
     output = BytesIO()
     pdf = canvas.Canvas(output, pagesize=A4)
+    width, _ = A4
     
     title = f"Einzelabrechnung {participant.camp.name} {participant.camp.year}"
     y = _draw_page_framework(pdf, title, "", participant.full_name)
@@ -189,10 +221,14 @@ def participant_pdf_response(participant):
             pdf.showPage()
             y = _draw_page_framework(pdf, title, "", participant.full_name)
             pdf.setFont("Helvetica", 10)
-        pdf.drawString(50, y, line.label[:75])
-        pdf.drawRightString(420, y, str(line.quantity))
-        pdf.drawRightString(500, y, f"{line.total:.2f} EUR")
-        y -= 16
+        pdf.drawString(50, y, line.label[:80])
+        pdf.drawRightString(width - 120, y, str(line.quantity))
+        pdf.drawRightString(width - 50, y, f"{line.total:.2f} EUR")
+        
+        pdf.setStrokeColorRGB(0.9, 0.9, 0.9)
+        pdf.line(50, y - 5, width - 50, y - 5)
+        pdf.setStrokeColorRGB(0, 0, 0)
+        y -= 18
 
     _draw_sum_block(pdf, y, [
         ("Brutto", result.total_gross),
@@ -265,6 +301,7 @@ def settlement_snapshot_pdf_response(snapshot: Settlement) -> HttpResponse:
         raise ValueError("Historical settlement PDF requires a versioned run.")
     output = BytesIO()
     pdf = canvas.Canvas(output, pagesize=A4)
+    width, _ = A4
     
     title = f"Einzelabrechnung {run.camp.name} {run.camp.year}"
     subtitle = f"Version {run.version} vom {run.created_at:%d.%m.%Y %H:%M}"
@@ -276,10 +313,14 @@ def settlement_snapshot_pdf_response(snapshot: Settlement) -> HttpResponse:
             pdf.showPage()
             y = _draw_page_framework(pdf, title, subtitle, snapshot.participant_name)
             pdf.setFont("Helvetica", 10)
-        pdf.drawString(50, y, str(line.get("label", ""))[:75])
-        pdf.drawRightString(420, y, str(line.get("quantity", "")))
-        pdf.drawRightString(500, y, f"{line.get('total', '0.00')} EUR")
-        y -= 16
+        pdf.drawString(50, y, str(line.get("label", ""))[:80])
+        pdf.drawRightString(width - 120, y, str(line.get("quantity", "")))
+        pdf.drawRightString(width - 50, y, f"{line.get('total', '0.00')} EUR")
+        
+        pdf.setStrokeColorRGB(0.9, 0.9, 0.9)
+        pdf.line(50, y - 5, width - 50, y - 5)
+        pdf.setStrokeColorRGB(0, 0, 0)
+        y -= 18
 
     _draw_sum_block(pdf, y, [
         ("Brutto", snapshot.total_gross),
