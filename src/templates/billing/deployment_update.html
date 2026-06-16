@@ -52,6 +52,11 @@
         <p>{{ deployment_status.message }}</p>
         {% if deployment_status.backup %}<p>Backup: <code>{{ deployment_status.backup }}</code></p>{% endif %}
         {% if deployment_status.error %}<p class="error-text">{{ deployment_status.error }}</p>{% endif %}
+        {% if deployment_status.rollback_error %}<p class="error-text">{{ deployment_status.rollback_error }}</p>{% endif %}
+        {% if deployment_status.recovery %}
+          <p><strong>Recovery:</strong></p>
+          <pre><code>{{ deployment_status.recovery }}</code></pre>
+        {% endif %}
       </div>
       <span class="status-badge{% if deployment_status.phase == 'complete' or deployment_status.phase == 'checked' %} status-badge--ok{% endif %}">
         {{ deployment_status.phase }}
