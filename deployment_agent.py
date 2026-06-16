@@ -27,7 +27,28 @@ PROJECT_NAME = os.getenv("COMPOSE_PROJECT_NAME", "fliegerlager")
 TARGET_SERVICE = os.getenv("TARGET_SERVICE", "app")
 DATABASE_SERVICE = os.getenv("DATABASE_SERVICE", "db")
 COMPOSE_FILE = os.getenv("COMPOSE_FILE", "/deployment/docker-compose.yml")
-ENV_FILE = os.getenv("COMPOSE_ENV_FILE", "/deployment/.env")
+
+def get_env_file() -> str | None:
+    configured = os.getenv("COMPOSE_ENV_FILE")
+    if configured and Path(configured).is_file():
+        return configured
+
+    compose_path = Path(COMPOSE_FILE)
+    if compose_path.is_file():
+        import re
+        content = compose_path.read_text(encoding="utf-8")
+        match = re.search(r"^\s*env_file:\s*([^\s]+)", content, re.MULTILINE)
+        if match:
+            env_name = match.group(1).strip("'\"")
+            env_path = compose_path.parent / env_name
+            if env_path.is_file():
+                return str(env_path)
+
+    default_env = Path("/deployment/.env")
+    if default_env.is_file():
+        return str(default_env)
+
+    return None
 BACKUP_DIR = Path(os.getenv("BACKUP_DIR", "/backups"))
 HEALTH_TIMEOUT = int(os.getenv("UPDATE_HEALTH_TIMEOUT", "180"))
 STATE_FILE = Path(os.getenv("UPDATE_STATE_FILE", "/state/status.json"))
@@ -203,8 +224,9 @@ def compose_up(image: str, *, step: str = "App-Container neu starten") -> None:
         "--file",
         COMPOSE_FILE,
     ]
-    if Path(ENV_FILE).is_file():
-        command.extend(["--env-file", ENV_FILE])
+    env_file = get_env_file()
+    if env_file:
+        command.extend(["--env-file", env_file])
     command.extend([
         "up",
         "--detach",
