@@ -140,7 +140,7 @@ def test_participant_import_template_export_contains_headers_and_examples(client
     sheet = wb["Teilnehmer"]
     # Check headers
     headers = [cell.value for cell in sheet[1]]
-    assert headers[:6] == ["Vorname", "Nachname", "Anreise", "Abreise", "Hilfssatz", "Berufssatz"]
+    assert headers[:6] == ["Vorname*", "Nachname*", "Anreise*", "Abreise*", "Hilfssatz*", "Berufssatz*"]
     assert "Email" in headers
     assert "Notizen" in headers
 

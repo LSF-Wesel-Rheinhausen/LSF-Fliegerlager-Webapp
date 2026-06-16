@@ -115,7 +115,7 @@ def normalize_row(raw, row_number):
     for k, v in raw.items():
         if k is None:
             continue
-        k_lower = str(k).lower().strip()
+        k_lower = str(k).lower().replace("*", "").strip()
         # Convert None to empty string for string/text fields
         if v is None:
             v = ""

@@ -27,7 +27,7 @@ def participant_import_template_response():
     sheet.title = "Teilnehmer"
     
     headers = [
-        "Vorname", "Nachname", "Anreise", "Abreise", "Hilfssatz", "Berufssatz", 
+        "Vorname*", "Nachname*", "Anreise*", "Abreise*", "Hilfssatz*", "Berufssatz*", 
         "Email", "Telefon", "Status", "Kind", "Jugendgruppe", "Begleitperson", "Notizen"
     ]
     sheet.append(headers)
