@@ -1473,5 +1473,11 @@ def kiosk_shifts(request):
 
 
 def user_guide(request: HttpRequest) -> HttpResponse:
-    """Render the built-in user documentation."""
+    """Render the built-in kiosk user documentation."""
     return render(request, "billing/user_guide.html")
+
+
+@login_required
+def admin_guide(request: HttpRequest) -> HttpResponse:
+    """Render the built-in admin documentation."""
+    return render(request, "billing/admin_guide.html")

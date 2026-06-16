@@ -12,6 +12,7 @@ urlpatterns = [
     path("deployment/update/check/", views.deployment_update_check, name="deployment-update-check"),
     path("deployment/update/install/", views.deployment_update_install, name="deployment-update-install"),
     path("help/", views.user_guide, name="user-guide"),
+    path("help/admin/", views.admin_guide, name="admin-guide"),
     path("", views.kiosk_home, name="kiosk-root"),
     path("camps/", views.camp_list, name="camp-list"),
     path("camps/new/", views.camp_create, name="camp-create"),
