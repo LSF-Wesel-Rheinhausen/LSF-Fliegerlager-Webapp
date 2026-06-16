@@ -132,98 +132,102 @@
 
   <div class="kiosk-masonry">
     <div class="kiosk-masonry-col">
-    <section class="panel stack">
-      <h2>Dienste</h2>
-      <p>Du hast <strong>{{ participant.completed_shifts }} von {{ participant.target_shifts }}</strong> Pflichtdiensten erledigt.</p>
-      <div class="form-actions" style="margin-top: auto; padding-top: 1rem;">
-        <a class="button" href="{% url 'kiosk-shifts' %}">Zum Dienstplan</a>
-      </div>
-    </section>
-
-    <section class="panel stack">
-      <div class="toolbar compact-toolbar kiosk-section-heading">
-        <div>
-          <h2 style="display: flex; align-items: center; gap: 8px;">
-            Familie
-            <button type="button" class="kiosk-help-button" data-help-text="Hier legst du Familienmitglieder (z.B. Partner, Kinder) an. Ihre Kosten werden auf deine finale Abrechnung gebucht. Sie tauchen beim Essen als auswählbare Personen auf, haben aber keinen eigenen Kiosk-Login.">?</button>
-          </h2>
-          <p>Diese Personen werden über dein Konto abgerechnet.</p>
-        </div>
-        <button type="button" class="button" data-open-family-dialog>Anlegen</button>
-      </div>
-
-      {% for member in family_members %}
-        <div class="kiosk-list-row">
-          <div class="kiosk-list-row__content">
-            <strong>{{ member.full_name }}</strong>
-            <span>{{ member.get_role_display }}</span>
+      <section class="panel stack">
+        <div class="toolbar compact-toolbar kiosk-section-heading">
+          <div>
+            <h2>Dienste</h2>
+            <p>Du hast <strong>{{ participant.completed_shifts }} von {{ participant.target_shifts }}</strong> Pflichtdiensten erledigt.</p>
           </div>
-          <form method="post" class="kiosk-list-row__actions">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="family_member_deactivate">
-            <input type="hidden" name="family_member_id" value="{{ member.pk }}">
-            <button type="submit" class="button-secondary">Entfernen</button>
-          </form>
+          <a class="button" href="{% url 'kiosk-shifts' %}">Zum Dienstplan</a>
         </div>
-      {% empty %}
-        <p class="hint">Noch keine Familienmitglieder angelegt.</p>
-      {% endfor %}
-    </section>
+      </section>
 
+      <section class="panel stack">
+        <div class="toolbar compact-toolbar kiosk-section-heading">
+          <div>
+            <h2 style="display: flex; align-items: center; gap: 8px;">
+              Familie
+              <button type="button" class="kiosk-help-button" data-help-text="Hier legst du Familienmitglieder (z.B. Partner, Kinder) an. Ihre Kosten werden auf deine finale Abrechnung gebucht. Sie tauchen beim Essen als auswählbare Personen auf, haben aber keinen eigenen Kiosk-Login.">?</button>
+            </h2>
+            <p>Diese Personen werden über dein Konto abgerechnet.</p>
+          </div>
+          <button type="button" class="button" data-open-family-dialog>Anlegen</button>
+        </div>
+
+        {% for member in family_members %}
+          <div class="kiosk-list-row">
+            <div class="kiosk-list-row__content">
+              <strong>{{ member.full_name }}</strong>
+              <span>{{ member.get_role_display }}</span>
+            </div>
+            <form method="post" class="kiosk-list-row__actions">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="family_member_deactivate">
+              <input type="hidden" name="family_member_id" value="{{ member.pk }}">
+              <button type="submit" class="button-secondary">Entfernen</button>
+            </form>
+          </div>
+        {% empty %}
+          <p class="hint">Noch keine Familienmitglieder angelegt.</p>
+        {% endfor %}
+      </section>
     </div>
-    <div class="kiosk-masonry-col">
-    <section class="panel stack">
-      <h2 style="display: flex; align-items: center; gap: 8px;">
-        Gemeinschaftsausgaben
-        <button type="button" class="kiosk-help-button" data-help-text="Hier kannst du Ausgaben einreichen, die du für die Gemeinschaft vorgestreckt hast (z.B. Grillgut). Nach Freigabe durch die Lagerleitung wird der Betrag als Umlage auf die Teilnehmer aufgeteilt und dir als Gutschrift angerechnet.">?</button>
-      </h2>
-      <p>Geld für die Gemeinschaft vorgestreckt?</p>
-      <div class="form-actions" style="margin-top: auto; padding-top: 1rem;">
-        <a class="button button-secondary" href="{% url 'kiosk-shared-expense-request' %}">Antrag einreichen</a>
-      </div>
-      
-      {% if participant_expenses %}
-      <h3 style="margin-top: 2rem;">Meine Anträge</h3>
-      <table class="data-table" style="margin-top: 1rem;">
-        <thead>
-          <tr>
-            <th>Status</th>
-            <th>Beschreibung</th>
-            <th>Betrag</th>
-            <th>Datum</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for expense in participant_expenses %}
-          <tr>
-            <td>
-              {% if expense.status == "pending" %}
-                <span style="color: #d97706; font-weight: 600;">Ausstehend</span>
-              {% elif expense.status == "approved" %}
-                <span style="color: var(--ok); font-weight: 600;">Genehmigt</span>
-              {% elif expense.status == "rejected" %}
-                <span style="color: var(--danger); font-weight: 600;">Abgelehnt</span>
-              {% else %}
-                {{ expense.get_status_display }}
-              {% endif %}
-            </td>
-            <td>{{ expense.description }}</td>
-            <td>{{ expense.amount }} €</td>
-            <td>{{ expense.paid_on|default:expense.created_at|date:"d.m.Y" }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% endif %}
-    </section>
 
-    <section class="panel stack">
-      <div class="kiosk-section-heading">
-        <h2 style="display: flex; align-items: center; gap: 8px;">
-          Mitbuchungen
-          <button type="button" class="kiosk-help-button" data-help-text="Lade andere Teilnehmer ein, damit ihr euch gegenseitig beim Essen mit anmelden könnt. Sobald die Einladung angenommen wurde, könnt ihr euch gegenseitig auswählen. Die Abrechnung bleibt dabei für jeden separat.">?</button>
-        </h2>
-      </div>
+    <div class="kiosk-masonry-col">
+      <section class="panel stack">
+        <div class="toolbar compact-toolbar kiosk-section-heading">
+          <div>
+            <h2 style="display: flex; align-items: center; gap: 8px;">
+              Gemeinschaftsausgaben
+              <button type="button" class="kiosk-help-button" data-help-text="Hier kannst du Ausgaben einreichen, die du für die Gemeinschaft vorgestreckt hast (z.B. Grillgut). Nach Freigabe durch die Lagerleitung wird der Betrag als Umlage auf die Teilnehmer aufgeteilt und dir als Gutschrift angerechnet.">?</button>
+            </h2>
+            <p>Geld für die Gemeinschaft vorgestreckt?</p>
+          </div>
+          <a class="button button-secondary" href="{% url 'kiosk-shared-expense-request' %}">Antrag einreichen</a>
+        </div>
+        
+        {% if participant_expenses %}
+        <h3 style="margin-top: 0.5rem; font-size: 1.1rem;">Meine Anträge</h3>
+        <table class="data-table" style="margin-top: 0.25rem;">
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Beschreibung</th>
+              <th>Betrag</th>
+              <th>Datum</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for expense in participant_expenses %}
+            <tr>
+              <td>
+                {% if expense.status == "pending" %}
+                  <span style="color: #d97706; font-weight: 600;">Ausstehend</span>
+                {% elif expense.status == "approved" %}
+                  <span style="color: var(--ok); font-weight: 600;">Genehmigt</span>
+                {% elif expense.status == "rejected" %}
+                  <span style="color: var(--danger); font-weight: 600;">Abgelehnt</span>
+                {% else %}
+                  {{ expense.get_status_display }}
+                {% endif %}
+              </td>
+              <td>{{ expense.description }}</td>
+              <td>{{ expense.amount }} €</td>
+              <td>{{ expense.paid_on|default:expense.created_at|date:"d.m.Y" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
+      </section>
+
+      <section class="panel stack">
+        <div class="kiosk-section-heading">
+          <h2 style="display: flex; align-items: center; gap: 8px;">
+            Mitbuchungen
+            <button type="button" class="kiosk-help-button" data-help-text="Lade andere Teilnehmer ein, damit ihr euch gegenseitig beim Essen mit anmelden könnt. Sobald die Einladung angenommen wurde, könnt ihr euch gegenseitig auswählen. Die Abrechnung bleibt dabei für jeden separat.">?</button>
+          </h2>
+        </div>
       <form method="post" class="form-grid">
         {% csrf_token %}
         <input type="hidden" name="action" value="booking_link_invite">
