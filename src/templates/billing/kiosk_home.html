@@ -14,7 +14,7 @@
     </div>
   </div>
 
-  <div style="margin-bottom: 24px; max-width: 480px;">
+  <div style="margin-bottom: 24px;">
     <button type="button" class="button" data-open-summary-dialog style="width: 100%; font-size: 1.1rem; padding: 12px; justify-content: space-between; display: flex;">
       <span>Aktuelle Abrechnung</span>
       <strong>Offen: {{ summary.balance|money_eur }}</strong>
@@ -130,7 +130,7 @@
     </section>
   </div>
 
-  <div class="kiosk-grid">
+  <div class="kiosk-grid" style="align-items: start;">
     <section class="panel stack">
       <h2>Dienste</h2>
       <p>Du hast <strong>{{ participant.completed_shifts }} von {{ participant.target_shifts }}</strong> Pflichtdiensten erledigt.</p>
