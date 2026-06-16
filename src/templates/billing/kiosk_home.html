@@ -169,12 +169,12 @@
             <td>{{ expense.amount }} €</td>
             <td>{{ expense.description }}</td>
             <td>
-              {% if expense.status == "PENDING" %}
-                <span style="color: var(--color-warning);">Ausstehend</span>
-              {% elif expense.status == "APPROVED" %}
-                <span style="color: var(--color-success);">Genehmigt</span>
-              {% elif expense.status == "REJECTED" %}
-                <span style="color: var(--color-danger);">Abgelehnt</span>
+              {% if expense.status == "pending" %}
+                <span style="color: #d97706; font-weight: 600;">Ausstehend</span>
+              {% elif expense.status == "approved" %}
+                <span style="color: var(--ok); font-weight: 600;">Genehmigt</span>
+              {% elif expense.status == "rejected" %}
+                <span style="color: var(--danger); font-weight: 600;">Abgelehnt</span>
               {% else %}
                 {{ expense.get_status_display }}
               {% endif %}
