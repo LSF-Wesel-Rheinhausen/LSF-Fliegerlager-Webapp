@@ -156,18 +156,15 @@
       <table class="data-table" style="margin-top: 1rem;">
         <thead>
           <tr>
-            <th>Datum</th>
-            <th>Betrag</th>
-            <th>Beschreibung</th>
             <th>Status</th>
+            <th>Beschreibung</th>
+            <th>Betrag</th>
+            <th>Datum</th>
           </tr>
         </thead>
         <tbody>
           {% for expense in participant_expenses %}
           <tr>
-            <td>{{ expense.paid_on|default:expense.created_at|date:"d.m.Y" }}</td>
-            <td>{{ expense.amount }} €</td>
-            <td>{{ expense.description }}</td>
             <td>
               {% if expense.status == "pending" %}
                 <span style="color: #d97706; font-weight: 600;">Ausstehend</span>
@@ -179,6 +176,9 @@
                 {{ expense.get_status_display }}
               {% endif %}
             </td>
+            <td>{{ expense.description }}</td>
+            <td>{{ expense.amount }} €</td>
+            <td>{{ expense.paid_on|default:expense.created_at|date:"d.m.Y" }}</td>
           </tr>
           {% endfor %}
         </tbody>
