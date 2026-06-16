@@ -130,21 +130,20 @@ def camp_workbook_response(camp):
 
 def _draw_page_framework(pdf, title, subtitle, participant_name):
     width, height = A4
-    y = height - 50
     
     logo_path = settings.BASE_DIR / "static" / "billing" / "logo.jpg"
     if logo_path.exists():
-        pdf.drawImage(str(logo_path), 50, height - 100, width=160, height=50, preserveAspectRatio=True, anchor='nw', mask='auto')
+        pdf.drawImage(str(logo_path), 50, height - 150, width=250, height=100, preserveAspectRatio=True, anchor='nw', mask='auto')
 
     pdf.setFont("Helvetica", 8)
     pdf.setFillColorRGB(0.3, 0.3, 0.3)
-    pdf.drawString(50, height - 115, "Luftsportfreunde Wesel-Rheinhausen e.V., Postfach 100240, 46462 Wesel")
+    pdf.drawString(50, height - 165, "Luftsportfreunde Wesel-Rheinhausen e.V. · Postfach 100240 · 46462 Wesel")
     pdf.setFillColorRGB(0, 0, 0)
 
     pdf.setFont("Helvetica", 10)
-    pdf.drawString(50, height - 150, "An:")
+    pdf.drawString(50, height - 200, "An:")
     pdf.setFont("Helvetica-Bold", 12)
-    pdf.drawString(50, height - 165, participant_name)
+    pdf.drawString(50, height - 215, participant_name)
 
     pdf.setFont("Helvetica-Bold", 16)
     pdf.drawRightString(width - 50, height - 70, title)
@@ -155,7 +154,7 @@ def _draw_page_framework(pdf, title, subtitle, participant_name):
         pdf.drawRightString(width - 50, height - 90, subtitle)
         pdf.setFillColorRGB(0, 0, 0)
         
-    y = height - 210
+    y = height - 260
 
     pdf.setFillColorRGB(0.95, 0.95, 0.95)
     pdf.rect(50, y - 6, width - 100, 20, stroke=0, fill=1)
@@ -185,7 +184,23 @@ def _draw_sum_block(pdf, y, items):
     pdf.setStrokeColorRGB(0, 0, 0)
     
     for label, value in items:
-        if label == "Offen":
+        if label in ["Förderung", "Gezahlt", "Vorgestreckt"]:
+            val_str = f"- {value:.2f} €" if value > 0 else f"{value:.2f} €"
+        elif label == "Offen":
+            if value > 0:
+                label = "Zu zahlen"
+                val_str = f"- {value:.2f} €"
+            elif value < 0:
+                label = "Guthaben"
+                val_str = f"+ {abs(value):.2f} €"
+            else:
+                val_str = "0.00 €"
+        else:
+            val_str = f"{value:.2f} €"
+
+        is_final = label in ["Zu zahlen", "Guthaben", "Offen"]
+
+        if is_final:
             y -= 4
             pdf.setStrokeColorRGB(0.2, 0.2, 0.2)
             pdf.line(width - 250, y + 14, width - 50, y + 14)
@@ -195,10 +210,10 @@ def _draw_sum_block(pdf, y, items):
             pdf.setFont("Helvetica", 11)
         
         pdf.drawString(width - 220, y, f"{label}:")
-        pdf.drawRightString(width - 50, y, f"{value:.2f} EUR")
+        pdf.drawRightString(width - 50, y, val_str)
         y -= 18
         
-        if label == "Offen":
+        if is_final:
             pdf.setStrokeColorRGB(0.2, 0.2, 0.2)
             pdf.line(width - 250, y + 14, width - 50, y + 14)
             pdf.setStrokeColorRGB(0, 0, 0)
@@ -223,7 +238,7 @@ def participant_pdf_response(participant):
             pdf.setFont("Helvetica", 10)
         pdf.drawString(50, y, line.label[:80])
         pdf.drawRightString(width - 120, y, str(line.quantity))
-        pdf.drawRightString(width - 50, y, f"{line.total:.2f} EUR")
+        pdf.drawRightString(width - 50, y, f"{line.total:.2f} €")
         
         pdf.setStrokeColorRGB(0.9, 0.9, 0.9)
         pdf.line(50, y - 5, width - 50, y - 5)
@@ -315,7 +330,14 @@ def settlement_snapshot_pdf_response(snapshot: Settlement) -> HttpResponse:
             pdf.setFont("Helvetica", 10)
         pdf.drawString(50, y, str(line.get("label", ""))[:80])
         pdf.drawRightString(width - 120, y, str(line.get("quantity", "")))
-        pdf.drawRightString(width - 50, y, f"{line.get('total', '0.00')} EUR")
+        
+        try:
+            total_val = float(line.get('total', 0.00))
+            total_str = f"{total_val:.2f} €"
+        except (ValueError, TypeError):
+            total_str = f"{line.get('total', '0.00')} €"
+            
+        pdf.drawRightString(width - 50, y, total_str)
         
         pdf.setStrokeColorRGB(0.9, 0.9, 0.9)
         pdf.line(50, y - 5, width - 50, y - 5)
