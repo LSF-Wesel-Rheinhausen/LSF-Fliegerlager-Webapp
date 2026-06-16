@@ -232,21 +232,35 @@ def _draw_payment_instructions(pdf, y, camp, balance):
     if not iban and not paypal:
         return y
         
+    width, _ = A4
     y -= 30
-    pdf.setFont("Helvetica-Bold", 10)
-    pdf.drawString(50, y, "Zahlungsinformationen:")
-    y -= 14
     
-    pdf.setFont("Helvetica", 10)
-    pdf.drawString(50, y, "Bitte überweise den offenen Betrag auf folgendes Konto oder nutze PayPal:")
-    y -= 16
+    box_height = 65
+    y -= box_height
     
-    if iban:
-        pdf.drawString(50, y, f"IBAN: {iban}")
-        y -= 14
-    if paypal:
-        pdf.drawString(50, y, f"PayPal: {paypal}")
-        y -= 14
+    pdf.setFillColorRGB(0.96, 0.96, 0.96)
+    pdf.setStrokeColorRGB(0.85, 0.85, 0.85)
+    pdf.roundRect(50, y, width - 100, box_height, radius=4, stroke=1, fill=1)
+    
+    text_y = y + box_height - 18
+    pdf.setFillColorRGB(0, 0, 0)
+    pdf.setFont("Helvetica-Bold", 9)
+    pdf.drawString(65, text_y, "Zahlungsinformationen")
+    
+    text_y -= 14
+    pdf.setFont("Helvetica", 9)
+    pdf.drawString(65, text_y, "Bitte begleiche den offenen Kontostand zeitnah auf eines der folgenden Konten:")
+    
+    text_y -= 16
+    pdf.setFont("Helvetica-Bold", 9)
+    
+    if iban and paypal:
+        pdf.drawString(65, text_y, f"IBAN: {iban}")
+        pdf.drawString(280, text_y, f"PayPal: {paypal}")
+    elif iban:
+        pdf.drawString(65, text_y, f"IBAN: {iban}")
+    elif paypal:
+        pdf.drawString(65, text_y, f"PayPal: {paypal}")
         
     return y
 
