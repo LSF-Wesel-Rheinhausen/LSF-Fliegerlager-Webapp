@@ -116,6 +116,9 @@ def normalize_row(raw, row_number):
         if k is None:
             continue
         k_lower = str(k).lower().strip()
+        # Convert None to empty string for string/text fields
+        if v is None:
+            v = ""
         if k_lower in mapping:
             data[mapping[k_lower]] = v
         else:

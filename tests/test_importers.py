@@ -64,6 +64,13 @@ def test_csv_preview_parses_optional_and_unknown_fields():
     assert "Verein: LSV" in rows[0].data["notes"]
 
 
+def test_csv_preview_handles_none_values():
+    from billing.importers import normalize_row
+    # Simulates what openpyxl returns for empty cells
+    row = normalize_row({"Vorname": "Empty", "Nachname": "Row", "Email": None}, 1)
+    assert row.data["email"] == ""
+
+
 @pytest.mark.django_db
 def test_save_participants_upserts_valid_rows():
     camp = CampFactory()
