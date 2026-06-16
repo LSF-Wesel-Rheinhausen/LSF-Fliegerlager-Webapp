@@ -926,11 +926,11 @@ def _linked_booking_participants(participant):
 def _variant_choices_for_booking_target(is_child):
     if is_child:
         return [
-            (MealSignup.Variant.NORMAL_CHILD, "Normal (Kind)"),
+            (MealSignup.Variant.NORMAL_CHILD, "Mit Fleisch (Kind)"),
             (MealSignup.Variant.VEGAN_CHILD, "Vegan/Vegetarisch (Kind)"),
         ]
     return [
-        (MealSignup.Variant.NORMAL, "Normal"),
+        (MealSignup.Variant.NORMAL, "Mit Fleisch"),
         (MealSignup.Variant.VEGAN, "Vegan/Vegetarisch"),
     ]
 
