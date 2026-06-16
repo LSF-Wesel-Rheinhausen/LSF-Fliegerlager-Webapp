@@ -45,7 +45,9 @@
   <div class="kiosk-grid">
     <section class="panel">
       <h2>Getränk buchen</h2>
-      <p class="hint">Tippe auf ein Getränk und wähle danach die Menge.</p>
+      <div style="padding: 12px; background: #eef2f6; border-left: 4px solid var(--accent); border-radius: 0 4px 4px 0; margin-bottom: 16px; font-size: 0.9em;">
+        <strong>Kurzdoku:</strong> Tippe auf ein Getränk und wähle danach die Menge, um es auf deinen Deckel zu buchen. Falls du dich vertippt hast, kannst du den Fehler ganz unten unter "Letzte Getränke" über das Mülleimer-Symbol sofort wieder stornieren.
+      </div>
       <form method="post" class="stack kiosk-drink-form" id="drink-booking-form">
         {% csrf_token %}
         <input type="hidden" name="action" value="drink">
@@ -79,7 +81,9 @@
 
     <section class="panel">
       <h2>Essen anmelden</h2>
-      <p class="hint">Wähle im Kalender die Mahlzeit und danach im Popup die Personen samt Variante.</p>
+      <div style="padding: 12px; background: #eef2f6; border-left: 4px solid var(--accent); border-radius: 0 4px 4px 0; margin-bottom: 16px; font-size: 0.9em;">
+        <strong>Kurzdoku:</strong> Wähle im Kalender eine Mahlzeit (z.B. Frühstück). Im folgenden Fenster kannst du dich und deine Familienmitglieder an- und abmelden oder die Variante (Normal/Vegetarisch) ändern. Graue Kalendertage bedeuten, dass die Meldefrist bereits abgelaufen ist.
+      </div>
       <div class="meal-order-status" aria-label="Essensbestellung für {{ next_order_date|date:'d.m.Y' }}">
         <strong>Essensbestellung für {{ next_order_date|date:"d.m.Y" }}</strong>
         {% if next_meal_order %}
@@ -144,6 +148,9 @@
         </div>
         <button type="button" class="button" data-open-family-dialog>Anlegen</button>
       </div>
+      <div style="padding: 12px; background: #eef2f6; border-left: 4px solid var(--accent); border-radius: 0 4px 4px 0; margin-bottom: 16px; font-size: 0.9em;">
+        <strong>Kurzdoku:</strong> Hier legst du Familienmitglieder (z.B. Partner, Kinder) an. Ihre Kosten werden auf deine finale Abrechnung gebucht. Sie tauchen beim Essen als auswählbare Personen auf, haben aber keinen eigenen Kiosk-Login.
+      </div>
       {% for member in family_members %}
         <div class="kiosk-list-row">
           <div class="kiosk-list-row__content">
@@ -165,6 +172,9 @@
     <section class="panel stack">
       <div class="kiosk-section-heading">
         <h2>Mitbuchungen</h2>
+      </div>
+      <div style="padding: 12px; background: #eef2f6; border-left: 4px solid var(--accent); border-radius: 0 4px 4px 0; margin-bottom: 16px; font-size: 0.9em;">
+        <strong>Kurzdoku:</strong> Lade andere Teilnehmer ein, damit ihr euch gegenseitig beim Essen mit anmelden könnt. Sobald die Einladung angenommen wurde, könnt ihr euch gegenseitig auswählen. Die Abrechnung bleibt dabei für jeden separat.
       </div>
       <form method="post" class="form-grid">
         {% csrf_token %}

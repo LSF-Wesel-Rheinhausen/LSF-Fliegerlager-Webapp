@@ -28,6 +28,7 @@
           {% if user.is_superuser %}
             <a class="button button-secondary nav-link" href="{% url 'deployment-update' %}">Updates</a>
           {% endif %}
+          <a class="button button-secondary nav-link" href="{% url 'user-guide' %}">Hilfe</a>
           <span>{{ user.email|default:user.username }}</span>
           <form method="post" action="{% url 'logout' %}">
             {% csrf_token %}
