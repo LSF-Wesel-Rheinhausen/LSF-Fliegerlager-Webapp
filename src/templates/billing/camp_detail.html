@@ -106,6 +106,7 @@
             <th>Kostenstelle</th>
             <th class="number">Einnahmen</th>
             <th class="number">Ausgaben</th>
+            <th class="number">Ergebnis</th>
             <th class="number">Details</th>
           </tr>
         </thead>
@@ -115,6 +116,11 @@
               <td>{{ data.label }}</td>
               <td class="number">{{ data.income|floatformat:2 }} €</td>
               <td class="number">{{ data.expense_total|floatformat:2 }} €</td>
+              <td class="number">
+                <span class="cost-center-result {% if data.balance > 0 %}cost-center-result-positive{% elif data.balance < 0 %}cost-center-result-negative{% else %}cost-center-result-neutral{% endif %}">
+                  {% if data.balance > 0 %}+{% endif %}{{ data.balance|floatformat:2 }} €
+                </span>
+              </td>
               <td class="number">
                 <button type="button" class="button button-small button-secondary" data-dialog-open="cost-center-dialog-{{ forloop.counter }}">Details</button>
               </td>
@@ -128,6 +134,12 @@
             <h2 id="cost-center-dialog-title-{{ forloop.counter }}">{{ data.label }}</h2>
             <button type="submit" class="button button-secondary">Schließen</button>
           </form>
+          <p>
+            Ergebnis:
+            <strong class="cost-center-result {% if data.balance > 0 %}cost-center-result-positive{% elif data.balance < 0 %}cost-center-result-negative{% else %}cost-center-result-neutral{% endif %}">
+              {% if data.balance > 0 %}+{% endif %}{{ data.balance|floatformat:2 }} €
+            </strong>
+          </p>
 
           <section class="stack">
             <h3>Einnahmen</h3>
