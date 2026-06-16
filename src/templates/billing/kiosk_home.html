@@ -150,6 +150,40 @@
       <div class="form-actions" style="margin-top: 1rem;">
         <a class="button button-secondary" href="{% url 'kiosk-shared-expense-request' %}">Antrag einreichen</a>
       </div>
+      
+      {% if participant_expenses %}
+      <h3 style="margin-top: 2rem;">Meine Anträge</h3>
+      <table class="data-table" style="margin-top: 1rem;">
+        <thead>
+          <tr>
+            <th>Datum</th>
+            <th>Betrag</th>
+            <th>Beschreibung</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for expense in participant_expenses %}
+          <tr>
+            <td>{{ expense.paid_on|default:expense.created_at|date:"d.m.Y" }}</td>
+            <td>{{ expense.amount }} €</td>
+            <td>{{ expense.description }}</td>
+            <td>
+              {% if expense.status == "PENDING" %}
+                <span style="color: var(--color-warning);">Ausstehend</span>
+              {% elif expense.status == "APPROVED" %}
+                <span style="color: var(--color-success);">Genehmigt</span>
+              {% elif expense.status == "REJECTED" %}
+                <span style="color: var(--color-danger);">Abgelehnt</span>
+              {% else %}
+                {{ expense.get_status_display }}
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
     </section>
 
     <section class="panel stack">

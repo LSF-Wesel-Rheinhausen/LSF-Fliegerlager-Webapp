@@ -497,12 +497,13 @@ class PaymentForm(forms.ModelForm):
 class ExpenseForm(forms.ModelForm):
     class Meta:
         model = Expense
-        fields = ["participant", "category", "description", "amount", "paid_on", "reimbursable"]
+        fields = ["participant", "category", "description", "amount", "receipt", "paid_on", "reimbursable"]
         labels = {
             "participant": "Teilnehmer",
             "category": "Kategorie",
             "description": "Beschreibung",
             "amount": "Betrag",
+            "receipt": "Rechnungsbeleg",
             "paid_on": "Zahlungsdatum",
             "reimbursable": "Erstattungsfähig",
         }
@@ -512,11 +513,12 @@ class ExpenseForm(forms.ModelForm):
 class SharedExpenseRequestForm(forms.ModelForm):
     class Meta:
         model = Expense
-        fields = ["category", "description", "amount", "paid_on"]
+        fields = ["category", "description", "amount", "receipt", "paid_on"]
         labels = {
             "category": "Kategorie",
             "description": "Beschreibung",
             "amount": "Betrag",
+            "receipt": "Rechnungsbeleg",
             "paid_on": "Zahlungsdatum",
         }
         widgets = {"paid_on": forms.DateInput(attrs={"type": "date"})}

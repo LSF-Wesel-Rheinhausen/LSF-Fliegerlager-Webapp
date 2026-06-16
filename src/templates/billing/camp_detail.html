@@ -71,20 +71,27 @@
   <section class="panel stack">
     <h2>Ausstehende Gemeinschaftsausgaben</h2>
     <table>
-      <thead><tr><th>Datum</th><th>Person</th><th>Beschreibung</th><th>Betrag</th><th></th></tr></thead>
+      <thead><tr><th>Datum</th><th>Person</th><th>Beschreibung</th><th>Betrag</th><th>Beleg</th><th></th></tr></thead>
       <tbody>
         {% for expense in pending_expenses %}
           <tr>
-            <td>{{ expense.paid_on|default:"-" }}</td>
-            <td>{{ expense.participant|default:"-" }}</td>
+            <td>{{ expense.paid_on|default:expense.created_at|date:"d.m.Y" }}</td>
+            <td>{{ expense.participant.first_name }} {{ expense.participant.last_name }}</td>
             <td>{{ expense.description }}</td>
-            <td>{{ expense.amount }} EUR</td>
+            <td>{{ expense.amount }} €</td>
             <td>
-              <a href="{% url 'shared-expense-approve' expense.pk %}" class="button button-secondary">Umlage & Genehmigen</a>
-              <form method="post" action="{% url 'shared-expense-reject' expense.pk %}" style="display:inline;">
-                {% csrf_token %}
-                <button type="submit" class="button-link" style="color:red;">Ablehnen</button>
-              </form>
+              {% if expense.receipt %}
+                <a href="{{ expense.receipt.url }}" target="_blank" class="button button-small button-secondary">Beleg ansehen</a>
+              {% endif %}
+            </td>
+            <td>
+              <div class="button-group">
+                <a href="{% url 'shared-expense-approve' expense.pk %}" class="button button-small">Genehmigen &amp; Umlegen</a>
+                <form method="post" action="{% url 'shared-expense-reject' expense.pk %}" style="display:inline;">
+                  {% csrf_token %}
+                  <button type="submit" class="button button-small button-danger">Ablehnen</button>
+                </form>
+              </div>
             </td>
           </tr>
         {% endfor %}

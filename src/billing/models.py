@@ -439,6 +439,7 @@ class Expense(TimeStampedModel):
     category = models.CharField(max_length=120)
     description = models.CharField(max_length=180)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
+    receipt = models.FileField(upload_to="receipts/", blank=True, null=True, verbose_name="Rechnungsbeleg")
     paid_on = models.DateField(null=True, blank=True)
     reimbursable = models.BooleanField(default=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)

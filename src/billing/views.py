@@ -792,7 +792,7 @@ def shift_delete(request, shift_id):
 @editor_required
 def expense_create(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
-    form = ExpenseForm(request.POST or None)
+    form = ExpenseForm(request.POST or None, request.FILES or None)
     form.fields["participant"].queryset = Participant.objects.filter(camp=camp, archived_at__isnull=True)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
@@ -1417,6 +1417,7 @@ def kiosk_home(request):
         "next_order_date": next_order_date,
         "next_meal_order": next_meal_order,
         "next_order_locked": is_meal_change_locked(participant.camp, next_order_date),
+        "participant_expenses": participant.expenses.all().order_by("-created_at"),
     }
     return render(request, "billing/kiosk_home.html", context)
 
@@ -1426,7 +1427,7 @@ def kiosk_shared_expense_request(request):
     if not participant:
         return redirect("kiosk-login")
     
-    form = SharedExpenseRequestForm(request.POST or None)
+    form = SharedExpenseRequestForm(request.POST or None, request.FILES or None)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
             expense = form.save(commit=False)
