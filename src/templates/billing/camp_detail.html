@@ -104,22 +104,54 @@
         <thead>
           <tr>
             <th>Kostenstelle</th>
+            <th class="number">Einnahmen</th>
+            <th class="number">Ausgaben</th>
+            <th class="number">Saldo</th>
             <th class="number">Anzahl Ausgaben</th>
-            <th class="number">Gesamtsumme</th>
           </tr>
         </thead>
         <tbody>
-          {% for cc, data in cost_centers.items %}
+          {% for code, data in cost_centers.items %}
             <tr>
-              <td>{{ cc }}</td>
-              <td class="number">{{ data.count }}</td>
-              <td class="number">{{ data.total }} €</td>
+              <td>
+                <details>
+                  <summary>{{ data.label }}</summary>
+                  {% if data.income_details %}
+                    <h3>Einnahmen</h3>
+                    <ul>
+                      {% for signup in data.income_details %}
+                        <li>
+                          {{ signup.meal_date|date:"d.m.Y" }}:
+                          {{ signup.participant.full_name }}
+                          {% if signup.family_member %}für {{ signup.family_member.full_name }}{% endif %}
+                          - {{ signup.charge.total }} €
+                        </li>
+                      {% endfor %}
+                    </ul>
+                  {% endif %}
+                  {% if data.expense_details %}
+                    <h3>Ausgaben</h3>
+                    <ul>
+                      {% for expense in data.expense_details %}
+                        <li>
+                          {% if expense.paid_on %}{{ expense.paid_on|date:"d.m.Y" }}{% else %}{{ expense.created_at|date:"d.m.Y" }}{% endif %}:
+                          {{ expense.description }} - {{ expense.amount }} €
+                        </li>
+                      {% endfor %}
+                    </ul>
+                  {% endif %}
+                </details>
+              </td>
+              <td class="number">{{ data.income }} €</td>
+              <td class="number">{{ data.expense_total }} €</td>
+              <td class="number">{{ data.balance }} €</td>
+              <td class="number">{{ data.expense_count }}</td>
             </tr>
           {% endfor %}
         </tbody>
       </table>
     {% else %}
-      <p class="hint">Bisher gibt es keine freigegebenen Ausgaben auf Kostenstellen.</p>
+      <p class="hint">Bisher gibt es keine Einnahmen oder freigegebenen Ausgaben auf Kostenstellen.</p>
     {% endif %}
   </section>
 

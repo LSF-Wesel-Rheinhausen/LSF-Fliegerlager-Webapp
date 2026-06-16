@@ -500,7 +500,11 @@ def calculate_participant_settlement(participant):
     total_due = money(sum((line.total for line in lines), ZERO))
     total_paid = money(participant.payments.aggregate(total=Sum("amount"))["total"])
     total_advanced = money(
-        Expense.objects.filter(participant=participant, reimbursable=True, status=Expense.Status.APPROVED).aggregate(total=Sum("amount"))["total"]
+        Expense.objects.filter(
+            participant=participant,
+            reimbursable=True,
+            status=Expense.Status.APPROVED,
+        ).aggregate(total=Sum("amount"))["total"]
     )
     balance = money(total_due - total_paid - total_advanced)
     return SettlementResult(
@@ -634,7 +638,7 @@ def approve_shared_expense(expense: Expense, approved_by: Any, participant_ids: 
     remainder = expense.amount - (base_amount_per_person * count)
 
     allocations = []
-    for i, p in enumerate(participants):
+    for p in participants:
         amount = base_amount_per_person
         if remainder > 0:
             amount += Decimal("0.01")
@@ -660,21 +664,68 @@ def reject_shared_expense(expense: Expense, rejected_by: Any, rejection_reason: 
 
 
 def get_cost_center_evaluation(camp):
-    expenses = Expense.objects.filter(
-        camp=camp, 
-        allocation_method=Expense.AllocationMethod.COST_CENTER, 
-        status=Expense.Status.APPROVED
-    ).select_related("participant")
-    
-    evaluation = {}
-    for exp in expenses:
-        cc = exp.get_cost_center_display() if exp.cost_center else "Ohne Kostenstelle"
-        if cc not in evaluation:
-            evaluation[cc] = {"total": Decimal("0.00"), "count": 0, "expenses": []}
-        
-        evaluation[cc]["total"] += exp.amount
-        evaluation[cc]["count"] += 1
-        evaluation[cc]["expenses"].append(exp)
-        
-    return evaluation
+    evaluation = {
+        code: {
+            "label": label,
+            "income": Decimal("0.00"),
+            "expense_total": Decimal("0.00"),
+            "balance": Decimal("0.00"),
+            "income_count": 0,
+            "expense_count": 0,
+            "income_details": [],
+            "expense_details": [],
+        }
+        for code, label in Expense.CostCenter.choices
+    }
 
+    expenses = Expense.objects.filter(
+        camp=camp,
+        allocation_method=Expense.AllocationMethod.COST_CENTER,
+        status=Expense.Status.APPROVED,
+    ).select_related("participant")
+
+    for exp in expenses:
+        code = exp.cost_center or "without_cost_center"
+        if code not in evaluation:
+            evaluation[code] = {
+                "label": "Ohne Kostenstelle",
+                "income": Decimal("0.00"),
+                "expense_total": Decimal("0.00"),
+                "balance": Decimal("0.00"),
+                "income_count": 0,
+                "expense_count": 0,
+                "income_details": [],
+                "expense_details": [],
+            }
+
+        evaluation[code]["expense_total"] += exp.amount
+        evaluation[code]["expense_count"] += 1
+        evaluation[code]["expense_details"].append(exp)
+
+    meal_cost_centers = {
+        MealSignup.Meal.BREAKFAST: Expense.CostCenter.FOOD_BREAKFAST,
+        MealSignup.Meal.DINNER: Expense.CostCenter.FOOD_DINNER,
+    }
+    meal_signups = (
+        MealSignup.objects.filter(
+            participant__camp=camp,
+            status=MealSignup.Status.ACTIVE,
+            charge__isnull=False,
+            charge__deleted_at__isnull=True,
+        )
+        .select_related("participant", "family_member", "charge")
+        .order_by("meal_date", "meal", "participant__last_name", "participant__first_name")
+    )
+    for signup in meal_signups:
+        code = meal_cost_centers.get(signup.meal)
+        if code is None or signup.charge is None:
+            continue
+        amount = signup.charge.total
+        evaluation[code]["income"] += amount
+        evaluation[code]["income_count"] += 1
+        evaluation[code]["income_details"].append(signup)
+
+    for data in evaluation.values():
+        data["balance"] = data["income"] - data["expense_total"]
+
+    return {code: data for code, data in evaluation.items() if data["income_count"] or data["expense_count"]}

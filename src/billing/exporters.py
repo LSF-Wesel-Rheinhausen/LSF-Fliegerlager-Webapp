@@ -8,7 +8,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
 from .models import Charge, DrinkEntry, Participant, Settlement, SettlementRun
-from .services import calculate_camp_settlements, calculate_participant_settlement, money, get_cost_center_evaluation
+from .services import calculate_camp_settlements, calculate_participant_settlement, get_cost_center_evaluation, money
 
 
 def csv_response(filename, rows, headers):
@@ -183,20 +183,41 @@ def camp_workbook_response(camp):
     cost_centers_sheet = workbook.create_sheet("Kostenstellen")
     cost_centers = get_cost_center_evaluation(camp)
     
-    # Write totals first
-    cost_centers_sheet.append(["Kostenstelle", "Anzahl Ausgaben", "Gesamtsumme"])
-    for cc, data in cost_centers.items():
-        cost_centers_sheet.append([cc, data["count"], float(data["total"])])
+    cost_centers_sheet.append(["Kostenstelle", "Einnahmen", "Ausgaben", "Saldo", "Anzahl Einnahmen", "Anzahl Ausgaben"])
+    for data in cost_centers.values():
+        cost_centers_sheet.append([
+            data["label"],
+            float(data["income"]),
+            float(data["expense_total"]),
+            float(data["balance"]),
+            data["income_count"],
+            data["expense_count"],
+        ])
     
     cost_centers_sheet.append([])
-    cost_centers_sheet.append(["Detaillierte Belege pro Kostenstelle"])
-    cost_centers_sheet.append(["Kostenstelle", "Datum", "Antragsteller", "Beschreibung", "Betrag"])
+    cost_centers_sheet.append(["Detaillierte Einnahmen pro Kostenstelle"])
+    cost_centers_sheet.append(["Kostenstelle", "Datum", "Teilnehmer", "Beschreibung", "Betrag"])
+    for data in cost_centers.values():
+        for signup in data["income_details"]:
+            description = signup.get_meal_display()
+            if signup.family_member:
+                description = f"{description} für {signup.family_member.full_name}"
+            cost_centers_sheet.append([
+                data["label"],
+                signup.meal_date.strftime("%d.%m.%Y"),
+                signup.participant.full_name,
+                description,
+                float(signup.charge.total),
+            ])
     
-    for cc, data in cost_centers.items():
-        for exp in data["expenses"]:
+    cost_centers_sheet.append([])
+    cost_centers_sheet.append(["Detaillierte Ausgaben pro Kostenstelle"])
+    cost_centers_sheet.append(["Kostenstelle", "Datum", "Antragsteller", "Beschreibung", "Betrag"])
+    for data in cost_centers.values():
+        for exp in data["expense_details"]:
             paid_date = exp.paid_on.strftime("%d.%m.%Y") if exp.paid_on else exp.created_at.strftime("%d.%m.%Y")
             applicant = f"{exp.participant.first_name} {exp.participant.last_name}" if exp.participant else "Unbekannt"
-            cost_centers_sheet.append([cc, paid_date, applicant, exp.description, float(exp.amount)])
+            cost_centers_sheet.append([data["label"], paid_date, applicant, exp.description, float(exp.amount)])
 
     output = BytesIO()
     workbook.save(output)
@@ -461,20 +482,41 @@ def settlement_run_workbook_response(run: SettlementRun) -> HttpResponse:
     cost_centers_sheet = workbook.create_sheet("Kostenstellen")
     cost_centers = get_cost_center_evaluation(run.camp)
     
-    # Write totals first
-    cost_centers_sheet.append(["Kostenstelle", "Anzahl Ausgaben", "Gesamtsumme"])
-    for cc, data in cost_centers.items():
-        cost_centers_sheet.append([cc, data["count"], float(data["total"])])
+    cost_centers_sheet.append(["Kostenstelle", "Einnahmen", "Ausgaben", "Saldo", "Anzahl Einnahmen", "Anzahl Ausgaben"])
+    for data in cost_centers.values():
+        cost_centers_sheet.append([
+            data["label"],
+            float(data["income"]),
+            float(data["expense_total"]),
+            float(data["balance"]),
+            data["income_count"],
+            data["expense_count"],
+        ])
     
     cost_centers_sheet.append([])
-    cost_centers_sheet.append(["Detaillierte Belege pro Kostenstelle"])
-    cost_centers_sheet.append(["Kostenstelle", "Datum", "Antragsteller", "Beschreibung", "Betrag"])
+    cost_centers_sheet.append(["Detaillierte Einnahmen pro Kostenstelle"])
+    cost_centers_sheet.append(["Kostenstelle", "Datum", "Teilnehmer", "Beschreibung", "Betrag"])
+    for data in cost_centers.values():
+        for signup in data["income_details"]:
+            description = signup.get_meal_display()
+            if signup.family_member:
+                description = f"{description} für {signup.family_member.full_name}"
+            cost_centers_sheet.append([
+                data["label"],
+                signup.meal_date.strftime("%d.%m.%Y"),
+                signup.participant.full_name,
+                description,
+                float(signup.charge.total),
+            ])
     
-    for cc, data in cost_centers.items():
-        for exp in data["expenses"]:
+    cost_centers_sheet.append([])
+    cost_centers_sheet.append(["Detaillierte Ausgaben pro Kostenstelle"])
+    cost_centers_sheet.append(["Kostenstelle", "Datum", "Antragsteller", "Beschreibung", "Betrag"])
+    for data in cost_centers.values():
+        for exp in data["expense_details"]:
             paid_date = exp.paid_on.strftime("%d.%m.%Y") if exp.paid_on else exp.created_at.strftime("%d.%m.%Y")
             applicant = f"{exp.participant.first_name} {exp.participant.last_name}" if exp.participant else "Unbekannt"
-            cost_centers_sheet.append([cc, paid_date, applicant, exp.description, float(exp.amount)])
+            cost_centers_sheet.append([data["label"], paid_date, applicant, exp.description, float(exp.amount)])
 
     output = BytesIO()
     workbook.save(output)
