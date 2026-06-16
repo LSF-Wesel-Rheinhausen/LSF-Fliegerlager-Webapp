@@ -14,14 +14,12 @@
     </div>
   </div>
 
-  <dl class="metrics" aria-label="Kiosk-Abrechnungsübersicht">
-    <div class="metric"><dt>Brutto</dt><dd><strong>{{ summary.total_gross|money_eur }}</strong></dd></div>
-    <div class="metric"><dt>Förderung</dt><dd><strong>{{ summary.total_subsidy|money_eur }}</strong></dd></div>
-    <div class="metric"><dt>Soll</dt><dd><strong>{{ summary.total_due|money_eur }}</strong></dd></div>
-    <div class="metric"><dt>Gezahlt</dt><dd><strong>{{ summary.total_paid|money_eur }}</strong></dd></div>
-    <div class="metric"><dt>Vorgestreckt</dt><dd><strong>{{ summary.total_advanced|money_eur }}</strong></dd></div>
-    <div class="metric"><dt>Offen</dt><dd><strong>{{ summary.balance|money_eur }}</strong></dd></div>
-  </dl>
+  <div style="margin-bottom: 24px;">
+    <button type="button" class="button" data-open-summary-dialog style="width: 100%; font-size: 1.1rem; padding: 12px; justify-content: space-between; display: flex;">
+      <span>Aktuelle Abrechnung</span>
+      <strong>Offen: {{ summary.balance|money_eur }}</strong>
+    </button>
+  </div>
 
   {% if pending_invites %}
     <section class="panel stack">
@@ -297,6 +295,48 @@
     </section>
   </div>
 
+  <dialog id="summary-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="summary-dialog-title">
+    <form method="dialog" class="dialog-heading">
+      <h2 id="summary-dialog-title">Aktuelle Abrechnung</h2>
+      <button class="button button-secondary">Schließen</button>
+    </form>
+    
+    <dl class="metrics" aria-label="Kiosk-Abrechnungsübersicht" style="margin-top: 0;">
+      <div class="metric"><dt>Brutto</dt><dd><strong>{{ summary.total_gross|money_eur }}</strong></dd></div>
+      <div class="metric"><dt>Förderung</dt><dd><strong>{{ summary.total_subsidy|money_eur }}</strong></dd></div>
+      <div class="metric"><dt>Soll</dt><dd><strong>{{ summary.total_due|money_eur }}</strong></dd></div>
+      <div class="metric"><dt>Gezahlt</dt><dd><strong>{{ summary.total_paid|money_eur }}</strong></dd></div>
+      <div class="metric"><dt>Vorgestreckt</dt><dd><strong>{{ summary.total_advanced|money_eur }}</strong></dd></div>
+      <div class="metric"><dt>Offen</dt><dd><strong>{{ summary.balance|money_eur }}</strong></dd></div>
+    </dl>
+
+    <h3 style="margin-top: 2rem;">Positionen</h3>
+    <table class="data-table" style="margin-top: 1rem;">
+      <thead>
+        <tr>
+          <th>Position</th>
+          <th>Menge</th>
+          <th>Brutto</th>
+          <th>Förderung</th>
+          <th>Summe</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for line in summary.lines %}
+        <tr>
+          <td>{{ line.label }}</td>
+          <td>{{ line.quantity|default:"" }}</td>
+          <td>{{ line.gross_total|money_eur }}</td>
+          <td>{{ line.subsidy_amount|money_eur }}</td>
+          <td>{{ line.total|money_eur }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5">Noch keine Positionen vorhanden.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </dialog>
+
   <dialog id="drink-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="drink-dialog-title">
     <form method="dialog" class="dialog-heading">
       <h2 id="drink-dialog-title">Getränk buchen</h2>
@@ -430,9 +470,11 @@
           mealDialogTitle.textContent = `${button.dataset.mealLabel || "Mahlzeit"} buchen`;
           mealDialog.showModal();
         });
-      });
       document.querySelector("[data-open-family-dialog]")?.addEventListener("click", () => familyDialog.showModal());
       document.querySelector("[data-open-contact-dialog]")?.addEventListener("click", () => contactDialog.showModal());
+      
+      const summaryDialog = document.getElementById("summary-dialog");
+      document.querySelector("[data-open-summary-dialog]")?.addEventListener("click", () => summaryDialog.showModal());
     })();
   </script>
 {% endblock %}
