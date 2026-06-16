@@ -223,45 +223,70 @@ def _draw_sum_block(pdf, y, items):
 
 
 def _draw_payment_instructions(pdf, y, camp, balance):
-    if balance <= 0:
-        return y
-    
-    iban = getattr(camp, 'iban', '').strip()
-    paypal = getattr(camp, 'paypal_link', '').strip()
-    
-    if not iban and not paypal:
+    if balance == 0:
         return y
         
     width, _ = A4
     y -= 30
     
-    box_height = 65
-    y -= box_height
-    
-    pdf.setFillColorRGB(0.96, 0.96, 0.96)
-    pdf.setStrokeColorRGB(0.85, 0.85, 0.85)
-    pdf.roundRect(50, y, width - 100, box_height, radius=4, stroke=1, fill=1)
-    
-    text_y = y + box_height - 18
-    pdf.setFillColorRGB(0, 0, 0)
-    pdf.setFont("Helvetica-Bold", 9)
-    pdf.drawString(65, text_y, "Zahlungsinformationen")
-    
-    text_y -= 14
-    pdf.setFont("Helvetica", 9)
-    pdf.drawString(65, text_y, "Bitte begleiche den offenen Kontostand zeitnah auf eines der folgenden Konten:")
-    
-    text_y -= 16
-    pdf.setFont("Helvetica-Bold", 9)
-    
-    if iban and paypal:
-        pdf.drawString(65, text_y, f"IBAN: {iban}")
-        pdf.drawString(280, text_y, f"PayPal: {paypal}")
-    elif iban:
-        pdf.drawString(65, text_y, f"IBAN: {iban}")
-    elif paypal:
-        pdf.drawString(65, text_y, f"PayPal: {paypal}")
+    if balance > 0:
+        iban = getattr(camp, 'iban', '').strip()
+        paypal = getattr(camp, 'paypal_link', '').strip()
         
+        if not iban and not paypal:
+            return y
+            
+        box_height = 65
+        y -= box_height
+        
+        pdf.setFillColorRGB(0.96, 0.96, 0.96)
+        pdf.setStrokeColorRGB(0.85, 0.85, 0.85)
+        pdf.roundRect(50, y, width - 100, box_height, radius=4, stroke=1, fill=1)
+        
+        text_y = y + box_height - 18
+        pdf.setFillColorRGB(0, 0, 0)
+        pdf.setFont("Helvetica-Bold", 9)
+        pdf.drawString(65, text_y, "Zahlungsinformationen")
+        
+        text_y -= 14
+        pdf.setFont("Helvetica", 9)
+        pdf.drawString(65, text_y, "Bitte begleiche den offenen Kontostand zeitnah auf eines der folgenden Konten:")
+        
+        text_y -= 16
+        pdf.setFont("Helvetica-Bold", 9)
+        
+        if iban and paypal:
+            pdf.drawString(65, text_y, f"IBAN: {iban}")
+            pdf.drawString(280, text_y, f"PayPal: {paypal}")
+        elif iban:
+            pdf.drawString(65, text_y, f"IBAN: {iban}")
+        elif paypal:
+            pdf.drawString(65, text_y, f"PayPal: {paypal}")
+            
+    else:
+        # balance < 0 (Guthaben)
+        box_height = 70
+        y -= box_height
+        
+        pdf.setFillColorRGB(0.96, 0.96, 0.96)
+        pdf.setStrokeColorRGB(0.85, 0.85, 0.85)
+        pdf.roundRect(50, y, width - 100, box_height, radius=4, stroke=1, fill=1)
+        
+        text_y = y + box_height - 18
+        pdf.setFillColorRGB(0, 0, 0)
+        pdf.setFont("Helvetica-Bold", 9)
+        pdf.drawString(65, text_y, "Guthaben & Auszahlung")
+        
+        text_y -= 14
+        pdf.setFont("Helvetica", 9)
+        pdf.drawString(65, text_y, "Du hast ein Guthaben. Bitte teile der Lagerleitung mit, ob du diesen Betrag spenden (auch")
+        text_y -= 12
+        pdf.drawString(65, text_y, "anteilig möglich) oder ausgezahlt haben möchtest.")
+        
+        text_y -= 16
+        pdf.setFont("Helvetica-Bold", 9)
+        pdf.drawString(65, text_y, "Für eine Auszahlung nenne der Lagerleitung bitte deine IBAN oder PayPal-Adresse.")
+
     return y
 
 
