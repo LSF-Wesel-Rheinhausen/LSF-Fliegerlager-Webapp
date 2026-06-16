@@ -1087,6 +1087,7 @@ dialog::backdrop {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  margin-top: 24px;
 }
 .kiosk-masonry-col {
   display: flex;
