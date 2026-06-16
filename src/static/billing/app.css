@@ -1082,3 +1082,24 @@ dialog::backdrop {
 .row-actions form {
   margin: 0;
 }
+
+.kiosk-masonry {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.kiosk-masonry-col {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+@media (min-width: 768px) {
+  .kiosk-masonry {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+  .kiosk-masonry-col {
+    flex: 1;
+    min-width: 0;
+  }
+}

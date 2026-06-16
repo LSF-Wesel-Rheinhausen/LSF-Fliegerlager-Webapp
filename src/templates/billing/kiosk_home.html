@@ -130,7 +130,8 @@
     </section>
   </div>
 
-  <div class="kiosk-grid" style="align-items: start;">
+  <div class="kiosk-masonry">
+    <div class="kiosk-masonry-col">
     <section class="panel stack">
       <h2>Dienste</h2>
       <p>Du hast <strong>{{ participant.completed_shifts }} von {{ participant.target_shifts }}</strong> Pflichtdiensten erledigt.</p>
@@ -139,6 +140,38 @@
       </div>
     </section>
 
+    <section class="panel stack">
+      <div class="toolbar compact-toolbar kiosk-section-heading">
+        <div>
+          <h2 style="display: flex; align-items: center; gap: 8px;">
+            Familie
+            <button type="button" class="kiosk-help-button" data-help-text="Hier legst du Familienmitglieder (z.B. Partner, Kinder) an. Ihre Kosten werden auf deine finale Abrechnung gebucht. Sie tauchen beim Essen als auswählbare Personen auf, haben aber keinen eigenen Kiosk-Login.">?</button>
+          </h2>
+          <p>Diese Personen werden über dein Konto abgerechnet.</p>
+        </div>
+        <button type="button" class="button" data-open-family-dialog>Anlegen</button>
+      </div>
+
+      {% for member in family_members %}
+        <div class="kiosk-list-row">
+          <div class="kiosk-list-row__content">
+            <strong>{{ member.full_name }}</strong>
+            <span>{{ member.get_role_display }}</span>
+          </div>
+          <form method="post" class="kiosk-list-row__actions">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="family_member_deactivate">
+            <input type="hidden" name="family_member_id" value="{{ member.pk }}">
+            <button type="submit" class="button-secondary">Entfernen</button>
+          </form>
+        </div>
+      {% empty %}
+        <p class="hint">Noch keine Familienmitglieder angelegt.</p>
+      {% endfor %}
+    </section>
+
+    </div>
+    <div class="kiosk-masonry-col">
     <section class="panel stack">
       <h2 style="display: flex; align-items: center; gap: 8px;">
         Gemeinschaftsausgaben
@@ -185,36 +218,6 @@
     </section>
 
     <section class="panel stack">
-      <div class="toolbar compact-toolbar kiosk-section-heading">
-        <div>
-          <h2 style="display: flex; align-items: center; gap: 8px;">
-            Familie
-            <button type="button" class="kiosk-help-button" data-help-text="Hier legst du Familienmitglieder (z.B. Partner, Kinder) an. Ihre Kosten werden auf deine finale Abrechnung gebucht. Sie tauchen beim Essen als auswählbare Personen auf, haben aber keinen eigenen Kiosk-Login.">?</button>
-          </h2>
-          <p>Diese Personen werden über dein Konto abgerechnet.</p>
-        </div>
-        <button type="button" class="button" data-open-family-dialog>Anlegen</button>
-      </div>
-
-      {% for member in family_members %}
-        <div class="kiosk-list-row">
-          <div class="kiosk-list-row__content">
-            <strong>{{ member.full_name }}</strong>
-            <span>{{ member.get_role_display }}</span>
-          </div>
-          <form method="post" class="kiosk-list-row__actions">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="family_member_deactivate">
-            <input type="hidden" name="family_member_id" value="{{ member.pk }}">
-            <button type="submit" class="button-secondary">Entfernen</button>
-          </form>
-        </div>
-      {% empty %}
-        <p class="hint">Noch keine Familienmitglieder angelegt.</p>
-      {% endfor %}
-    </section>
-
-    <section class="panel stack">
       <div class="kiosk-section-heading">
         <h2 style="display: flex; align-items: center; gap: 8px;">
           Mitbuchungen
@@ -252,6 +255,7 @@
       {% endfor %}
     </section>
   </div>
+    </div>
 
   <div class="kiosk-grid">
     <section>
