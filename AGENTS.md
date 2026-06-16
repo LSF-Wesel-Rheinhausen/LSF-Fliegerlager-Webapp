@@ -93,7 +93,7 @@ Use Conventional Commits:
 
 Pull requests should include a clear summary, rationale, test results, and linked issues when available. Include screenshots or sample output for visible UI changes, generated reports, or modified exports. CI must pass before review. **For features, major refactorings, and relevant bugfixes, a changelog entry MUST be created in the `changelog/` directory following the format `pr-<number>-<short-title>.md`.**
 
-**CRITICAL AGENT WORKFLOW**: Every time a logical sub-task or milestone is completed, you MUST automatically run the git workflow: stage all changes, create a descriptive commit, push the branch, and create a Pull Request via GitHub CLI, without asking for permission first.
+**CRITICAL AGENT WORKFLOW**: Every time a logical sub-task or milestone is completed, you MUST automatically run the git workflow: stage all changes, create a descriptive commit, push the branch, and create a Pull Request via GitHub CLI, without asking for permission first. **Before committing ANY code changes, you MUST run the test suite (`.venv/bin/python -m pytest`) to ensure nothing is broken. Do not commit failing tests.**
 
 ## 6. AI & Agent-Specific Instructions
 
