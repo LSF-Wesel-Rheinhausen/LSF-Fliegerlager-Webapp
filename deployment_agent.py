@@ -5,6 +5,7 @@ import hmac
 import json
 import logging
 import os
+import shlex
 import subprocess
 import threading
 import time
@@ -36,10 +37,57 @@ update_lock = threading.Lock()
 state_lock = threading.Lock()
 
 
+class ComposeUpError(RuntimeError):
+    """Expose docker compose failures without leaking environment values."""
+
+    def __init__(
+        self,
+        *,
+        step: str,
+        image: str,
+        command: list[str],
+        returncode: int | None,
+        stdout: str,
+        stderr: str,
+    ) -> None:
+        self.step = step
+        self.image = image
+        self.command = command
+        self.returncode = returncode
+        self.stdout = stdout.strip()
+        self.stderr = stderr.strip()
+        super().__init__(self._build_message())
+
+    def _build_message(self) -> str:
+        parts = [
+            f"{self.step} fehlgeschlagen.",
+            f"Image: {self.image}",
+            f"Befehl: {format_command(self.command)}",
+        ]
+        if self.returncode is not None:
+            parts.append(f"Exit-Code: {self.returncode}")
+        if self.stdout:
+            parts.append(f"stdout: {limit_output(self.stdout)}")
+        if self.stderr:
+            parts.append(f"stderr: {limit_output(self.stderr)}")
+        return "\n".join(parts)
+
+
+def format_command(command: list[str]) -> str:
+    return " ".join(shlex.quote(part) for part in command)
+
+
+def limit_output(output: str, limit: int = 1200) -> str:
+    stripped = output.strip()
+    if len(stripped) <= limit:
+        return stripped
+    return f"{stripped[:limit]}... [gekürzt]"
+
+
 def docker_client() -> Any:
     global client
     if client is None:
-        client = docker.from_env()
+        client = docker.from_env()  # type: ignore[attr-defined]
     return client
 
 
@@ -141,7 +189,7 @@ def create_backup() -> str:
     return filename
 
 
-def compose_up(image: str) -> None:
+def compose_up(image: str, *, step: str = "App-Container neu starten") -> None:
     environment = os.environ.copy()
     environment["APP_IMAGE"] = image
     command = [
@@ -159,7 +207,50 @@ def compose_up(image: str) -> None:
         "--force-recreate",
         TARGET_SERVICE,
     ]
-    subprocess.run(command, env=environment, check=True, capture_output=True, text=True, timeout=180)
+    try:
+        result = subprocess.run(command, env=environment, check=False, capture_output=True, text=True, timeout=180)
+    except subprocess.TimeoutExpired as error:
+        raise ComposeUpError(
+            step=step,
+            image=image,
+            command=command,
+            returncode=None,
+            stdout=str(error.stdout or ""),
+            stderr=str(error.stderr or "Timeout nach 180 Sekunden."),
+        ) from error
+    if result.returncode != 0:
+        raise ComposeUpError(
+            step=step,
+            image=image,
+            command=command,
+            returncode=result.returncode,
+            stdout=result.stdout,
+            stderr=result.stderr,
+        )
+
+
+def update_error(step: str, error: BaseException) -> str:
+    if isinstance(error, ComposeUpError):
+        return str(error)
+    return f"{step} fehlgeschlagen: {error}"
+
+
+def recovery_hint(backup_name: str, old_image_id: str) -> str:
+    lines = [
+        "Logs prüfen: docker compose --project-name "
+        f"{shlex.quote(PROJECT_NAME)} --file {shlex.quote(COMPOSE_FILE)} --env-file {shlex.quote(ENV_FILE)} "
+        "logs --tail=200 app updater db"
+    ]
+    if old_image_id:
+        lines.append(
+            "Manuelle Wiederherstellung: APP_IMAGE="
+            f"{shlex.quote(old_image_id)} docker compose --project-name {shlex.quote(PROJECT_NAME)} "
+            f"--file {shlex.quote(COMPOSE_FILE)} --env-file {shlex.quote(ENV_FILE)} "
+            f"up --detach --no-deps --force-recreate {shlex.quote(TARGET_SERVICE)}"
+        )
+    if backup_name:
+        lines.append(f"Backup vorhanden: {backup_name}")
+    return "\n".join(lines)
 
 
 def wait_until_healthy(expected_image_id: str) -> None:
@@ -184,18 +275,24 @@ def wait_until_healthy(expected_image_id: str) -> None:
 def perform_update() -> None:
     old_image_id = ""
     backup_name = ""
+    step = "Update vorbereiten"
     try:
         save_state(phase="preparing", message="Update wird vorbereitet.", error="")
+        step = "Laufenden App-Container ermitteln"
         old_container = service_container(TARGET_SERVICE)
         old_image_id = old_container.image.id
+        step = "Neuestes Image laden"
         latest = docker_client().images.pull(TARGET_IMAGE)
         if latest.id == old_image_id:
             save_state(phase="complete", message="Die Anwendung ist bereits aktuell.", latest=image_metadata(latest))
             return
 
+        step = "Datenbank-Backup erstellen"
         backup_name = create_backup()
         save_state(phase="installing", message="Neues Image wird gestartet.", backup=backup_name)
-        compose_up(TARGET_IMAGE)
+        step = "Neuen App-Container starten"
+        compose_up(TARGET_IMAGE, step=step)
+        step = "Healthcheck abwarten"
         wait_until_healthy(latest.id)
         save_state(
             phase="complete",
@@ -210,15 +307,17 @@ def perform_update() -> None:
         if old_image_id:
             try:
                 save_state(phase="rollback", message="Update fehlgeschlagen; vorheriges Image wird wiederhergestellt.")
-                compose_up(old_image_id)
+                compose_up(old_image_id, step="Rollback: alten App-Container starten")
                 wait_until_healthy(old_image_id)
             except (DockerException, OSError, RuntimeError, subprocess.SubprocessError) as rollback_exception:
                 logger.exception("Rollback fehlgeschlagen")
-                rollback_error = f" Rollback fehlgeschlagen: {rollback_exception}"
+                rollback_error = update_error("Rollback", rollback_exception)
         save_state(
             phase="failed",
             message="Update fehlgeschlagen; bitte Logs prüfen.",
-            error=f"{error}{rollback_error}",
+            error=update_error(step, error),
+            rollback_error=rollback_error,
+            recovery=recovery_hint(backup_name, old_image_id),
             backup=backup_name,
         )
     finally:
