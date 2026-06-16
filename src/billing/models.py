@@ -113,6 +113,8 @@ class Participant(TimeStampedModel):
         validators=[MinValueValidator(Decimal("0")), MaxValueValidator(Decimal("1"))],
         help_text="0 bis 1, zum Beispiel 0,3300.",
     )
+    arrival_date = models.DateField(null=True, blank=True)
+    departure_date = models.DateField(null=True, blank=True)
     booked_nights = models.PositiveIntegerField(default=0)
     actual_nights = models.PositiveIntegerField(default=0)
     notes = models.TextField(blank=True)
@@ -133,6 +135,13 @@ class Participant(TimeStampedModel):
                 name="unique_participant_name_per_camp",
             ),
         ]
+
+    def save(self, *args, **kwargs):
+        if self.arrival_date and self.departure_date:
+            days = (self.departure_date - self.arrival_date).days
+            if days > 0:
+                self.booked_nights = days
+        super().save(*args, **kwargs)
 
     @property
     def full_name(self):

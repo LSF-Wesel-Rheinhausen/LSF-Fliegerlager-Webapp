@@ -11,12 +11,16 @@ from tests.factories import CampFactory, ParticipantFactory
 
 
 def test_csv_preview_validates_required_fields_and_numbers():
-    payload = b"first_name,last_name,actual_nights\nAda,,abc\nGrace,Hopper,3\n"
+    payload = (
+        b"Vorname,Nachname,Anreise,Abreise,Hilfssatz,Berufssatz,ist_n\xc3\xa4chte\n"
+        b"Ada,,01.08.2026,10.08.2026,1.0,1.0,abc\n"
+        b"Grace,Hopper,01.08.2026,10.08.2026,1.0,1.0,3\n"
+    )
 
     rows = preview_participants(BytesIO(payload), "teilnehmer.csv")
 
     assert rows[0].valid is False
-    assert "last_name: Pflichtfeld fehlt" in rows[0].errors
+    assert "Nachname: Pflichtfeld fehlt" in rows[0].errors
     assert "actual_nights: keine gültige Zahl" in rows[0].errors
     assert rows[1].valid is True
     assert rows[1].data["actual_nights"] == 3
@@ -25,7 +29,10 @@ def test_csv_preview_validates_required_fields_and_numbers():
 @pytest.mark.django_db
 def test_save_participants_upserts_valid_rows():
     camp = CampFactory()
-    payload = b"first_name,last_name,email\nAda,Lovelace,ada@example.org\n"
+    payload = (
+        b"Vorname,Nachname,Anreise,Abreise,Hilfssatz,Berufssatz,Email\n"
+        b"Ada,Lovelace,01.08.2026,10.08.2026,1.0,1.0,ada@example.org\n"
+    )
     rows = preview_participants(BytesIO(payload), "teilnehmer.csv")
 
     save_participants(camp, rows)
@@ -39,7 +46,11 @@ def test_save_participants_upserts_valid_rows():
 def test_save_participants_rejects_archived_name_conflict():
     camp = CampFactory()
     ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace", archived_at="2026-06-09T12:00:00Z")
-    rows = preview_participants(BytesIO(b"first_name,last_name\nAda,Lovelace\n"), "teilnehmer.csv")
+    payload = (
+        b"Vorname,Nachname,Anreise,Abreise,Hilfssatz,Berufssatz\n"
+        b"Ada,Lovelace,01.08.2026,10.08.2026,1.0,1.0\n"
+    )
+    rows = preview_participants(BytesIO(payload), "teilnehmer.csv")
 
     with pytest.raises(ValidationError, match="archiviert"):
         save_participants(camp, rows)

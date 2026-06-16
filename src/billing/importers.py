@@ -25,10 +25,28 @@ PARTICIPANT_COLUMNS = [
     "is_companion",
     "hilfssatz",
     "berufssatz",
+    "arrival_date",
+    "departure_date",
     "booked_nights",
     "actual_nights",
     "notes",
 ]
+
+
+def parse_date(value, field_name, errors):
+    if not value or not str(value).strip():
+        return None
+    val_str = str(value).strip()
+    import datetime
+    
+    # Try different date formats
+    for fmt in ("%d.%m.%Y", "%Y-%m-%d", "%d.%m.%y", "%m/%d/%Y", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.datetime.strptime(val_str, fmt).date()
+        except ValueError:
+            pass
+    errors.append(f"{field_name}: ungültiges Datumsformat (erwartet TT.MM.JJJJ)")
+    return None
 
 
 @dataclass
@@ -72,16 +90,71 @@ def parse_decimal(value, field_name, errors, default="1"):
 
 def normalize_row(raw, row_number):
     errors = []
-    data = {column: raw.get(column, "") for column in PARTICIPANT_COLUMNS}
-    for column in REQUIRED_PARTICIPANT_COLUMNS:
+    
+    mapping = {
+        "vorname": "first_name", "first_name": "first_name",
+        "nachname": "last_name", "last_name": "last_name",
+        "anreise": "arrival_date", "arrival_date": "arrival_date",
+        "abreise": "departure_date", "departure_date": "departure_date",
+        "hilfssatz": "hilfssatz",
+        "berufssatz": "berufssatz",
+        "email": "email", "e-mail": "email",
+        "telefon": "phone", "phone": "phone",
+        "status": "status",
+        "kind": "is_child", "is_child": "is_child",
+        "jugendgruppe": "is_youth_group", "is_youth_group": "is_youth_group",
+        "begleitperson": "is_companion", "is_companion": "is_companion",
+        "notizen": "notes", "notes": "notes",
+        "gebuchte_nächte": "booked_nights", "booked_nights": "booked_nights",
+        "ist_nächte": "actual_nights", "actual_nights": "actual_nights",
+    }
+    
+    data = {}
+    extra_notes = []
+    
+    for k, v in raw.items():
+        if k is None:
+            continue
+        k_lower = str(k).lower().strip()
+        if k_lower in mapping:
+            data[mapping[k_lower]] = v
+        else:
+            if str(v).strip():
+                extra_notes.append(f"{k}: {v}")
+                
+    for column in PARTICIPANT_COLUMNS:
+        data.setdefault(column, "")
+        
+    for column in ["first_name", "last_name", "arrival_date", "departure_date", "hilfssatz", "berufssatz"]:
         if not str(data.get(column, "")).strip():
-            errors.append(f"{column}: Pflichtfeld fehlt")
+            label_map = {
+                "first_name": "Vorname", "last_name": "Nachname",
+                "arrival_date": "Anreise", "departure_date": "Abreise",
+                "hilfssatz": "Hilfssatz", "berufssatz": "Berufssatz"
+            }
+            errors.append(f"{label_map.get(column, column)}: Pflichtfeld fehlt")
+            
+    data["arrival_date"] = parse_date(data.get("arrival_date"), "Anreise", errors)
+    data["departure_date"] = parse_date(data.get("departure_date"), "Abreise", errors)
+
     for column in ["booked_nights", "actual_nights"]:
         data[column] = parse_int(data.get(column), column, errors)
+        
     for column in ["hilfssatz", "berufssatz"]:
-        data[column] = parse_decimal(data.get(column), column, errors)
+        val = parse_decimal(data.get(column), column, errors)
+        if val is not None and (val < 0 or val > 1):
+            errors.append(f"{column.capitalize()}: Wert muss zwischen 0 und 1 liegen")
+        data[column] = val
+        
     for column in ["is_child", "is_youth_group", "is_companion"]:
         data[column] = parse_bool(data.get(column))
+        
+    if extra_notes:
+        if data["notes"]:
+            data["notes"] += "\n" + "\n".join(extra_notes)
+        else:
+            data["notes"] = "\n".join(extra_notes)
+
     return ImportRow(row_number=row_number, data=data, errors=errors)
 
 
