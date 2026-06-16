@@ -7,46 +7,23 @@
   <a class="button button-secondary" href="{% url 'kiosk-logout' %}">Abmelden</a>
 {% endblock %}
 {% block content %}
-  <section class="kiosk-hero">
-    <article class="panel kiosk-hero__intro kiosk-card--accent">
-      <span class="kiosk-hero__eyebrow">Mein Kiosk</span>
-      <div class="kiosk-hero__copy">
-        <h1>{{ participant.full_name }}</h1>
-        <p>Buche Getränke und Essen, verwalte Mitbuchungen und behalte deine Abrechnung im Blick, ohne zwischen Seiten zu springen.</p>
-      </div>
-      <div class="kiosk-meta">
-        <span class="kiosk-meta__item">{{ participant.camp }}</span>
-        <span class="kiosk-meta__item">{{ participant.get_status_display }}</span>
-        <span class="kiosk-meta__item">{{ participant.completed_shifts }} / {{ participant.target_shifts }} Pflichtdienste</span>
-      </div>
-      <div class="kiosk-actions">
-        <button type="button" class="button" data-open-summary-dialog>Abrechnung ansehen</button>
-      </div>
-    </article>
+  <div class="toolbar">
+    <div>
+      <h1>{{ participant.full_name }}</h1>
+      <p>{{ participant.camp }} · {{ participant.get_status_display }}</p>
+    </div>
+  </div>
 
-    <aside class="panel kiosk-summary-card">
-      <span class="kiosk-summary-card__label">Aktuelle Abrechnung</span>
-      <strong class="kiosk-summary-card__value {% if summary.balance > 0 %}negative{% elif summary.balance < 0 %}positive{% endif %}">
-        {{ summary.balance|money_eur }}
-      </strong>
-      <div class="kiosk-summary-card__meta">
-        <p>Brutto: {{ summary.total_gross|money_eur }}</p>
-        <p>Soll: {{ summary.total_due|money_eur }}</p>
-        <p>Gezahlt und Auslagen werden im Dialog detailliert angezeigt.</p>
-      </div>
-      <button type="button" class="button" data-open-summary-dialog>Details öffnen</button>
-    </aside>
-  </section>
+  <div style="margin-bottom: 24px;">
+    <button type="button" class="button" data-open-summary-dialog style="width: 100%; font-size: 1.1rem; padding: 12px; justify-content: space-between; display: flex;">
+      <span>Aktuelle Abrechnung</span>
+      <strong>Offen: {{ summary.balance|money_eur }}</strong>
+    </button>
+  </div>
 
   {% if pending_invites %}
-    <section class="panel kiosk-card kiosk-card--muted">
-      <div class="kiosk-card__header">
-        <div class="kiosk-card__header-main">
-          <span class="kiosk-card__eyebrow">Offene Aktion</span>
-          <h2>Einladungen</h2>
-          <p>Hier warten Freigaben für gegenseitiges Mitbuchen.</p>
-        </div>
-      </div>
+    <section class="panel stack">
+      <h2>Einladungen</h2>
       {% for invite in pending_invites %}
         <div class="kiosk-list-row">
           <div class="kiosk-list-row__content">
@@ -65,17 +42,11 @@
   {% endif %}
 
   <div class="kiosk-grid">
-    <section class="panel kiosk-card kiosk-card--accent">
-      <div class="kiosk-card__header">
-        <div class="kiosk-card__header-main">
-          <span class="kiosk-card__eyebrow">Schnellaktion</span>
-          <h2 class="kiosk-title">
-            Getränk buchen
-            <button type="button" class="kiosk-help-button" data-help-text="Tippe auf ein Getränk und wähle danach die Menge, um es auf deinen Deckel zu buchen. Falls du dich vertippt hast, kannst du den Fehler ganz unten unter 'Letzte Getränke' über das Mülleimer-Symbol sofort wieder stornieren." aria-label="Kurzhilfe Getränke">?</button>
-          </h2>
-          <p>Wähle ein Getränk und buche die Menge direkt auf deinen Deckel.</p>
-        </div>
-      </div>
+    <section class="panel">
+      <h2 style="display: flex; align-items: center; gap: 8px;">
+        Getränk buchen
+        <button type="button" class="kiosk-help-button" data-help-text="Tippe auf ein Getränk und wähle danach die Menge, um es auf deinen Deckel zu buchen. Falls du dich vertippt hast, kannst du den Fehler ganz unten unter 'Letzte Getränke' über das Mülleimer-Symbol sofort wieder stornieren.">?</button>
+      </h2>
       <form method="post" class="stack kiosk-drink-form" id="drink-booking-form">
         {% csrf_token %}
         <input type="hidden" name="action" value="drink">
@@ -107,17 +78,11 @@
       </form>
     </section>
 
-    <section class="panel kiosk-card kiosk-card--accent">
-      <div class="kiosk-card__header">
-        <div class="kiosk-card__header-main">
-          <span class="kiosk-card__eyebrow">Schnellaktion</span>
-          <h2 class="kiosk-title">
-            Essen anmelden
-            <button type="button" class="kiosk-help-button" data-help-text="Wähle im Kalender eine Mahlzeit (z.B. Frühstück). Im folgenden Fenster kannst du dich und deine Familienmitglieder an- und abmelden oder die Variante (Normal/Vegetarisch) ändern. Graue Kalendertage bedeuten, dass die Meldefrist bereits abgelaufen ist." aria-label="Kurzhilfe Mahlzeiten">?</button>
-          </h2>
-          <p>Öffne einen Tag im Kalender und speichere deine Auswahl für dich oder deine Familie.</p>
-        </div>
-      </div>
+    <section class="panel">
+      <h2 style="display: flex; align-items: center; gap: 8px;">
+        Essen anmelden
+        <button type="button" class="kiosk-help-button" data-help-text="Wähle im Kalender eine Mahlzeit (z.B. Frühstück). Im folgenden Fenster kannst du dich und deine Familienmitglieder an- und abmelden oder die Variante (Normal/Vegetarisch) ändern. Graue Kalendertage bedeuten, dass die Meldefrist bereits abgelaufen ist.">?</button>
+      </h2>
       <div class="meal-order-status" aria-label="Essensbestellung für {{ next_order_date|date:'d.m.Y' }}">
         <strong>Essensbestellung für {{ next_order_date|date:"d.m.Y" }}</strong>
         {% if next_meal_order %}
@@ -165,28 +130,28 @@
     </section>
   </div>
 
-  <div class="kiosk-split">
-    <div class="kiosk-stack">
-      <section class="panel kiosk-card kiosk-card--muted">
-        <div class="kiosk-card__header kiosk-section-heading">
+  <div class="kiosk-masonry">
+    <div class="kiosk-masonry-col">
+      <section class="panel stack">
+        <div class="toolbar compact-toolbar kiosk-section-heading">
           <div>
             <h2>Dienste</h2>
             <p>Du hast <strong>{{ participant.completed_shifts }} von {{ participant.target_shifts }}</strong> Pflichtdiensten erledigt.</p>
           </div>
-          <a class="button kiosk-card__action" href="{% url 'kiosk-shifts' %}">Zum Dienstplan</a>
+          <a class="button" href="{% url 'kiosk-shifts' %}">Zum Dienstplan</a>
         </div>
       </section>
 
-      <section class="panel kiosk-card kiosk-card--muted">
-        <div class="kiosk-card__header kiosk-section-heading">
-          <div class="kiosk-card__header-main">
-            <h2 class="kiosk-title">
+      <section class="panel stack">
+        <div class="toolbar compact-toolbar kiosk-section-heading">
+          <div>
+            <h2 style="display: flex; align-items: center; gap: 8px;">
               Familie
-              <button type="button" class="kiosk-help-button" data-help-text="Hier legst du Familienmitglieder (z.B. Partner, Kinder) an. Ihre Kosten werden auf deine finale Abrechnung gebucht. Sie tauchen beim Essen als auswählbare Personen auf, haben aber keinen eigenen Kiosk-Login." aria-label="Kurzhilfe Familie">?</button>
+              <button type="button" class="kiosk-help-button" data-help-text="Hier legst du Familienmitglieder (z.B. Partner, Kinder) an. Ihre Kosten werden auf deine finale Abrechnung gebucht. Sie tauchen beim Essen als auswählbare Personen auf, haben aber keinen eigenen Kiosk-Login.">?</button>
             </h2>
             <p>Diese Personen werden über dein Konto abgerechnet.</p>
           </div>
-          <button type="button" class="button kiosk-card__action" data-open-family-dialog>Anlegen</button>
+          <button type="button" class="button" data-open-family-dialog>Anlegen</button>
         </div>
 
         {% for member in family_members %}
@@ -203,244 +168,204 @@
             </form>
           </div>
         {% empty %}
-          <div class="kiosk-empty">
-            <strong>Noch keine Familienmitglieder angelegt.</strong>
-            <p>Lege Personen an, die über dein Konto mit Essen buchen oder mitgerechnet werden sollen.</p>
-          </div>
-        {% endfor %}
-      </section>
-
-      <section class="panel kiosk-card kiosk-card--muted">
-        <div class="kiosk-card__header kiosk-section-heading">
-          <div class="kiosk-card__header-main">
-            <h2 class="kiosk-title">
-              Mitbuchungen
-              <button type="button" class="kiosk-help-button" data-help-text="Lade andere Teilnehmer ein, damit ihr euch gegenseitig beim Essen mit anmelden könnt. Sobald die Einladung angenommen wurde, könnt ihr euch gegenseitig auswählen. Die Abrechnung bleibt dabei für jeden separat." aria-label="Kurzhilfe Mitbuchungen">?</button>
-            </h2>
-            <p>Lade andere Teilnehmer ein und verwalte bestehende Freigaben.</p>
-          </div>
-        </div>
-        <form method="post" class="form-grid">
-          {% csrf_token %}
-          <input type="hidden" name="action" value="booking_link_invite">
-          {{ booking_link_form.as_p }}
-          <div class="form-actions">
-            <button type="submit">Einladen</button>
-          </div>
-        </form>
-        {% for invite in sent_invites %}
-          <p class="hint">Offen: {{ invite.invitee.full_name }}</p>
-        {% endfor %}
-        {% for link in accepted_links %}
-          <div class="kiosk-list-row">
-            <div class="kiosk-list-row__content">
-              <strong>
-                {% if link.inviter_id == participant.pk %}{{ link.invitee.full_name }}{% else %}{{ link.inviter.full_name }}{% endif %}
-              </strong>
-              <span>Gegenseitig freigegeben</span>
-            </div>
-            <form method="post" class="kiosk-list-row__actions">
-              {% csrf_token %}
-              <input type="hidden" name="action" value="booking_link_revoke">
-              <input type="hidden" name="booking_link_id" value="{{ link.pk }}">
-              <button type="submit" class="button-secondary">Auflösen</button>
-            </form>
-          </div>
-        {% empty %}
-          <div class="kiosk-empty">
-            <strong>Keine angenommenen Verknüpfungen vorhanden.</strong>
-            <p>Einladungen erscheinen hier, sobald sie angenommen wurden.</p>
-          </div>
+          <p class="hint">Noch keine Familienmitglieder angelegt.</p>
         {% endfor %}
       </section>
     </div>
 
-    <div class="kiosk-stack">
-      <section class="panel kiosk-card kiosk-card--muted">
-        <div class="kiosk-card__header kiosk-section-heading">
-          <div class="kiosk-card__header-main">
-            <h2 class="kiosk-title">
+    <div class="kiosk-masonry-col">
+      <section class="panel stack">
+        <div class="toolbar compact-toolbar kiosk-section-heading">
+          <div>
+            <h2 style="display: flex; align-items: center; gap: 8px;">
               Gemeinschaftsausgaben
-              <button type="button" class="kiosk-help-button" data-help-text="Hier kannst du Ausgaben einreichen, die du für die Gemeinschaft vorgestreckt hast (z.B. Grillgut). Nach Freigabe durch die Lagerleitung wird der Betrag als Umlage auf die Teilnehmer aufgeteilt und dir als Gutschrift angerechnet." aria-label="Kurzhilfe Auslagen">?</button>
+              <button type="button" class="kiosk-help-button" data-help-text="Hier kannst du Ausgaben einreichen, die du für die Gemeinschaft vorgestreckt hast (z.B. Grillgut). Nach Freigabe durch die Lagerleitung wird der Betrag als Umlage auf die Teilnehmer aufgeteilt und dir als Gutschrift angerechnet.">?</button>
             </h2>
             <p>Geld für die Gemeinschaft vorgestreckt?</p>
           </div>
-          <a class="button button-secondary kiosk-card__action" href="{% url 'kiosk-shared-expense-request' %}">Antrag einreichen</a>
+          <a class="button button-secondary" href="{% url 'kiosk-shared-expense-request' %}">Antrag einreichen</a>
         </div>
-
+        
         {% if participant_expenses %}
-          <div class="kiosk-table">
-            <div class="kiosk-table__header">
-              <h3>Meine Anträge</h3>
-            </div>
-            <div class="kiosk-table__wrapper">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>Status</th>
-                    <th>Beschreibung</th>
-                    <th>Betrag</th>
-                    <th>Datum</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for expense in participant_expenses %}
-                    <tr>
-                      <td>
-                        {% if expense.status == "pending" %}
-                          <span class="kiosk-status-text kiosk-status-text--pending">Ausstehend</span>
-                        {% elif expense.status == "approved" %}
-                          <span class="kiosk-status-text kiosk-status-text--ok">Genehmigt</span>
-                        {% elif expense.status == "rejected" %}
-                          <button type="button" class="button-link kiosk-status-text kiosk-status-text--danger" data-open-rejection-reason-dialog data-reason="{{ expense.rejection_reason }}">Abgelehnt ℹ️</button>
-                        {% else %}
-                          {{ expense.get_status_display }}
-                        {% endif %}
-                      </td>
-                      <td>{{ expense.description }}</td>
-                      <td>{{ expense.amount }} €</td>
-                      <td>{{ expense.paid_on|default:expense.created_at|date:"d.m.Y" }}</td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        {% else %}
-          <div class="kiosk-empty">
-            <strong>Noch keine Anträge eingereicht.</strong>
-            <p>Wenn du etwas für die Gemeinschaft vorgestreckt hast, kannst du den Beleg hier einreichen.</p>
-          </div>
+        <h3 style="margin-top: 0.5rem; font-size: 1.1rem;">Meine Anträge</h3>
+        <table class="data-table" style="margin-top: 0.25rem;">
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Beschreibung</th>
+              <th>Betrag</th>
+              <th>Datum</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for expense in participant_expenses %}
+            <tr>
+              <td>
+                {% if expense.status == "pending" %}
+                  <span style="color: #d97706; font-weight: 600;">Ausstehend</span>
+                {% elif expense.status == "approved" %}
+                  <span style="color: var(--ok); font-weight: 600;">Genehmigt</span>
+                {% elif expense.status == "rejected" %}
+                  <button type="button" class="button-link" data-open-rejection-reason-dialog data-reason="{{ expense.rejection_reason }}" style="color: var(--danger); font-weight: 600; padding: 0; text-align: left; text-decoration: underline; text-underline-offset: 4px;">Abgelehnt ℹ️</button>
+                {% else %}
+                  {{ expense.get_status_display }}
+                {% endif %}
+              </td>
+              <td>{{ expense.description }}</td>
+              <td>{{ expense.amount }} €</td>
+              <td>{{ expense.paid_on|default:expense.created_at|date:"d.m.Y" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
         {% endif %}
       </section>
 
-      <section class="panel kiosk-card kiosk-card--muted">
-        <div class="kiosk-card__header kiosk-section-heading">
-          <div class="kiosk-card__header-main">
-            <h2>Kontakt Lagerleitung</h2>
-            <p>Öffne die Kontaktdaten direkt im Dialog, wenn bei Buchungen etwas unklar ist.</p>
-          </div>
-          <button type="button" class="button button-secondary kiosk-card__action" data-open-contact-dialog>Kontakt anzeigen</button>
+      <section class="panel stack">
+        <div class="kiosk-section-heading">
+          <h2 style="display: flex; align-items: center; gap: 8px;">
+            Mitbuchungen
+            <button type="button" class="kiosk-help-button" data-help-text="Lade andere Teilnehmer ein, damit ihr euch gegenseitig beim Essen mit anmelden könnt. Sobald die Einladung angenommen wurde, könnt ihr euch gegenseitig auswählen. Die Abrechnung bleibt dabei für jeden separat.">?</button>
+          </h2>
         </div>
-      </section>
-    </div>
+      <form method="post" class="form-grid">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="booking_link_invite">
+        {{ booking_link_form.as_p }}
+        <div class="form-actions">
+          <button type="submit">Einladen</button>
+        </div>
+      </form>
+      {% for invite in sent_invites %}
+        <p class="hint">Offen: {{ invite.invitee.full_name }}</p>
+      {% endfor %}
+      {% for link in accepted_links %}
+        <div class="kiosk-list-row">
+          <div class="kiosk-list-row__content">
+            <strong>
+              {% if link.inviter_id == participant.pk %}{{ link.invitee.full_name }}{% else %}{{ link.inviter.full_name }}{% endif %}
+            </strong>
+            <span>Gegenseitig freigegeben</span>
+          </div>
+          <form method="post" class="kiosk-list-row__actions">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="booking_link_revoke">
+            <input type="hidden" name="booking_link_id" value="{{ link.pk }}">
+            <button type="submit" class="button-secondary">Auflösen</button>
+          </form>
+        </div>
+      {% empty %}
+        <p class="hint">Keine angenommenen Verknüpfungen vorhanden.</p>
+      {% endfor %}
+    </section>
   </div>
+    </div>
 
   <div class="kiosk-grid">
-    <section class="panel kiosk-card kiosk-card--muted kiosk-table">
-      <div class="kiosk-table__header">
-        <h2>Letzte Getränke</h2>
-        <p>Deine letzten Buchungen im Überblick.</p>
-      </div>
-      <div class="kiosk-table__wrapper">
-        <table>
-          <thead><tr><th>Zeit</th><th>Getränk</th><th>Menge</th><th>Einzelpreis</th><th>Summe</th></tr></thead>
-          <tbody>
-            {% for entry in recent_drinks %}
-              <tr>
-                <td>{{ entry.created_at }}</td>
-                <td>{{ entry.description }}</td>
-                <td>{{ entry.quantity }}</td>
-                <td>{{ entry.unit_price|money_eur }}</td>
-                <td>{{ entry.total|money_eur }}</td>
-              </tr>
-            {% empty %}
-              <tr><td colspan="5">Noch keine Getränke gebucht.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
+    <section>
+      <h2>Letzte Getränke</h2>
+      <table>
+        <thead><tr><th>Zeit</th><th>Getränk</th><th>Menge</th><th>Einzelpreis</th><th>Summe</th></tr></thead>
+        <tbody>
+          {% for entry in recent_drinks %}
+            <tr>
+              <td>{{ entry.created_at }}</td>
+              <td>{{ entry.description }}</td>
+              <td>{{ entry.quantity }}</td>
+              <td>{{ entry.unit_price|money_eur }}</td>
+              <td>{{ entry.total|money_eur }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5">Noch keine Getränke gebucht.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </section>
 
-    <section class="panel kiosk-card kiosk-card--muted kiosk-table">
-      <div class="kiosk-table__header">
-        <h2>Essensanmeldungen</h2>
-        <p>So sind deine aktuellen Anmeldungen gespeichert.</p>
-      </div>
-      <div class="kiosk-table__wrapper">
-        <table>
-          <thead><tr><th>Datum</th><th>Person</th><th>Mahlzeit</th><th>Variante</th><th>Status</th></tr></thead>
-          <tbody>
-            {% for signup in meal_signups %}
-              <tr>
-                <td>{{ signup.meal_date }}</td>
-                <td>{% if signup.family_member %}{{ signup.family_member.full_name }}{% else %}{{ signup.participant.full_name }}{% endif %}</td>
-                <td>{{ signup.get_meal_display }}</td>
-                <td>{{ signup.get_variant_display }}</td>
-                <td>{{ signup.get_status_display }}</td>
-              </tr>
-            {% empty %}
-              <tr><td colspan="5">Noch keine Essensanmeldungen vorhanden.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
+    <section>
+      <h2>Essensanmeldungen</h2>
+      <table>
+        <thead><tr><th>Datum</th><th>Person</th><th>Mahlzeit</th><th>Variante</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for signup in meal_signups %}
+            <tr>
+              <td>{{ signup.meal_date }}</td>
+              <td>{% if signup.family_member %}{{ signup.family_member.full_name }}{% else %}{{ signup.participant.full_name }}{% endif %}</td>
+              <td>{{ signup.get_meal_display }}</td>
+              <td>{{ signup.get_variant_display }}</td>
+              <td>{{ signup.get_status_display }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5">Noch keine Essensanmeldungen vorhanden.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </section>
   </div>
 
   <dialog id="summary-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="summary-dialog-title">
-    <form method="dialog" class="dialog-heading dialog-heading--flush">
+    <form method="dialog" class="dialog-heading" style="border-bottom: none; padding-bottom: 0;">
       <h2 id="summary-dialog-title">Abrechnung</h2>
       <button class="button button-secondary">Schließen</button>
     </form>
-
-    <div class="kiosk-dialog-meta">
-      <strong>{{ participant.full_name }}</strong>
-      <span>{{ participant.camp }}</span>
+    
+    <div style="font-size: 1.1em; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--line);">
+      <strong>{{ participant.full_name }}</strong><br>
+      <span style="color: var(--muted);">{{ participant.camp }}</span>
     </div>
 
-    <div class="kiosk-table__wrapper" style="margin-bottom: 2rem;">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Position</th>
-            <th style="text-align: right;">Menge</th>
-            <th style="text-align: right;">Brutto</th>
-            <th style="text-align: right;">Förderung</th>
-            <th style="text-align: right;">Summe</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for line in summary.lines %}
-            <tr>
-              <td>{{ line.label }}</td>
-              <td style="text-align: right;">{{ line.quantity|default:"" }}</td>
-              <td style="text-align: right;">{{ line.gross_total|money_eur }}</td>
-              <td style="text-align: right;">{% if line.subsidy_amount %}{{ line.subsidy_amount|money_eur }}{% endif %}</td>
-              <td style="text-align: right;"><strong>{{ line.total|money_eur }}</strong></td>
-            </tr>
-          {% empty %}
-            <tr><td colspan="5" style="text-align: center; color: var(--muted); padding: 2rem 0;">Noch keine Positionen vorhanden.</td></tr>
-          {% endfor %}
-        </tbody>
+    <table class="data-table" style="margin-bottom: 2rem;">
+      <thead>
+        <tr>
+          <th style="text-align: left;">Position</th>
+          <th style="text-align: right;">Menge</th>
+          <th style="text-align: right;">Brutto</th>
+          <th style="text-align: right;">Förderung</th>
+          <th style="text-align: right;">Summe</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for line in summary.lines %}
+        <tr>
+          <td>{{ line.label }}</td>
+          <td style="text-align: right;">{{ line.quantity|default:"" }}</td>
+          <td style="text-align: right;">{{ line.gross_total|money_eur }}</td>
+          <td style="text-align: right;">{% if line.subsidy_amount %}{{ line.subsidy_amount|money_eur }}{% endif %}</td>
+          <td style="text-align: right;"><strong>{{ line.total|money_eur }}</strong></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" style="text-align: center; color: var(--muted); padding: 2rem 0;">Noch keine Positionen vorhanden.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div style="display: flex; justify-content: center; margin-bottom: 1rem;">
+      <table style="width: 100%; max-width: 320px; text-align: right; border-collapse: collapse;">
+        <tr>
+          <td style="padding: 4px 12px; color: var(--muted);">Brutto Gesamt</td>
+          <td style="padding: 4px 0;">{{ summary.total_gross|money_eur }}</td>
+        </tr>
+        <tr>
+          <td style="padding: 4px 12px; color: var(--muted);">Förderung</td>
+          <td style="padding: 4px 0; color: var(--ok);">{% if summary.total_subsidy %}-{{ summary.total_subsidy|money_eur }}{% else %}0,00 €{% endif %}</td>
+        </tr>
+        <tr style="border-top: 1px solid var(--line);">
+          <td style="padding: 8px 12px; font-weight: bold;">Rechnungsbetrag (Soll)</td>
+          <td style="padding: 8px 0; font-weight: bold;">{{ summary.total_due|money_eur }}</td>
+        </tr>
+        <tr>
+          <td style="padding: 4px 12px; color: var(--muted);">Bereits gezahlt</td>
+          <td style="padding: 4px 0;">{% if summary.total_paid %}-{{ summary.total_paid|money_eur }}{% else %}0,00 €{% endif %}</td>
+        </tr>
+        <tr>
+          <td style="padding: 4px 12px; color: var(--muted);">Vorgestreckte Auslagen</td>
+          <td style="padding: 4px 0;">{% if summary.total_advanced %}-{{ summary.total_advanced|money_eur }}{% else %}0,00 €{% endif %}</td>
+        </tr>
+        <tr style="border-top: 2px solid var(--text); font-size: 1.15em;">
+          <td style="padding: 12px 12px; font-weight: bold;">Noch offen</td>
+          <td style="padding: 12px 0; font-weight: bold; {% if summary.balance > 0 %}color: var(--danger);{% elif summary.balance < 0 %}color: var(--ok);{% endif %}">{{ summary.balance|money_eur }}</td>
+        </tr>
       </table>
-    </div>
-
-    <div class="kiosk-dialog-summary">
-      <div class="kiosk-dialog-summary__row">
-        <span>Brutto Gesamt</span>
-        <strong>{{ summary.total_gross|money_eur }}</strong>
-      </div>
-      <div class="kiosk-dialog-summary__row">
-        <span>Förderung</span>
-        <strong class="positive">{% if summary.total_subsidy %}-{{ summary.total_subsidy|money_eur }}{% else %}0,00 €{% endif %}</strong>
-      </div>
-      <div class="kiosk-dialog-summary__row kiosk-dialog-summary__row--separator">
-        <span>Rechnungsbetrag (Soll)</span>
-        <strong>{{ summary.total_due|money_eur }}</strong>
-      </div>
-      <div class="kiosk-dialog-summary__row">
-        <span>Bereits gezahlt</span>
-        <strong>{% if summary.total_paid %}-{{ summary.total_paid|money_eur }}{% else %}0,00 €{% endif %}</strong>
-      </div>
-      <div class="kiosk-dialog-summary__row">
-        <span>Vorgestreckte Auslagen</span>
-        <strong>{% if summary.total_advanced %}-{{ summary.total_advanced|money_eur }}{% else %}0,00 €{% endif %}</strong>
-      </div>
-      <div class="kiosk-dialog-summary__row kiosk-dialog-summary__row--total">
-        <span>Noch offen</span>
-        <strong class="{% if summary.balance > 0 %}negative{% elif summary.balance < 0 %}positive{% endif %}">{{ summary.balance|money_eur }}</strong>
-      </div>
     </div>
   </dialog>
 
@@ -532,7 +457,7 @@
       <h2 id="rejection-reason-dialog-title">Ablehnungsgrund</h2>
       <button class="button button-secondary">Schließen</button>
     </form>
-    <p id="rejection-reason-text" class="rejection-reason-text"></p>
+    <p id="rejection-reason-text" style="white-space: pre-wrap; margin-bottom: 1rem;"></p>
     <form method="dialog" class="form-actions">
       <button type="submit" class="button">OK</button>
     </form>

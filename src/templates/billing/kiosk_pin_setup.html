@@ -4,34 +4,15 @@
   <a class="button button-secondary" href="{% url 'kiosk-logout' %}">Abmelden</a>
 {% endblock %}
 {% block content %}
-  <section class="kiosk-login-shell">
-    <div class="kiosk-login-card">
-      <article class="panel kiosk-login-card__hero kiosk-card--accent">
-        <span class="kiosk-hero__eyebrow">Erster Login</span>
-        <div class="kiosk-hero__copy">
-          <h1>Eigene PIN festlegen</h1>
-          <p>Für <strong>{{ participant.full_name }}</strong> ist noch keine PIN hinterlegt. Richte jetzt deinen persönlichen Zugang ein.</p>
-        </div>
-        <div class="kiosk-note">
-          <strong>Merktipp</strong>
-          <p>Wähle eine PIN, die du dir auch am Kiosk schnell merken und sicher eingeben kannst.</p>
-        </div>
-      </article>
-
-      <section class="panel kiosk-login-card__form">
-        <div class="kiosk-card__header-main">
-          <span class="kiosk-card__eyebrow">Sicherheit</span>
-          <h2>PIN speichern</h2>
-          <p>Nach dem Speichern wirst du direkt im Kiosk weiterarbeiten können.</p>
-        </div>
-        <form method="post" class="form-grid">
-          {% csrf_token %}
-          {{ form.as_p }}
-          <div class="form-actions">
-            <button type="submit">PIN speichern</button>
-          </div>
-        </form>
-      </section>
-    </div>
+  <section class="panel narrow">
+    <h1>PIN festlegen</h1>
+    <p class="hint">Für {{ participant.full_name }} wurde noch kein PIN gesetzt. Lege jetzt einen neuen PIN fest.</p>
+    <form method="post" class="form-grid">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="form-actions">
+        <button type="submit">PIN speichern</button>
+      </div>
+    </form>
   </section>
 {% endblock %}

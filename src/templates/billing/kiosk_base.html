@@ -6,17 +6,48 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Kiosk{% endblock %}</title>
     <link rel="stylesheet" href="{% static 'billing/app.css' %}?v=4">
+    <style>
+      .kiosk-help-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 24px;
+        width: 24px;
+        height: 24px;
+        min-width: 24px !important;
+        min-height: 24px !important;
+        max-width: 24px !important;
+        max-height: 24px !important;
+        border-radius: 50%;
+        background: var(--accent);
+        color: white;
+        font-family: inherit;
+        font-weight: bold;
+        cursor: pointer;
+        border: none;
+        font-size: 14px;
+        line-height: 1;
+        padding: 0;
+        margin: 0;
+        appearance: none;
+        -webkit-appearance: none;
+        box-sizing: border-box;
+      }
+      .kiosk-help-button:hover {
+        background: color-mix(in srgb, var(--accent) 80%, black);
+      }
+    </style>
   </head>
   <body class="kiosk-shell">
     <header class="topbar kiosk-topbar">
-      <div class="kiosk-topbar__brand">
-        <a class="brand kiosk-brand" href="{% url 'kiosk-login' %}">
+      <div style="display: flex; justify-content: center; width: 100%;">
+        <a class="brand" href="{% url 'kiosk-login' %}" style="flex-shrink: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: center;">
           <img src="{% static 'billing/logo.jpg' %}" alt="Luftsportfreunde Wesel-Rheinhausen e.V.">
-          <span class="kiosk-brand__copy">
-            <span class="kiosk-brand__label">Kiosk</span>
+          <span style="display: flex; gap: 12px; align-items: baseline;">
+            <span>Kiosk</span>
             {% if participant %}
-              <span class="kiosk-brand__context">
-                <span id="kiosk-greeting">Hallo</span> <strong>{{ participant.first_name }}</strong>
+              <span style="color: var(--muted); font-weight: 700; pointer-events: none;">
+                <span id="kiosk-greeting">Hallo</span> <strong style="color: var(--text);">{{ participant.first_name }}</strong>
                 <script>
                   (function() {
                     const greetings = ["Hallo", "Moin", "Servus", "Willkommen", "Hey", "Gude", "Grüß dich"];
@@ -28,7 +59,7 @@
           </span>
         </a>
       </div>
-      <div class="kiosk-header-actions">
+      <div class="kiosk-header-actions" style="flex-shrink: 0;">
         {% if kiosk_autologout %}
           <div
             class="kiosk-timer"
@@ -109,7 +140,7 @@
         <h2 id="kiosk-help-title">Kurzhilfe</h2>
         <button class="button button-secondary">Schließen</button>
       </form>
-      <div id="kiosk-help-content" class="kiosk-dialog-help">
+      <div id="kiosk-help-content" style="padding: 12px; background: #eef2f6; border-left: 4px solid var(--accent); font-size: 0.95em; line-height: 1.5; margin-bottom: 1rem;">
       </div>
     </dialog>
     <script>

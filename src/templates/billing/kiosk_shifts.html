@@ -6,204 +6,312 @@
   <a class="button button-secondary" href="{% url 'kiosk-home' %}">Zurück</a>
 {% endblock %}
 {% block content %}
-  <section class="shift-layout">
-    <div class="toolbar">
-      <div>
-        <h1>Dienstplan</h1>
-        <p>Hier trägst du dich für offene Dienste ein, verwaltest Tauschangebote und siehst deinen Fortschritt.</p>
-      </div>
+<style>
+/* Modernes Card-Design für den Kiosk */
+.shift-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+  margin-bottom: 0.75rem;
+}
+.shift-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 16px rgba(0,0,0,0.08);
+  border-color: var(--primary);
+}
+.shift-card--offer {
+  border: 2px solid var(--ok);
+  background: color-mix(in srgb, var(--ok) 5%, transparent);
+}
+.shift-card--offer:hover {
+  box-shadow: 0 8px 16px color-mix(in srgb, var(--ok) 15%, transparent);
+}
+.shift-card__info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.shift-card__title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.shift-card__meta {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.shift-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.shift-badge--ok {
+  background: color-mix(in srgb, var(--ok) 15%, transparent);
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 30%, transparent);
+}
+.shift-badge--danger {
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+}
+
+/* Modern Progress Bar */
+.progress-track {
+  width: 100%;
+  height: 22px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  border-radius: 9999px;
+  box-shadow: inset 0 4px 8px rgba(0,0,0,0.15), inset 0 1px 3px rgba(0,0,0,0.1);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--text) 15%, transparent);
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, var(--ok), #10b981);
+  position: relative;
+  transition: width 1s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--ok) 80%, transparent);
+}
+.progress-fill::after {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; bottom: 0; right: 0;
+  background: linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.25) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.25) 50%,
+    rgba(255, 255, 255, 0.25) 75%,
+    transparent 75%,
+    transparent
+  );
+  background-size: 20px 20px;
+  animation: move-stripes 1.5s linear infinite;
+  border-radius: 9999px;
+}
+@keyframes move-stripes {
+  0% { background-position: 0 0; }
+  100% { background-position: 20px 0; }
+}
+
+/* Dynamische Namen via Container Queries */
+.shift-card {
+  container-type: inline-size;
+  container-name: shiftcard;
+}
+.coworker-badge {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 0.1rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+.shift-card--offer .coworker-badge {
+  background: var(--surface);
+}
+.coworker-short { display: none; }
+
+@container shiftcard (max-width: 380px) {
+  .coworker-full { display: none; }
+  .coworker-short { display: inline; }
+}
+</style>
+  <div class="toolbar">
+    <div>
+      <h1>Dienstplan</h1>
+      <p>Hier kannst du dich für offene Dienste eintragen oder deine Dienste verwalten.</p>
     </div>
+  </div>
 
-    <section class="panel shift-progress">
-      <h2>Dein Fortschritt</h2>
-      {% if participant.completed_shifts >= participant.target_shifts %}
-        <div class="shift-progress__celebration">
-          <span class="shift-progress__check" aria-hidden="true">✓</span>
-          <div>
-            <strong class="positive">Super! Du hast alle Pflichtdienste übernommen. Vielen Dank!</strong>
-            <p>Du kannst natürlich trotzdem noch freiwillig weitere Dienste übernehmen oder Tauschangebote annehmen.</p>
-          </div>
-        </div>
-      {% else %}
-        <div class="shift-progress__header">
-          <span class="shift-progress__count">Du hast <strong>{{ participant.completed_shifts }}</strong> von <strong>{{ participant.target_shifts }}</strong> Pflichtdiensten erledigt.</span>
-          <strong class="shift-progress__percent">{% widthratio participant.completed_shifts participant.target_shifts|default:1 100 %} %</strong>
-        </div>
-        <div class="progress-track" aria-hidden="true">
-          <div class="progress-fill" style="width: {% widthratio participant.completed_shifts participant.target_shifts|default:1 100 %}%; max-width: 100%;"></div>
-        </div>
-      {% endif %}
-    </section>
+  <section class="panel" style="margin-bottom: 2rem;">
+    <h2>Dein Fortschritt</h2>
+    {% if participant.completed_shifts >= participant.target_shifts %}
+      <div style="display: flex; align-items: center; gap: 1rem; padding: 1rem; background: var(--surface-2); border: 2px solid var(--ok); border-radius: 8px;">
+         <div style="background: var(--ok); color: white; border-radius: 50%; min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; font-weight: bold;">✓</div>
+         <div style="font-weight: bold; color: var(--ok);">Super! Du hast alle Pflichtdienste übernommen. Vielen Dank! 🎉🥳</div>
+      </div>
+      <p style="margin-top: 1rem; font-size: 0.9rem; color: var(--text-muted);">Du kannst natürlich trotzdem noch freiwillig weitere Dienste übernehmen oder Tauschangebote annehmen.</p>
+    {% else %}
+      <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 0.6rem;">
+        <span style="font-size: 0.95rem; color: var(--text-muted);">Du hast <strong><span style="color: var(--text);">{{ participant.completed_shifts }}</span> von <span style="color: var(--text);">{{ participant.target_shifts }}</span></strong> Pflichtdiensten erledigt.</span>
+        <strong style="font-size: 1.15rem; color: var(--ok);">{% widthratio participant.completed_shifts participant.target_shifts|default:1 100 %} %</strong>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" style="width: {% widthratio participant.completed_shifts participant.target_shifts|default:1 100 %}%; max-width: 100%;"></div>
+      </div>
+    {% endif %}
+  </section>
 
-    <div class="kiosk-grid shift-columns">
-      <div class="shift-column">
-        {% if offered_shifts %}
-          <section class="panel kiosk-card kiosk-card--success">
-            <div class="kiosk-card__header kiosk-section-heading">
-              <div class="kiosk-card__header-main">
-                <span class="kiosk-card__eyebrow">Priorität</span>
-                <h2>Tauschangebote</h2>
-                <p>Diese Dienste suchen aktuell aktiv eine Übernahme.</p>
-              </div>
-            </div>
-            {% for shift in offered_shifts %}
-              <article class="shift-card shift-card--offer">
-                <div class="shift-card__info">
-                  <h3 class="shift-card__title">
-                    {{ shift.name }}
-                    <span class="shift-badge shift-badge--ok">Tauschangebot</span>
-                  </h3>
-                  <div class="shift-card__meta">
-                    <span>📅 {{ shift.date|date:"d.m.Y" }}</span>
-                    {% if shift.start_time %}<span>⏰ {{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}</span>{% endif %}
-                    <span>👤 Angeboten von: <strong>{{ shift.offered_by }}</strong></span>
-                  </div>
-                  {% if shift.assignments.count > 1 %}
-                    <div class="kiosk-stack">
-                      <span class="helptext">Weitere Einteilungen</span>
-                      <div class="kiosk-pill-list">
-                        {% for assignment in shift.assignments.all %}
-                          {% if assignment.participant.full_name != shift.offered_by %}
-                            <span class="coworker-badge">
-                              <span class="coworker-full">{{ assignment.participant.full_name }}</span>
-                              <span class="coworker-short">{{ assignment.participant.first_name }} {{ assignment.participant.last_name|make_list|first }}.</span>
-                            </span>
-                          {% endif %}
-                        {% endfor %}
-                      </div>
-                    </div>
-                  {% endif %}
-                </div>
-                <form method="post">
-                  {% csrf_token %}
-                  <input type="hidden" name="action" value="signup">
-                  <input type="hidden" name="shift_id" value="{{ shift.pk }}">
-                  {% if not shift.is_full %}
-                    <button type="submit" class="button">Eintragen</button>
-                  {% else %}
-                    <button type="submit" class="button">Dienst übernehmen</button>
-                  {% endif %}
-                </form>
-              </article>
-            {% endfor %}
-          </section>
-        {% endif %}
-
-        <section class="panel kiosk-card kiosk-card--muted">
-          <div class="kiosk-card__header kiosk-section-heading">
-            <div class="kiosk-card__header-main">
-              <h2 class="kiosk-title">
-                Meine übernommenen Dienste
-                <button type="button" class="kiosk-help-button" data-help-text="Hier siehst du die Dienste, für die du eingeteilt bist. Falls du verhindert bist, klicke auf 'Zum Tausch anbieten'. Dein Dienst wird dann bei allen anderen hervorgehoben angeboten, bis ihn jemand übernimmt." aria-label="Hilfe zu meinen Diensten">?</button>
-              </h2>
-              <p>Verwalte deine aktuellen Dienste und biete sie bei Bedarf zum Tausch an.</p>
-            </div>
-          </div>
-          {% for shift in my_shifts %}
-            <article class="shift-card">
+  <div class="kiosk-grid" style="align-items: start;">
+    <!-- Linke Spalte -->
+    <div style="display: flex; flex-direction: column; gap: 22px;">
+      {% if offered_shifts %}
+        <section class="panel stack" style="border: 2px solid var(--ok); background: color-mix(in srgb, var(--ok) 2%, transparent);">
+          <h2>Tauschangebote</h2>
+          {% for shift in offered_shifts %}
+            <div class="shift-card shift-card--offer">
               <div class="shift-card__info">
-                <h3 class="shift-card__title">{{ shift.name }}</h3>
+                <h3 class="shift-card__title">
+                  {{ shift.name }}
+                  <span class="shift-badge shift-badge--ok">Tauschangebot</span>
+                </h3>
                 <div class="shift-card__meta">
                   <span>📅 {{ shift.date|date:"d.m.Y" }}</span>
                   {% if shift.start_time %}<span>⏰ {{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}</span>{% endif %}
-                  {% if shift.my_assignment.offered_for_exchange %}
-                    <span class="shift-badge shift-badge--ok">Wird zum Tausch angeboten</span>
-                  {% endif %}
+                  <span>👤 Angeboten von: <strong>{{ shift.offered_by }}</strong></span>
                 </div>
                 {% if shift.assignments.count > 1 %}
-                  <div class="kiosk-stack">
-                    <span class="helptext">Zusammen mit</span>
-                    <div class="kiosk-pill-list">
-                      {% for assignment in shift.assignments.all %}
-                        {% if assignment.participant != participant %}
-                          <span class="coworker-badge">
-                            <span class="coworker-full">{{ assignment.participant.full_name }}</span>
-                            <span class="coworker-short">{{ assignment.participant.first_name }} {{ assignment.participant.last_name|make_list|first }}.</span>
-                          </span>
-                        {% endif %}
-                      {% endfor %}
-                    </div>
-                  </div>
-                {% endif %}
-              </div>
-              <div class="shift-card__actions">
-                <form method="post">
-                  {% csrf_token %}
-                  <input type="hidden" name="shift_id" value="{{ shift.pk }}">
-                  {% if shift.my_assignment.offered_for_exchange %}
-                    <input type="hidden" name="action" value="revoke_offer">
-                    <button type="submit" class="button button-secondary">Angebot zurückziehen</button>
-                  {% else %}
-                    <input type="hidden" name="action" value="offer">
-                    <button type="submit" class="button button-secondary">Zum Tausch anbieten</button>
-                  {% endif %}
-                </form>
-              </div>
-            </article>
-          {% empty %}
-            <div class="kiosk-empty">
-              <strong>Du hast noch keine Dienste übernommen.</strong>
-              <p>Offene Dienste findest du direkt in der rechten Spalte.</p>
-            </div>
-          {% endfor %}
-        </section>
-      </div>
-
-      <div class="shift-column">
-        <section class="panel kiosk-card kiosk-card--muted">
-          <div class="kiosk-card__header kiosk-section-heading">
-            <div class="kiosk-card__header-main">
-              <h2 class="kiosk-title">
-                Offene Dienste
-                <button type="button" class="kiosk-help-button" data-help-text="Tippe auf 'Eintragen', um einen Dienst zu übernehmen. Graue Buttons bedeuten, dass der Dienst bereits voll besetzt ist." aria-label="Hilfe zu offenen Diensten">?</button>
-              </h2>
-              <p>Hier siehst du alle freien Dienste inklusive aktueller Belegung.</p>
-            </div>
-          </div>
-          {% for shift in open_shifts %}
-            <article class="shift-card">
-              <div class="shift-card__info">
-                <h3 class="shift-card__title">{{ shift.name }}</h3>
-                <div class="shift-card__meta">
-                  <span>📅 {{ shift.date|date:"d.m.Y" }}</span>
-                  {% if shift.start_time %}<span>⏰ {{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}</span>{% endif %}
-                  <span class="shift-badge {% if shift.is_full %}shift-badge--danger{% else %}shift-badge--ok{% endif %}">
-                    Besetzt: {{ shift.assignments.count }} / {{ shift.required_slots }}
-                  </span>
-                </div>
-                {% if shift.assignments.count > 0 %}
-                  <div class="kiosk-stack">
-                    <span class="helptext">Bereits eingetragen</span>
-                    <div class="kiosk-pill-list">
-                      {% for assignment in shift.assignments.all %}
+                  <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.5rem; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                    <span>Weitere Einteilungen:</span>
+                    {% for assignment in shift.assignments.all %}
+                      {% if assignment.participant.full_name != shift.offered_by %}
                         <span class="coworker-badge">
                           <span class="coworker-full">{{ assignment.participant.full_name }}</span>
                           <span class="coworker-short">{{ assignment.participant.first_name }} {{ assignment.participant.last_name|make_list|first }}.</span>
                         </span>
-                      {% endfor %}
-                    </div>
+                      {% endif %}
+                    {% endfor %}
                   </div>
                 {% endif %}
               </div>
-              <form method="post">
+              <form method="post" style="margin: 0;">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="signup">
                 <input type="hidden" name="shift_id" value="{{ shift.pk }}">
                 {% if not shift.is_full %}
-                  <button type="submit" class="button">Eintragen</button>
+                  <button type="submit" class="button button-primary">Eintragen</button>
                 {% else %}
-                  <button type="button" class="button button-secondary" disabled>Voll</button>
+                  <button type="submit" class="button" style="background-color: var(--ok); border-color: var(--ok);">Dienst übernehmen</button>
                 {% endif %}
               </form>
-            </article>
-          {% empty %}
-            <div class="kiosk-empty">
-              <strong>Es stehen aktuell keine offenen Dienste zur Verfügung.</strong>
-              <p>Schau später noch einmal vorbei oder prüfe Tauschangebote in der linken Spalte.</p>
             </div>
           {% endfor %}
         </section>
-      </div>
+      {% endif %}
+
+      <section class="panel stack">
+        <h2 style="display: flex; align-items: center; gap: 8px;">
+          Meine übernommenen Dienste
+          <button type="button" class="kiosk-help-button" data-help-text="Hier siehst du die Dienste, für die du eingeteilt bist. Falls du verhindert bist, klicke auf 'Zum Tausch anbieten'. Dein Dienst wird dann bei allen anderen hervorgehoben angeboten, bis ihn jemand übernimmt.">?</button>
+        </h2>
+        {% for shift in my_shifts %}
+          <div class="shift-card">
+            <div class="shift-card__info">
+              <h3 class="shift-card__title">{{ shift.name }}</h3>
+              <div class="shift-card__meta">
+                <span>📅 {{ shift.date|date:"d.m.Y" }}</span>
+                {% if shift.start_time %}<span>⏰ {{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}</span>{% endif %}
+                {% if shift.my_assignment.offered_for_exchange %}
+                  <span class="shift-badge shift-badge--ok">Wird zum Tausch angeboten</span>
+                {% endif %}
+              </div>
+              {% if shift.assignments.count > 1 %}
+                <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.5rem; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                  <span>Zusammen mit:</span>
+                  {% for assignment in shift.assignments.all %}
+                    {% if assignment.participant != participant %}
+                      <span class="coworker-badge">
+                        <span class="coworker-full">{{ assignment.participant.full_name }}</span>
+                        <span class="coworker-short">{{ assignment.participant.first_name }} {{ assignment.participant.last_name|make_list|first }}.</span>
+                      </span>
+                    {% endif %}
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </div>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <form method="post" style="margin: 0;">
+                {% csrf_token %}
+                <input type="hidden" name="shift_id" value="{{ shift.pk }}">
+                {% if shift.my_assignment.offered_for_exchange %}
+                  <input type="hidden" name="action" value="revoke_offer">
+                  <button type="submit" class="button button-secondary">Angebot zurückziehen</button>
+                {% else %}
+                  <input type="hidden" name="action" value="offer">
+                  <button type="submit" class="button button-secondary">Zum Tausch anbieten</button>
+                {% endif %}
+              </form>
+            </div>
+          </div>
+        {% empty %}
+          <p class="hint">Du hast noch keine Dienste übernommen.</p>
+        {% endfor %}
+      </section>
     </div>
-  </section>
+
+    <!-- Rechte Spalte -->
+    <div style="display: flex; flex-direction: column; gap: 22px;">
+      <section class="panel stack">
+        <h2 style="display: flex; align-items: center; gap: 8px;">
+          Offene Dienste
+          <button type="button" class="kiosk-help-button" data-help-text="Tippe auf 'Eintragen', um einen Dienst zu übernehmen. Graue Buttons bedeuten, dass der Dienst bereits voll besetzt ist.">?</button>
+        </h2>
+        {% for shift in open_shifts %}
+          <div class="shift-card">
+            <div class="shift-card__info">
+              <h3 class="shift-card__title">{{ shift.name }}</h3>
+              <div class="shift-card__meta">
+                <span>📅 {{ shift.date|date:"d.m.Y" }}</span>
+                {% if shift.start_time %}<span>⏰ {{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}</span>{% endif %}
+                <span class="shift-badge {% if shift.is_full %}shift-badge--danger{% else %}shift-badge--ok{% endif %}">
+                  Besetzt: {{ shift.assignments.count }} / {{ shift.required_slots }}
+                </span>
+              </div>
+              {% if shift.assignments.count > 0 %}
+                <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.5rem; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                  <span>Bereits eingetragen:</span>
+                  {% for assignment in shift.assignments.all %}
+                    <span class="coworker-badge">
+                      <span class="coworker-full">{{ assignment.participant.full_name }}</span>
+                      <span class="coworker-short">{{ assignment.participant.first_name }} {{ assignment.participant.last_name|make_list|first }}.</span>
+                    </span>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </div>
+            <form method="post" style="margin: 0;">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="signup">
+              <input type="hidden" name="shift_id" value="{{ shift.pk }}">
+              {% if not shift.is_full %}
+                <button type="submit" class="button button-primary">Eintragen</button>
+              {% else %}
+                <button type="button" class="button button-secondary" disabled>Voll</button>
+              {% endif %}
+            </form>
+          </div>
+        {% empty %}
+          <p class="hint">Es stehen aktuell keine offenen Dienste zur Verfügung.</p>
+        {% endfor %}
+      </section>
+    </div>
+  </div>
+
+
 {% endblock %}
