@@ -214,6 +214,13 @@ def create_backup() -> str:
 
 
 def compose_up(image: str, *, step: str = "App-Container neu starten") -> None:
+    compose_path = Path(COMPOSE_FILE)
+    if not compose_path.is_file():
+        raise RuntimeError(
+            f"Compose-Datei '{COMPOSE_FILE}' nicht gefunden oder ist ein Verzeichnis. "
+            "Falls Portainer genutzt wird: Keine relativen Dateipfade wie './docker-compose.yml' mounten!"
+        )
+
     environment = os.environ.copy()
     environment["APP_IMAGE"] = image
     command = [
