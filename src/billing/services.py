@@ -547,6 +547,43 @@ def _settlement_snapshot_data(result: SettlementResult) -> dict[str, Any]:
     }
 
 
+def _cost_center_snapshot_data(camp: Camp) -> list[dict[str, Any]]:
+    evaluation = get_cost_center_evaluation(camp)
+    snapshot: list[dict[str, Any]] = []
+    for code, data in evaluation.items():
+        snapshot.append(
+            {
+                "code": code,
+                "label": data["label"],
+                "income": str(money(data["income"])),
+                "expense_total": str(money(data["expense_total"])),
+                "balance": str(money(data["balance"])),
+                "income_count": data["income_count"],
+                "expense_count": data["expense_count"],
+                "income_details": [
+                    {
+                        "meal_date": signup.meal_date.isoformat(),
+                        "participant_name": signup.participant.full_name,
+                        "family_member_name": signup.family_member.full_name if signup.family_member else "",
+                        "description": signup.get_meal_display(),
+                        "amount": str(money(signup.charge.total)),
+                    }
+                    for signup in data["income_details"]
+                ],
+                "expense_details": [
+                    {
+                        "paid_date": (expense.paid_on or expense.created_at.date()).isoformat(),
+                        "applicant_name": expense.participant.full_name if expense.participant else "Unbekannt",
+                        "description": expense.description,
+                        "amount": str(money(expense.amount)),
+                    }
+                    for expense in data["expense_details"]
+                ],
+            }
+        )
+    return snapshot
+
+
 @transaction.atomic
 def create_settlement_run(camp: Camp, calculated_by: Any) -> SettlementRun:
     locked_camp = Camp.objects.select_for_update().get(pk=camp.pk)
@@ -563,6 +600,7 @@ def create_settlement_run(camp: Camp, calculated_by: Any) -> SettlementRun:
         total_paid=money(sum((result.total_paid for result in results), ZERO)),
         total_advanced=money(sum((result.total_advanced for result in results), ZERO)),
         balance=money(sum((result.balance for result in results), ZERO)),
+        cost_center_data=_cost_center_snapshot_data(locked_camp),
     )
     Settlement.objects.bulk_create(
         [
