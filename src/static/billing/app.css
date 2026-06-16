@@ -86,7 +86,8 @@ textarea:focus-visible {
 
 .brand span {
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .topbar nav,
@@ -101,7 +102,8 @@ textarea:focus-visible {
 .topbar nav span {
   color: var(--muted);
   font-size: 14px;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .page {
@@ -204,7 +206,8 @@ table {
 table a,
 td,
 th {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 th,
@@ -291,7 +294,8 @@ tbody tr:hover {
 
 .metadata-list dd {
   margin: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .deployment-status,
@@ -569,7 +573,8 @@ textarea {
   font-size: 17px;
   font-weight: 800;
   line-height: 1.15;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .drink-card__price {
@@ -613,7 +618,8 @@ textarea {
 
 .kiosk-list-row__content strong {
   line-height: 1.25;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .kiosk-list-row__content span {
@@ -705,7 +711,8 @@ textarea {
 }
 
 .target-row label span {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .target-row input[type="checkbox"] {
@@ -784,7 +791,8 @@ textarea {
 
 .meal-slot__body strong,
 .meal-slot__body span {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .meal-slot__body span {
@@ -810,7 +818,8 @@ textarea {
 
 .meal-slot__bookings span {
   font-size: 13px;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .meal-slot__action {

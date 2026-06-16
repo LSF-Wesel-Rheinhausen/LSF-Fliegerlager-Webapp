@@ -428,3 +428,23 @@ for (const viewport of VIEWPORTS) {
     await assertNoUnexpectedOverflow(page);
   });
 }
+
+test("Kiosk meal and drink layout has no mobile overflow", async ({ page }) => {
+  await page.setViewportSize({ width: 430, height: 932 });
+  await setupFirstAdmin(page);
+  await createCamp(page, "Sommerlager Kiosk Mobile");
+  await createParticipant(page, "Mobile", "Tester");
+  await logout(page);
+
+  await page.goto("/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Mobile Tester" });
+  await page.getByLabel("PIN").fill("0000");
+  await page.getByRole("button", { name: "Anmelden" }).click();
+  await page.getByLabel("Neuer PIN").fill("1234");
+  await page.getByLabel("PIN wiederholen").fill("1234");
+  await page.getByRole("button", { name: "Speichern" }).click();
+
+  await expect(page.getByRole("heading", { name: "Getränk buchen" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Essen anmelden" })).toBeVisible();
+  await assertNoUnexpectedOverflow(page);
+});
