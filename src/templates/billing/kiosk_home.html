@@ -296,45 +296,69 @@
   </div>
 
   <dialog id="summary-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="summary-dialog-title">
-    <form method="dialog" class="dialog-heading">
-      <h2 id="summary-dialog-title">Aktuelle Abrechnung</h2>
+    <form method="dialog" class="dialog-heading" style="border-bottom: none; padding-bottom: 0;">
+      <h2 id="summary-dialog-title">Abrechnung</h2>
       <button class="button button-secondary">Schließen</button>
     </form>
     
-    <dl class="metrics" aria-label="Kiosk-Abrechnungsübersicht" style="margin-top: 0;">
-      <div class="metric"><dt>Brutto</dt><dd><strong>{{ summary.total_gross|money_eur }}</strong></dd></div>
-      <div class="metric"><dt>Förderung</dt><dd><strong>{{ summary.total_subsidy|money_eur }}</strong></dd></div>
-      <div class="metric"><dt>Soll</dt><dd><strong>{{ summary.total_due|money_eur }}</strong></dd></div>
-      <div class="metric"><dt>Gezahlt</dt><dd><strong>{{ summary.total_paid|money_eur }}</strong></dd></div>
-      <div class="metric"><dt>Vorgestreckt</dt><dd><strong>{{ summary.total_advanced|money_eur }}</strong></dd></div>
-      <div class="metric"><dt>Offen</dt><dd><strong>{{ summary.balance|money_eur }}</strong></dd></div>
-    </dl>
+    <div style="font-size: 1.1em; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--line);">
+      <strong>{{ participant.full_name }}</strong><br>
+      <span style="color: var(--muted);">{{ participant.camp }}</span>
+    </div>
 
-    <h3 style="margin-top: 2rem;">Positionen</h3>
-    <table class="data-table" style="margin-top: 1rem;">
+    <table class="data-table" style="margin-bottom: 2rem;">
       <thead>
         <tr>
-          <th>Position</th>
-          <th>Menge</th>
-          <th>Brutto</th>
-          <th>Förderung</th>
-          <th>Summe</th>
+          <th style="text-align: left;">Position</th>
+          <th style="text-align: right;">Menge</th>
+          <th style="text-align: right;">Brutto</th>
+          <th style="text-align: right;">Förderung</th>
+          <th style="text-align: right;">Summe</th>
         </tr>
       </thead>
       <tbody>
         {% for line in summary.lines %}
         <tr>
           <td>{{ line.label }}</td>
-          <td>{{ line.quantity|default:"" }}</td>
-          <td>{{ line.gross_total|money_eur }}</td>
-          <td>{{ line.subsidy_amount|money_eur }}</td>
-          <td>{{ line.total|money_eur }}</td>
+          <td style="text-align: right;">{{ line.quantity|default:"" }}</td>
+          <td style="text-align: right;">{{ line.gross_total|money_eur }}</td>
+          <td style="text-align: right;">{% if line.subsidy_amount %}{{ line.subsidy_amount|money_eur }}{% endif %}</td>
+          <td style="text-align: right;"><strong>{{ line.total|money_eur }}</strong></td>
         </tr>
         {% empty %}
-        <tr><td colspan="5">Noch keine Positionen vorhanden.</td></tr>
+        <tr><td colspan="5" style="text-align: center; color: var(--muted); padding: 2rem 0;">Noch keine Positionen vorhanden.</td></tr>
         {% endfor %}
       </tbody>
     </table>
+
+    <div style="display: flex; justify-content: flex-end; margin-bottom: 1rem;">
+      <table style="width: 100%; max-width: 320px; text-align: right; border-collapse: collapse;">
+        <tr>
+          <td style="padding: 4px 12px; color: var(--muted);">Brutto Gesamt</td>
+          <td style="padding: 4px 0;">{{ summary.total_gross|money_eur }}</td>
+        </tr>
+        <tr>
+          <td style="padding: 4px 12px; color: var(--muted);">Förderung</td>
+          <td style="padding: 4px 0; color: var(--ok);">{% if summary.total_subsidy %}-{{ summary.total_subsidy|money_eur }}{% else %}0,00 €{% endif %}</td>
+        </tr>
+        <tr style="border-top: 1px solid var(--line);">
+          <td style="padding: 8px 12px; font-weight: bold;">Rechnungsbetrag (Soll)</td>
+          <td style="padding: 8px 0; font-weight: bold;">{{ summary.total_due|money_eur }}</td>
+        </tr>
+        <tr>
+          <td style="padding: 4px 12px; color: var(--muted);">Bereits gezahlt</td>
+          <td style="padding: 4px 0;">{% if summary.total_paid %}-{{ summary.total_paid|money_eur }}{% else %}0,00 €{% endif %}</td>
+        </tr>
+        <tr>
+          <td style="padding: 4px 12px; color: var(--muted);">Vorgestreckte Auslagen</td>
+          <td style="padding: 4px 0;">{% if summary.total_advanced %}-{{ summary.total_advanced|money_eur }}{% else %}0,00 €{% endif %}</td>
+        </tr>
+        <tr style="border-top: 2px solid var(--text); font-size: 1.15em;">
+          <td style="padding: 12px 12px; font-weight: bold;">Noch offen</td>
+          <td style="padding: 12px 0; font-weight: bold; {% if summary.balance > 0 %}color: var(--danger);{% elif summary.balance < 0 %}color: var(--ok);{% endif %}">{{ summary.balance|money_eur }}</td>
+        </tr>
+      </table>
+    </div>
   </dialog>
 
   <dialog id="drink-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="drink-dialog-title">
