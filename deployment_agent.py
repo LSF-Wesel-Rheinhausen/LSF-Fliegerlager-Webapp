@@ -27,7 +27,28 @@ PROJECT_NAME = os.getenv("COMPOSE_PROJECT_NAME", "fliegerlager")
 TARGET_SERVICE = os.getenv("TARGET_SERVICE", "app")
 DATABASE_SERVICE = os.getenv("DATABASE_SERVICE", "db")
 COMPOSE_FILE = os.getenv("COMPOSE_FILE", "/deployment/docker-compose.yml")
-ENV_FILE = os.getenv("COMPOSE_ENV_FILE", "/deployment/.env")
+
+def get_env_file() -> str | None:
+    configured = os.getenv("COMPOSE_ENV_FILE")
+    if configured and Path(configured).is_file():
+        return configured
+
+    compose_path = Path(COMPOSE_FILE)
+    if compose_path.is_file():
+        import re
+        content = compose_path.read_text(encoding="utf-8")
+        match = re.search(r"^\s*env_file:\s*([^\s]+)", content, re.MULTILINE)
+        if match:
+            env_name = match.group(1).strip("'\"")
+            env_path = compose_path.parent / env_name
+            if env_path.is_file():
+                return str(env_path)
+
+    default_env = Path("/deployment/.env")
+    if default_env.is_file():
+        return str(default_env)
+
+    return None
 BACKUP_DIR = Path(os.getenv("BACKUP_DIR", "/backups"))
 HEALTH_TIMEOUT = int(os.getenv("UPDATE_HEALTH_TIMEOUT", "180"))
 STATE_FILE = Path(os.getenv("UPDATE_STATE_FILE", "/state/status.json"))
@@ -202,14 +223,17 @@ def compose_up(image: str, *, step: str = "App-Container neu starten") -> None:
         PROJECT_NAME,
         "--file",
         COMPOSE_FILE,
-        "--env-file",
-        ENV_FILE,
+    ]
+    env_file = get_env_file()
+    if env_file:
+        command.extend(["--env-file", env_file])
+    command.extend([
         "up",
         "--detach",
         "--no-deps",
         "--force-recreate",
         TARGET_SERVICE,
-    ]
+    ])
     try:
         result = subprocess.run(command, env=environment, check=False, capture_output=True, text=True, timeout=180)
     except subprocess.TimeoutExpired as error:
@@ -239,16 +263,18 @@ def update_error(step: str, error: BaseException) -> str:
 
 
 def recovery_hint(backup_name: str, old_image_id: str) -> str:
+    env_file = get_env_file()
+    env_arg = f"--env-file {shlex.quote(env_file)} " if env_file else ""
     lines = [
         "Logs prüfen: docker compose --project-name "
-        f"{shlex.quote(PROJECT_NAME)} --file {shlex.quote(COMPOSE_FILE)} --env-file {shlex.quote(ENV_FILE)} "
+        f"{shlex.quote(PROJECT_NAME)} --file {shlex.quote(COMPOSE_FILE)} {env_arg}"
         "logs --tail=200 app updater db"
     ]
     if old_image_id:
         lines.append(
             "Manuelle Wiederherstellung: APP_IMAGE="
             f"{shlex.quote(old_image_id)} docker compose --project-name {shlex.quote(PROJECT_NAME)} "
-            f"--file {shlex.quote(COMPOSE_FILE)} --env-file {shlex.quote(ENV_FILE)} "
+            f"--file {shlex.quote(COMPOSE_FILE)} {env_arg}"
             f"up --detach --no-deps --force-recreate {shlex.quote(TARGET_SERVICE)}"
         )
     if backup_name:
