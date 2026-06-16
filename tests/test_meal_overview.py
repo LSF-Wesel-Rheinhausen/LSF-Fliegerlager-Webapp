@@ -61,7 +61,7 @@ def test_calculate_meal_overview_counts_active_variants_and_retractions():
     assert len(overview[0].meals) == 1
     dinner = overview[0].meals[0]
     assert dinner.meal == MealSignup.Meal.DINNER
-    assert dinner.variant_counts["Normal"] == 1
+    assert dinner.variant_counts["Mit Fleisch"] == 1
     assert dinner.variant_counts["Vegan Kind"] == 1
     assert dinner.active_total == 2
     assert dinner.retracted_total == 1

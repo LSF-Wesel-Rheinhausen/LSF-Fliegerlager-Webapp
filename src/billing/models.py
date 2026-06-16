@@ -440,9 +440,9 @@ class MealSignup(TimeStampedModel):
         RETRACTED = "retracted", "Zurückgenommen"
 
     class Variant(models.TextChoices):
-        NORMAL = "normal", "Normal"
+        NORMAL = "normal", "Mit Fleisch"
         VEGAN = "vegan", "Vegan"
-        NORMAL_CHILD = "normal_child", "Normal Kind"
+        NORMAL_CHILD = "normal_child", "Mit Fleisch Kind"
         VEGAN_CHILD = "vegan_child", "Vegan Kind"
 
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="meal_signups")

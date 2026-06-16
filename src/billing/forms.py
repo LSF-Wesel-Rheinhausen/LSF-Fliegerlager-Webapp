@@ -677,12 +677,12 @@ class MealBookingForm(forms.Form):
             self.fields["meal_date"].initial = timezone.now().date()
             if participant.is_child:
                 self.fields["variant"].choices = [
-                    (MealSignup.Variant.NORMAL_CHILD, "Normal (Kind)"),
+                    (MealSignup.Variant.NORMAL_CHILD, "Mit Fleisch (Kind)"),
                     (MealSignup.Variant.VEGAN_CHILD, "Vegan/Vegetarisch (Kind)"),
                 ]
             else:
                 self.fields["variant"].choices = [
-                    (MealSignup.Variant.NORMAL, "Normal"),
+                    (MealSignup.Variant.NORMAL, "Mit Fleisch"),
                     (MealSignup.Variant.VEGAN, "Vegan/Vegetarisch"),
                 ]
 

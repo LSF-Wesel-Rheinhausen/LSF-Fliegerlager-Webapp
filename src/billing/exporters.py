@@ -1,6 +1,8 @@
 import csv
 from io import BytesIO, StringIO
 
+from django.conf import settings
+
 from django.http import HttpResponse
 from openpyxl import Workbook
 from reportlab.lib.pagesizes import A4
@@ -126,49 +128,81 @@ def camp_workbook_response(camp):
     return response
 
 
-def participant_pdf_response(participant):
-    result = calculate_participant_settlement(participant)
-    output = BytesIO()
-    pdf = canvas.Canvas(output, pagesize=A4)
+def _draw_page_framework(pdf, title, subtitle, participant_name):
     width, height = A4
     y = height - 60
+    
+    logo_path = settings.BASE_DIR / "static" / "billing" / "logo.jpg"
+    if logo_path.exists():
+        pdf.drawImage(str(logo_path), width - 150, height - 100, width=100, height=50, preserveAspectRatio=True, anchor='ne', mask='auto')
 
     pdf.setFont("Helvetica-Bold", 16)
-    pdf.drawString(50, y, f"Einzelabrechnung {participant.camp.name} {participant.camp.year}")
-    y -= 35
+    pdf.drawString(50, y, title)
+    y -= 24
+    if subtitle:
+        pdf.setFont("Helvetica", 10)
+        pdf.drawString(50, y, subtitle)
+        y -= 24
     pdf.setFont("Helvetica", 11)
-    pdf.drawString(50, y, f"Teilnehmer: {participant.full_name}")
+    pdf.drawString(50, y, f"Teilnehmer: {participant_name}")
     y -= 30
 
     pdf.setFont("Helvetica-Bold", 10)
     pdf.drawString(50, y, "Position")
     pdf.drawRightString(420, y, "Menge")
     pdf.drawRightString(500, y, "Summe")
+    y -= 8
+    pdf.line(50, y, 500, y)
     y -= 18
+    
+    footer_y = 30
+    pdf.setFont("Helvetica", 8)
+    pdf.setFillColorRGB(0.5, 0.5, 0.5)
+    pdf.drawCentredString(width / 2.0, footer_y, "Erstellt mit der Fliegerlagerabrechnung | Luftsportfreunde 2000 e.V.")
+    pdf.setFillColorRGB(0, 0, 0)
+    
+    return y
+
+
+def _draw_sum_block(pdf, y, items):
+    y -= 6
+    pdf.line(250, y + 16, 500, y + 16)
+    pdf.setFont("Helvetica-Bold", 11)
+    for label, value in items:
+        pdf.drawString(300, y, f"{label}:")
+        pdf.drawRightString(500, y, f"{value:.2f} EUR")
+        y -= 18
+    return y
+
+
+def participant_pdf_response(participant):
+    result = calculate_participant_settlement(participant)
+    output = BytesIO()
+    pdf = canvas.Canvas(output, pagesize=A4)
+    
+    title = f"Einzelabrechnung {participant.camp.name} {participant.camp.year}"
+    y = _draw_page_framework(pdf, title, "", participant.full_name)
+
     pdf.setFont("Helvetica", 10)
     for line in result.lines:
         if y < 80:
             pdf.showPage()
-            y = height - 60
+            y = _draw_page_framework(pdf, title, "", participant.full_name)
             pdf.setFont("Helvetica", 10)
-        pdf.drawString(50, y, line.label[:60])
+        pdf.drawString(50, y, line.label[:75])
         pdf.drawRightString(420, y, str(line.quantity))
         pdf.drawRightString(500, y, f"{line.total:.2f} EUR")
         y -= 16
 
-    y -= 12
-    pdf.setFont("Helvetica-Bold", 11)
-    pdf.drawRightString(500, y, f"Brutto: {result.total_gross:.2f} EUR")
-    y -= 18
-    pdf.drawRightString(500, y, f"Förderung: {result.total_subsidy:.2f} EUR")
-    y -= 18
-    pdf.drawRightString(500, y, f"Soll: {result.total_due:.2f} EUR")
-    y -= 18
-    pdf.drawRightString(500, y, f"Gezahlt: {result.total_paid:.2f} EUR")
-    y -= 18
-    pdf.drawRightString(500, y, f"Vorgestreckt: {result.total_advanced:.2f} EUR")
-    y -= 18
-    pdf.drawRightString(500, y, f"Offen: {result.balance:.2f} EUR")
+    _draw_sum_block(pdf, y, [
+        ("Brutto", result.total_gross),
+        ("Förderung", result.total_subsidy),
+        ("Soll", result.total_due),
+        ("Gezahlt", result.total_paid),
+        ("Vorgestreckt", result.total_advanced),
+        ("Offen", result.balance),
+    ])
+    
     pdf.showPage()
     pdf.save()
 
@@ -231,37 +265,31 @@ def settlement_snapshot_pdf_response(snapshot: Settlement) -> HttpResponse:
         raise ValueError("Historical settlement PDF requires a versioned run.")
     output = BytesIO()
     pdf = canvas.Canvas(output, pagesize=A4)
-    _width, height = A4
-    y = height - 60
-    pdf.setFont("Helvetica-Bold", 16)
-    pdf.drawString(50, y, f"Einzelabrechnung {run.camp.name} {run.camp.year}")
-    y -= 24
+    
+    title = f"Einzelabrechnung {run.camp.name} {run.camp.year}"
+    subtitle = f"Version {run.version} vom {run.created_at:%d.%m.%Y %H:%M}"
+    y = _draw_page_framework(pdf, title, subtitle, snapshot.participant_name)
+
     pdf.setFont("Helvetica", 10)
-    pdf.drawString(50, y, f"Version {run.version} vom {run.created_at:%d.%m.%Y %H:%M}")
-    y -= 28
-    pdf.drawString(50, y, f"Teilnehmer: {snapshot.participant_name}")
-    y -= 28
     for line in snapshot.data.get("lines", []):
         if y < 80:
             pdf.showPage()
-            y = height - 60
+            y = _draw_page_framework(pdf, title, subtitle, snapshot.participant_name)
             pdf.setFont("Helvetica", 10)
-        pdf.drawString(50, y, str(line.get("label", ""))[:60])
+        pdf.drawString(50, y, str(line.get("label", ""))[:75])
         pdf.drawRightString(420, y, str(line.get("quantity", "")))
         pdf.drawRightString(500, y, f"{line.get('total', '0.00')} EUR")
         y -= 16
-    y -= 12
-    pdf.setFont("Helvetica-Bold", 11)
-    for label, value in (
+
+    _draw_sum_block(pdf, y, [
         ("Brutto", snapshot.total_gross),
         ("Förderung", snapshot.total_subsidy),
         ("Soll", snapshot.total_due),
         ("Gezahlt", snapshot.total_paid),
         ("Vorgestreckt", snapshot.total_advanced),
         ("Offen", snapshot.balance),
-    ):
-        pdf.drawRightString(500, y, f"{label}: {value:.2f} EUR")
-        y -= 18
+    ])
+    
     pdf.showPage()
     pdf.save()
     response = HttpResponse(output.getvalue(), content_type="application/pdf")

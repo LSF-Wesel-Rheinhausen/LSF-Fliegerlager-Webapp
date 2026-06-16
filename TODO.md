@@ -4,14 +4,14 @@
 
 ## Phase 1: Stabilität und Betrieb
 
-- [ ] #70 Automatisches Upgrade robuster machen: Compose-Fehler mit stdout/stderr, Rollback-Diagnose, Recovery-Hinweisen und Tests absichern.
-- [ ] #65 Mobile Admin-/Kiosk-Layouts reparieren: iPhone-Hochformat, Essen/Getränke, Aktionsleisten und Tabellen kontrolliert umbrechen lassen.
-- [ ] #67 Playwright-CI beschleunigen: Browser-Cache oder Playwright-Image nutzen, Browserabdeckung behalten, Doku aktualisieren.
+- [x] #70 Automatisches Upgrade robuster machen: Compose-Fehler mit stdout/stderr, Rollback-Diagnose, Recovery-Hinweisen und Tests absichern.
+- [x] #65 Mobile Admin-/Kiosk-Layouts reparieren: iPhone-Hochformat, Essen/Getränke, Aktionsleisten und Tabellen kontrolliert umbrechen lassen.
+- [x] #67 Playwright-CI beschleunigen: Browser-Cache oder Playwright-Image nutzen, Browserabdeckung behalten, Doku aktualisieren.
 
 ## Phase 2: Kleine Produktpolitur
 
-- [ ] #68 Nicht-vegetarische Essensoptionen nicht mehr als "Normal" anzeigen; interne DB-Werte kompatibel lassen.
-- [ ] #64 PDF-Export lesbarer gestalten: Kopfbereich, Positionsliste, Summenblock, lange Namen und Seitenumbrüche verbessern.
+- [x] #68 Nicht-vegetarische Essensoptionen nicht mehr als "Normal" anzeigen; interne DB-Werte kompatibel lassen.
+- [x] #64 PDF-Export lesbarer gestalten: Kopfbereich, Positionsliste, Summenblock, lange Namen und Seitenumbrüche verbessern.
 
 ## Phase 3: Import und Dokumentation
 
