@@ -620,6 +620,7 @@ class SettlementRun(TimeStampedModel):
     total_paid = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
     total_advanced = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
     balance = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
+    cost_center_data = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ["-version"]

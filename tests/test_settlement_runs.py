@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 from io import BytesIO
 
@@ -7,10 +8,10 @@ from django.db import IntegrityError
 from django.urls import reverse
 from openpyxl import load_workbook
 
-from billing.models import Settlement, SettlementRun
+from billing.models import Charge, Expense, MealSignup, Settlement, SettlementRun
 from billing.permissions import EDITOR_GROUP
 from billing.services import create_settlement_run
-from tests.factories import ChargeFactory, ParticipantFactory, SuperUserFactory, UserFactory
+from tests.factories import ChargeFactory, ExpenseFactory, ParticipantFactory, SuperUserFactory, UserFactory
 
 
 @pytest.mark.django_db
@@ -100,6 +101,69 @@ def test_historical_exports_use_snapshot_data(client):
     assert workbook["Abrechnung"]["A2"].value == "Ada Lovelace"
     assert pdf_response.status_code == 200
     assert pdf_response.content.startswith(b"%PDF-")
+
+
+@pytest.mark.django_db
+def test_historical_workbook_uses_cost_center_snapshot_data(client):
+    user = SuperUserFactory()
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    breakfast_charge = ChargeFactory(
+        participant=participant,
+        kind=Charge.Kind.FOOD,
+        description="Frühstück Frühstück",
+        unit_price=Decimal("4.00"),
+    )
+    MealSignup.objects.create(
+        participant=participant,
+        meal_date=date(2026, 7, 1),
+        meal=MealSignup.Meal.BREAKFAST,
+        variant=MealSignup.Variant.NORMAL,
+        charge=breakfast_charge,
+    )
+    ExpenseFactory(
+        participant=participant,
+        camp=participant.camp,
+        description="Brötchen",
+        amount=Decimal("3.50"),
+        status=Expense.Status.APPROVED,
+        allocation_method=Expense.AllocationMethod.COST_CENTER,
+        cost_center=Expense.CostCenter.FOOD_BREAKFAST,
+    )
+    run = create_settlement_run(participant.camp, user)
+
+    dinner_charge = ChargeFactory(
+        participant=participant,
+        kind=Charge.Kind.FOOD,
+        description="Abendessen Abendessen",
+        unit_price=Decimal("7.00"),
+    )
+    MealSignup.objects.create(
+        participant=participant,
+        meal_date=date(2026, 7, 2),
+        meal=MealSignup.Meal.DINNER,
+        variant=MealSignup.Variant.NORMAL,
+        charge=dinner_charge,
+    )
+    ExpenseFactory(
+        participant=participant,
+        camp=participant.camp,
+        description="Nudeln",
+        amount=Decimal("5.00"),
+        status=Expense.Status.APPROVED,
+        allocation_method=Expense.AllocationMethod.COST_CENTER,
+        cost_center=Expense.CostCenter.FOOD_DINNER,
+    )
+    client.force_login(user)
+
+    workbook_response = client.get(reverse("settlement-run-workbook", args=[run.pk]))
+
+    workbook = load_workbook(BytesIO(workbook_response.content), data_only=True)
+    cost_center_sheet = workbook["Kostenstellen"]
+    assert cost_center_sheet["A2"].value == "Unterkunft/Verpflegung - Frühstück"
+    assert cost_center_sheet["B2"].value == 4
+    assert cost_center_sheet["C2"].value == 3.5
+    values = [cell[0] for cell in cost_center_sheet.iter_rows(min_row=1, max_col=1, values_only=True)]
+    assert "Unterkunft/Verpflegung - Abendessen" not in values
 
 
 @pytest.mark.django_db

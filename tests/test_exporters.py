@@ -1,4 +1,5 @@
 import csv
+from datetime import date
 from decimal import Decimal
 from io import BytesIO, StringIO
 
@@ -6,7 +7,7 @@ import pytest
 from django.urls import reverse
 from openpyxl import load_workbook
 
-from billing.models import Charge, Expense
+from billing.models import Charge, Expense, MealSignup
 from billing.permissions import EDITOR_GROUP
 from tests.factories import (
     CampFactory,
@@ -178,7 +179,7 @@ def test_workbook_export_contains_settlement_and_participant_sheets(client, expo
     assert response["Content-Disposition"] == 'attachment; filename="fliegerlager-2026.xlsx"'
 
     workbook = load_workbook(BytesIO(response.content), data_only=True)
-    assert workbook.sheetnames == ["Abrechnung", "Teilnehmer"]
+    assert workbook.sheetnames == ["Abrechnung", "Teilnehmer", "Kostenstellen"]
     settlement_sheet = workbook["Abrechnung"]
     assert [cell.value for cell in settlement_sheet[1]] == [
         "Nachname",
@@ -201,6 +202,65 @@ def test_workbook_export_contains_settlement_and_participant_sheets(client, expo
     assert participants_sheet["C2"].value == "ada@example.test"
     assert participants_sheet["D2"].value == "01234"
     assert participants_sheet["H2"].value == 5
+
+
+@pytest.mark.django_db
+def test_workbook_export_compares_cost_center_income_and_expenses(client):
+    camp = CampFactory(year=2026)
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    charge = ChargeFactory(
+        participant=participant,
+        kind=Charge.Kind.FOOD,
+        description="Frühstück Frühstück",
+        quantity=Decimal("2.00"),
+        unit_price=Decimal("4.00"),
+    )
+    MealSignup.objects.create(
+        participant=participant,
+        meal_date=date(2026, 7, 1),
+        meal=MealSignup.Meal.BREAKFAST,
+        variant=MealSignup.Variant.NORMAL,
+        charge=charge,
+    )
+    ExpenseFactory(
+        participant=participant,
+        camp=camp,
+        description="Brötchen",
+        amount=Decimal("3.50"),
+        status=Expense.Status.APPROVED,
+        allocation_method=Expense.AllocationMethod.COST_CENTER,
+        cost_center=Expense.CostCenter.FOOD_BREAKFAST,
+    )
+    client.force_login(SuperUserFactory())
+
+    response = client.get(reverse("export-workbook", args=[camp.pk]))
+
+    workbook = load_workbook(BytesIO(response.content), data_only=True)
+    sheet = workbook["Kostenstellen"]
+    assert [cell.value for cell in sheet[1]] == [
+        "Kostenstelle",
+        "Einnahmen",
+        "Ausgaben",
+        "Saldo",
+        "Anzahl Einnahmen",
+        "Anzahl Ausgaben",
+    ]
+    assert [cell.value for cell in sheet[2]] == [
+        "Unterkunft/Verpflegung - Frühstück",
+        8,
+        3.5,
+        4.5,
+        1,
+        1,
+    ]
+    assert sheet["A4"].value == "Detaillierte Einnahmen pro Kostenstelle"
+    assert sheet["A6"].value == "Unterkunft/Verpflegung - Frühstück"
+    assert sheet["D6"].value == "Frühstück"
+    assert sheet["E6"].value == 8
+    assert sheet["A8"].value == "Detaillierte Ausgaben pro Kostenstelle"
+    assert sheet["A10"].value == "Unterkunft/Verpflegung - Frühstück"
+    assert sheet["D10"].value == "Brötchen"
+    assert sheet["E10"].value == 3.5
 
 
 @pytest.mark.django_db

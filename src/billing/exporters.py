@@ -1,4 +1,5 @@
 import csv
+from decimal import Decimal
 from io import BytesIO, StringIO
 
 from django.conf import settings
@@ -8,7 +9,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
 from .models import Charge, DrinkEntry, Participant, Settlement, SettlementRun
-from .services import calculate_camp_settlements, calculate_participant_settlement, money
+from .services import calculate_camp_settlements, calculate_participant_settlement, get_cost_center_evaluation, money
 
 
 def csv_response(filename, rows, headers):
@@ -19,6 +20,66 @@ def csv_response(filename, rows, headers):
     response = HttpResponse(buffer.getvalue(), content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
+
+
+def _format_money_cells(sheet, row: int, columns: tuple[int, ...]) -> None:
+    for column in columns:
+        sheet.cell(row=row, column=column).number_format = "#,##0.00"
+
+
+def _decimal_text(value: str | Decimal) -> float:
+    return float(Decimal(str(value)))
+
+
+def _write_cost_center_sheet_from_snapshot(sheet, cost_centers: list[dict]) -> None:
+    sheet.append(["Kostenstelle", "Einnahmen", "Ausgaben", "Saldo", "Anzahl Einnahmen", "Anzahl Ausgaben"])
+    for data in cost_centers:
+        sheet.append(
+            [
+                data["label"],
+                _decimal_text(data["income"]),
+                _decimal_text(data["expense_total"]),
+                _decimal_text(data["balance"]),
+                data["income_count"],
+                data["expense_count"],
+            ]
+        )
+        _format_money_cells(sheet, sheet.max_row, (2, 3, 4))
+
+    sheet.append([])
+    sheet.append(["Detaillierte Einnahmen pro Kostenstelle"])
+    sheet.append(["Kostenstelle", "Datum", "Teilnehmer", "Beschreibung", "Betrag"])
+    for data in cost_centers:
+        for income in data["income_details"]:
+            participant_name = income["participant_name"]
+            if income.get("family_member_name"):
+                participant_name = f"{participant_name} für {income['family_member_name']}"
+            sheet.append(
+                [
+                    data["label"],
+                    income["meal_date"][8:10] + "." + income["meal_date"][5:7] + "." + income["meal_date"][:4],
+                    participant_name,
+                    income["description"],
+                    _decimal_text(income["amount"]),
+                ]
+            )
+            _format_money_cells(sheet, sheet.max_row, (5,))
+
+    sheet.append([])
+    sheet.append(["Detaillierte Ausgaben pro Kostenstelle"])
+    sheet.append(["Kostenstelle", "Datum", "Antragsteller", "Beschreibung", "Betrag"])
+    for data in cost_centers:
+        for expense in data["expense_details"]:
+            sheet.append(
+                [
+                    data["label"],
+                    expense["paid_date"][8:10] + "." + expense["paid_date"][5:7] + "." + expense["paid_date"][:4],
+                    expense["applicant_name"],
+                    expense["description"],
+                    _decimal_text(expense["amount"]),
+                ]
+            )
+            _format_money_cells(sheet, sheet.max_row, (5,))
 
 
 def participant_import_template_response():
@@ -179,6 +240,42 @@ def camp_workbook_response(camp):
                 participant.actual_nights,
             ]
         )
+
+    cost_centers_sheet = workbook.create_sheet("Kostenstellen")
+    cost_centers = get_cost_center_evaluation(camp)
+    _write_cost_center_sheet_from_snapshot(
+        cost_centers_sheet,
+        [
+            {
+                "label": data["label"],
+                "income": data["income"],
+                "expense_total": data["expense_total"],
+                "balance": data["balance"],
+                "income_count": data["income_count"],
+                "expense_count": data["expense_count"],
+                "income_details": [
+                    {
+                        "meal_date": signup.meal_date.isoformat(),
+                        "participant_name": signup.participant.full_name,
+                        "family_member_name": signup.family_member.full_name if signup.family_member else "",
+                        "description": signup.get_meal_display(),
+                        "amount": signup.charge.total,
+                    }
+                    for signup in data["income_details"]
+                ],
+                "expense_details": [
+                    {
+                        "paid_date": (exp.paid_on or exp.created_at.date()).isoformat(),
+                        "applicant_name": exp.participant.full_name if exp.participant else "Unbekannt",
+                        "description": exp.description,
+                        "amount": exp.amount,
+                    }
+                    for exp in data["expense_details"]
+                ],
+            }
+            for data in cost_centers.values()
+        ],
+    )
 
     output = BytesIO()
     workbook.save(output)
@@ -439,6 +536,10 @@ def settlement_run_workbook_response(run: SettlementRun) -> HttpResponse:
                 snapshot.balance,
             ]
         )
+
+    cost_centers_sheet = workbook.create_sheet("Kostenstellen")
+    _write_cost_center_sheet_from_snapshot(cost_centers_sheet, run.cost_center_data or [])
+
     output = BytesIO()
     workbook.save(output)
     response = HttpResponse(
