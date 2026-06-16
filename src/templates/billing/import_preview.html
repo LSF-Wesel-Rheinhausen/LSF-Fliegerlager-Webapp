@@ -6,6 +6,11 @@
   </div>
 
   <section class="panel">
+    <p>
+      Lade hier eine Excel-Datei (.xlsx) oder eine CSV-Datei (.csv) mit den Teilnehmerdaten hoch.
+      <br>
+      <a href="{% url 'participant-import-template' camp.pk %}">Hier kannst du eine Beispiel-Excel-Vorlage mit Anleitungen und allen Fällen herunterladen.</a>
+    </p>
     <form method="post" enctype="multipart/form-data" class="stack">
       {% csrf_token %}
       {{ form.as_p }}

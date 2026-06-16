@@ -60,6 +60,11 @@ urlpatterns = [
     path("shifts/<int:shift_id>/delete/", views.shift_delete, name="shift-delete"),
     path("camps/<int:camp_id>/expenses/new/", views.expense_create, name="expense-create"),
     path("camps/<int:camp_id>/import/", views.participant_import, name="participant-import"),
+    path(
+        "camps/<int:camp_id>/import/template/", 
+        views.participant_import_template_view, 
+        name="participant-import-template"
+    ),
     path("camps/<int:camp_id>/export/settlements.csv", views.export_settlements_csv, name="export-settlements-csv"),
     path("camps/<int:camp_id>/export/drinks.csv", views.export_drinks_csv, name="export-drinks-csv"),
     path("camps/<int:camp_id>/export/workbook.xlsx", views.export_workbook, name="export-workbook"),

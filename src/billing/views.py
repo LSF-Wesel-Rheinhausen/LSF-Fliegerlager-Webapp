@@ -797,6 +797,12 @@ def expense_create(request, camp_id):
         return redirect("camp-detail", camp_id=camp.pk)
     return render(request, "billing/form.html", {"form": form, "title": "Auslage erfassen"})
 
+@editor_required
+def participant_import_template_view(request, camp_id):
+    from .exporters import participant_import_template_response
+    return participant_import_template_response()
+
+
 
 @editor_required
 def participant_import(request, camp_id):
