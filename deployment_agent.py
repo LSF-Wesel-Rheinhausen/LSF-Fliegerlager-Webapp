@@ -202,14 +202,16 @@ def compose_up(image: str, *, step: str = "App-Container neu starten") -> None:
         PROJECT_NAME,
         "--file",
         COMPOSE_FILE,
-        "--env-file",
-        ENV_FILE,
+    ]
+    if Path(ENV_FILE).is_file():
+        command.extend(["--env-file", ENV_FILE])
+    command.extend([
         "up",
         "--detach",
         "--no-deps",
         "--force-recreate",
         TARGET_SERVICE,
-    ]
+    ])
     try:
         result = subprocess.run(command, env=environment, check=False, capture_output=True, text=True, timeout=180)
     except subprocess.TimeoutExpired as error:
