@@ -184,8 +184,10 @@ def _draw_sum_block(pdf, y, items):
     pdf.setStrokeColorRGB(0, 0, 0)
     
     for label, value in items:
-        if label in ["Förderung", "Gezahlt", "Vorgestreckt"]:
+        if label in ["Brutto", "Soll"]:
             val_str = f"- {value:.2f} €" if value > 0 else f"{value:.2f} €"
+        elif label in ["Förderung", "Gezahlt", "Vorgestreckt"]:
+            val_str = f"+ {value:.2f} €" if value > 0 else f"{value:.2f} €"
         elif label == "Offen":
             if value > 0:
                 label = "Zu zahlen"
@@ -238,7 +240,7 @@ def participant_pdf_response(participant):
             pdf.setFont("Helvetica", 10)
         pdf.drawString(50, y, line.label[:80])
         pdf.drawRightString(width - 120, y, str(line.quantity))
-        pdf.drawRightString(width - 50, y, f"{line.total:.2f} €")
+        pdf.drawRightString(width - 50, y, f"- {line.total:.2f} €")
         
         pdf.setStrokeColorRGB(0.9, 0.9, 0.9)
         pdf.line(50, y - 5, width - 50, y - 5)
@@ -333,9 +335,9 @@ def settlement_snapshot_pdf_response(snapshot: Settlement) -> HttpResponse:
         
         try:
             total_val = float(line.get('total', 0.00))
-            total_str = f"{total_val:.2f} €"
+            total_str = f"- {total_val:.2f} €" if total_val > 0 else f"{total_val:.2f} €"
         except (ValueError, TypeError):
-            total_str = f"{line.get('total', '0.00')} €"
+            total_str = f"- {line.get('total', '0.00')} €"
             
         pdf.drawRightString(width - 50, y, total_str)
         
