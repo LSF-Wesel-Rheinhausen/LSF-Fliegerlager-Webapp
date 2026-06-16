@@ -21,6 +21,11 @@ def csv_response(filename, rows, headers):
     return response
 
 
+def _format_money_cells(sheet, row: int, columns: tuple[int, ...]) -> None:
+    for column in columns:
+        sheet.cell(row=row, column=column).number_format = "#,##0.00"
+
+
 def participant_import_template_response():
     workbook = Workbook()
     sheet = workbook.active
@@ -193,6 +198,7 @@ def camp_workbook_response(camp):
             data["income_count"],
             data["expense_count"],
         ])
+        _format_money_cells(cost_centers_sheet, cost_centers_sheet.max_row, (2, 3, 4))
     
     cost_centers_sheet.append([])
     cost_centers_sheet.append(["Detaillierte Einnahmen pro Kostenstelle"])
@@ -209,6 +215,7 @@ def camp_workbook_response(camp):
                 description,
                 float(signup.charge.total),
             ])
+            _format_money_cells(cost_centers_sheet, cost_centers_sheet.max_row, (5,))
     
     cost_centers_sheet.append([])
     cost_centers_sheet.append(["Detaillierte Ausgaben pro Kostenstelle"])
@@ -218,6 +225,7 @@ def camp_workbook_response(camp):
             paid_date = exp.paid_on.strftime("%d.%m.%Y") if exp.paid_on else exp.created_at.strftime("%d.%m.%Y")
             applicant = f"{exp.participant.first_name} {exp.participant.last_name}" if exp.participant else "Unbekannt"
             cost_centers_sheet.append([data["label"], paid_date, applicant, exp.description, float(exp.amount)])
+            _format_money_cells(cost_centers_sheet, cost_centers_sheet.max_row, (5,))
 
     output = BytesIO()
     workbook.save(output)
@@ -492,6 +500,7 @@ def settlement_run_workbook_response(run: SettlementRun) -> HttpResponse:
             data["income_count"],
             data["expense_count"],
         ])
+        _format_money_cells(cost_centers_sheet, cost_centers_sheet.max_row, (2, 3, 4))
     
     cost_centers_sheet.append([])
     cost_centers_sheet.append(["Detaillierte Einnahmen pro Kostenstelle"])
@@ -508,6 +517,7 @@ def settlement_run_workbook_response(run: SettlementRun) -> HttpResponse:
                 description,
                 float(signup.charge.total),
             ])
+            _format_money_cells(cost_centers_sheet, cost_centers_sheet.max_row, (5,))
     
     cost_centers_sheet.append([])
     cost_centers_sheet.append(["Detaillierte Ausgaben pro Kostenstelle"])
@@ -517,6 +527,7 @@ def settlement_run_workbook_response(run: SettlementRun) -> HttpResponse:
             paid_date = exp.paid_on.strftime("%d.%m.%Y") if exp.paid_on else exp.created_at.strftime("%d.%m.%Y")
             applicant = f"{exp.participant.first_name} {exp.participant.last_name}" if exp.participant else "Unbekannt"
             cost_centers_sheet.append([data["label"], paid_date, applicant, exp.description, float(exp.amount)])
+            _format_money_cells(cost_centers_sheet, cost_centers_sheet.max_row, (5,))
 
     output = BytesIO()
     workbook.save(output)

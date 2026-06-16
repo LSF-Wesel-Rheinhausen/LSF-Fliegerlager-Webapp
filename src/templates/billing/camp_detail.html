@@ -106,50 +106,89 @@
             <th>Kostenstelle</th>
             <th class="number">Einnahmen</th>
             <th class="number">Ausgaben</th>
-            <th class="number">Saldo</th>
-            <th class="number">Anzahl Ausgaben</th>
+            <th class="number">Details</th>
           </tr>
         </thead>
         <tbody>
           {% for code, data in cost_centers.items %}
             <tr>
-              <td>
-                <details>
-                  <summary>{{ data.label }}</summary>
-                  {% if data.income_details %}
-                    <h3>Einnahmen</h3>
-                    <ul>
-                      {% for signup in data.income_details %}
-                        <li>
-                          {{ signup.meal_date|date:"d.m.Y" }}:
-                          {{ signup.participant.full_name }}
-                          {% if signup.family_member %}für {{ signup.family_member.full_name }}{% endif %}
-                          - {{ signup.charge.total }} €
-                        </li>
-                      {% endfor %}
-                    </ul>
-                  {% endif %}
-                  {% if data.expense_details %}
-                    <h3>Ausgaben</h3>
-                    <ul>
-                      {% for expense in data.expense_details %}
-                        <li>
-                          {% if expense.paid_on %}{{ expense.paid_on|date:"d.m.Y" }}{% else %}{{ expense.created_at|date:"d.m.Y" }}{% endif %}:
-                          {{ expense.description }} - {{ expense.amount }} €
-                        </li>
-                      {% endfor %}
-                    </ul>
-                  {% endif %}
-                </details>
+              <td>{{ data.label }}</td>
+              <td class="number">{{ data.income|floatformat:2 }} €</td>
+              <td class="number">{{ data.expense_total|floatformat:2 }} €</td>
+              <td class="number">
+                <button type="button" class="button button-small button-secondary" data-dialog-open="cost-center-dialog-{{ forloop.counter }}">Details</button>
               </td>
-              <td class="number">{{ data.income }} €</td>
-              <td class="number">{{ data.expense_total }} €</td>
-              <td class="number">{{ data.balance }} €</td>
-              <td class="number">{{ data.expense_count }}</td>
             </tr>
           {% endfor %}
         </tbody>
       </table>
+      {% for code, data in cost_centers.items %}
+        <dialog id="cost-center-dialog-{{ forloop.counter }}" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="cost-center-dialog-title-{{ forloop.counter }}">
+          <form method="dialog" class="dialog-heading">
+            <h2 id="cost-center-dialog-title-{{ forloop.counter }}">{{ data.label }}</h2>
+            <button type="submit" class="button button-secondary">Schließen</button>
+          </form>
+
+          <section class="stack">
+            <h3>Einnahmen</h3>
+            {% if data.income_details %}
+              <table>
+                <thead>
+                  <tr>
+                    <th>Datum</th>
+                    <th>Teilnehmer</th>
+                    <th>Beschreibung</th>
+                    <th class="number">Betrag</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for signup in data.income_details %}
+                    <tr>
+                      <td>{{ signup.meal_date|date:"d.m.Y" }}</td>
+                      <td>
+                        {{ signup.participant.full_name }}
+                        {% if signup.family_member %}für {{ signup.family_member.full_name }}{% endif %}
+                      </td>
+                      <td>{{ signup.get_meal_display }}</td>
+                      <td class="number">{{ signup.charge.total|floatformat:2 }} €</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% else %}
+              <p class="hint">Keine Einnahmen erfasst.</p>
+            {% endif %}
+          </section>
+
+          <section class="stack">
+            <h3>Ausgaben</h3>
+            {% if data.expense_details %}
+              <table>
+                <thead>
+                  <tr>
+                    <th>Datum</th>
+                    <th>Antragsteller</th>
+                    <th>Beschreibung</th>
+                    <th class="number">Betrag</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for expense in data.expense_details %}
+                    <tr>
+                      <td>{% if expense.paid_on %}{{ expense.paid_on|date:"d.m.Y" }}{% else %}{{ expense.created_at|date:"d.m.Y" }}{% endif %}</td>
+                      <td>{% if expense.participant %}{{ expense.participant.full_name }}{% else %}Unbekannt{% endif %}</td>
+                      <td>{{ expense.description }}</td>
+                      <td class="number">{{ expense.amount|floatformat:2 }} €</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% else %}
+              <p class="hint">Keine Ausgaben erfasst.</p>
+            {% endif %}
+          </section>
+        </dialog>
+      {% endfor %}
     {% else %}
       <p class="hint">Bisher gibt es keine Einnahmen oder freigegebenen Ausgaben auf Kostenstellen.</p>
     {% endif %}
@@ -269,6 +308,12 @@
   </dialog>
 <script>
   (() => {
+    document.querySelectorAll("[data-dialog-open]").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.getElementById(button.dataset.dialogOpen)?.showModal();
+      });
+    });
+
     const dialog = document.getElementById("reject-dialog");
     const form = document.getElementById("reject-form");
     const descEl = document.getElementById("reject-expense-desc");
