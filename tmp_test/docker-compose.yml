@@ -1,0 +1,1 @@
+services:\n  test:\n    image: alpine\n    env_file: .env

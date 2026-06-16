@@ -417,6 +417,16 @@ class Payment(TimeStampedModel):
 
 
 class Expense(TimeStampedModel):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Ausstehend"
+        APPROVED = "approved", "Genehmigt"
+        REJECTED = "rejected", "Abgelehnt"
+
+    class AllocationMethod(models.TextChoices):
+        NONE = "none", "Keine Umlage"
+        ALL_ACTIVE = "all_active", "Alle aktiven Teilnehmer"
+        SELECTED = "selected", "Ausgewählte Teilnehmer"
+
     camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="expenses")
     participant = models.ForeignKey(
         Participant,
@@ -431,12 +441,37 @@ class Expense(TimeStampedModel):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     paid_on = models.DateField(null=True, blank=True)
     reimbursable = models.BooleanField(default=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    allocation_method = models.CharField(max_length=20, choices=AllocationMethod.choices, default=AllocationMethod.NONE)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    approved_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approved_expenses",
+    )
 
     class Meta:
         ordering = ["category", "description"]
 
     def __str__(self):
         return f"{self.camp}: {self.description}"
+
+
+class ExpenseAllocation(TimeStampedModel):
+    expense = models.ForeignKey(Expense, on_delete=models.CASCADE, related_name="allocations")
+    participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="expense_allocations")
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+
+    class Meta:
+        ordering = ["expense", "participant"]
+        constraints = [
+            models.UniqueConstraint(fields=["expense", "participant"], name="unique_expense_allocation"),
+        ]
+
+    def __str__(self):
+        return f"{self.participant} -> {self.expense}: {self.amount}"
 
 
 class MealSignup(TimeStampedModel):

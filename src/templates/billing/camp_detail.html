@@ -67,6 +67,32 @@
     </table>
   </section>
 
+  {% if pending_expenses %}
+  <section class="panel stack">
+    <h2>Ausstehende Gemeinschaftsausgaben</h2>
+    <table>
+      <thead><tr><th>Datum</th><th>Person</th><th>Beschreibung</th><th>Betrag</th><th></th></tr></thead>
+      <tbody>
+        {% for expense in pending_expenses %}
+          <tr>
+            <td>{{ expense.paid_on|default:"-" }}</td>
+            <td>{{ expense.participant|default:"-" }}</td>
+            <td>{{ expense.description }}</td>
+            <td>{{ expense.amount }} EUR</td>
+            <td>
+              <a href="{% url 'shared-expense-approve' expense.pk %}" class="button button-secondary">Umlage & Genehmigen</a>
+              <form method="post" action="{% url 'shared-expense-reject' expense.pk %}" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="button-link" style="color:red;">Ablehnen</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
+
   <section class="panel">
     <h2>Dienste & Aufgaben</h2>
     <p>Hier kannst du Lagerdienste (wie Spülen, Kochen, Putzen) anlegen und Teilnehmern zuweisen.</p>

@@ -61,6 +61,9 @@ urlpatterns = [
     path("shifts/<int:shift_id>/edit/", views.shift_edit, name="shift-edit"),
     path("shifts/<int:shift_id>/delete/", views.shift_delete, name="shift-delete"),
     path("camps/<int:camp_id>/expenses/new/", views.expense_create, name="expense-create"),
+    path("camps/<int:camp_id>/shared-expenses/request/", views.kiosk_shared_expense_request, name="shared-expense-request"),
+    path("expenses/<int:expense_id>/approve/", views.shared_expense_approve, name="shared-expense-approve"),
+    path("expenses/<int:expense_id>/reject/", views.shared_expense_reject, name="shared-expense-reject"),
     path("camps/<int:camp_id>/import/", views.participant_import, name="participant-import"),
     path(
         "camps/<int:camp_id>/import/template/", 

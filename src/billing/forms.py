@@ -506,7 +506,51 @@ class ExpenseForm(forms.ModelForm):
             "paid_on": "Zahlungsdatum",
             "reimbursable": "Erstattungsfähig",
         }
+        }
         widgets = {"paid_on": forms.DateInput(attrs={"type": "date"})}
+
+
+class SharedExpenseRequestForm(forms.ModelForm):
+    class Meta:
+        model = Expense
+        fields = ["category", "description", "amount", "paid_on"]
+        labels = {
+            "category": "Kategorie",
+            "description": "Beschreibung",
+            "amount": "Betrag",
+            "paid_on": "Zahlungsdatum",
+        }
+        widgets = {"paid_on": forms.DateInput(attrs={"type": "date"})}
+
+
+class SharedExpenseApprovalForm(forms.ModelForm):
+    participant_ids = forms.MultipleChoiceField(
+        label="Umlage auf",
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+    )
+
+    class Meta:
+        model = Expense
+        fields = ["allocation_method"]
+        labels = {
+            "allocation_method": "Umlagemethode",
+        }
+
+    def __init__(self, *args, camp=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if camp:
+            participants = Participant.objects.filter(camp=camp, archived_at__isnull=True).order_by("last_name", "first_name")
+            self.fields["participant_ids"].choices = [(p.id, p.full_name) for p in participants]
+
+    def clean(self):
+        cleaned_data = super().clean()
+        allocation_method = cleaned_data.get("allocation_method")
+        participant_ids = cleaned_data.get("participant_ids")
+
+        if allocation_method == Expense.AllocationMethod.SELECTED and not participant_ids:
+            self.add_error("participant_ids", "Bitte wähle mindestens einen Teilnehmer aus.")
+        return cleaned_data
 
 
 class ParticipantImportForm(forms.Form):

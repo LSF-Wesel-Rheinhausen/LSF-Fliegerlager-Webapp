@@ -142,6 +142,17 @@
     </section>
 
     <section class="panel stack">
+      <h2 style="display: flex; align-items: center; gap: 8px;">
+        Gemeinschaftsausgaben
+        <button type="button" class="kiosk-help-button" data-help-text="Hier kannst du Ausgaben einreichen, die du für die Gemeinschaft vorgestreckt hast (z.B. Grillgut). Nach Freigabe durch die Lagerleitung wird der Betrag als Umlage auf die Teilnehmer aufgeteilt und dir als Gutschrift angerechnet.">?</button>
+      </h2>
+      <p>Geld für die Gemeinschaft vorgestreckt?</p>
+      <div class="form-actions" style="margin-top: 1rem;">
+        <a class="button button-secondary" href="{% url 'shared-expense-request' participant.camp.pk %}">Antrag einreichen</a>
+      </div>
+    </section>
+
+    <section class="panel stack">
       <div class="toolbar compact-toolbar kiosk-section-heading">
         <div>
           <h2 style="display: flex; align-items: center; gap: 8px;">

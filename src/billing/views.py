@@ -46,6 +46,8 @@ from .forms import (
     ParticipantPinForm,
     PaymentForm,
     PriceRuleForm,
+    SharedExpenseApprovalForm,
+    SharedExpenseRequestForm,
     ShiftForm,
     UserCreateForm,
     UserEditForm,
@@ -56,6 +58,7 @@ from .models import (
     BookingAuditLog,
     Camp,
     Charge,
+    Expense,
     MealOrder,
     MealSignup,
     Participant,
@@ -317,6 +320,7 @@ def camp_detail(request, camp_id):
         "balance": sum(result.balance for result in settlements),
     }
     price_rules = camp.price_rules.all()
+    pending_expenses = camp.expenses.filter(status=Expense.Status.PENDING)
     return render(
         request,
         "billing/camp_detail.html",
@@ -327,6 +331,7 @@ def camp_detail(request, camp_id):
             "price_rules": price_rules,
             "archived_participants": archived_participants,
             "settlement_runs": settlement_runs,
+            "pending_expenses": pending_expenses,
         },
     )
 
@@ -795,7 +800,46 @@ def expense_create(request, camp_id):
             expense.save()
         messages.success(request, "Auslage wurde gespeichert.")
         return redirect("camp-detail", camp_id=camp.pk)
-    return render(request, "billing/form.html", {"form": form, "title": "Auslage erfassen"})
+    return render(request, "billing/form.html", {"form": form, "title": "Auslage erfassen", "cancel_url": reverse("camp-detail", args=[camp.pk])})
+
+
+@editor_required
+def shared_expense_approve(request, expense_id):
+    expense = get_object_or_404(Expense, pk=expense_id, status=Expense.Status.PENDING)
+    camp = expense.camp
+    
+    form = SharedExpenseApprovalForm(request.POST or None, camp=camp)
+    if request.method == "POST" and form.is_valid():
+        from .services import approve_shared_expense
+        allocation_method = form.cleaned_data["allocation_method"]
+        participant_ids = [int(pid) for pid in form.cleaned_data.get("participant_ids", [])]
+        
+        expense.allocation_method = allocation_method
+        try:
+            approve_shared_expense(expense, approved_by=request.user, participant_ids=participant_ids)
+            messages.success(request, "Gemeinschaftsausgabe genehmigt.")
+        except ValidationError as e:
+            messages.error(request, e.message)
+            return redirect("shared-expense-approve", expense_id=expense.pk)
+        
+        return redirect("camp-detail", camp_id=camp.pk)
+    
+    return render(request, "billing/form.html", {
+        "form": form,
+        "title": f"Umlage genehmigen: {expense.description}",
+        "camp": camp,
+        "cancel_url": reverse("camp-detail", args=[camp.pk])
+    })
+
+@editor_required
+@require_POST
+def shared_expense_reject(request, expense_id):
+    expense = get_object_or_404(Expense, pk=expense_id, status=Expense.Status.PENDING)
+    from .services import reject_shared_expense
+    reject_shared_expense(expense, rejected_by=request.user)
+    messages.success(request, "Gemeinschaftsausgabe abgelehnt.")
+    return redirect("camp-detail", camp_id=expense.camp.pk)
+
 
 @editor_required
 def participant_import_template_view(request, camp_id):
@@ -1374,6 +1418,31 @@ def kiosk_home(request):
         "next_order_locked": is_meal_change_locked(participant.camp, next_order_date),
     }
     return render(request, "billing/kiosk_home.html", context)
+
+
+def kiosk_shared_expense_request(request):
+    participant = _kiosk_participant(request)
+    if not participant:
+        return redirect("kiosk-login")
+    
+    form = SharedExpenseRequestForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            expense = form.save(commit=False)
+            expense.camp = participant.camp
+            expense.participant = participant
+            expense.reimbursable = True
+            expense.save()
+        messages.success(request, "Antrag auf Gemeinschaftsausgabe eingereicht.")
+        return redirect("kiosk-home")
+    
+    return render(request, "billing/form.html", {
+        "form": form,
+        "title": "Gemeinschaftsausgabe beantragen",
+        "camp": participant.camp,
+        "kiosk_autologout": True,
+        "cancel_url": reverse("kiosk-home")
+    })
 
 
 def kiosk_shifts(request):
