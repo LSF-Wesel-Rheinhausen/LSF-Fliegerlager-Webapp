@@ -1024,6 +1024,8 @@ dialog {
   max-width: 560px;
   width: min(92vw, 560px);
   box-sizing: border-box;
+  margin: auto;
+  inset: 0;
 }
 
 .kiosk-dialog--compact {
