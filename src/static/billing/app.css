@@ -138,6 +138,22 @@ h2 {
   letter-spacing: 0;
 }
 
+.cost-center-result {
+  font-weight: 700;
+}
+
+.cost-center-result-positive {
+  color: var(--ok);
+}
+
+.cost-center-result-negative {
+  color: var(--danger);
+}
+
+.cost-center-result-neutral {
+  color: var(--muted);
+}
+
 p {
   margin: 0;
   color: var(--muted);
