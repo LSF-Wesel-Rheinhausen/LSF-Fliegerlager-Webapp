@@ -2,6 +2,7 @@
 {% load billing_format %}
 {% block title %}Kiosk{% endblock %}
 {% block kiosk_nav %}
+  <a class="button button-secondary" href="{% url 'user-guide' %}">Hilfe</a>
   <button type="button" class="button button-secondary" data-open-contact-dialog>Kontakt Lagerleitung</button>
   <a class="button button-secondary" href="{% url 'kiosk-logout' %}">Abmelden</a>
 {% endblock %}
