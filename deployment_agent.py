@@ -263,16 +263,18 @@ def update_error(step: str, error: BaseException) -> str:
 
 
 def recovery_hint(backup_name: str, old_image_id: str) -> str:
+    env_file = get_env_file()
+    env_arg = f"--env-file {shlex.quote(env_file)} " if env_file else ""
     lines = [
         "Logs prüfen: docker compose --project-name "
-        f"{shlex.quote(PROJECT_NAME)} --file {shlex.quote(COMPOSE_FILE)} --env-file {shlex.quote(ENV_FILE)} "
+        f"{shlex.quote(PROJECT_NAME)} --file {shlex.quote(COMPOSE_FILE)} {env_arg}"
         "logs --tail=200 app updater db"
     ]
     if old_image_id:
         lines.append(
             "Manuelle Wiederherstellung: APP_IMAGE="
             f"{shlex.quote(old_image_id)} docker compose --project-name {shlex.quote(PROJECT_NAME)} "
-            f"--file {shlex.quote(COMPOSE_FILE)} --env-file {shlex.quote(ENV_FILE)} "
+            f"--file {shlex.quote(COMPOSE_FILE)} {env_arg}"
             f"up --detach --no-deps --force-recreate {shlex.quote(TARGET_SERVICE)}"
         )
     if backup_name:
