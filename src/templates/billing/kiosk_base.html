@@ -40,22 +40,24 @@
   </head>
   <body class="kiosk-shell">
     <header class="topbar kiosk-topbar">
-      <div style="display: flex; align-items: center; gap: 16px; justify-content: center; flex-wrap: wrap; text-align: center;">
-        <a class="brand" href="{% url 'kiosk-login' %}" style="flex-shrink: 0;">
+      <div style="display: flex; justify-content: center; width: 100%;">
+        <a class="brand" href="{% url 'kiosk-login' %}" style="flex-shrink: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: center;">
           <img src="{% static 'billing/logo.jpg' %}" alt="Luftsportfreunde Wesel-Rheinhausen e.V.">
-          <span>Kiosk</span>
+          <span style="display: flex; gap: 12px; align-items: baseline;">
+            <span>Kiosk</span>
+            {% if participant %}
+              <span style="color: var(--muted); font-weight: 700; pointer-events: none;">
+                <span id="kiosk-greeting">Hallo</span> <strong style="color: var(--text);">{{ participant.first_name }}</strong>
+                <script>
+                  (function() {
+                    const greetings = ["Hallo", "Moin", "Servus", "Willkommen", "Hey", "Gude", "Grüß dich"];
+                    document.getElementById("kiosk-greeting").innerText = greetings[Math.floor(Math.random() * greetings.length)];
+                  })();
+                </script>
+              </span>
+            {% endif %}
+          </span>
         </a>
-        {% if participant %}
-          <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 20px; font-weight: 700; color: var(--muted); pointer-events: none;">
-            <span id="kiosk-greeting">Hallo</span> <strong style="color: var(--text);">{{ participant.first_name }}</strong>
-            <script>
-              (function() {
-                const greetings = ["Hallo", "Moin", "Servus", "Willkommen", "Hey", "Gude", "Grüß dich"];
-                document.getElementById("kiosk-greeting").innerText = greetings[Math.floor(Math.random() * greetings.length)];
-              })();
-            </script>
-          </div>
-        {% endif %}
       </div>
       <div class="kiosk-header-actions" style="flex-shrink: 0;">
         {% if kiosk_autologout %}
