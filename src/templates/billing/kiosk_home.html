@@ -14,7 +14,7 @@
     </div>
   </div>
 
-  <div style="margin-bottom: 24px;">
+  <div style="margin-bottom: 24px; max-width: 480px;">
     <button type="button" class="button" data-open-summary-dialog style="width: 100%; font-size: 1.1rem; padding: 12px; justify-content: space-between; display: flex;">
       <span>Aktuelle Abrechnung</span>
       <strong>Offen: {{ summary.balance|money_eur }}</strong>
@@ -134,7 +134,7 @@
     <section class="panel stack">
       <h2>Dienste</h2>
       <p>Du hast <strong>{{ participant.completed_shifts }} von {{ participant.target_shifts }}</strong> Pflichtdiensten erledigt.</p>
-      <div class="form-actions" style="margin-top: 1rem;">
+      <div class="form-actions" style="margin-top: auto; padding-top: 1rem;">
         <a class="button" href="{% url 'kiosk-shifts' %}">Zum Dienstplan</a>
       </div>
     </section>
@@ -145,7 +145,7 @@
         <button type="button" class="kiosk-help-button" data-help-text="Hier kannst du Ausgaben einreichen, die du für die Gemeinschaft vorgestreckt hast (z.B. Grillgut). Nach Freigabe durch die Lagerleitung wird der Betrag als Umlage auf die Teilnehmer aufgeteilt und dir als Gutschrift angerechnet.">?</button>
       </h2>
       <p>Geld für die Gemeinschaft vorgestreckt?</p>
-      <div class="form-actions" style="margin-top: 1rem;">
+      <div class="form-actions" style="margin-top: auto; padding-top: 1rem;">
         <a class="button button-secondary" href="{% url 'kiosk-shared-expense-request' %}">Antrag einreichen</a>
       </div>
       
