@@ -506,7 +506,6 @@ class ExpenseForm(forms.ModelForm):
             "paid_on": "Zahlungsdatum",
             "reimbursable": "Erstattungsfähig",
         }
-        }
         widgets = {"paid_on": forms.DateInput(attrs={"type": "date"})}
 
 
