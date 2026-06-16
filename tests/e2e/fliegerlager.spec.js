@@ -274,7 +274,7 @@ test("Import flow: upload CSV and confirm", async ({ page }) => {
 
   await page.getByRole("link", { name: "Teilnehmer importieren" }).click();
 
-  const csvContent = "first_name,last_name\nImport,Test\n";
+  const csvContent = "first_name,last_name,arrival_date,departure_date,hilfssatz,berufssatz\nImport,Test,01.07.2026,10.07.2026,0.15,0.08\n";
   await page.getByLabel("Importdatei").setInputFiles({
     name: "test.csv",
     mimeType: "text/csv",
