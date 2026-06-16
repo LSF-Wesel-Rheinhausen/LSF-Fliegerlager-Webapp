@@ -204,19 +204,13 @@ table {
   overflow: hidden;
 }
 
-table a,
-td,
-th {
-  overflow-wrap: break-word;
-  word-break: normal;
-}
-
 th,
 td {
   padding: 12px 14px;
   border-bottom: 1px solid var(--line);
   text-align: left;
   vertical-align: middle;
+  white-space: nowrap;
 }
 
 th {
@@ -224,7 +218,12 @@ th {
   color: #4b5565;
   font-size: 13px;
   font-weight: 700;
-  white-space: nowrap;
+}
+
+td a {
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 tbody tr:last-child td {
@@ -983,6 +982,8 @@ textarea {
 
   table {
     display: block;
+    width: 100%;
+    max-width: 100%;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
