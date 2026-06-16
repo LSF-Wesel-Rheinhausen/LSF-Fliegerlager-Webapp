@@ -2,7 +2,6 @@ import csv
 from io import BytesIO, StringIO
 
 from django.conf import settings
-
 from django.http import HttpResponse
 from openpyxl import Workbook
 from reportlab.lib.pagesizes import A4
@@ -133,7 +132,9 @@ def _draw_page_framework(pdf, title, subtitle, participant_name):
     
     logo_path = settings.BASE_DIR / "static" / "billing" / "logo.jpg"
     if logo_path.exists():
-        pdf.drawImage(str(logo_path), 50, height - 150, width=250, height=100, preserveAspectRatio=True, anchor='nw', mask='auto')
+        pdf.drawImage(
+            str(logo_path), 50, height - 150, width=250, height=100, preserveAspectRatio=True, anchor="nw", mask="auto"
+        )
 
     pdf.setFont("Helvetica", 8)
     pdf.setFillColorRGB(0.3, 0.3, 0.3)
@@ -169,7 +170,9 @@ def _draw_page_framework(pdf, title, subtitle, participant_name):
     footer_y = 30
     pdf.setFont("Helvetica", 8)
     pdf.setFillColorRGB(0.5, 0.5, 0.5)
-    pdf.drawCentredString(width / 2.0, footer_y, "Erstellt mit der Fliegerlagerabrechnung | Luftsportfreunde Wesel-Rheinhausen e.V.")
+    pdf.drawCentredString(
+        width / 2.0, footer_y, "Erstellt mit der Fliegerlagerabrechnung | Luftsportfreunde Wesel-Rheinhausen e.V."
+    )
     pdf.setFillColorRGB(0, 0, 0)
     
     return y
@@ -279,7 +282,9 @@ def _draw_payment_instructions(pdf, y, camp, balance):
         
         text_y -= 14
         pdf.setFont("Helvetica", 9)
-        pdf.drawString(65, text_y, "Du hast ein Guthaben. Bitte teile der Lagerleitung mit, ob du diesen Betrag spenden (auch")
+        pdf.drawString(
+            65, text_y, "Du hast ein Guthaben. Bitte teile der Lagerleitung mit, ob du diesen Betrag spenden (auch"
+        )
         text_y -= 12
         pdf.drawString(65, text_y, "anteilig möglich) oder ausgezahlt haben möchtest.")
         
