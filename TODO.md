@@ -4,4 +4,4 @@
 
 ## Phase 4: Finanzfeature Gemeinschaftsausgaben
 
-- [ ] #69 Gemeinschaftsausgaben als Gutschrift plus optionale Kostenumlage konzipieren und implementieren: Genehmigung, Teilnehmerauswahl, Rundung, Abrechnung, Exporte und Tests.
+- [x] #69 Gemeinschaftsausgaben als Gutschrift plus optionale Kostenumlage konzipieren und implementieren: Genehmigung, Teilnehmerauswahl, Rundung, Abrechnung, Exporte und Tests.
