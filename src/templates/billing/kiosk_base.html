@@ -8,14 +8,16 @@
     <link rel="stylesheet" href="{% static 'billing/app.css' %}">
     <style>
       .kiosk-help-button {
-        display: inline-flex;
+        display: flex;
         align-items: center;
         justify-content: center;
-        width: 22px;
-        height: 22px;
+        flex: 0 0 24px;
+        width: 24px;
+        height: 24px;
         border-radius: 50%;
         background: var(--accent);
         color: white;
+        font-family: inherit;
         font-weight: bold;
         cursor: pointer;
         border: none;
@@ -23,9 +25,9 @@
         line-height: 1;
         padding: 0;
         margin: 0;
-        flex-shrink: 0;
         appearance: none;
         -webkit-appearance: none;
+        box-sizing: border-box;
       }
       .kiosk-help-button:hover {
         background: color-mix(in srgb, var(--accent) 80%, black);
