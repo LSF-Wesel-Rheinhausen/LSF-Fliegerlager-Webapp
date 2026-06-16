@@ -221,7 +221,27 @@ def rows_to_payload(rows):
 
 
 def rows_from_payload(payload):
-    return [ImportRow(row_number=row["row_number"], data=row["data"], errors=row.get("errors", [])) for row in payload]
+    import datetime
+    
+    rows = []
+    for row in payload:
+        data = row["data"]
+        # Deserialize date strings back to date objects
+        for field in ["arrival_date", "departure_date"]:
+            if data.get(field) and isinstance(data[field], str):
+                try:
+                    data[field] = datetime.date.fromisoformat(data[field])
+                except ValueError:
+                    pass
+                    
+        # Decimal fields might also be strings or floats, though JSON handles floats. 
+        # For precision, let's leave them if Django ORM handles them, or parse them to Decimal.
+        for field in ["hilfssatz", "berufssatz", "quantity", "unit_price", "amount"]:
+            if field in data and data[field] is not None:
+                data[field] = Decimal(str(data[field]))
+                
+        rows.append(ImportRow(row_number=row["row_number"], data=data, errors=row.get("errors", [])))
+    return rows
 
 
 def save_participants(camp, rows):
