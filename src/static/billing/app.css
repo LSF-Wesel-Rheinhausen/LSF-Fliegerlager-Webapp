@@ -1021,22 +1021,21 @@ dialog {
   background: var(--panel);
   box-shadow: 0 20px 48px rgba(32, 37, 45, 0.16);
   max-width: 560px;
-  width: 92vw;
+  width: 92%;
   box-sizing: border-box;
   margin: auto;
   position: fixed;
-  inset: 0;
-  transform: none;
+  top: 0; bottom: 0; left: 0; right: 0;
 }
 
 .kiosk-dialog--compact {
   max-width: 520px;
-  width: min(92vw, 520px);
+  width: 92%;
 }
 
 .kiosk-dialog--wide {
   max-width: 760px;
-  width: min(94vw, 760px);
+  width: 96%;
 }
 
 dialog::backdrop {
