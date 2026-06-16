@@ -124,6 +124,7 @@ h1 {
   font-size: 30px;
   line-height: 1.2;
   letter-spacing: 0;
+  overflow-wrap: anywhere;
 }
 
 h2 {
@@ -707,12 +708,12 @@ textarea {
   align-items: center;
   gap: 12px;
   font-weight: 700;
+  max-width: 100%;
   min-width: 0;
 }
 
 .target-row label span {
-  overflow-wrap: break-word;
-  word-break: normal;
+  overflow-wrap: anywhere;
 }
 
 .target-row input[type="checkbox"] {
@@ -722,6 +723,8 @@ textarea {
 }
 
 .target-row select {
+  width: 100%;
+  min-width: 0;
   min-height: 44px;
 }
 
