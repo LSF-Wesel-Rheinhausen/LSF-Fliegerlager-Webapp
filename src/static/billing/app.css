@@ -1016,6 +1016,11 @@ textarea {
 
 /* Dialog/Popup Modals */
 dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 26px;
@@ -1024,8 +1029,6 @@ dialog {
   max-width: 560px;
   width: min(92vw, 560px);
   box-sizing: border-box;
-  margin: auto;
-  inset: 0;
 }
 
 .kiosk-dialog--compact {

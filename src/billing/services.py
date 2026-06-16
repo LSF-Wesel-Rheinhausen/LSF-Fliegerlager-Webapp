@@ -498,7 +498,7 @@ def calculate_participant_settlement(participant):
     total_due = money(sum((line.total for line in lines), ZERO))
     total_paid = money(participant.payments.aggregate(total=Sum("amount"))["total"])
     total_advanced = money(
-        Expense.objects.filter(participant=participant, reimbursable=True).aggregate(total=Sum("amount"))["total"]
+        Expense.objects.filter(participant=participant, reimbursable=True, status=Expense.Status.APPROVED).aggregate(total=Sum("amount"))["total"]
     )
     balance = money(total_due - total_paid - total_advanced)
     return SettlementResult(
