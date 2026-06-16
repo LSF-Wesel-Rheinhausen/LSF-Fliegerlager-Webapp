@@ -67,6 +67,7 @@ def csv_rows(response):
         ("export-settlements-csv", lambda camp, _participant: [camp.pk]),
         ("export-drinks-csv", lambda camp, _participant: [camp.pk]),
         ("export-workbook", lambda camp, _participant: [camp.pk]),
+        ("participant-import-template", lambda camp, _participant: [camp.pk]),
         ("export-participant-pdf", lambda _camp, participant: [participant.pk]),
     ],
 )
@@ -87,6 +88,7 @@ def test_export_routes_require_editor_access(client, export_dataset, route_name,
         ("export-settlements-csv", lambda camp, _participant: [camp.pk]),
         ("export-drinks-csv", lambda camp, _participant: [camp.pk]),
         ("export-workbook", lambda camp, _participant: [camp.pk]),
+        ("participant-import-template", lambda camp, _participant: [camp.pk]),
         ("export-participant-pdf", lambda _camp, participant: [participant.pk]),
     ],
 )
@@ -119,6 +121,33 @@ def test_settlement_csv_exports_calculated_kiosk_charges_payments_and_expenses(c
         ["Nachname", "Vorname", "Brutto", "Förderung", "Soll", "Gezahlt", "Vorgestreckt", "Offen"],
         ["Lovelace", "Ada", "16.50", "0.00", "16.50", "4.00", "3.00", "9.50"],
     ]
+
+
+@pytest.mark.django_db
+def test_participant_import_template_export_contains_headers_and_examples(client, export_dataset):
+    camp, _participant = export_dataset
+    client.force_login(SuperUserFactory())
+
+    response = client.get(reverse("participant-import-template", args=[camp.pk]))
+
+    assert response.status_code == 200
+    assert response["Content-Type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    assert response["Content-Disposition"] == 'attachment; filename="teilnehmer_import_vorlage.xlsx"'
+
+    wb = load_workbook(BytesIO(response.content))
+    assert "Teilnehmer" in wb.sheetnames
+
+    sheet = wb["Teilnehmer"]
+    # Check headers
+    headers = [cell.value for cell in sheet[1]]
+    assert headers[:6] == ["Vorname*", "Nachname*", "Anreise*", "Abreise*", "Hilfssatz*", "Berufssatz*"]
+    assert "Email" in headers
+    assert "Notizen" in headers
+
+    # Check that there is at least one example row
+    assert sheet.max_row >= 2
+    assert sheet.cell(row=2, column=1).value == "Max"
+    assert sheet.cell(row=2, column=2).value == "Mustermann"
 
 
 @pytest.mark.django_db

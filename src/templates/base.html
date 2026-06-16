@@ -22,6 +22,7 @@
       </div>
       <nav>
         {% if user.is_authenticated %}
+          <a class="button button-secondary nav-link" href="{% url 'admin-guide' %}">Hilfe</a>
           {% if user|can_manage_users %}
             <a class="button button-secondary nav-link" href="{% url 'user-list' %}">Nutzer</a>
           {% endif %}

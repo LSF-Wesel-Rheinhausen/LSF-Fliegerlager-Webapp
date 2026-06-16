@@ -2,6 +2,7 @@
 {% load billing_format %}
 {% block title %}Kiosk{% endblock %}
 {% block kiosk_nav %}
+  <a class="button button-secondary" href="{% url 'user-guide' %}">Hilfe</a>
   <button type="button" class="button button-secondary" data-open-contact-dialog>Kontakt Lagerleitung</button>
   <a class="button button-secondary" href="{% url 'kiosk-logout' %}">Abmelden</a>
 {% endblock %}
@@ -44,8 +45,10 @@
 
   <div class="kiosk-grid">
     <section class="panel">
-      <h2>Getränk buchen</h2>
-      <p class="hint">Tippe auf ein Getränk und wähle danach die Menge.</p>
+      <h2 style="display: flex; align-items: center; gap: 8px;">
+        Getränk buchen
+        <button type="button" class="kiosk-help-button" data-help-text="Tippe auf ein Getränk und wähle danach die Menge, um es auf deinen Deckel zu buchen. Falls du dich vertippt hast, kannst du den Fehler ganz unten unter 'Letzte Getränke' über das Mülleimer-Symbol sofort wieder stornieren.">?</button>
+      </h2>
       <form method="post" class="stack kiosk-drink-form" id="drink-booking-form">
         {% csrf_token %}
         <input type="hidden" name="action" value="drink">
@@ -78,8 +81,10 @@
     </section>
 
     <section class="panel">
-      <h2>Essen anmelden</h2>
-      <p class="hint">Wähle im Kalender die Mahlzeit und danach im Popup die Personen samt Variante.</p>
+      <h2 style="display: flex; align-items: center; gap: 8px;">
+        Essen anmelden
+        <button type="button" class="kiosk-help-button" data-help-text="Wähle im Kalender eine Mahlzeit (z.B. Frühstück). Im folgenden Fenster kannst du dich und deine Familienmitglieder an- und abmelden oder die Variante (Normal/Vegetarisch) ändern. Graue Kalendertage bedeuten, dass die Meldefrist bereits abgelaufen ist.">?</button>
+      </h2>
       <div class="meal-order-status" aria-label="Essensbestellung für {{ next_order_date|date:'d.m.Y' }}">
         <strong>Essensbestellung für {{ next_order_date|date:"d.m.Y" }}</strong>
         {% if next_meal_order %}
@@ -139,11 +144,15 @@
     <section class="panel stack">
       <div class="toolbar compact-toolbar kiosk-section-heading">
         <div>
-          <h2>Familie</h2>
+          <h2 style="display: flex; align-items: center; gap: 8px;">
+            Familie
+            <button type="button" class="kiosk-help-button" data-help-text="Hier legst du Familienmitglieder (z.B. Partner, Kinder) an. Ihre Kosten werden auf deine finale Abrechnung gebucht. Sie tauchen beim Essen als auswählbare Personen auf, haben aber keinen eigenen Kiosk-Login.">?</button>
+          </h2>
           <p>Diese Personen werden über dein Konto abgerechnet.</p>
         </div>
         <button type="button" class="button" data-open-family-dialog>Anlegen</button>
       </div>
+
       {% for member in family_members %}
         <div class="kiosk-list-row">
           <div class="kiosk-list-row__content">
@@ -164,7 +173,10 @@
 
     <section class="panel stack">
       <div class="kiosk-section-heading">
-        <h2>Mitbuchungen</h2>
+        <h2 style="display: flex; align-items: center; gap: 8px;">
+          Mitbuchungen
+          <button type="button" class="kiosk-help-button" data-help-text="Lade andere Teilnehmer ein, damit ihr euch gegenseitig beim Essen mit anmelden könnt. Sobald die Einladung angenommen wurde, könnt ihr euch gegenseitig auswählen. Die Abrechnung bleibt dabei für jeden separat.">?</button>
+        </h2>
       </div>
       <form method="post" class="form-grid">
         {% csrf_token %}

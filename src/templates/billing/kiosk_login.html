@@ -4,10 +4,14 @@
   <section class="panel narrow">
     <h1>Kiosk</h1>
     <p class="hint">Melde dich mit deinem Namen und deiner PIN an.</p>
+    <div style="padding: 12px; background: #eef2f6; border-left: 4px solid var(--accent); border-radius: 0 4px 4px 0; margin-bottom: 16px; font-size: 0.9em;">
+      <strong>Neu hier?</strong> Wenn du dich zum ersten Mal anmeldest, kannst du dir eine eigene PIN ausdenken. Trage sie einfach ein, sie wird dann für die Zukunft gespeichert.
+    </div>
     <form method="post" class="form-grid">
       {% csrf_token %}
       {{ form.as_p }}
       <div class="form-actions">
+        <a class="button button-secondary" href="{% url 'user-guide' %}">Hilfe</a>
         <a class="button button-secondary" href="{% url 'login' %}">Admin-Interface</a>
         <button type="submit" class="button">Anmelden</button>
       </div>

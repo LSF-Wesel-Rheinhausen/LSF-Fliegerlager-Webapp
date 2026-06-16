@@ -11,6 +11,8 @@ urlpatterns = [
     path("deployment/update/", views.deployment_update, name="deployment-update"),
     path("deployment/update/check/", views.deployment_update_check, name="deployment-update-check"),
     path("deployment/update/install/", views.deployment_update_install, name="deployment-update-install"),
+    path("help/", views.user_guide, name="user-guide"),
+    path("help/admin/", views.admin_guide, name="admin-guide"),
     path("", views.kiosk_home, name="kiosk-root"),
     path("camps/", views.camp_list, name="camp-list"),
     path("camps/new/", views.camp_create, name="camp-create"),
@@ -60,6 +62,11 @@ urlpatterns = [
     path("shifts/<int:shift_id>/delete/", views.shift_delete, name="shift-delete"),
     path("camps/<int:camp_id>/expenses/new/", views.expense_create, name="expense-create"),
     path("camps/<int:camp_id>/import/", views.participant_import, name="participant-import"),
+    path(
+        "camps/<int:camp_id>/import/template/", 
+        views.participant_import_template_view, 
+        name="participant-import-template"
+    ),
     path("camps/<int:camp_id>/export/settlements.csv", views.export_settlements_csv, name="export-settlements-csv"),
     path("camps/<int:camp_id>/export/drinks.csv", views.export_drinks_csv, name="export-drinks-csv"),
     path("camps/<int:camp_id>/export/workbook.xlsx", views.export_workbook, name="export-workbook"),

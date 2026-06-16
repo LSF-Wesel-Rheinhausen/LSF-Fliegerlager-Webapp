@@ -50,6 +50,13 @@
     <article class="metric"><span>Offen</span><strong>{{ settlement.balance }} EUR</strong></article>
   </section>
 
+  {% if settlement.balance < 0 %}
+    <section class="panel infobox" style="background: var(--surface-2); padding: 1rem; margin-bottom: 1.5rem; border-left: 4px solid var(--primary);">
+      <h3>Guthaben vorhanden</h3>
+      <p>Möchtest du das Guthaben gespendet lassen oder ausgezahlt bekommen? Bitte teile uns ggf. deine IBAN oder PayPal mit.</p>
+    </section>
+  {% endif %}
+
   <section class="panel stack">
     <div class="toolbar compact-toolbar">
       <div>

@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Benutzerhandbuch - Fliegerlager-Webapp</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f7f9;
+        --panel: #ffffff;
+        --text: #20252d;
+        --muted: #647084;
+        --line: #dce2ea;
+        --accent: #005ca9;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 16px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      main {
+        width: min(980px, calc(100vw - 32px));
+        margin: 40px auto;
+      }
+      section {
+        margin: 18px 0;
+        padding: 24px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+      h1, h2, h3 {
+        margin: 0 0 12px;
+        line-height: 1.2;
+      }
+      p {
+        margin: 0 0 12px;
+      }
+      a {
+        color: var(--accent);
+      }
+      ul, ol {
+        margin: 0 0 16px 0;
+        padding-left: 22px;
+      }
+      li + li {
+        margin-top: 6px;
+      }
+      code {
+        padding: 2px 5px;
+        border-radius: 4px;
+        background: #eef2f6;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 14px;
+      }
+      .notice {
+        padding: 12px;
+        background: #eef2f6;
+        border-left: 4px solid var(--accent);
+        border-radius: 0 4px 4px 0;
+        margin-bottom: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Benutzerhandbuch</h1>
+      <p class="muted">Anleitungen für Teilnehmer (Kiosk), Abrechner (Hübers), Bearbeiter und Administratoren.</p>
+
+      <section id="kiosk">
+        <h2>1. Kiosk-Nutzer (Teilnehmer)</h2>
+        <p>Der Kiosk ist die zentrale Oberfläche für alle Teilnehmer während des Lagers, optimiert für Tablets und Smartphones.</p>
+        <ul>
+          <li><strong>Login:</strong> Die Anmeldung erfolgt durch Auswahl des eigenen Namens und Eingabe einer 4-stelligen PIN. Beim ersten Login muss die PIN selbst vergeben werden.</li>
+          <li><strong>Getränke buchen:</strong> Auf der Startseite können Getränke direkt mit einem Klick auf die jeweilige Sorte gebucht werden. Eigene Fehlbuchungen können über das "Mülleimer"-Symbol innerhalb kurzer Zeit storniert werden.</li>
+          <li><strong>Mahlzeiten:</strong> Essen für die kommenden Tage kann an- und abgemeldet werden. Es gibt die Wahl zwischen "Normal" und "Vegetarisch".</li>
+          <li><strong>Dienstplan:</strong> Im Bereich "Dienste" können sich Teilnehmer für offene Schichten (z.B. Frühstücksdienst, Winde) eintragen, bereits gewählte Dienste einsehen oder diese wieder freigeben / tauschen.</li>
+        </ul>
+        <div class="notice">
+          <strong>Sicherheitshinweis:</strong> Der Kiosk meldet Benutzer nach 2 Minuten Inaktivität automatisch ab, um Fehlbuchungen durch fremde Personen zu vermeiden. Ein sichtbarer Timer zeigt die verbleibende Zeit an.
+        </div>
+        <p><em>Screenshot-Referenz:</em> <a href="images/kiosk-shift-planning.png">Dienstplanung im Kiosk</a></p>
+      </section>
+
+      <section id="huebers">
+        <h2>2. Abrechner / Hübers</h2>
+        <p>Hübers sind primär für den finanziellen Abschluss eines Lagers oder für Zwischenabrechnungen zuständig.</p>
+        <ul>
+          <li><strong>Lager-Fortschritt prüfen:</strong> In der Lager-Übersicht können gebuchte Mahlzeiten, Getränke-Umsätze und Dienste kontrolliert werden.</li>
+          <li><strong>Abrechnungslauf erstellen:</strong> Über den Button <em>Neue Abrechnung</em> wird ein "Settlement Run" erzeugt. Dieser berechnet für alle Teilnehmer die entstandenen Kosten abzüglich individueller Förderung (Hilfssatz, Berufssatz).</li>
+          <li><strong>Kontrolle:</strong> Die Zwischenabrechnung kann geprüft werden, ohne dass sie endgültig ist. Erst wenn alle Daten stimmen, kann die Abrechnung <em>fixiert</em> werden.</li>
+          <li><strong>Exporte:</strong> Nach dem Fixieren stehen CSV-Dateien (für die Vereinsbuchhaltung), Excel-Tabellen und Einzel-PDFs für die Teilnehmer zum Download bereit.</li>
+        </ul>
+        <div class="notice">
+          <strong>Tipp:</strong> Eine fixierte Abrechnung (Settlement) kann nicht mehr geändert werden. So wird sichergestellt, dass die ausgegebenen PDFs immer mit der Datenbank übereinstimmen. Wenn Fehler auffallen, müssen diese korrigiert und eine neue Abrechnung gestartet werden.
+        </div>
+      </section>
+
+      <section id="bearbeiter">
+        <h2>3. Bearbeiter</h2>
+        <p>Die Bearbeiter-Rolle dient der laufenden Datenpflege während oder vor dem Lager.</p>
+        <ul>
+          <li><strong>Teilnehmerverwaltung:</strong> Bearbeiter können Teilnehmer anlegen, archivieren (z.B. bei früherer Abreise) oder per CSV/Excel-Datei gebündelt importieren.</li>
+          <li><strong>Auslagen und Zahlungen:</strong> Wenn ein Teilnehmer z.B. bar bezahlt oder Einkäufe für das Lager getätigt hat, können diese Zahlungen und Auslagen im Profil des Teilnehmers eingetragen werden, damit sie in der Abrechnung berücksichtigt werden.</li>
+          <li><strong>Buchungskorrekturen:</strong> Sollte sich jemand am Kiosk verbucht haben, können Bearbeiter im Teilnehmerprofil einzelne Posten stornieren. Dies wird zur Sicherheit in einem Audit-Protokoll gespeichert.</li>
+        </ul>
+      </section>
+
+      <section id="admins">
+        <h2>4. Administratoren (Admins)</h2>
+        <p>Admins haben Zugriff auf alle Funktionen der Bearbeiter und Hübers, können aber zusätzlich globale Einstellungen vornehmen.</p>
+        <ul>
+          <li><strong>Lager und Preisregeln konfigurieren:</strong> Admins legen neue Lager an und definieren die Preise für Getränke, Mahlzeiten und Lagerpauschalen. Es können auch abweichende Preise (z.B. Bergfest) hinterlegt werden.</li>
+          <li><strong>Nutzerverwaltung:</strong> Unter "Nutzer" können neue Administratoren oder Bearbeiter eingeladen und deren Passwörter bei Bedarf zurückgesetzt werden.</li>
+          <li><strong>Dienst-Vorlagen:</strong> Admins erstellen Vorlagen für tägliche Dienste (z.B. 2x Frühstücksdienst, 1x Winde). Die Anwendung generiert daraus auf Knopfdruck die tatsächlichen Dienst-Slots für den gesamten Lagerzeitraum.</li>
+        </ul>
+        <p><em>Screenshot-Referenz:</em> <a href="images/admin-camp-overview.png">Admin-Lagerübersicht</a></p>
+      </section>
+
+    </main>
+  </body>
+</html>

@@ -21,6 +21,69 @@ def csv_response(filename, rows, headers):
     return response
 
 
+def participant_import_template_response():
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Teilnehmer"
+    
+    headers = [
+        "Vorname*", "Nachname*", "Anreise*", "Abreise*", "Hilfssatz*", "Berufssatz*", 
+        "Email", "Telefon", "Status", "Kind", "Jugendgruppe", "Begleitperson", "Notizen"
+    ]
+    sheet.append(headers)
+    
+    # Example 1: Standard Active Adult
+    sheet.append([
+        "Max", "Mustermann", "01.08.2026", "10.08.2026", 1.0, 1.0, 
+        "max@example.com", "015112345678", "active", "Nein", "Nein", "Nein", "Standard Flieger"
+    ])
+    
+    # Example 2: Child with youth group discount
+    sheet.append([
+        "Lisa", "Müller", "01.08.2026", "10.08.2026", 0.5, 0.33, 
+        "", "", "registered", "Ja", "Ja", "Nein", "Vegetarisch"
+    ])
+    
+    # Example 3: Companion (Begleitperson, does not fly)
+    sheet.append([
+        "Anna", "Schmidt", "05.08.2026", "10.08.2026", 0.0, 0.0, 
+        "anna@example.com", "", "active", "Nein", "Nein", "Ja", "Begleitperson von Lisa"
+    ])
+    
+    # Example 4: Student (reduced Hilfssatz)
+    sheet.append([
+        "Tom", "Schulz", "01.08.2026", "08.08.2026", 0.5, 0.5, 
+        "tom@uni.de", "", "active", "Nein", "Nein", "Nein", "Studentenrabatt"
+    ])
+
+    # Make headers bold
+    from openpyxl.styles import Font
+    for cell in sheet[1]:
+        cell.font = Font(bold=True)
+        
+    # Auto-adjust column widths roughly
+    for col in sheet.columns:
+        max_length = 0
+        col_letter = col[0].column_letter
+        for cell in col:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except Exception:
+                pass
+        adjusted_width = (max_length + 2)
+        sheet.column_dimensions[col_letter].width = adjusted_width
+
+    buffer = BytesIO()
+    workbook.save(buffer)
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = 'attachment; filename="teilnehmer_import_vorlage.xlsx"'
+    return response
+
+
 def camp_settlement_csv(camp):
     rows = []
     for result in calculate_camp_settlements(camp):
