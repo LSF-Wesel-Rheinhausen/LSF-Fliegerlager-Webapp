@@ -518,6 +518,7 @@ class ExpenseForm(forms.ModelForm):
         widgets = {
             "paid_on": forms.DateInput(attrs={"type": "date"}),
             "category": forms.Select(choices=EXPENSE_CATEGORY_CHOICES),
+            "receipt": forms.FileInput(attrs={"accept": "application/pdf,image/*", "capture": "environment"}),
         }
 
 
@@ -535,6 +536,7 @@ class SharedExpenseRequestForm(forms.ModelForm):
         widgets = {
             "paid_on": forms.DateInput(attrs={"type": "date"}),
             "category": forms.Select(choices=EXPENSE_CATEGORY_CHOICES),
+            "receipt": forms.FileInput(attrs={"accept": "application/pdf,image/*", "capture": "environment"}),
         }
 
 
