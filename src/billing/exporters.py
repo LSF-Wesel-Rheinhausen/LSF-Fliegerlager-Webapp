@@ -2,7 +2,6 @@ import csv
 from io import BytesIO, StringIO
 
 from django.conf import settings
-
 from django.http import HttpResponse
 from openpyxl import Workbook
 from reportlab.lib.pagesizes import A4
@@ -130,48 +129,169 @@ def camp_workbook_response(camp):
 
 def _draw_page_framework(pdf, title, subtitle, participant_name):
     width, height = A4
-    y = height - 60
     
     logo_path = settings.BASE_DIR / "static" / "billing" / "logo.jpg"
     if logo_path.exists():
-        pdf.drawImage(str(logo_path), width - 150, height - 100, width=100, height=50, preserveAspectRatio=True, anchor='ne', mask='auto')
+        pdf.drawImage(
+            str(logo_path), 50, height - 150, width=250, height=100, preserveAspectRatio=True, anchor="nw", mask="auto"
+        )
+
+    pdf.setFont("Helvetica", 8)
+    pdf.setFillColorRGB(0.3, 0.3, 0.3)
+    pdf.drawString(50, height - 165, "Luftsportfreunde Wesel-Rheinhausen e.V. · Postfach 100240 · 46462 Wesel")
+    pdf.setFillColorRGB(0, 0, 0)
+
+    pdf.setFont("Helvetica", 10)
+    pdf.drawString(50, height - 200, "An:")
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(50, height - 215, participant_name)
 
     pdf.setFont("Helvetica-Bold", 16)
-    pdf.drawString(50, y, title)
-    y -= 24
+    pdf.drawRightString(width - 50, height - 70, title)
+    
     if subtitle:
         pdf.setFont("Helvetica", 10)
-        pdf.drawString(50, y, subtitle)
-        y -= 24
-    pdf.setFont("Helvetica", 11)
-    pdf.drawString(50, y, f"Teilnehmer: {participant_name}")
-    y -= 30
+        pdf.setFillColorRGB(0.3, 0.3, 0.3)
+        pdf.drawRightString(width - 50, height - 90, subtitle)
+        pdf.setFillColorRGB(0, 0, 0)
+        
+    y = height - 260
 
+    pdf.setFillColorRGB(0.95, 0.95, 0.95)
+    pdf.rect(50, y - 6, width - 100, 20, stroke=0, fill=1)
+    pdf.setFillColorRGB(0, 0, 0)
+    
     pdf.setFont("Helvetica-Bold", 10)
-    pdf.drawString(50, y, "Position")
-    pdf.drawRightString(420, y, "Menge")
-    pdf.drawRightString(500, y, "Summe")
-    y -= 8
-    pdf.line(50, y, 500, y)
-    y -= 18
+    pdf.drawString(55, y, "Position")
+    pdf.drawRightString(width - 120, y, "Menge")
+    pdf.drawRightString(width - 55, y, "Summe")
+    y -= 15
     
     footer_y = 30
     pdf.setFont("Helvetica", 8)
     pdf.setFillColorRGB(0.5, 0.5, 0.5)
-    pdf.drawCentredString(width / 2.0, footer_y, "Erstellt mit der Fliegerlagerabrechnung | Luftsportfreunde 2000 e.V.")
+    pdf.drawCentredString(
+        width / 2.0, footer_y, "Erstellt mit der Fliegerlagerabrechnung | Luftsportfreunde Wesel-Rheinhausen e.V."
+    )
     pdf.setFillColorRGB(0, 0, 0)
     
     return y
 
 
 def _draw_sum_block(pdf, y, items):
-    y -= 6
-    pdf.line(250, y + 16, 500, y + 16)
-    pdf.setFont("Helvetica-Bold", 11)
+    width, _ = A4
+    y -= 10
+    
+    pdf.setStrokeColorRGB(0.5, 0.5, 0.5)
+    pdf.line(width - 250, y + 16, width - 50, y + 16)
+    pdf.setStrokeColorRGB(0, 0, 0)
+    
     for label, value in items:
-        pdf.drawString(300, y, f"{label}:")
-        pdf.drawRightString(500, y, f"{value:.2f} EUR")
+        if label in ["Brutto", "Soll"]:
+            val_str = f"- {value:.2f} €" if value > 0 else f"{value:.2f} €"
+        elif label in ["Förderung", "Gezahlt", "Vorgestreckt"]:
+            val_str = f"+ {value:.2f} €" if value > 0 else f"{value:.2f} €"
+        elif label == "Offen":
+            label = "Kontostand"
+            if value > 0:
+                val_str = f"- {value:.2f} €"
+            elif value < 0:
+                val_str = f"+ {abs(value):.2f} €"
+            else:
+                val_str = "0.00 €"
+        else:
+            val_str = f"{value:.2f} €"
+
+        is_final = label == "Kontostand"
+
+        if is_final:
+            y -= 4
+            pdf.setStrokeColorRGB(0.2, 0.2, 0.2)
+            pdf.line(width - 250, y + 14, width - 50, y + 14)
+            pdf.setStrokeColorRGB(0, 0, 0)
+            pdf.setFont("Helvetica-Bold", 12)
+        else:
+            pdf.setFont("Helvetica", 11)
+        
+        pdf.drawString(width - 220, y, f"{label}:")
+        pdf.drawRightString(width - 50, y, val_str)
         y -= 18
+        
+        if is_final:
+            pdf.setStrokeColorRGB(0.2, 0.2, 0.2)
+            pdf.line(width - 250, y + 14, width - 50, y + 14)
+            pdf.setStrokeColorRGB(0, 0, 0)
+            
+    return y
+
+
+def _draw_payment_instructions(pdf, y, camp, balance):
+    if balance == 0:
+        return y
+        
+    width, _ = A4
+    y -= 30
+    
+    if balance > 0:
+        iban = getattr(camp, 'iban', '').strip()
+        paypal = getattr(camp, 'paypal_link', '').strip()
+        
+        if not iban and not paypal:
+            return y
+            
+        box_height = 65
+        y -= box_height
+        
+        pdf.setFillColorRGB(0.96, 0.96, 0.96)
+        pdf.setStrokeColorRGB(0.85, 0.85, 0.85)
+        pdf.roundRect(50, y, width - 100, box_height, radius=4, stroke=1, fill=1)
+        
+        text_y = y + box_height - 18
+        pdf.setFillColorRGB(0, 0, 0)
+        pdf.setFont("Helvetica-Bold", 9)
+        pdf.drawString(65, text_y, "Zahlungsinformationen")
+        
+        text_y -= 14
+        pdf.setFont("Helvetica", 9)
+        pdf.drawString(65, text_y, "Bitte begleiche den offenen Kontostand zeitnah auf eines der folgenden Konten:")
+        
+        text_y -= 16
+        pdf.setFont("Helvetica-Bold", 9)
+        
+        if iban and paypal:
+            pdf.drawString(65, text_y, f"IBAN: {iban}")
+            pdf.drawString(280, text_y, f"PayPal: {paypal}")
+        elif iban:
+            pdf.drawString(65, text_y, f"IBAN: {iban}")
+        elif paypal:
+            pdf.drawString(65, text_y, f"PayPal: {paypal}")
+            
+    else:
+        # balance < 0 (Guthaben)
+        box_height = 70
+        y -= box_height
+        
+        pdf.setFillColorRGB(0.96, 0.96, 0.96)
+        pdf.setStrokeColorRGB(0.85, 0.85, 0.85)
+        pdf.roundRect(50, y, width - 100, box_height, radius=4, stroke=1, fill=1)
+        
+        text_y = y + box_height - 18
+        pdf.setFillColorRGB(0, 0, 0)
+        pdf.setFont("Helvetica-Bold", 9)
+        pdf.drawString(65, text_y, "Guthaben & Auszahlung")
+        
+        text_y -= 14
+        pdf.setFont("Helvetica", 9)
+        pdf.drawString(
+            65, text_y, "Du hast ein Guthaben. Bitte teile der Lagerleitung mit, ob du diesen Betrag spenden (auch"
+        )
+        text_y -= 12
+        pdf.drawString(65, text_y, "anteilig möglich) oder ausgezahlt haben möchtest.")
+        
+        text_y -= 16
+        pdf.setFont("Helvetica-Bold", 9)
+        pdf.drawString(65, text_y, "Für eine Auszahlung nenne der Lagerleitung bitte deine IBAN oder PayPal-Adresse.")
+
     return y
 
 
@@ -179,6 +299,7 @@ def participant_pdf_response(participant):
     result = calculate_participant_settlement(participant)
     output = BytesIO()
     pdf = canvas.Canvas(output, pagesize=A4)
+    width, _ = A4
     
     title = f"Einzelabrechnung {participant.camp.name} {participant.camp.year}"
     y = _draw_page_framework(pdf, title, "", participant.full_name)
@@ -189,12 +310,16 @@ def participant_pdf_response(participant):
             pdf.showPage()
             y = _draw_page_framework(pdf, title, "", participant.full_name)
             pdf.setFont("Helvetica", 10)
-        pdf.drawString(50, y, line.label[:75])
-        pdf.drawRightString(420, y, str(line.quantity))
-        pdf.drawRightString(500, y, f"{line.total:.2f} EUR")
-        y -= 16
+        pdf.drawString(50, y, line.label[:80])
+        pdf.drawRightString(width - 120, y, str(line.quantity))
+        pdf.drawRightString(width - 50, y, f"- {line.total:.2f} €")
+        
+        pdf.setStrokeColorRGB(0.9, 0.9, 0.9)
+        pdf.line(50, y - 5, width - 50, y - 5)
+        pdf.setStrokeColorRGB(0, 0, 0)
+        y -= 18
 
-    _draw_sum_block(pdf, y, [
+    y = _draw_sum_block(pdf, y, [
         ("Brutto", result.total_gross),
         ("Förderung", result.total_subsidy),
         ("Soll", result.total_due),
@@ -202,6 +327,8 @@ def participant_pdf_response(participant):
         ("Vorgestreckt", result.total_advanced),
         ("Offen", result.balance),
     ])
+
+    _draw_payment_instructions(pdf, y, participant.camp, result.balance)
     
     pdf.showPage()
     pdf.save()
@@ -265,6 +392,7 @@ def settlement_snapshot_pdf_response(snapshot: Settlement) -> HttpResponse:
         raise ValueError("Historical settlement PDF requires a versioned run.")
     output = BytesIO()
     pdf = canvas.Canvas(output, pagesize=A4)
+    width, _ = A4
     
     title = f"Einzelabrechnung {run.camp.name} {run.camp.year}"
     subtitle = f"Version {run.version} vom {run.created_at:%d.%m.%Y %H:%M}"
@@ -276,12 +404,23 @@ def settlement_snapshot_pdf_response(snapshot: Settlement) -> HttpResponse:
             pdf.showPage()
             y = _draw_page_framework(pdf, title, subtitle, snapshot.participant_name)
             pdf.setFont("Helvetica", 10)
-        pdf.drawString(50, y, str(line.get("label", ""))[:75])
-        pdf.drawRightString(420, y, str(line.get("quantity", "")))
-        pdf.drawRightString(500, y, f"{line.get('total', '0.00')} EUR")
-        y -= 16
+        pdf.drawString(50, y, str(line.get("label", ""))[:80])
+        pdf.drawRightString(width - 120, y, str(line.get("quantity", "")))
+        
+        try:
+            total_val = float(line.get('total', 0.00))
+            total_str = f"- {total_val:.2f} €" if total_val > 0 else f"{total_val:.2f} €"
+        except (ValueError, TypeError):
+            total_str = f"- {line.get('total', '0.00')} €"
+            
+        pdf.drawRightString(width - 50, y, total_str)
+        
+        pdf.setStrokeColorRGB(0.9, 0.9, 0.9)
+        pdf.line(50, y - 5, width - 50, y - 5)
+        pdf.setStrokeColorRGB(0, 0, 0)
+        y -= 18
 
-    _draw_sum_block(pdf, y, [
+    y = _draw_sum_block(pdf, y, [
         ("Brutto", snapshot.total_gross),
         ("Förderung", snapshot.total_subsidy),
         ("Soll", snapshot.total_due),
@@ -289,6 +428,8 @@ def settlement_snapshot_pdf_response(snapshot: Settlement) -> HttpResponse:
         ("Vorgestreckt", snapshot.total_advanced),
         ("Offen", snapshot.balance),
     ])
+    
+    _draw_payment_instructions(pdf, y, run.camp, snapshot.balance)
     
     pdf.showPage()
     pdf.save()

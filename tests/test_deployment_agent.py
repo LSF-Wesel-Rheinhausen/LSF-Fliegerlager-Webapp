@@ -32,9 +32,11 @@ def test_compose_up_limits_reconciliation_to_app_service(monkeypatch):
     monkeypatch.setattr(deployment_agent, "PROJECT_NAME", "test-project")
     monkeypatch.setattr(deployment_agent, "TARGET_SERVICE", "app")
 
-    with patch("deployment_agent.subprocess.run") as run:
-        run.return_value = Mock(returncode=0, stdout="", stderr="")
-        deployment_agent.compose_up("sha256:old-image")
+    with patch("deployment_agent.Path.is_file", return_value=True):
+        with patch("deployment_agent.get_env_file", return_value="/deployment/.env"):
+            with patch("deployment_agent.subprocess.run") as run:
+                run.return_value = Mock(returncode=0, stdout="", stderr="")
+                deployment_agent.compose_up("sha256:old-image")
 
     command = run.call_args.args[0]
     assert command[-3:] == ["--no-deps", "--force-recreate", "app"]
@@ -47,9 +49,11 @@ def test_compose_up_reports_stdout_and_stderr(monkeypatch):
     monkeypatch.setattr(deployment_agent, "TARGET_SERVICE", "app")
 
     result = Mock(returncode=1, stdout="creating app\n", stderr="port already allocated\n")
-    with patch("deployment_agent.subprocess.run", return_value=result):
-        with pytest.raises(deployment_agent.ComposeUpError) as error:
-            deployment_agent.compose_up("sha256:new-image", step="Neuen App-Container starten")
+    with patch("deployment_agent.Path.is_file", return_value=True):
+        with patch("deployment_agent.get_env_file", return_value="/deployment/.env"):
+            with patch("deployment_agent.subprocess.run", return_value=result):
+                with pytest.raises(deployment_agent.ComposeUpError) as error:
+                    deployment_agent.compose_up("sha256:new-image", step="Neuen App-Container starten")
 
     message = str(error.value)
     assert "Neuen App-Container starten fehlgeschlagen." in message

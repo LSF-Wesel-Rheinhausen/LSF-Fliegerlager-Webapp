@@ -42,6 +42,8 @@ class Camp(TimeStampedModel):
         validators=[MinValueValidator(Decimal("0"))],
         help_text="Anzahl benötigter Dienste pro gebuchter Nacht, z.B. 0.2 für 1 Dienst pro 5 Nächte.",
     )
+    iban = models.CharField(max_length=40, blank=True, help_text="IBAN für Überweisungen")
+    paypal_link = models.CharField(max_length=200, blank=True, help_text="PayPal.me Link oder E-Mail-Adresse")
     notes = models.TextField(blank=True)
 
     class Meta:
