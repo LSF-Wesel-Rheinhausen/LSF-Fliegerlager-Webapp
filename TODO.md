@@ -11,7 +11,7 @@
 ## Phase 2: Kleine Produktpolitur
 
 - [x] #68 Nicht-vegetarische Essensoptionen nicht mehr als "Normal" anzeigen; interne DB-Werte kompatibel lassen.
-- [x] #64 PDF-Export lesbarer gestalten: Kopfbereich, Positionsliste, Summenblock, lange Namen und Seitenumbrüche verbessern.
+- [x] #64 PDF-Export lesbarer gestalten: Kopfbereich (Logo & Adresse), Positionsliste, Summenblock (inkl. Kontostand, +, -, €), Zahlungs-/Spenden-Infoboxen und Seitenumbrüche verbessern.
 
 ## Phase 3: Import und Dokumentation
 
