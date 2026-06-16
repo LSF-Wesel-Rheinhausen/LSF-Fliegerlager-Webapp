@@ -639,11 +639,12 @@ def approve_shared_expense(expense: Expense, approved_by: Any, participant_ids: 
 
 
 @transaction.atomic
-def reject_shared_expense(expense: Expense, rejected_by: Any) -> None:
+def reject_shared_expense(expense: Expense, rejected_by: Any, rejection_reason: str = "") -> None:
     if expense.status != Expense.Status.PENDING:
         raise ValidationError("Nur ausstehende Ausgaben können abgelehnt werden.")
     expense.status = Expense.Status.REJECTED
     expense.approved_by = rejected_by
     expense.approved_at = timezone.now()
-    expense.save(update_fields=["status", "approved_by", "approved_at"])
+    expense.rejection_reason = rejection_reason
+    expense.save(update_fields=["status", "approved_by", "approved_at", "rejection_reason"])
 

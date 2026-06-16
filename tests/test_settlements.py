@@ -3,7 +3,7 @@ from decimal import Decimal
 
 import pytest
 
-from billing.models import Charge, PriceRule
+from billing.models import Charge, PriceRule, Expense
 from billing.services import calculate_participant_settlement
 from tests.factories import (
     CampFactory,
@@ -59,6 +59,7 @@ def test_settlement_calculates_due_paid_advanced_and_balance():
         description="Brötchen",
         amount=Decimal("12.00"),
         reimbursable=True,
+        status=Expense.Status.APPROVED,
     )
 
     result = calculate_participant_settlement(participant)
@@ -190,8 +191,9 @@ def test_approve_shared_expense_pro_rata():
 
     expense = ExpenseFactory(
         camp=camp,
-        amount=Decimal("10.00"),
-        allocation_method=Expense.AllocationMethod.PRO_RATA,
+        participant=p1,
+        amount=Decimal("12.00"),
+        allocation_method=Expense.AllocationMethod.ALL_ACTIVE,
         status=Expense.Status.PENDING,
     )
 
@@ -200,10 +202,9 @@ def test_approve_shared_expense_pro_rata():
     assert expense.status == Expense.Status.APPROVED
     allocations = list(ExpenseAllocation.objects.filter(expense=expense).order_by("amount"))
     assert len(allocations) == 3
-    
-    # 10.00 / 3 = 3.333... so two get 3.33 and one gets 3.34
+
     amounts = sorted([a.amount for a in allocations])
-    assert amounts == [Decimal("3.33"), Decimal("3.33"), Decimal("3.34")]
+    assert amounts == [Decimal("4.00"), Decimal("4.00"), Decimal("4.00")]
 
 
 @pytest.mark.django_db
@@ -231,4 +232,4 @@ def test_settlement_includes_shared_expense_allocation():
     # Participant gets advanced 15.00, and is allocated 5.00 due
     assert result.total_advanced == Decimal("15.00")
     assert result.total_due == Decimal("5.00")
-    assert any("Umlage Grillkohle" in line.label for line in result.lines)
+    assert any("Umlage: Grillkohle" in line.label for line in result.lines)

@@ -87,10 +87,7 @@
             <td>
               <div class="button-group">
                 <a href="{% url 'shared-expense-approve' expense.pk %}" class="button button-small">Genehmigen &amp; Umlegen</a>
-                <form method="post" action="{% url 'shared-expense-reject' expense.pk %}" style="display:inline;">
-                  {% csrf_token %}
-                  <button type="submit" class="button button-small button-danger">Ablehnen</button>
-                </form>
+                <button type="button" class="button button-small button-danger" data-open-reject-dialog data-expense-id="{{ expense.pk }}" data-expense-desc="{{ expense.description }}">Ablehnen</button>
               </div>
             </td>
           </tr>
@@ -193,6 +190,45 @@
           {% endfor %}
         </tbody>
       </table>
-    </section>
   {% endif %}
+
+  <dialog id="reject-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="reject-dialog-title">
+    <form method="dialog" class="dialog-heading">
+      <h2 id="reject-dialog-title">Antrag ablehnen</h2>
+      <button class="button button-secondary">Abbrechen</button>
+    </form>
+    <form method="post" id="reject-form" class="form-grid">
+      {% csrf_token %}
+      <p class="hint" id="reject-expense-desc"></p>
+      <p class="dialog-field">
+        <label for="rejection-reason">Begründung (Pflichtfeld)</label>
+        <textarea id="rejection-reason" name="rejection_reason" required rows="3" placeholder="Warum wird dieser Antrag abgelehnt?"></textarea>
+      </p>
+      <div class="form-actions">
+        <button type="submit" class="button-danger">Antrag endgültig ablehnen</button>
+      </div>
+    </form>
+  </dialog>
+{% endblock %}
+
+{% block scripts %}
+{{ block.super }}
+<script>
+  (() => {
+    const dialog = document.getElementById("reject-dialog");
+    const form = document.getElementById("reject-form");
+    const descEl = document.getElementById("reject-expense-desc");
+    
+    document.querySelectorAll("[data-open-reject-dialog]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const expenseId = button.dataset.expenseId;
+        const expenseDesc = button.dataset.expenseDesc;
+        descEl.textContent = "Ausgabe: " + expenseDesc;
+        // The URL needs to be constructed. Assuming the standard pattern:
+        form.action = `/expenses/${expenseId}/reject/`;
+        dialog.showModal();
+      });
+    });
+  })();
+</script>
 {% endblock %}

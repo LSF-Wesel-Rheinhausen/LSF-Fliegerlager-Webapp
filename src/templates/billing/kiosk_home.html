@@ -206,7 +206,7 @@
                 {% elif expense.status == "approved" %}
                   <span style="color: var(--ok); font-weight: 600;">Genehmigt</span>
                 {% elif expense.status == "rejected" %}
-                  <span style="color: var(--danger); font-weight: 600;">Abgelehnt</span>
+                  <button type="button" class="button-link" data-open-rejection-reason-dialog data-reason="{{ expense.rejection_reason }}" style="color: var(--danger); font-weight: 600; padding: 0; text-align: left; text-decoration: underline; text-underline-offset: 4px;">Abgelehnt ℹ️</button>
                 {% else %}
                   {{ expense.get_status_display }}
                 {% endif %}
@@ -451,6 +451,17 @@
       {% endfor %}
     </div>
   </dialog>
+
+  <dialog id="rejection-reason-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="rejection-reason-dialog-title">
+    <form method="dialog" class="dialog-heading">
+      <h2 id="rejection-reason-dialog-title">Ablehnungsgrund</h2>
+      <button class="button button-secondary">Schließen</button>
+    </form>
+    <p id="rejection-reason-text" style="white-space: pre-wrap; margin-bottom: 1rem;"></p>
+    <form method="dialog" class="form-actions">
+      <button type="submit" class="button">OK</button>
+    </form>
+  </dialog>
 {% endblock %}
 {% block scripts %}
   <script>
@@ -508,6 +519,15 @@
       
       const summaryDialog = document.getElementById("summary-dialog");
       document.querySelector("[data-open-summary-dialog]")?.addEventListener("click", () => summaryDialog.showModal());
+
+      const rejectionDialog = document.getElementById("rejection-reason-dialog");
+      const rejectionReasonText = document.getElementById("rejection-reason-text");
+      document.querySelectorAll("[data-open-rejection-reason-dialog]").forEach((button) => {
+        button.addEventListener("click", () => {
+          rejectionReasonText.textContent = button.dataset.reason || "Keine Begründung angegeben.";
+          rejectionDialog.showModal();
+        });
+      });
     })();
   </script>
 {% endblock %}

@@ -443,6 +443,7 @@ class Expense(TimeStampedModel):
     paid_on = models.DateField(null=True, blank=True)
     reimbursable = models.BooleanField(default=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    rejection_reason = models.TextField(blank=True, help_text="Begründung der Ablehnung, sichtbar für den Teilnehmer.")
     allocation_method = models.CharField(max_length=20, choices=AllocationMethod.choices, default=AllocationMethod.NONE)
     approved_at = models.DateTimeField(null=True, blank=True)
     approved_by = models.ForeignKey(

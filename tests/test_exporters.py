@@ -6,7 +6,7 @@ import pytest
 from django.urls import reverse
 from openpyxl import load_workbook
 
-from billing.models import Charge
+from billing.models import Charge, Expense
 from billing.permissions import EDITOR_GROUP
 from tests.factories import (
     CampFactory,
@@ -52,7 +52,7 @@ def export_dataset():
         unit_price=Decimal("1.50"),
     )
     PaymentFactory(participant=participant, amount=Decimal("4.00"))
-    ExpenseFactory(participant=participant, amount=Decimal("3.00"))
+    ExpenseFactory(participant=participant, amount=Decimal("3.00"), status=Expense.Status.APPROVED)
     return camp, participant
 
 

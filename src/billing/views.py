@@ -832,13 +832,15 @@ def shared_expense_approve(request, expense_id):
         "cancel_url": reverse("camp-detail", args=[camp.pk])
     })
 
+
 @editor_required
 @require_POST
 def shared_expense_reject(request, expense_id):
     expense = get_object_or_404(Expense, pk=expense_id, status=Expense.Status.PENDING)
+    rejection_reason = request.POST.get("rejection_reason", "").strip()
     from .services import reject_shared_expense
-    reject_shared_expense(expense, rejected_by=request.user)
-    messages.success(request, "Gemeinschaftsausgabe abgelehnt.")
+    reject_shared_expense(expense, rejected_by=request.user, rejection_reason=rejection_reason)
+    messages.success(request, f"Antrag abgelehnt: {expense.description}")
     return redirect("camp-detail", camp_id=expense.camp.pk)
 
 
