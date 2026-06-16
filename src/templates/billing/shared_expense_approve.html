@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+  <section class="panel">
+    <h1>{{ title }}</h1>
+    <form method="post" class="form-grid" enctype="multipart/form-data">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="form-actions">
+        <button type="submit">Speichern</button>
+      </div>
+    </form>
+  </section>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const methodSelect = document.getElementById("id_allocation_method");
+      const participantWrapper = document.getElementById("id_participant_ids")?.closest("p");
+      const costCenterWrapper = document.getElementById("id_cost_center")?.closest("p");
+
+      function updateVisibility() {
+        const val = methodSelect.value;
+        if (participantWrapper) {
+          participantWrapper.style.display = (val === "selected") ? "block" : "none";
+        }
+        if (costCenterWrapper) {
+          costCenterWrapper.style.display = (val === "cost_center") ? "block" : "none";
+        }
+      }
+
+      if (methodSelect) {
+        methodSelect.addEventListener("change", updateVisibility);
+        updateVisibility();
+      }
+    });
+  </script>
+{% endblock %}

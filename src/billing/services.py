@@ -614,8 +614,8 @@ def approve_shared_expense(expense: Expense, approved_by: Any, participant_ids: 
     expense.approved_by = approved_by
     expense.approved_at = timezone.now()
     
-    if expense.allocation_method == Expense.AllocationMethod.NONE:
-        expense.save(update_fields=["status", "approved_by", "approved_at"])
+    if expense.allocation_method in (Expense.AllocationMethod.NONE, Expense.AllocationMethod.COST_CENTER):
+        expense.save(update_fields=["status", "approved_by", "approved_at", "allocation_method", "cost_center"])
         return
 
     participants = []
@@ -637,7 +637,7 @@ def approve_shared_expense(expense: Expense, approved_by: Any, participant_ids: 
         for p in participants
     ]
     ExpenseAllocation.objects.bulk_create(allocations)
-    expense.save(update_fields=["status", "approved_by", "approved_at"])
+    expense.save(update_fields=["status", "approved_by", "approved_at", "allocation_method", "cost_center"])
 
 
 @transaction.atomic

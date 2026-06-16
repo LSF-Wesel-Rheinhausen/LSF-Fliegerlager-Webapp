@@ -814,8 +814,10 @@ def shared_expense_approve(request, expense_id):
         from .services import approve_shared_expense
         allocation_method = form.cleaned_data["allocation_method"]
         participant_ids = [int(pid) for pid in form.cleaned_data.get("participant_ids", [])]
+        cost_center = form.cleaned_data.get("cost_center", "")
         
         expense.allocation_method = allocation_method
+        expense.cost_center = cost_center
         try:
             approve_shared_expense(expense, approved_by=request.user, participant_ids=participant_ids)
             messages.success(request, "Gemeinschaftsausgabe genehmigt.")
@@ -825,7 +827,7 @@ def shared_expense_approve(request, expense_id):
         
         return redirect("camp-detail", camp_id=camp.pk)
     
-    return render(request, "billing/form.html", {
+    return render(request, "billing/shared_expense_approve.html", {
         "form": form,
         "title": f"Umlage genehmigen: {expense.description}",
         "camp": camp,

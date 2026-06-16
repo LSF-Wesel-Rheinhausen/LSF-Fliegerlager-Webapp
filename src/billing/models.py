@@ -423,9 +423,18 @@ class Expense(TimeStampedModel):
         REJECTED = "rejected", "Abgelehnt"
 
     class AllocationMethod(models.TextChoices):
-        NONE = "none", "Keine Umlage"
+        NONE = "none", "Nicht umlegen"
+        COST_CENTER = "cost_center", "Auf Kostenstelle umlegen"
         ALL_ACTIVE = "all_active", "Alle aktiven Teilnehmer"
         SELECTED = "selected", "Ausgewählte Teilnehmer"
+
+    class CostCenter(models.TextChoices):
+        FOOD_BREAKFAST = "food_breakfast", "Unterkunft/Verpflegung - Frühstück"
+        FOOD_DINNER = "food_dinner", "Unterkunft/Verpflegung - Abendessen"
+        FOOD_OTHER = "food_other", "Unterkunft/Verpflegung - Sonstiges"
+        TRAVEL = "travel", "Fahrtkosten"
+        MATERIALS = "materials", "Verbrauchsmaterial"
+        RENT_OTHER = "rent_other", "Miete/sonstiges"
 
     camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="expenses")
     participant = models.ForeignKey(
@@ -445,6 +454,7 @@ class Expense(TimeStampedModel):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     rejection_reason = models.TextField(blank=True, help_text="Begründung der Ablehnung, sichtbar für den Teilnehmer.")
     allocation_method = models.CharField(max_length=20, choices=AllocationMethod.choices, default=AllocationMethod.NONE)
+    cost_center = models.CharField(max_length=50, choices=CostCenter.choices, blank=True)
     approved_at = models.DateTimeField(null=True, blank=True)
     approved_by = models.ForeignKey(
         get_user_model(),
