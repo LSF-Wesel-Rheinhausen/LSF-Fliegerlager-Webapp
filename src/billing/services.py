@@ -468,9 +468,11 @@ def shared_expense_charge_lines(participant):
     lines = []
     allocations = ExpenseAllocation.objects.filter(participant=participant).select_related("expense")
     for allocation in allocations:
+        date_str = allocation.expense.paid_on.strftime('%d.%m.%Y') if allocation.expense.paid_on else ''
+        date_part = f" ({date_str})" if date_str else ""
         lines.append(
             build_settlement_line(
-                label=f"Umlage: {allocation.expense.description}",
+                label=f"Umlage{date_part}: {allocation.expense.description}",
                 quantity=Decimal("1.00"),
                 unit_price=allocation.amount,
                 source=f"expense_allocation:{allocation.pk}",

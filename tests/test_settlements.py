@@ -232,4 +232,4 @@ def test_settlement_includes_shared_expense_allocation():
     # Participant gets advanced 15.00, and is allocated 5.00 due
     assert result.total_advanced == Decimal("15.00")
     assert result.total_due == Decimal("5.00")
-    assert any("Umlage: Grillkohle" in line.label for line in result.lines)
+    assert any("Umlage" in line.label and "Grillkohle" in line.label for line in result.lines)
