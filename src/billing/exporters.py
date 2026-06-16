@@ -189,18 +189,17 @@ def _draw_sum_block(pdf, y, items):
         elif label in ["Förderung", "Gezahlt", "Vorgestreckt"]:
             val_str = f"+ {value:.2f} €" if value > 0 else f"{value:.2f} €"
         elif label == "Offen":
+            label = "Kontostand"
             if value > 0:
-                label = "Zu zahlen"
                 val_str = f"- {value:.2f} €"
             elif value < 0:
-                label = "Guthaben"
                 val_str = f"+ {abs(value):.2f} €"
             else:
                 val_str = "0.00 €"
         else:
             val_str = f"{value:.2f} €"
 
-        is_final = label in ["Zu zahlen", "Guthaben", "Offen"]
+        is_final = label == "Kontostand"
 
         if is_final:
             y -= 4
@@ -220,6 +219,35 @@ def _draw_sum_block(pdf, y, items):
             pdf.line(width - 250, y + 14, width - 50, y + 14)
             pdf.setStrokeColorRGB(0, 0, 0)
             
+    return y
+
+
+def _draw_payment_instructions(pdf, y, camp, balance):
+    if balance <= 0:
+        return y
+    
+    iban = getattr(camp, 'iban', '').strip()
+    paypal = getattr(camp, 'paypal_link', '').strip()
+    
+    if not iban and not paypal:
+        return y
+        
+    y -= 30
+    pdf.setFont("Helvetica-Bold", 10)
+    pdf.drawString(50, y, "Zahlungsinformationen:")
+    y -= 14
+    
+    pdf.setFont("Helvetica", 10)
+    pdf.drawString(50, y, "Bitte überweise den offenen Betrag auf folgendes Konto oder nutze PayPal:")
+    y -= 16
+    
+    if iban:
+        pdf.drawString(50, y, f"IBAN: {iban}")
+        y -= 14
+    if paypal:
+        pdf.drawString(50, y, f"PayPal: {paypal}")
+        y -= 14
+        
     return y
 
 
@@ -247,7 +275,7 @@ def participant_pdf_response(participant):
         pdf.setStrokeColorRGB(0, 0, 0)
         y -= 18
 
-    _draw_sum_block(pdf, y, [
+    y = _draw_sum_block(pdf, y, [
         ("Brutto", result.total_gross),
         ("Förderung", result.total_subsidy),
         ("Soll", result.total_due),
@@ -255,6 +283,8 @@ def participant_pdf_response(participant):
         ("Vorgestreckt", result.total_advanced),
         ("Offen", result.balance),
     ])
+
+    _draw_payment_instructions(pdf, y, participant.camp, result.balance)
     
     pdf.showPage()
     pdf.save()
@@ -346,7 +376,7 @@ def settlement_snapshot_pdf_response(snapshot: Settlement) -> HttpResponse:
         pdf.setStrokeColorRGB(0, 0, 0)
         y -= 18
 
-    _draw_sum_block(pdf, y, [
+    y = _draw_sum_block(pdf, y, [
         ("Brutto", snapshot.total_gross),
         ("Förderung", snapshot.total_subsidy),
         ("Soll", snapshot.total_due),
@@ -354,6 +384,8 @@ def settlement_snapshot_pdf_response(snapshot: Settlement) -> HttpResponse:
         ("Vorgestreckt", snapshot.total_advanced),
         ("Offen", snapshot.balance),
     ])
+    
+    _draw_payment_instructions(pdf, y, run.camp, snapshot.balance)
     
     pdf.showPage()
     pdf.save()

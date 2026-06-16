@@ -202,6 +202,8 @@ class CampForm(forms.ModelForm):
             "is_active",
             "meal_booking_cutoff_time",
             "shift_ratio_per_night",
+            "iban",
+            "paypal_link",
             "notes",
         ]
         labels = {
@@ -212,6 +214,8 @@ class CampForm(forms.ModelForm):
             "is_active": "Aktiv",
             "meal_booking_cutoff_time": "Essens-Stichzeitpunkt",
             "shift_ratio_per_night": "Dienste pro gebuchter Nacht",
+            "iban": "IBAN",
+            "paypal_link": "PayPal.me Link",
             "notes": "Notizen",
         }
         widgets = {
