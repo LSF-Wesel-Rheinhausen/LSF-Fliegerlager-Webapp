@@ -7,10 +7,7 @@
     <title>{% block title %}Kiosk{% endblock %}</title>
     <link rel="stylesheet" href="{% static 'billing/app.css' %}">
     <style>
-      details.kiosk-help {
-        margin-bottom: 16px;
-      }
-      details.kiosk-help > summary {
+      .kiosk-help-button {
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -21,22 +18,13 @@
         color: white;
         font-weight: bold;
         cursor: pointer;
-        list-style: none;
-        user-select: none;
+        border: none;
         font-size: 14px;
+        padding: 0;
+        vertical-align: middle;
       }
-      details.kiosk-help > summary::-webkit-details-marker {
-        display: none;
-      }
-      details.kiosk-help[open] > summary {
-        margin-bottom: 8px;
-      }
-      details.kiosk-help .kiosk-help-content {
-        padding: 12px;
-        background: #eef2f6;
-        border-left: 4px solid var(--accent);
-        border-radius: 0 4px 4px 0;
-        font-size: 0.9em;
+      .kiosk-help-button:hover {
+        background: color-mix(in srgb, var(--accent) 80%, black);
       }
     </style>
   </head>
@@ -133,6 +121,25 @@
         })();
       </script>
     {% endif %}
+    <dialog id="kiosk-help-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="kiosk-help-title">
+      <form method="dialog" class="dialog-heading">
+        <h2 id="kiosk-help-title">Kurzhilfe</h2>
+        <button class="button button-secondary">Schließen</button>
+      </form>
+      <div id="kiosk-help-content" style="padding: 12px; background: #eef2f6; border-left: 4px solid var(--accent); font-size: 0.95em; line-height: 1.5; margin-bottom: 1rem;">
+      </div>
+    </dialog>
+    <script>
+      document.addEventListener("click", (e) => {
+        const btn = e.target.closest(".kiosk-help-button");
+        if (btn) {
+          const dialog = document.getElementById("kiosk-help-dialog");
+          const content = document.getElementById("kiosk-help-content");
+          content.textContent = btn.dataset.helpText;
+          dialog.showModal();
+        }
+      });
+    </script>
     {% block scripts %}{% endblock %}
   </body>
 </html>

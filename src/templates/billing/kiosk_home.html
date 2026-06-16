@@ -45,13 +45,10 @@
 
   <div class="kiosk-grid">
     <section class="panel">
-      <h2>Getränk buchen</h2>
-      <details class="kiosk-help">
-        <summary title="Hilfe anzeigen">?</summary>
-        <div class="kiosk-help-content">
-          <strong>Kurzdoku:</strong> Tippe auf ein Getränk und wähle danach die Menge, um es auf deinen Deckel zu buchen. Falls du dich vertippt hast, kannst du den Fehler ganz unten unter "Letzte Getränke" über das Mülleimer-Symbol sofort wieder stornieren.
-        </div>
-      </details>
+      <h2 style="display: flex; align-items: center; gap: 8px;">
+        Getränk buchen
+        <button type="button" class="kiosk-help-button" data-help-text="Tippe auf ein Getränk und wähle danach die Menge, um es auf deinen Deckel zu buchen. Falls du dich vertippt hast, kannst du den Fehler ganz unten unter 'Letzte Getränke' über das Mülleimer-Symbol sofort wieder stornieren.">?</button>
+      </h2>
       <form method="post" class="stack kiosk-drink-form" id="drink-booking-form">
         {% csrf_token %}
         <input type="hidden" name="action" value="drink">
@@ -84,13 +81,10 @@
     </section>
 
     <section class="panel">
-      <h2>Essen anmelden</h2>
-      <details class="kiosk-help">
-        <summary title="Hilfe anzeigen">?</summary>
-        <div class="kiosk-help-content">
-          <strong>Kurzdoku:</strong> Wähle im Kalender eine Mahlzeit (z.B. Frühstück). Im folgenden Fenster kannst du dich und deine Familienmitglieder an- und abmelden oder die Variante (Normal/Vegetarisch) ändern. Graue Kalendertage bedeuten, dass die Meldefrist bereits abgelaufen ist.
-        </div>
-      </details>
+      <h2 style="display: flex; align-items: center; gap: 8px;">
+        Essen anmelden
+        <button type="button" class="kiosk-help-button" data-help-text="Wähle im Kalender eine Mahlzeit (z.B. Frühstück). Im folgenden Fenster kannst du dich und deine Familienmitglieder an- und abmelden oder die Variante (Normal/Vegetarisch) ändern. Graue Kalendertage bedeuten, dass die Meldefrist bereits abgelaufen ist.">?</button>
+      </h2>
       <div class="meal-order-status" aria-label="Essensbestellung für {{ next_order_date|date:'d.m.Y' }}">
         <strong>Essensbestellung für {{ next_order_date|date:"d.m.Y" }}</strong>
         {% if next_meal_order %}
@@ -150,17 +144,15 @@
     <section class="panel stack">
       <div class="toolbar compact-toolbar kiosk-section-heading">
         <div>
-          <h2>Familie</h2>
+          <h2 style="display: flex; align-items: center; gap: 8px;">
+            Familie
+            <button type="button" class="kiosk-help-button" data-help-text="Hier legst du Familienmitglieder (z.B. Partner, Kinder) an. Ihre Kosten werden auf deine finale Abrechnung gebucht. Sie tauchen beim Essen als auswählbare Personen auf, haben aber keinen eigenen Kiosk-Login.">?</button>
+          </h2>
           <p>Diese Personen werden über dein Konto abgerechnet.</p>
         </div>
         <button type="button" class="button" data-open-family-dialog>Anlegen</button>
       </div>
-      <details class="kiosk-help">
-        <summary title="Hilfe anzeigen">?</summary>
-        <div class="kiosk-help-content">
-          <strong>Kurzdoku:</strong> Hier legst du Familienmitglieder (z.B. Partner, Kinder) an. Ihre Kosten werden auf deine finale Abrechnung gebucht. Sie tauchen beim Essen als auswählbare Personen auf, haben aber keinen eigenen Kiosk-Login.
-        </div>
-      </details>
+
       {% for member in family_members %}
         <div class="kiosk-list-row">
           <div class="kiosk-list-row__content">
@@ -181,14 +173,11 @@
 
     <section class="panel stack">
       <div class="kiosk-section-heading">
-        <h2>Mitbuchungen</h2>
+        <h2 style="display: flex; align-items: center; gap: 8px;">
+          Mitbuchungen
+          <button type="button" class="kiosk-help-button" data-help-text="Lade andere Teilnehmer ein, damit ihr euch gegenseitig beim Essen mit anmelden könnt. Sobald die Einladung angenommen wurde, könnt ihr euch gegenseitig auswählen. Die Abrechnung bleibt dabei für jeden separat.">?</button>
+        </h2>
       </div>
-      <details class="kiosk-help">
-        <summary title="Hilfe anzeigen">?</summary>
-        <div class="kiosk-help-content">
-          <strong>Kurzdoku:</strong> Lade andere Teilnehmer ein, damit ihr euch gegenseitig beim Essen mit anmelden könnt. Sobald die Einladung angenommen wurde, könnt ihr euch gegenseitig auswählen. Die Abrechnung bleibt dabei für jeden separat.
-        </div>
-      </details>
       <form method="post" class="form-grid">
         {% csrf_token %}
         <input type="hidden" name="action" value="booking_link_invite">

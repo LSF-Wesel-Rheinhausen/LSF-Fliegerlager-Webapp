@@ -216,13 +216,10 @@
       {% endif %}
 
       <section class="panel stack">
-        <h2>Meine übernommenen Dienste</h2>
-        <details class="kiosk-help">
-          <summary title="Hilfe anzeigen">?</summary>
-          <div class="kiosk-help-content">
-            <strong>Kurzdoku:</strong> Hier siehst du die Dienste, für die du eingeteilt bist. Falls du verhindert bist, klicke auf "Zum Tausch anbieten". Dein Dienst wird dann bei allen anderen hervorgehoben angeboten, bis ihn jemand übernimmt.
-          </div>
-        </details>
+        <h2 style="display: flex; align-items: center; gap: 8px;">
+          Meine übernommenen Dienste
+          <button type="button" class="kiosk-help-button" data-help-text="Hier siehst du die Dienste, für die du eingeteilt bist. Falls du verhindert bist, klicke auf 'Zum Tausch anbieten'. Dein Dienst wird dann bei allen anderen hervorgehoben angeboten, bis ihn jemand übernimmt.">?</button>
+        </h2>
         {% for shift in my_shifts %}
           <div class="shift-card">
             <div class="shift-card__info">
@@ -271,13 +268,10 @@
     <!-- Rechte Spalte -->
     <div style="display: flex; flex-direction: column; gap: 22px;">
       <section class="panel stack">
-        <h2>Offene Dienste</h2>
-        <details class="kiosk-help">
-          <summary title="Hilfe anzeigen">?</summary>
-          <div class="kiosk-help-content">
-            <strong>Kurzdoku:</strong> Tippe auf "Eintragen", um einen Dienst zu übernehmen. Graue Buttons bedeuten, dass der Dienst bereits voll besetzt ist.
-          </div>
-        </details>
+        <h2 style="display: flex; align-items: center; gap: 8px;">
+          Offene Dienste
+          <button type="button" class="kiosk-help-button" data-help-text="Tippe auf 'Eintragen', um einen Dienst zu übernehmen. Graue Buttons bedeuten, dass der Dienst bereits voll besetzt ist.">?</button>
+        </h2>
         {% for shift in open_shifts %}
           <div class="shift-card">
             <div class="shift-card__info">
