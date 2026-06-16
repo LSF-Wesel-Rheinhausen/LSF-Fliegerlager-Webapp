@@ -914,7 +914,8 @@ textarea {
   }
 
   .brand {
-    align-items: flex-start;
+    justify-content: center;
+    align-items: center;
   }
 
   .brand img {
