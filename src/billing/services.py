@@ -668,7 +668,7 @@ def get_cost_center_evaluation(camp):
     
     evaluation = {}
     for exp in expenses:
-        cc = exp.cost_center or "Ohne Kostenstelle"
+        cc = exp.get_cost_center_display() if exp.cost_center else "Ohne Kostenstelle"
         if cc not in evaluation:
             evaluation[cc] = {"total": Decimal("0.00"), "count": 0, "expenses": []}
         
