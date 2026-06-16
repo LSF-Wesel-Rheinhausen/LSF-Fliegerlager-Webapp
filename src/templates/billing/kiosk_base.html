@@ -6,6 +6,39 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Kiosk{% endblock %}</title>
     <link rel="stylesheet" href="{% static 'billing/app.css' %}">
+    <style>
+      details.kiosk-help {
+        margin-bottom: 16px;
+      }
+      details.kiosk-help > summary {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: white;
+        font-weight: bold;
+        cursor: pointer;
+        list-style: none;
+        user-select: none;
+        font-size: 14px;
+      }
+      details.kiosk-help > summary::-webkit-details-marker {
+        display: none;
+      }
+      details.kiosk-help[open] > summary {
+        margin-bottom: 8px;
+      }
+      details.kiosk-help .kiosk-help-content {
+        padding: 12px;
+        background: #eef2f6;
+        border-left: 4px solid var(--accent);
+        border-radius: 0 4px 4px 0;
+        font-size: 0.9em;
+      }
+    </style>
   </head>
   <body class="kiosk-shell">
     <header class="topbar kiosk-topbar">

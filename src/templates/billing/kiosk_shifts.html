@@ -216,9 +216,12 @@
 
       <section class="panel stack">
         <h2>Meine übernommenen Dienste</h2>
-        <div style="padding: 12px; background: #eef2f6; border-left: 4px solid var(--accent); border-radius: 0 4px 4px 0; margin-bottom: 16px; font-size: 0.9em;">
-          <strong>Kurzdoku:</strong> Hier siehst du die Dienste, für die du eingeteilt bist. Falls du verhindert bist, klicke auf "Zum Tausch anbieten". Dein Dienst wird dann bei allen anderen hervorgehoben angeboten, bis ihn jemand übernimmt.
-        </div>
+        <details class="kiosk-help">
+          <summary title="Hilfe anzeigen">?</summary>
+          <div class="kiosk-help-content">
+            <strong>Kurzdoku:</strong> Hier siehst du die Dienste, für die du eingeteilt bist. Falls du verhindert bist, klicke auf "Zum Tausch anbieten". Dein Dienst wird dann bei allen anderen hervorgehoben angeboten, bis ihn jemand übernimmt.
+          </div>
+        </details>
         {% for shift in my_shifts %}
           <div class="shift-card">
             <div class="shift-card__info">
@@ -268,9 +271,12 @@
     <div style="display: flex; flex-direction: column; gap: 22px;">
       <section class="panel stack">
         <h2>Offene Dienste</h2>
-        <div style="padding: 12px; background: #eef2f6; border-left: 4px solid var(--accent); border-radius: 0 4px 4px 0; margin-bottom: 16px; font-size: 0.9em;">
-          <strong>Kurzdoku:</strong> Tippe auf "Eintragen", um einen Dienst zu übernehmen. Graue Buttons bedeuten, dass der Dienst bereits voll besetzt ist.
-        </div>
+        <details class="kiosk-help">
+          <summary title="Hilfe anzeigen">?</summary>
+          <div class="kiosk-help-content">
+            <strong>Kurzdoku:</strong> Tippe auf "Eintragen", um einen Dienst zu übernehmen. Graue Buttons bedeuten, dass der Dienst bereits voll besetzt ist.
+          </div>
+        </details>
         {% for shift in open_shifts %}
           <div class="shift-card">
             <div class="shift-card__info">
