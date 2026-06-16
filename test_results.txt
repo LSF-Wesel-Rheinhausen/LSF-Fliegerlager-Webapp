@@ -1,0 +1,117 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-9.0.3, pluggy-1.6.0
+django: version: 5.2.14, settings: config.settings (from ini)
+rootdir: /home/js/fliegerlagerabrechnung
+configfile: pytest.ini
+testpaths: tests
+plugins: django-4.12.0, cov-5.0.0, Faker-40.18.0
+collected 191 items / 4 errors
+
+==================================== ERRORS ====================================
+_____________________ ERROR collecting tests/test_forms.py _____________________
+.venv/lib/python3.13/site-packages/_pytest/python.py:507: in importtestmodule
+    mod = import_path(
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:587: in import_path
+    importlib.import_module(module_name)
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1387: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1331: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:935: in _load_unlocked
+    ???
+.venv/lib/python3.13/site-packages/_pytest/assertion/rewrite.py:197: in exec_module
+    exec(co, module.__dict__)
+tests/test_forms.py:5: in <module>
+    from billing.forms import CampForm, FirstAdminSetupForm, KioskLoginForm, UserCreateForm, UserEditForm
+E     File "/home/js/fliegerlagerabrechnung/src/billing/forms.py", line 509
+E       }
+E       ^
+E   SyntaxError: unmatched '}'
+___________________ ERROR collecting tests/test_importers.py ___________________
+.venv/lib/python3.13/site-packages/_pytest/python.py:507: in importtestmodule
+    mod = import_path(
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:587: in import_path
+    importlib.import_module(module_name)
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1387: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1331: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:935: in _load_unlocked
+    ???
+.venv/lib/python3.13/site-packages/_pytest/assertion/rewrite.py:197: in exec_module
+    exec(co, module.__dict__)
+tests/test_importers.py:7: in <module>
+    from billing.forms import ParticipantImportForm
+E     File "/home/js/fliegerlagerabrechnung/src/billing/forms.py", line 509
+E       }
+E       ^
+E   SyntaxError: unmatched '}'
+_____________________ ERROR collecting tests/test_kiosk.py _____________________
+.venv/lib/python3.13/site-packages/_pytest/python.py:507: in importtestmodule
+    mod = import_path(
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:587: in import_path
+    importlib.import_module(module_name)
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1387: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1331: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:935: in _load_unlocked
+    ???
+.venv/lib/python3.13/site-packages/_pytest/assertion/rewrite.py:197: in exec_module
+    exec(co, module.__dict__)
+tests/test_kiosk.py:17: in <module>
+    from billing.views import KIOSK_PARTICIPANT_SESSION_KEY, KIOSK_PIN_SETUP_SESSION_KEY
+src/billing/views.py:30: in <module>
+    from .forms import (
+E     File "/home/js/fliegerlagerabrechnung/src/billing/forms.py", line 509
+E       }
+E       ^
+E   SyntaxError: unmatched '}'
+_________________ ERROR collecting tests/test_kiosk_shifts.py __________________
+.venv/lib/python3.13/site-packages/_pytest/python.py:507: in importtestmodule
+    mod = import_path(
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:587: in import_path
+    importlib.import_module(module_name)
+/usr/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1387: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1331: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:935: in _load_unlocked
+    ???
+.venv/lib/python3.13/site-packages/_pytest/assertion/rewrite.py:197: in exec_module
+    exec(co, module.__dict__)
+tests/test_kiosk_shifts.py:7: in <module>
+    from billing.views import KIOSK_PARTICIPANT_SESSION_KEY
+src/billing/views.py:30: in <module>
+    from .forms import (
+E     File "/home/js/fliegerlagerabrechnung/src/billing/forms.py", line 509
+E       }
+E       ^
+E   SyntaxError: unmatched '}'
+=========================== short test summary info ============================
+ERROR tests/test_forms.py
+ERROR tests/test_importers.py
+ERROR tests/test_kiosk.py
+ERROR tests/test_kiosk_shifts.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 4 errors during collection !!!!!!!!!!!!!!!!!!!!
+============================== 4 errors in 0.57s ===============================

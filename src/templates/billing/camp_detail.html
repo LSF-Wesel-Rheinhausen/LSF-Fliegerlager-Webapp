@@ -67,6 +67,36 @@
     </table>
   </section>
 
+  {% if pending_expenses %}
+  <section class="panel stack">
+    <h2>Ausstehende Gemeinschaftsausgaben</h2>
+    <table>
+      <thead><tr><th>Datum</th><th>Person</th><th>Beschreibung</th><th>Betrag</th><th>Beleg</th><th></th></tr></thead>
+      <tbody>
+        {% for expense in pending_expenses %}
+          <tr>
+            <td>{{ expense.paid_on|default:expense.created_at|date:"d.m.Y" }}</td>
+            <td>{{ expense.participant.first_name }} {{ expense.participant.last_name }}</td>
+            <td>{{ expense.description }}</td>
+            <td>{{ expense.amount }} €</td>
+            <td>
+              {% if expense.receipt %}
+                <a href="{{ expense.receipt.url }}" target="_blank" class="button button-small button-secondary">Beleg ansehen</a>
+              {% endif %}
+            </td>
+            <td>
+              <div class="button-group">
+                <a href="{% url 'shared-expense-approve' expense.pk %}" class="button button-small">Genehmigen &amp; Umlegen</a>
+                <button type="button" class="button button-small button-danger" data-open-reject-dialog data-expense-id="{{ expense.pk }}" data-expense-desc="{{ expense.description }}">Ablehnen</button>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
+
   <section class="panel">
     <h2>Dienste & Aufgaben</h2>
     <p>Hier kannst du Lagerdienste (wie Spülen, Kochen, Putzen) anlegen und Teilnehmern zuweisen.</p>
@@ -160,6 +190,41 @@
           {% endfor %}
         </tbody>
       </table>
-    </section>
   {% endif %}
+
+  <dialog id="reject-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="reject-dialog-title">
+    <form method="dialog" class="dialog-heading">
+      <h2 id="reject-dialog-title">Antrag ablehnen</h2>
+      <button class="button button-secondary">Abbrechen</button>
+    </form>
+    <form method="post" id="reject-form" class="form-grid">
+      {% csrf_token %}
+      <p class="hint" id="reject-expense-desc"></p>
+      <p class="dialog-field">
+        <label for="rejection-reason">Begründung (Pflichtfeld)</label>
+        <textarea id="rejection-reason" name="rejection_reason" required rows="3" placeholder="Warum wird dieser Antrag abgelehnt?"></textarea>
+      </p>
+      <div class="form-actions">
+        <button type="submit" class="button-danger">Antrag endgültig ablehnen</button>
+      </div>
+    </form>
+  </dialog>
+<script>
+  (() => {
+    const dialog = document.getElementById("reject-dialog");
+    const form = document.getElementById("reject-form");
+    const descEl = document.getElementById("reject-expense-desc");
+    
+    document.querySelectorAll("[data-open-reject-dialog]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const expenseId = button.dataset.expenseId;
+        const expenseDesc = button.dataset.expenseDesc;
+        descEl.textContent = "Ausgabe: " + expenseDesc;
+        // The URL needs to be constructed. Assuming the standard pattern:
+        form.action = `/expenses/${expenseId}/reject/`;
+        dialog.showModal();
+      });
+    });
+  })();
+</script>
 {% endblock %}

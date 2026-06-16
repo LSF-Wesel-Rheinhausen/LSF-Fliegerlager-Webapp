@@ -417,6 +417,25 @@ class Payment(TimeStampedModel):
 
 
 class Expense(TimeStampedModel):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Ausstehend"
+        APPROVED = "approved", "Genehmigt"
+        REJECTED = "rejected", "Abgelehnt"
+
+    class AllocationMethod(models.TextChoices):
+        NONE = "none", "Nicht umlegen"
+        COST_CENTER = "cost_center", "Auf Kostenstelle umlegen"
+        ALL_ACTIVE = "all_active", "Alle aktiven Teilnehmer"
+        SELECTED = "selected", "Ausgewählte Teilnehmer"
+
+    class CostCenter(models.TextChoices):
+        FOOD_BREAKFAST = "food_breakfast", "Unterkunft/Verpflegung - Frühstück"
+        FOOD_DINNER = "food_dinner", "Unterkunft/Verpflegung - Abendessen"
+        FOOD_OTHER = "food_other", "Unterkunft/Verpflegung - Sonstiges"
+        TRAVEL = "travel", "Fahrtkosten"
+        MATERIALS = "materials", "Verbrauchsmaterial"
+        RENT_OTHER = "rent_other", "Miete/sonstiges"
+
     camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="expenses")
     participant = models.ForeignKey(
         Participant,
@@ -429,14 +448,42 @@ class Expense(TimeStampedModel):
     category = models.CharField(max_length=120)
     description = models.CharField(max_length=180)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
+    receipt = models.FileField(upload_to="receipts/", blank=True, null=True, verbose_name="Rechnungsbeleg")
     paid_on = models.DateField(null=True, blank=True)
     reimbursable = models.BooleanField(default=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    rejection_reason = models.TextField(blank=True, help_text="Begründung der Ablehnung, sichtbar für den Teilnehmer.")
+    allocation_method = models.CharField(max_length=20, choices=AllocationMethod.choices, default=AllocationMethod.NONE)
+    cost_center = models.CharField(max_length=50, choices=CostCenter.choices, blank=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    approved_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approved_expenses",
+    )
 
     class Meta:
         ordering = ["category", "description"]
 
     def __str__(self):
         return f"{self.camp}: {self.description}"
+
+
+class ExpenseAllocation(TimeStampedModel):
+    expense = models.ForeignKey(Expense, on_delete=models.CASCADE, related_name="allocations")
+    participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="expense_allocations")
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+
+    class Meta:
+        ordering = ["expense", "participant"]
+        constraints = [
+            models.UniqueConstraint(fields=["expense", "participant"], name="unique_expense_allocation"),
+        ]
+
+    def __str__(self):
+        return f"{self.participant} -> {self.expense}: {self.amount}"
 
 
 class MealSignup(TimeStampedModel):

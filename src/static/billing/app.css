@@ -23,12 +23,16 @@
   box-sizing: border-box;
 }
 
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
   font: 15px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  overflow-x: hidden;
 }
 
 a {
@@ -391,8 +395,11 @@ textarea {
 }
 
 .helptext {
+  display: block;
   color: var(--muted);
   font-size: 13px;
+  line-height: 1.4;
+  margin-top: 4px;
 }
 
 .helptext.error {
@@ -907,7 +914,8 @@ textarea {
   }
 
   .brand {
-    align-items: flex-start;
+    justify-content: center;
+    align-items: center;
   }
 
   .brand img {
@@ -922,11 +930,12 @@ textarea {
   }
 
   .kiosk-header-actions {
-    justify-content: stretch;
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .kiosk-timer {
-    justify-content: space-between;
+    justify-content: center;
   }
 
   button,
@@ -1011,7 +1020,6 @@ textarea {
   }
 }
 
-/* Dialog/Popup Modals */
 dialog {
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -1019,18 +1027,21 @@ dialog {
   background: var(--panel);
   box-shadow: 0 20px 48px rgba(32, 37, 45, 0.16);
   max-width: 560px;
-  width: min(92vw, 560px);
+  width: 92%;
   box-sizing: border-box;
+  margin: auto;
+  position: fixed;
+  top: 0; bottom: 0; left: 0; right: 0;
 }
 
 .kiosk-dialog--compact {
   max-width: 520px;
-  width: min(92vw, 520px);
+  width: 92%;
 }
 
 .kiosk-dialog--wide {
   max-width: 760px;
-  width: min(94vw, 760px);
+  width: 96%;
 }
 
 dialog::backdrop {
@@ -1070,4 +1081,26 @@ dialog::backdrop {
 
 .row-actions form {
   margin: 0;
+}
+
+.kiosk-masonry {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin-top: 24px;
+}
+.kiosk-masonry-col {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+@media (min-width: 768px) {
+  .kiosk-masonry {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+  .kiosk-masonry-col {
+    flex: 1;
+    min-width: 0;
+  }
 }

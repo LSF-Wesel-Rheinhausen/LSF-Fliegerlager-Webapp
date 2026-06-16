@@ -14,14 +14,12 @@
     </div>
   </div>
 
-  <dl class="metrics" aria-label="Kiosk-Abrechnungsübersicht">
-    <div class="metric"><dt>Brutto</dt><dd><strong>{{ summary.total_gross|money_eur }}</strong></dd></div>
-    <div class="metric"><dt>Förderung</dt><dd><strong>{{ summary.total_subsidy|money_eur }}</strong></dd></div>
-    <div class="metric"><dt>Soll</dt><dd><strong>{{ summary.total_due|money_eur }}</strong></dd></div>
-    <div class="metric"><dt>Gezahlt</dt><dd><strong>{{ summary.total_paid|money_eur }}</strong></dd></div>
-    <div class="metric"><dt>Vorgestreckt</dt><dd><strong>{{ summary.total_advanced|money_eur }}</strong></dd></div>
-    <div class="metric"><dt>Offen</dt><dd><strong>{{ summary.balance|money_eur }}</strong></dd></div>
-  </dl>
+  <div style="margin-bottom: 24px;">
+    <button type="button" class="button" data-open-summary-dialog style="width: 100%; font-size: 1.1rem; padding: 12px; justify-content: space-between; display: flex;">
+      <span>Aktuelle Abrechnung</span>
+      <strong>Offen: {{ summary.balance|money_eur }}</strong>
+    </button>
+  </div>
 
   {% if pending_invites %}
     <section class="panel stack">
@@ -132,52 +130,104 @@
     </section>
   </div>
 
-  <div class="kiosk-grid">
-    <section class="panel stack">
-      <h2>Dienste</h2>
-      <p>Du hast <strong>{{ participant.completed_shifts }} von {{ participant.target_shifts }}</strong> Pflichtdiensten erledigt.</p>
-      <div class="form-actions" style="margin-top: 1rem;">
-        <a class="button" href="{% url 'kiosk-shifts' %}">Zum Dienstplan</a>
-      </div>
-    </section>
-
-    <section class="panel stack">
-      <div class="toolbar compact-toolbar kiosk-section-heading">
-        <div>
-          <h2 style="display: flex; align-items: center; gap: 8px;">
-            Familie
-            <button type="button" class="kiosk-help-button" data-help-text="Hier legst du Familienmitglieder (z.B. Partner, Kinder) an. Ihre Kosten werden auf deine finale Abrechnung gebucht. Sie tauchen beim Essen als auswählbare Personen auf, haben aber keinen eigenen Kiosk-Login.">?</button>
-          </h2>
-          <p>Diese Personen werden über dein Konto abgerechnet.</p>
-        </div>
-        <button type="button" class="button" data-open-family-dialog>Anlegen</button>
-      </div>
-
-      {% for member in family_members %}
-        <div class="kiosk-list-row">
-          <div class="kiosk-list-row__content">
-            <strong>{{ member.full_name }}</strong>
-            <span>{{ member.get_role_display }}</span>
+  <div class="kiosk-masonry">
+    <div class="kiosk-masonry-col">
+      <section class="panel stack">
+        <div class="toolbar compact-toolbar kiosk-section-heading">
+          <div>
+            <h2>Dienste</h2>
+            <p>Du hast <strong>{{ participant.completed_shifts }} von {{ participant.target_shifts }}</strong> Pflichtdiensten erledigt.</p>
           </div>
-          <form method="post" class="kiosk-list-row__actions">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="family_member_deactivate">
-            <input type="hidden" name="family_member_id" value="{{ member.pk }}">
-            <button type="submit" class="button-secondary">Entfernen</button>
-          </form>
+          <a class="button" href="{% url 'kiosk-shifts' %}">Zum Dienstplan</a>
         </div>
-      {% empty %}
-        <p class="hint">Noch keine Familienmitglieder angelegt.</p>
-      {% endfor %}
-    </section>
+      </section>
 
-    <section class="panel stack">
-      <div class="kiosk-section-heading">
-        <h2 style="display: flex; align-items: center; gap: 8px;">
-          Mitbuchungen
-          <button type="button" class="kiosk-help-button" data-help-text="Lade andere Teilnehmer ein, damit ihr euch gegenseitig beim Essen mit anmelden könnt. Sobald die Einladung angenommen wurde, könnt ihr euch gegenseitig auswählen. Die Abrechnung bleibt dabei für jeden separat.">?</button>
-        </h2>
-      </div>
+      <section class="panel stack">
+        <div class="toolbar compact-toolbar kiosk-section-heading">
+          <div>
+            <h2 style="display: flex; align-items: center; gap: 8px;">
+              Familie
+              <button type="button" class="kiosk-help-button" data-help-text="Hier legst du Familienmitglieder (z.B. Partner, Kinder) an. Ihre Kosten werden auf deine finale Abrechnung gebucht. Sie tauchen beim Essen als auswählbare Personen auf, haben aber keinen eigenen Kiosk-Login.">?</button>
+            </h2>
+            <p>Diese Personen werden über dein Konto abgerechnet.</p>
+          </div>
+          <button type="button" class="button" data-open-family-dialog>Anlegen</button>
+        </div>
+
+        {% for member in family_members %}
+          <div class="kiosk-list-row">
+            <div class="kiosk-list-row__content">
+              <strong>{{ member.full_name }}</strong>
+              <span>{{ member.get_role_display }}</span>
+            </div>
+            <form method="post" class="kiosk-list-row__actions">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="family_member_deactivate">
+              <input type="hidden" name="family_member_id" value="{{ member.pk }}">
+              <button type="submit" class="button-secondary">Entfernen</button>
+            </form>
+          </div>
+        {% empty %}
+          <p class="hint">Noch keine Familienmitglieder angelegt.</p>
+        {% endfor %}
+      </section>
+    </div>
+
+    <div class="kiosk-masonry-col">
+      <section class="panel stack">
+        <div class="toolbar compact-toolbar kiosk-section-heading">
+          <div>
+            <h2 style="display: flex; align-items: center; gap: 8px;">
+              Gemeinschaftsausgaben
+              <button type="button" class="kiosk-help-button" data-help-text="Hier kannst du Ausgaben einreichen, die du für die Gemeinschaft vorgestreckt hast (z.B. Grillgut). Nach Freigabe durch die Lagerleitung wird der Betrag als Umlage auf die Teilnehmer aufgeteilt und dir als Gutschrift angerechnet.">?</button>
+            </h2>
+            <p>Geld für die Gemeinschaft vorgestreckt?</p>
+          </div>
+          <a class="button button-secondary" href="{% url 'kiosk-shared-expense-request' %}">Antrag einreichen</a>
+        </div>
+        
+        {% if participant_expenses %}
+        <h3 style="margin-top: 0.5rem; font-size: 1.1rem;">Meine Anträge</h3>
+        <table class="data-table" style="margin-top: 0.25rem;">
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Beschreibung</th>
+              <th>Betrag</th>
+              <th>Datum</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for expense in participant_expenses %}
+            <tr>
+              <td>
+                {% if expense.status == "pending" %}
+                  <span style="color: #d97706; font-weight: 600;">Ausstehend</span>
+                {% elif expense.status == "approved" %}
+                  <span style="color: var(--ok); font-weight: 600;">Genehmigt</span>
+                {% elif expense.status == "rejected" %}
+                  <button type="button" class="button-link" data-open-rejection-reason-dialog data-reason="{{ expense.rejection_reason }}" style="color: var(--danger); font-weight: 600; padding: 0; text-align: left; text-decoration: underline; text-underline-offset: 4px;">Abgelehnt ℹ️</button>
+                {% else %}
+                  {{ expense.get_status_display }}
+                {% endif %}
+              </td>
+              <td>{{ expense.description }}</td>
+              <td>{{ expense.amount }} €</td>
+              <td>{{ expense.paid_on|default:expense.created_at|date:"d.m.Y" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
+      </section>
+
+      <section class="panel stack">
+        <div class="kiosk-section-heading">
+          <h2 style="display: flex; align-items: center; gap: 8px;">
+            Mitbuchungen
+            <button type="button" class="kiosk-help-button" data-help-text="Lade andere Teilnehmer ein, damit ihr euch gegenseitig beim Essen mit anmelden könnt. Sobald die Einladung angenommen wurde, könnt ihr euch gegenseitig auswählen. Die Abrechnung bleibt dabei für jeden separat.">?</button>
+          </h2>
+        </div>
       <form method="post" class="form-grid">
         {% csrf_token %}
         <input type="hidden" name="action" value="booking_link_invite">
@@ -209,6 +259,7 @@
       {% endfor %}
     </section>
   </div>
+    </div>
 
   <div class="kiosk-grid">
     <section>
@@ -251,6 +302,72 @@
       </table>
     </section>
   </div>
+
+  <dialog id="summary-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="summary-dialog-title">
+    <form method="dialog" class="dialog-heading" style="border-bottom: none; padding-bottom: 0;">
+      <h2 id="summary-dialog-title">Abrechnung</h2>
+      <button class="button button-secondary">Schließen</button>
+    </form>
+    
+    <div style="font-size: 1.1em; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--line);">
+      <strong>{{ participant.full_name }}</strong><br>
+      <span style="color: var(--muted);">{{ participant.camp }}</span>
+    </div>
+
+    <table class="data-table" style="margin-bottom: 2rem;">
+      <thead>
+        <tr>
+          <th style="text-align: left;">Position</th>
+          <th style="text-align: right;">Menge</th>
+          <th style="text-align: right;">Brutto</th>
+          <th style="text-align: right;">Förderung</th>
+          <th style="text-align: right;">Summe</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for line in summary.lines %}
+        <tr>
+          <td>{{ line.label }}</td>
+          <td style="text-align: right;">{{ line.quantity|default:"" }}</td>
+          <td style="text-align: right;">{{ line.gross_total|money_eur }}</td>
+          <td style="text-align: right;">{% if line.subsidy_amount %}{{ line.subsidy_amount|money_eur }}{% endif %}</td>
+          <td style="text-align: right;"><strong>{{ line.total|money_eur }}</strong></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" style="text-align: center; color: var(--muted); padding: 2rem 0;">Noch keine Positionen vorhanden.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div style="display: flex; justify-content: center; margin-bottom: 1rem;">
+      <table style="width: 100%; max-width: 320px; text-align: right; border-collapse: collapse;">
+        <tr>
+          <td style="padding: 4px 12px; color: var(--muted);">Brutto Gesamt</td>
+          <td style="padding: 4px 0;">{{ summary.total_gross|money_eur }}</td>
+        </tr>
+        <tr>
+          <td style="padding: 4px 12px; color: var(--muted);">Förderung</td>
+          <td style="padding: 4px 0; color: var(--ok);">{% if summary.total_subsidy %}-{{ summary.total_subsidy|money_eur }}{% else %}0,00 €{% endif %}</td>
+        </tr>
+        <tr style="border-top: 1px solid var(--line);">
+          <td style="padding: 8px 12px; font-weight: bold;">Rechnungsbetrag (Soll)</td>
+          <td style="padding: 8px 0; font-weight: bold;">{{ summary.total_due|money_eur }}</td>
+        </tr>
+        <tr>
+          <td style="padding: 4px 12px; color: var(--muted);">Bereits gezahlt</td>
+          <td style="padding: 4px 0;">{% if summary.total_paid %}-{{ summary.total_paid|money_eur }}{% else %}0,00 €{% endif %}</td>
+        </tr>
+        <tr>
+          <td style="padding: 4px 12px; color: var(--muted);">Vorgestreckte Auslagen</td>
+          <td style="padding: 4px 0;">{% if summary.total_advanced %}-{{ summary.total_advanced|money_eur }}{% else %}0,00 €{% endif %}</td>
+        </tr>
+        <tr style="border-top: 2px solid var(--text); font-size: 1.15em;">
+          <td style="padding: 12px 12px; font-weight: bold;">Noch offen</td>
+          <td style="padding: 12px 0; font-weight: bold; {% if summary.balance > 0 %}color: var(--danger);{% elif summary.balance < 0 %}color: var(--ok);{% endif %}">{{ summary.balance|money_eur }}</td>
+        </tr>
+      </table>
+    </div>
+  </dialog>
 
   <dialog id="drink-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="drink-dialog-title">
     <form method="dialog" class="dialog-heading">
@@ -334,6 +451,17 @@
       {% endfor %}
     </div>
   </dialog>
+
+  <dialog id="rejection-reason-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="rejection-reason-dialog-title">
+    <form method="dialog" class="dialog-heading">
+      <h2 id="rejection-reason-dialog-title">Ablehnungsgrund</h2>
+      <button class="button button-secondary">Schließen</button>
+    </form>
+    <p id="rejection-reason-text" style="white-space: pre-wrap; margin-bottom: 1rem;"></p>
+    <form method="dialog" class="form-actions">
+      <button type="submit" class="button">OK</button>
+    </form>
+  </dialog>
 {% endblock %}
 {% block scripts %}
   <script>
@@ -388,6 +516,18 @@
       });
       document.querySelector("[data-open-family-dialog]")?.addEventListener("click", () => familyDialog.showModal());
       document.querySelector("[data-open-contact-dialog]")?.addEventListener("click", () => contactDialog.showModal());
+      
+      const summaryDialog = document.getElementById("summary-dialog");
+      document.querySelector("[data-open-summary-dialog]")?.addEventListener("click", () => summaryDialog.showModal());
+
+      const rejectionDialog = document.getElementById("rejection-reason-dialog");
+      const rejectionReasonText = document.getElementById("rejection-reason-text");
+      document.querySelectorAll("[data-open-rejection-reason-dialog]").forEach((button) => {
+        button.addEventListener("click", () => {
+          rejectionReasonText.textContent = button.dataset.reason || "Keine Begründung angegeben.";
+          rejectionDialog.showModal();
+        });
+      });
     })();
   </script>
 {% endblock %}

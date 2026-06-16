@@ -3,7 +3,7 @@ from decimal import Decimal
 
 import pytest
 
-from billing.models import Charge, PriceRule
+from billing.models import Charge, PriceRule, Expense
 from billing.services import calculate_participant_settlement
 from tests.factories import (
     CampFactory,
@@ -59,6 +59,7 @@ def test_settlement_calculates_due_paid_advanced_and_balance():
         description="Brötchen",
         amount=Decimal("12.00"),
         reimbursable=True,
+        status=Expense.Status.APPROVED,
     )
 
     result = calculate_participant_settlement(participant)
@@ -176,3 +177,59 @@ def test_participant_camp_flat_duration():
     participant = ParticipantFactory(camp=camp, booked_nights=3)
     result = participant_camp_flat_duration(participant)
     assert result == PriceRule.CampFlatDuration.ONE_WEEK
+
+
+@pytest.mark.django_db
+def test_approve_shared_expense_pro_rata():
+    from billing.services import approve_shared_expense
+    from billing.models import Expense, ExpenseAllocation
+
+    camp = CampFactory()
+    p1 = ParticipantFactory(camp=camp)
+    p2 = ParticipantFactory(camp=camp)
+    p3 = ParticipantFactory(camp=camp)
+
+    expense = ExpenseFactory(
+        camp=camp,
+        participant=p1,
+        amount=Decimal("12.00"),
+        allocation_method=Expense.AllocationMethod.ALL_ACTIVE,
+        status=Expense.Status.PENDING,
+    )
+
+    approve_shared_expense(expense, approved_by=None, participant_ids=[p1.pk, p2.pk, p3.pk])
+
+    assert expense.status == Expense.Status.APPROVED
+    allocations = list(ExpenseAllocation.objects.filter(expense=expense).order_by("amount"))
+    assert len(allocations) == 3
+
+    amounts = sorted([a.amount for a in allocations])
+    assert amounts == [Decimal("4.00"), Decimal("4.00"), Decimal("4.00")]
+
+
+@pytest.mark.django_db
+def test_settlement_includes_shared_expense_allocation():
+    from billing.models import Expense, ExpenseAllocation
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp)
+    
+    expense = ExpenseFactory(
+        camp=camp,
+        participant=participant,
+        description="Grillkohle",
+        amount=Decimal("15.00"),
+        status=Expense.Status.APPROVED,
+        reimbursable=True,
+    )
+    ExpenseAllocation.objects.create(
+        expense=expense,
+        participant=participant,
+        amount=Decimal("5.00")
+    )
+
+    result = calculate_participant_settlement(participant)
+
+    # Participant gets advanced 15.00, and is allocated 5.00 due
+    assert result.total_advanced == Decimal("15.00")
+    assert result.total_due == Decimal("5.00")
+    assert any("Umlage" in line.label and "Grillkohle" in line.label for line in result.lines)

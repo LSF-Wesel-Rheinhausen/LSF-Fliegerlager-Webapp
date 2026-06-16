@@ -15,6 +15,7 @@ from .models import (
     Charge,
     DrinkEntry,
     Expense,
+    ExpenseAllocation,
     MealOrder,
     MealSignup,
     Participant,
@@ -463,19 +464,43 @@ def drink_charge_lines(participant):
     return lines
 
 
+def shared_expense_charge_lines(participant):
+    lines = []
+    allocations = ExpenseAllocation.objects.filter(participant=participant).select_related("expense")
+    for allocation in allocations:
+        date_str = allocation.expense.paid_on.strftime('%d.%m.%Y') if allocation.expense.paid_on else ''
+        date_part = f" ({date_str})" if date_str else ""
+        lines.append(
+            build_settlement_line(
+                label=f"Umlage{date_part}: {allocation.expense.description}",
+                quantity=Decimal("1.00"),
+                unit_price=allocation.amount,
+                source=f"expense_allocation:{allocation.pk}",
+                subsidy_rate=ZERO,
+                participant=participant,
+            )
+        )
+    return lines
+
+
 def calculate_participant_settlement(participant):
     participant = (
         Participant.objects.select_related("camp")
-        .prefetch_related("charges", "payments", "expenses", "drink_entries")
+        .prefetch_related("charges", "payments", "expenses", "drink_entries", "expense_allocations__expense")
         .get(pk=participant.pk)
     )
-    lines = default_charge_lines(participant) + manual_charge_lines(participant) + drink_charge_lines(participant)
+    lines = (
+        default_charge_lines(participant)
+        + manual_charge_lines(participant)
+        + drink_charge_lines(participant)
+        + shared_expense_charge_lines(participant)
+    )
     total_gross = money(sum((line.gross_total for line in lines), ZERO))
     total_subsidy = money(sum((line.subsidy_amount for line in lines), ZERO))
     total_due = money(sum((line.total for line in lines), ZERO))
     total_paid = money(participant.payments.aggregate(total=Sum("amount"))["total"])
     total_advanced = money(
-        Expense.objects.filter(participant=participant, reimbursable=True).aggregate(total=Sum("amount"))["total"]
+        Expense.objects.filter(participant=participant, reimbursable=True, status=Expense.Status.APPROVED).aggregate(total=Sum("amount"))["total"]
     )
     balance = money(total_due - total_paid - total_advanced)
     return SettlementResult(
@@ -578,4 +603,58 @@ def participant_kiosk_summary(participant):
             for line in result.lines
         ],
     }
+
+
+@transaction.atomic
+def approve_shared_expense(expense: Expense, approved_by: Any, participant_ids: list[int] | None = None) -> None:
+    if expense.status != Expense.Status.PENDING:
+        raise ValidationError("Nur ausstehende Ausgaben können genehmigt werden.")
+
+    expense.status = Expense.Status.APPROVED
+    expense.approved_by = approved_by
+    expense.approved_at = timezone.now()
+    
+    if expense.allocation_method in (Expense.AllocationMethod.NONE, Expense.AllocationMethod.COST_CENTER):
+        expense.save(update_fields=["status", "approved_by", "approved_at", "allocation_method", "cost_center"])
+        return
+
+    participants = []
+    if expense.allocation_method == Expense.AllocationMethod.ALL_ACTIVE:
+        participants = list(Participant.objects.filter(camp=expense.camp, archived_at__isnull=True))
+    elif expense.allocation_method == Expense.AllocationMethod.SELECTED:
+        if not participant_ids:
+            raise ValidationError("Es wurden keine Teilnehmer für die Umlage ausgewählt.")
+        participants = list(Participant.objects.filter(id__in=participant_ids, camp=expense.camp))
+
+    if not participants:
+        raise ValidationError("Es konnten keine Teilnehmer für die Umlage ermittelt werden.")
+
+    count = len(participants)
+    base_amount_per_person = money(expense.amount / Decimal(count))
+    remainder = expense.amount - (base_amount_per_person * count)
+
+    allocations = []
+    for i, p in enumerate(participants):
+        amount = base_amount_per_person
+        if remainder > 0:
+            amount += Decimal("0.01")
+            remainder -= Decimal("0.01")
+        elif remainder < 0:
+            amount -= Decimal("0.01")
+            remainder += Decimal("0.01")
+        allocations.append(ExpenseAllocation(expense=expense, participant=p, amount=amount))
+
+    ExpenseAllocation.objects.bulk_create(allocations)
+    expense.save(update_fields=["status", "approved_by", "approved_at", "allocation_method", "cost_center"])
+
+
+@transaction.atomic
+def reject_shared_expense(expense: Expense, rejected_by: Any, rejection_reason: str = "") -> None:
+    if expense.status != Expense.Status.PENDING:
+        raise ValidationError("Nur ausstehende Ausgaben können abgelehnt werden.")
+    expense.status = Expense.Status.REJECTED
+    expense.approved_by = rejected_by
+    expense.approved_at = timezone.now()
+    expense.rejection_reason = rejection_reason
+    expense.save(update_fields=["status", "approved_by", "approved_at", "rejection_reason"])
 

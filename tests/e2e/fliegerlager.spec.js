@@ -305,7 +305,7 @@ test("Finance flow: payments and expenses", async ({ page }) => {
   await page.getByText("Sommerlager Finance").click(); // Click on the camp link in the list
   await page.getByRole("link", { name: "Auslage erfassen" }).click();
   await page.getByLabel("Teilnehmer").selectOption({ label: "Marie Curie" });
-  await page.locator("#id_category").fill("Bürobedarf");
+  await page.locator("#id_category").selectOption({ label: "Verbrauchsmaterial" });
   await page.getByLabel("Beschreibung").fill("Stifte");
   await page.getByLabel("Betrag").fill("15.50");
   await page.locator("#id_paid_on").fill("2026-07-01");

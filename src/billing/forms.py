@@ -494,19 +494,88 @@ class PaymentForm(forms.ModelForm):
         widgets = {"paid_on": forms.DateInput(attrs={"type": "date"})}
 
 
+EXPENSE_CATEGORY_CHOICES = [
+    ("Unterkunft/Verpflegung", "Unterkunft/Verpflegung"),
+    ("Fahrtkosten", "Fahrtkosten"),
+    ("Verbrauchsmaterial", "Verbrauchsmaterial"),
+    ("Miete/sonstiges", "Miete/sonstiges"),
+]
+
+
 class ExpenseForm(forms.ModelForm):
     class Meta:
         model = Expense
-        fields = ["participant", "category", "description", "amount", "paid_on", "reimbursable"]
+        fields = ["participant", "category", "description", "amount", "receipt", "paid_on", "reimbursable"]
         labels = {
             "participant": "Teilnehmer",
             "category": "Kategorie",
             "description": "Beschreibung",
             "amount": "Betrag",
+            "receipt": "Rechnungsbeleg",
             "paid_on": "Zahlungsdatum",
             "reimbursable": "Erstattungsfähig",
         }
-        widgets = {"paid_on": forms.DateInput(attrs={"type": "date"})}
+        widgets = {
+            "paid_on": forms.DateInput(attrs={"type": "date"}),
+            "category": forms.Select(choices=EXPENSE_CATEGORY_CHOICES),
+            "receipt": forms.FileInput(attrs={"accept": "application/pdf,image/jpeg,image/png,image/heic,.pdf,.jpg,.jpeg,.png,.heic", "capture": "environment"}),
+        }
+
+
+class SharedExpenseRequestForm(forms.ModelForm):
+    class Meta:
+        model = Expense
+        fields = ["category", "description", "amount", "receipt", "paid_on"]
+        labels = {
+            "category": "Kategorie",
+            "description": "Beschreibung",
+            "amount": "Betrag",
+            "receipt": "Rechnungsbeleg",
+            "paid_on": "Zahlungsdatum",
+        }
+        widgets = {
+            "paid_on": forms.DateInput(attrs={"type": "date"}),
+            "category": forms.Select(choices=EXPENSE_CATEGORY_CHOICES),
+            "receipt": forms.FileInput(attrs={"accept": "application/pdf,image/jpeg,image/png,image/heic,.pdf,.jpg,.jpeg,.png,.heic", "capture": "environment"}),
+        }
+
+
+class SharedExpenseApprovalForm(forms.ModelForm):
+    participant_ids = forms.MultipleChoiceField(
+        label="Umlage auf",
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+    )
+
+    class Meta:
+        model = Expense
+        fields = ["allocation_method", "cost_center"]
+        labels = {
+            "allocation_method": "Umlagemethode",
+            "cost_center": "Kostenstelle",
+        }
+
+    def __init__(self, *args, camp=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if camp:
+            participants = Participant.objects.filter(camp=camp, archived_at__isnull=True).order_by("last_name", "first_name")
+            self.fields["participant_ids"].choices = [(p.id, p.full_name) for p in participants]
+        # Only require cost center if the allocation method is COST_CENTER
+        self.fields["cost_center"].required = False
+
+    def clean(self):
+        cleaned_data = super().clean()
+        allocation_method = cleaned_data.get("allocation_method")
+        participant_ids = cleaned_data.get("participant_ids")
+        cost_center = cleaned_data.get("cost_center")
+
+        if allocation_method == Expense.AllocationMethod.SELECTED and not participant_ids:
+            self.add_error("participant_ids", "Bitte wähle mindestens einen Teilnehmer aus.")
+        
+        if allocation_method == Expense.AllocationMethod.COST_CENTER and not cost_center:
+            self.add_error("cost_center", "Bitte wähle eine Kostenstelle aus.")
+            
+        return cleaned_data
 
 
 class ParticipantImportForm(forms.Form):

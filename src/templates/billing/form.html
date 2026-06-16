@@ -2,7 +2,7 @@
 {% block content %}
   <section class="panel">
     <h1>{{ title }}</h1>
-    <form method="post" class="form-grid">
+    <form method="post" class="form-grid" enctype="multipart/form-data">
       {% csrf_token %}
       {{ form.as_p }}
       <div class="form-actions">
