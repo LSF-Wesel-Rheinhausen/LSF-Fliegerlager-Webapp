@@ -61,7 +61,6 @@ urlpatterns = [
     path("shifts/<int:shift_id>/edit/", views.shift_edit, name="shift-edit"),
     path("shifts/<int:shift_id>/delete/", views.shift_delete, name="shift-delete"),
     path("camps/<int:camp_id>/expenses/new/", views.expense_create, name="expense-create"),
-    path("camps/<int:camp_id>/shared-expenses/request/", views.kiosk_shared_expense_request, name="shared-expense-request"),
     path("expenses/<int:expense_id>/approve/", views.shared_expense_approve, name="shared-expense-approve"),
     path("expenses/<int:expense_id>/reject/", views.shared_expense_reject, name="shared-expense-reject"),
     path("camps/<int:camp_id>/import/", views.participant_import, name="participant-import"),
@@ -81,6 +80,7 @@ urlpatterns = [
     path("kiosk/", views.kiosk_home, name="kiosk-home"),
     path("kiosk/login/", views.kiosk_login, name="kiosk-login"),
     path("kiosk/shifts/", views.kiosk_shifts, name="kiosk-shifts"),
+    path("kiosk/shared-expenses/request/", views.kiosk_shared_expense_request, name="kiosk-shared-expense-request"),
     path("kiosk/pin/", views.kiosk_pin_setup, name="kiosk-pin-setup"),
     path("kiosk/logout/", views.kiosk_logout, name="kiosk-logout"),
 ]
