@@ -61,7 +61,7 @@
 
   <div class="kiosk-split">
     <div class="kiosk-stack">
-        <form method="post" id="quick-booking-form" class="kiosk-stack">
+        <form method="post" id="quick-booking-form">
           {% csrf_token %}
           <input type="hidden" name="action" value="quick">
           <input type="hidden" name="quick-price_rule" id="quick-price-rule" value="">
@@ -111,6 +111,9 @@
             <div class="drink-card-grid" role="group" aria-label="Verpflegung auswählen">
               <button type="button" class="drink-card" data-open-meal-dialog-new data-meal="dinner">
                 <span class="drink-card__title">Abendessen</span>
+                {% if dinner_rule %}
+                  <span class="drink-card__price">{{ dinner_rule.unit_price|money_eur }}</span>
+                {% endif %}
               </button>
               {% for rule in snack_rules %}
                 <button

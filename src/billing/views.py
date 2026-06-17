@@ -1466,6 +1466,9 @@ def kiosk_home(request):
         "meal_calendar_groups": _group_kiosk_meal_calendar(meal_calendar_days),
         "drink_rules": quick_form.fields["price_rule"].queryset.filter(kind=PriceRule.Kind.DRINK),
         "snack_rules": quick_form.fields["price_rule"].queryset.filter(kind=PriceRule.Kind.MEAL),
+        "dinner_rule": PriceRule.objects.filter(
+            camp=participant.camp, kind=PriceRule.Kind.MEAL, meal_type=PriceRule.MealType.DINNER, is_archived=False
+        ).first(),
         "quick_form": quick_form,
         "meal_targets": meal_targets,
         "family_members": participant.family_members.filter(is_active=True).order_by("last_name", "first_name"),
