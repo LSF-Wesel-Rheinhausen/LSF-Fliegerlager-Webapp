@@ -624,6 +624,19 @@ def price_rule_edit(request, price_rule_id):
     return render(request, "billing/form.html", {"form": form, "title": "Preisregel bearbeiten", "camp": rule.camp})
 
 
+@admin_required
+@require_POST
+def price_rule_delete(request, price_rule_id):
+    rule = get_object_or_404(PriceRule.objects.select_related("camp"), pk=price_rule_id)
+    camp_id = rule.camp_id
+    if not rule.is_default:
+        rule.delete()
+        messages.success(request, f"Preisregel '{rule.name}' gelöscht.")
+    else:
+        messages.error(request, "Standardpreise können nicht gelöscht werden.")
+    return redirect("price-rules-manage", camp_id=camp_id)
+
+
 @editor_required
 def shift_manage(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
@@ -1265,28 +1278,35 @@ def kiosk_home(request):
                 target_ids = request.POST.getlist("quick-target")
                 targets = [participant]
                 if target_ids:
-                    targets = []
-                    for tid in target_ids:
-                        if tid.startswith("participant-"):
-                            targets.append(
-                                ParticipantBookingLink.objects.get(pk=tid.replace("participant-", "")).invitee
-                            )
-                        elif tid.startswith("family-"):
-                            targets.append(participant.family_members.get(pk=tid.replace("family-", "")))
-                        else:
-                            targets.append(participant)
+                    targets_by_token = _target_lookup(meal_targets)
+                    selected_targets = [
+                        targets_by_token[tid]["object"] for tid in target_ids if tid in targets_by_token
+                    ]
+                    if selected_targets:
+                        targets = selected_targets
 
                 rule = quick_form.cleaned_data["price_rule"]
+                occurred_on = quick_form.cleaned_data.get("quick_date") or timezone.localdate()
                 with transaction.atomic():
                     for target in set(targets):
+                        if hasattr(target, "first_name") and hasattr(target, "last_name") and hasattr(target, "role"):
+                            # This is a ParticipantFamilyMember
+                            charge_participant = target.guardian
+                            charge_desc = f"{rule.name} (Kiosk) für {target.full_name}"
+                        else:
+                            charge_participant = target
+                            charge_desc = f"{rule.name} (Kiosk)"
+                            if target != participant:
+                                charge_desc = f"{rule.name} (Kiosk) für {target.full_name}"
+
                         charge = Charge(
-                            participant=target,
+                            participant=charge_participant,
                             kind=Charge.Kind.DRINK if rule.kind == PriceRule.Kind.DRINK else Charge.Kind.FOOD,
-                            description=f"{rule.name} (Kiosk)",
+                            description=charge_desc,
                             quantity=quick_form.cleaned_data["quantity"],
                             unit_price=rule.unit_price,
                             foerdersatz=rule.foerdersatz,
-                            occurred_on=timezone.localdate(),
+                            occurred_on=occurred_on,
                         )
                         charge.save()
                 messages.success(request, f"{rule.name} gebucht.")

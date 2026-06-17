@@ -61,11 +61,12 @@
 
   <div class="kiosk-split">
     <div class="kiosk-stack">
-      <form method="post" id="quick-booking-form">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="quick">
-        <input type="hidden" name="quick-price_rule" id="quick-price-rule">
-        {{ quick_form.quantity.as_hidden }}
+        <form method="post" id="quick-booking-form" class="kiosk-stack">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="quick">
+          <input type="hidden" name="quick-price_rule" id="quick-price-rule" value="">
+          <input type="hidden" name="quick-quantity" id="id_quick-quantity" value="1">
+          <input type="hidden" name="quick-quick_date" id="quick-date" value="">
 
         <section class="panel kiosk-card kiosk-card--accent" style="margin-bottom: 1.5rem;">
           <div class="kiosk-card__header">
@@ -90,7 +91,6 @@
               >
                 <span class="drink-card__title">{{ rule.name }}</span>
                 <span class="drink-card__price">{{ rule.unit_price|money_eur }}</span>
-                <span class="drink-card__meta">Menge wählen</span>
               </button>
             {% empty %}
               <p class="hint">Keine Getränkepreise im Lager hinterlegt.</p>
@@ -116,13 +116,13 @@
                 <button
                   type="button"
                   class="drink-card"
-                  data-quick-button
+                  data-food-button
                   data-rule-id="{{ rule.pk }}"
                   data-rule-name="{{ rule.name }}"
+                  data-meal-type="{{ rule.meal_type }}"
                 >
                   <span class="drink-card__title">{{ rule.name }}</span>
                   <span class="drink-card__price">{{ rule.unit_price|money_eur }}</span>
-                  <span class="drink-card__meta">Buchen</span>
                 </button>
               {% empty %}
                 <p class="hint">Keine Verpflegung (Snacks/Frühstück) im Lager hinterlegt.</p>
@@ -481,6 +481,40 @@
     <button type="button" class="button" data-submit-custom-drink>Menge buchen</button>
   </dialog>
 
+  <dialog id="food-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="food-dialog-title">
+    <form method="dialog" class="dialog-heading">
+      <h2 id="food-dialog-title">Verpflegung buchen</h2>
+      <button class="button button-secondary">Schließen</button>
+    </form>
+    <p class="hint" id="food-dialog-name"></p>
+
+    <div id="food-step-date" style="display: none;" class="stack">
+      <p>Für welchen Tag möchtest du buchen?</p>
+      <div class="quantity-grid" role="group" aria-label="Datum auswählen" id="food-date-buttons">
+        {% for day in meal_calendar_days %}
+          <button type="button" class="button-secondary" data-food-date="{{ day.date|date:'Y-m-d' }}">
+            {% if day.date == today %}Heute{% elif day.date == tomorrow %}Morgen{% else %}{{ day.date|date:"D d.m." }}{% endif %}
+          </button>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div id="food-step-persons" style="display: none;" class="stack">
+      <p>Wer soll eingebucht werden?</p>
+      <div class="target-list">
+        {% for target in meal_targets %}
+          <article class="target-row">
+            <label>
+              <input type="checkbox" form="quick-booking-form" name="quick-target" value="{{ target.token }}" {% if target.object.pk == participant.pk and target.kind == "participant" %}checked{% endif %}>
+              <span>{{ target.name }} · {{ target.role }}</span>
+            </label>
+          </article>
+        {% endfor %}
+      </div>
+      <button type="button" class="button" id="submit-food-booking">Kostenpflichtig buchen</button>
+    </div>
+  </dialog>
+
   <dialog id="meal-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="meal-dialog-title">
     <form method="dialog" class="dialog-heading">
       <h2 id="meal-dialog-title">Personen auswählen</h2>
@@ -576,15 +610,54 @@
       document.querySelectorAll("[data-quick-button]").forEach((button) => {
         button.addEventListener("click", () => {
           priceRuleInput.value = button.dataset.ruleId;
+          document.getElementById("quick-date").value = "";
           customQuantityInput.value = "";
           drinkName.textContent = button.dataset.ruleName || "";
           drinkDialog.showModal();
         });
       });
 
+      // Food Dialog Logic
+      const foodDialog = document.getElementById("food-dialog");
+      const foodDialogName = document.getElementById("food-dialog-name");
+      const foodStepDate = document.getElementById("food-step-date");
+      const foodStepPersons = document.getElementById("food-step-persons");
+      const quickDateInput = document.getElementById("quick-date");
+
+      document.querySelectorAll("[data-food-button]").forEach((button) => {
+        button.addEventListener("click", () => {
+          priceRuleInput.value = button.dataset.ruleId;
+          foodDialogName.textContent = button.dataset.ruleName || "";
+          quickDateInput.value = "";
+
+          if (button.dataset.mealType === "breakfast") {
+            foodStepDate.style.display = "block";
+            foodStepPersons.style.display = "none";
+          } else {
+            // Snack skips date selection
+            foodStepDate.style.display = "none";
+            foodStepPersons.style.display = "block";
+          }
+          foodDialog.showModal();
+        });
+      });
+
+      document.querySelectorAll("[data-food-date]").forEach((button) => {
+        button.addEventListener("click", () => {
+          quickDateInput.value = button.dataset.foodDate;
+          foodStepDate.style.display = "none";
+          foodStepPersons.style.display = "block";
+        });
+      });
+
+      document.getElementById("submit-food-booking")?.addEventListener("click", () => {
+        quantityInput.value = "1";
+        drinkForm.requestSubmit();
+      });
+
       const submitDrink = (quantity) => {
         quantityInput.value = quantity;
-        drinkForm.requestSubmit();
+        drinkForm.submit();
       };
 
       document.querySelectorAll("[data-drink-quantity]").forEach((button) => {

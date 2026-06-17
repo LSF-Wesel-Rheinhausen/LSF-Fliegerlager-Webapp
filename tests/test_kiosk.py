@@ -120,7 +120,6 @@ def test_kiosk_home_hides_normal_admin_header_and_renders_drink_dialog_controls(
     assert b'action="/logout/"' not in response.content
     assert b'class="drink-card"' in response.content
     assert b'data-rule-id="' in response.content
-    assert b"Menge w\xc3\xa4hlen" in response.content
     assert b'id="quick-dialog"' in response.content
     assert b'data-timeout-ms="120000"' in response.content
     assert reverse("kiosk-logout").encode() in response.content
