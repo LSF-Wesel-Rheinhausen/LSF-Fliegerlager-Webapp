@@ -284,7 +284,7 @@ def test_kiosk_books_drink_with_camp_drink_price_and_subsidy_flag(client):
 
     assert response.status_code == 302
     entry = Charge.objects.get(participant=participant, kind=Charge.Kind.DRINK)
-    assert entry.description == "Getränk"
+    assert entry.description == "Getränk (Kiosk)"
     assert entry.quantity == Decimal("2.00")
     assert entry.unit_price == Decimal("2.50")
     assert entry.foerdersatz == Decimal("1.0000")
@@ -976,7 +976,8 @@ def test_kiosk_books_snack_successfully(client):
     )
     rule = PriceRuleFactory(
         camp=camp,
-        kind=PriceRule.Kind.SNACK,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=PriceRule.MealType.SNACK,
         name="Mittagssnack",
         unit_price=Decimal("4.50"),
     )
@@ -994,7 +995,7 @@ def test_kiosk_books_snack_successfully(client):
     )
 
     assert response.status_code == 302
-    entry = Charge.objects.get(participant=participant, kind=Charge.Kind.SNACK)
-    assert entry.description == "Mittagssnack"
+    entry = Charge.objects.get(participant=participant, kind=Charge.Kind.FOOD)
+    assert entry.description == "Mittagssnack (Kiosk)"
     assert entry.quantity == Decimal("1.00")
     assert entry.unit_price == Decimal("4.50")

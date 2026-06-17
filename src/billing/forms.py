@@ -692,8 +692,12 @@ class QuickBookingForm(forms.Form):
         if participant is not None:
             camp = participant.camp
         if camp is not None:
+            from django.db.models import Q
+
             queryset = PriceRule.objects.filter(
-                camp=camp, kind__in=[PriceRule.Kind.DRINK, PriceRule.Kind.SNACK]
+                Q(kind=PriceRule.Kind.DRINK)
+                | Q(kind=PriceRule.Kind.MEAL, meal_type__in=[PriceRule.MealType.BREAKFAST, PriceRule.MealType.SNACK]),
+                camp=camp,
             ).order_by("name")
             if participant is not None:
                 if participant.is_child:

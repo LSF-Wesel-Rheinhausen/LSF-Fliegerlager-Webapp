@@ -283,12 +283,12 @@ class PriceRule(TimeStampedModel):
         NIGHT = "night", "Übernachtung"
         MEAL = "meal", "Verpflegung"
         DRINK = "drink", "Getränk"
-        SNACK = "snack", "Snack/Schnellverpflegung"
         OTHER = "other", "Sonstiges"
 
     class MealType(models.TextChoices):
         BREAKFAST = "breakfast", "Frühstück"
         DINNER = "dinner", "Abendessen"
+        SNACK = "snack", "Mittagssnack"
 
     class CampFlatDuration(models.TextChoices):
         ONE_WEEK = "1w", "1 Woche"
@@ -329,7 +329,6 @@ class Charge(TimeStampedModel):
         CAMP_FLAT = "camp_flat", "Lagerpauschale"
         FOOD = "food", "Verpflegung"
         DRINK = "drink", "Getränke"
-        SNACK = "snack", "Snack/Schnellverpflegung"
         OTHER = "other", "Sonstige Kosten"
 
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="charges")

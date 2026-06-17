@@ -1279,15 +1279,16 @@ def kiosk_home(request):
                 rule = quick_form.cleaned_data["price_rule"]
                 with transaction.atomic():
                     for target in set(targets):
-                        Charge.objects.create(
+                        charge = Charge(
                             participant=target,
-                            kind=Charge.Kind.DRINK if rule.kind == PriceRule.Kind.DRINK else Charge.Kind.SNACK,
-                            description=rule.name,
+                            kind=Charge.Kind.DRINK if rule.kind == PriceRule.Kind.DRINK else Charge.Kind.FOOD,
+                            description=f"{rule.name} (Kiosk)",
                             quantity=quick_form.cleaned_data["quantity"],
                             unit_price=rule.unit_price,
                             foerdersatz=rule.foerdersatz,
                             occurred_on=timezone.localdate(),
                         )
+                        charge.save()
                 messages.success(request, f"{rule.name} gebucht.")
                 return redirect("kiosk-home")
         elif request.POST.get("action") == "meal":
@@ -1441,7 +1442,7 @@ def kiosk_home(request):
         "meal_calendar_days": meal_calendar_days,
         "meal_calendar_groups": _group_kiosk_meal_calendar(meal_calendar_days),
         "drink_rules": quick_form.fields["price_rule"].queryset.filter(kind=PriceRule.Kind.DRINK),
-        "snack_rules": quick_form.fields["price_rule"].queryset.filter(kind=PriceRule.Kind.SNACK),
+        "snack_rules": quick_form.fields["price_rule"].queryset.filter(kind=PriceRule.Kind.MEAL),
         "quick_form": quick_form,
         "meal_targets": meal_targets,
         "family_members": participant.family_members.filter(is_active=True).order_by("last_name", "first_name"),
