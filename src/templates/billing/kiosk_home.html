@@ -61,7 +61,7 @@
 
   <div class="kiosk-split">
     <div class="kiosk-stack">
-        <form method="post" id="quick-booking-form">
+        <form method="post" id="quick-booking-form" style="display: contents;">
           {% csrf_token %}
           <input type="hidden" name="action" value="quick">
           <input type="hidden" name="quick-price_rule" id="quick-price-rule" value="">
@@ -151,82 +151,6 @@
         </div>
       </section>
 
-      <section class="panel kiosk-card kiosk-card--muted">
-        <div class="kiosk-card__header kiosk-section-heading">
-          <div class="kiosk-card__header-main">
-            <h2 class="kiosk-title">
-              Familie
-              <button type="button" class="kiosk-help-button" data-help-text="Hier legst du Familienmitglieder (z.B. Partner, Kinder) an. Ihre Kosten werden auf deine finale Abrechnung gebucht. Sie tauchen beim Essen als auswählbare Personen auf, haben aber keinen eigenen Kiosk-Login." aria-label="Kurzhilfe Familie">?</button>
-            </h2>
-            <p>Diese Personen werden über dein Konto abgerechnet.</p>
-          </div>
-          <button type="button" class="button kiosk-card__action" data-open-family-dialog>Anlegen</button>
-        </div>
-
-        {% for member in family_members %}
-          <div class="kiosk-list-row">
-            <div class="kiosk-list-row__content">
-              <strong>{{ member.full_name }}</strong>
-              <span>{{ member.get_role_display }}</span>
-            </div>
-            <form method="post" class="kiosk-list-row__actions">
-              {% csrf_token %}
-              <input type="hidden" name="action" value="family_member_deactivate">
-              <input type="hidden" name="family_member_id" value="{{ member.pk }}">
-              <button type="submit" class="button-secondary">Entfernen</button>
-            </form>
-          </div>
-        {% empty %}
-          <div class="kiosk-empty">
-            <strong>Noch keine Familienmitglieder angelegt.</strong>
-            <p>Lege Personen an, die über dein Konto mit Essen buchen oder mitgerechnet werden sollen.</p>
-          </div>
-        {% endfor %}
-      </section>
-
-      <section class="panel kiosk-card kiosk-card--muted">
-        <div class="kiosk-card__header kiosk-section-heading">
-          <div class="kiosk-card__header-main">
-            <h2 class="kiosk-title">
-              Mitbuchungen
-              <button type="button" class="kiosk-help-button" data-help-text="Lade andere Teilnehmer ein, damit ihr euch gegenseitig beim Essen mit anmelden könnt. Sobald die Einladung angenommen wurde, könnt ihr euch gegenseitig auswählen. Die Abrechnung bleibt dabei für jeden separat." aria-label="Kurzhilfe Mitbuchungen">?</button>
-            </h2>
-            <p>Lade andere Teilnehmer ein und verwalte bestehende Freigaben.</p>
-          </div>
-        </div>
-        <form method="post" class="form-grid">
-          {% csrf_token %}
-          <input type="hidden" name="action" value="booking_link_invite">
-          {{ booking_link_form.as_p }}
-          <div class="form-actions">
-            <button type="submit">Einladen</button>
-          </div>
-        </form>
-        {% for invite in sent_invites %}
-          <p class="hint">Offen: {{ invite.invitee.full_name }}</p>
-        {% endfor %}
-        {% for link in accepted_links %}
-          <div class="kiosk-list-row">
-            <div class="kiosk-list-row__content">
-              <strong>
-                {% if link.inviter_id == participant.pk %}{{ link.invitee.full_name }}{% else %}{{ link.inviter.full_name }}{% endif %}
-              </strong>
-              <span>Gegenseitig freigegeben</span>
-            </div>
-            <form method="post" class="kiosk-list-row__actions">
-              {% csrf_token %}
-              <input type="hidden" name="action" value="booking_link_revoke">
-              <input type="hidden" name="booking_link_id" value="{{ link.pk }}">
-              <button type="submit" class="button-secondary">Auflösen</button>
-            </form>
-          </div>
-        {% empty %}
-          <div class="kiosk-empty">
-            <strong>Keine angenommenen Verknüpfungen vorhanden.</strong>
-            <p>Einladungen erscheinen hier, sobald sie angenommen wurden.</p>
-          </div>
-        {% endfor %}
-      </section>
     </div>
 
     <div class="kiosk-stack">
@@ -344,6 +268,82 @@
         {% endif %}
       </section>
     </div>
+      <section class="panel kiosk-card kiosk-card--muted">
+        <div class="kiosk-card__header kiosk-section-heading">
+          <div class="kiosk-card__header-main">
+            <h2 class="kiosk-title">
+              Familie
+              <button type="button" class="kiosk-help-button" data-help-text="Hier legst du Familienmitglieder (z.B. Partner, Kinder) an. Ihre Kosten werden auf deine finale Abrechnung gebucht. Sie tauchen beim Essen als auswählbare Personen auf, haben aber keinen eigenen Kiosk-Login." aria-label="Kurzhilfe Familie">?</button>
+            </h2>
+            <p>Diese Personen werden über dein Konto abgerechnet.</p>
+          </div>
+          <button type="button" class="button kiosk-card__action" data-open-family-dialog>Anlegen</button>
+        </div>
+
+        {% for member in family_members %}
+          <div class="kiosk-list-row">
+            <div class="kiosk-list-row__content">
+              <strong>{{ member.full_name }}</strong>
+              <span>{{ member.get_role_display }}</span>
+            </div>
+            <form method="post" class="kiosk-list-row__actions">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="family_member_deactivate">
+              <input type="hidden" name="family_member_id" value="{{ member.pk }}">
+              <button type="submit" class="button-secondary">Entfernen</button>
+            </form>
+          </div>
+        {% empty %}
+          <div class="kiosk-empty">
+            <strong>Noch keine Familienmitglieder angelegt.</strong>
+            <p>Lege Personen an, die über dein Konto mit Essen buchen oder mitgerechnet werden sollen.</p>
+          </div>
+        {% endfor %}
+      </section>
+
+      <section class="panel kiosk-card kiosk-card--muted">
+        <div class="kiosk-card__header kiosk-section-heading">
+          <div class="kiosk-card__header-main">
+            <h2 class="kiosk-title">
+              Mitbuchungen
+              <button type="button" class="kiosk-help-button" data-help-text="Lade andere Teilnehmer ein, damit ihr euch gegenseitig beim Essen mit anmelden könnt. Sobald die Einladung angenommen wurde, könnt ihr euch gegenseitig auswählen. Die Abrechnung bleibt dabei für jeden separat." aria-label="Kurzhilfe Mitbuchungen">?</button>
+            </h2>
+            <p>Lade andere Teilnehmer ein und verwalte bestehende Freigaben.</p>
+          </div>
+        </div>
+        <form method="post" class="form-grid">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="booking_link_invite">
+          {{ booking_link_form.as_p }}
+          <div class="form-actions">
+            <button type="submit">Einladen</button>
+          </div>
+        </form>
+        {% for invite in sent_invites %}
+          <p class="hint">Offen: {{ invite.invitee.full_name }}</p>
+        {% endfor %}
+        {% for link in accepted_links %}
+          <div class="kiosk-list-row">
+            <div class="kiosk-list-row__content">
+              <strong>
+                {% if link.inviter_id == participant.pk %}{{ link.invitee.full_name }}{% else %}{{ link.inviter.full_name }}{% endif %}
+              </strong>
+              <span>Gegenseitig freigegeben</span>
+            </div>
+            <form method="post" class="kiosk-list-row__actions">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="booking_link_revoke">
+              <input type="hidden" name="booking_link_id" value="{{ link.pk }}">
+              <button type="submit" class="button-secondary">Auflösen</button>
+            </form>
+          </div>
+        {% empty %}
+          <div class="kiosk-empty">
+            <strong>Keine angenommenen Verknüpfungen vorhanden.</strong>
+            <p>Einladungen erscheinen hier, sobald sie angenommen wurden.</p>
+          </div>
+        {% endfor %}
+      </section>
   </div>
 
   <div class="kiosk-grid">
