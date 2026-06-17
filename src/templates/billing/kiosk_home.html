@@ -3,9 +3,6 @@
 {% block title %}Kiosk{% endblock %}
 {% block kiosk_nav %}
   <a class="button button-secondary" href="{% url 'user-guide' %}">Hilfe</a>
-  <button type="button" class="button" data-open-food-dialog data-kind="breakfast">Frühstück buchen</button>
-  <button type="button" class="button button-secondary" data-open-food-dialog data-kind="snack">Snack buchen</button>
-  <button type="button" class="button button-secondary" data-open-meal-dialog-new data-meal="dinner">Abendessen buchen</button>
   <button type="button" class="button button-secondary" data-open-contact-dialog>Kontakt Lagerleitung</button>
   <a class="button button-secondary" href="{% url 'kiosk-logout' %}">Abmelden</a>
 {% endblock %}
@@ -101,6 +98,37 @@
           </div>
           </div>
         </section>
+
+        <section class="panel kiosk-card kiosk-card--accent">
+          <div class="kiosk-card__header">
+            <div class="kiosk-card__header-main">
+              <span class="kiosk-card__eyebrow">Aktion</span>
+              <h2 class="kiosk-title">Verpflegung buchen</h2>
+              <p>Buche hier Frühstück, Snacks und Abendessen.</p>
+            </div>
+          </div>
+          <div class="stack kiosk-drink-form">
+            <div class="drink-card-grid" role="group" aria-label="Verpflegung auswählen">
+              <button type="button" class="drink-card" data-open-meal-dialog-new data-meal="dinner">
+                <span class="drink-card__title">Abendessen</span>
+              </button>
+              {% for rule in snack_rules %}
+                <button
+                  type="button"
+                  class="drink-card"
+                  data-food-button
+                  data-rule-id="{{ rule.pk }}"
+                  data-rule-name="{{ rule.name }}"
+                  data-meal-type="{{ rule.meal_type }}"
+                >
+                  <span class="drink-card__title">{{ rule.name }}</span>
+                  <span class="drink-card__price">{{ rule.unit_price|money_eur }}</span>
+                </button>
+              {% endfor %}
+            </div>
+          </div>
+        </section>
+
 
         {% for error in quick_form.price_rule.errors %}
           <span class="helptext error">{{ error }}</span>
