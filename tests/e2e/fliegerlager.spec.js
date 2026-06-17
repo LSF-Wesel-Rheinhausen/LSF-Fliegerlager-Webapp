@@ -258,9 +258,9 @@ test("Kiosk flow: login, pin setup, drink and meal booking", async ({ page }) =>
   await expect(page.getByText("Apfelsaft gebucht.")).toBeVisible();
 
   // Book a meal
-  await page.getByText("Zukünftige Buchungen anzeigen").click();
-  await page.getByRole("button", { name: "Buchen" }).first().click();
+  await page.getByRole("button", { name: "Abendessen" }).click();
   await expect(page.locator("dialog#meal-dialog")).toBeVisible();
+  await page.locator("dialog#meal-dialog").locator("button[data-meal-date-select]").first().click();
   await page.locator("dialog#meal-dialog").getByRole("button", { name: "Essensanmeldung speichern" }).click();
   await expect(page.getByText("Essensanmeldung wurde gespeichert.")).toBeVisible();
 
@@ -456,9 +456,9 @@ for (const viewport of [
     await page.getByRole("button", { name: "Speichern" }).click();
 
     await expect(page.getByRole("heading", { name: "Getränk buchen" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Essen anmelden" })).toBeVisible();
-    await page.getByText("Zukünftige Buchungen anzeigen").click();
-    await page.getByRole("button", { name: "Buchen" }).first().click();
+    await expect(page.getByRole("heading", { name: "Verpflegung buchen" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Kalender" })).toBeVisible();
+    await page.getByRole("button", { name: "Abendessen" }).click();
     await expect(page.locator("dialog#meal-dialog")).toBeVisible();
     await assertNoUnexpectedOverflow(page);
   });
