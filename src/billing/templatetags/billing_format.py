@@ -24,6 +24,15 @@ def money_eur(value: Any) -> str:
 
 
 @register.filter
+def abs_value(value: Any) -> Decimal:
+    try:
+        amount = Decimal(value or ZERO)
+    except (InvalidOperation, TypeError, ValueError):
+        amount = ZERO
+    return abs(amount)
+
+
+@register.filter
 def percent(value: Any) -> str:
     try:
         percentage = Decimal(value or 0) * Decimal("100")

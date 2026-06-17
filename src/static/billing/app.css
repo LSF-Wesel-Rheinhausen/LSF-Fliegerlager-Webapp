@@ -611,8 +611,11 @@ textarea {
   align-items: center;
   justify-content: center;
   flex: 0 0 28px;
+  align-self: center;
   width: 28px;
+  min-width: 28px;
   height: 28px;
+  min-height: 28px;
   border: none;
   border-radius: 50%;
   background: var(--accent);
@@ -621,6 +624,8 @@ textarea {
   font-weight: 800;
   line-height: 1;
   padding: 0;
+  aspect-ratio: 1;
+  vertical-align: middle;
 }
 
 .kiosk-help-button:hover {
@@ -751,6 +756,7 @@ textarea {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 22px;
+  align-items: start;
 }
 
 .kiosk-card {
@@ -813,6 +819,7 @@ textarea {
 .kiosk-stack {
   display: grid;
   gap: 14px;
+  align-content: start;
 }
 
 .kiosk-note {
@@ -851,7 +858,7 @@ textarea {
 
 .drink-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(138px, 1fr));
   gap: 14px;
 }
 
@@ -859,9 +866,9 @@ textarea {
   display: grid;
   place-items: center;
   align-content: center;
-  gap: 8px;
-  min-height: 112px;
-  padding: 18px;
+  gap: 6px;
+  min-height: 98px;
+  padding: 14px 12px;
   border: 1px solid rgba(0, 92, 169, 0.18);
   border-radius: 16px;
   background: linear-gradient(180deg, #ffffff 0%, #edf4fd 100%);
@@ -878,15 +885,15 @@ textarea {
 }
 
 .drink-card__title {
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 800;
   line-height: 1.15;
   overflow-wrap: break-word;
-  word-break: normal;
+  word-break: break-word;
 }
 
 .drink-card__price {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 800;
   line-height: 1.05;
   color: var(--accent-dark);
@@ -896,12 +903,12 @@ textarea {
 .drink-card__meta {
   display: inline-flex;
   align-items: center;
-  min-height: 22px;
+  min-height: 20px;
   padding: 0 8px;
   border-radius: 999px;
   background: rgba(0, 92, 169, 0.1);
   color: var(--accent-dark);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -969,6 +976,7 @@ textarea {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 24px;
+  align-items: start;
 }
 
 .kiosk-table {
@@ -998,23 +1006,47 @@ textarea {
   white-space: nowrap;
 }
 
+.kiosk-table__wrapper .data-table tbody tr {
+  transition: background-color 0.2s ease;
+}
+
+.kiosk-table__wrapper .data-table tbody td {
+  vertical-align: middle;
+}
+
+.kiosk-table__wrapper .data-table tbody tr.kiosk-table__row--rejected {
+  background: #fef2f2;
+}
+
+.kiosk-table__wrapper .data-table tbody tr.kiosk-table__row--rejected td {
+  border-color: rgba(180, 35, 24, 0.14);
+}
+
 .kiosk-table__wrapper td a {
   white-space: normal;
 }
 
 .kiosk-status-text {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 999px;
   font-weight: 700;
 }
 
 .kiosk-status-text--pending {
+  background: #fff7ed;
   color: #b45309;
 }
 
 .kiosk-status-text--ok {
+  background: #ecfdf3;
   color: var(--ok);
 }
 
 .kiosk-status-text--danger {
+  background: #fef2f2;
   color: var(--danger);
 }
 
@@ -1332,6 +1364,9 @@ textarea {
   width: min(100%, 960px);
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+  grid-template-areas:
+    "hero form"
+    "tips form";
   gap: 18px;
 }
 
@@ -1342,7 +1377,12 @@ textarea {
 }
 
 .kiosk-login-card__hero {
+  grid-area: hero;
   align-content: start;
+}
+
+.kiosk-login-card__form {
+  grid-area: form;
 }
 
 .kiosk-login-card__hero p {
@@ -1350,6 +1390,7 @@ textarea {
 }
 
 .kiosk-login-card__tips {
+  grid-area: tips;
   display: grid;
   gap: 12px;
 }
@@ -1645,6 +1686,13 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .kiosk-login-card {
+    grid-template-areas:
+      "hero"
+      "form"
+      "tips";
+  }
+
   button,
   .button,
   .exportbar a {
@@ -1697,6 +1745,7 @@ textarea {
   .kiosk-list-row__actions {
     width: 100%;
   }
+
 
   .target-row {
     grid-template-columns: 1fr;
@@ -1772,8 +1821,10 @@ dialog {
 }
 
 .kiosk-dialog--wide {
-  max-width: 760px;
-  width: 96%;
+  width: min(1120px, calc(100vw - 32px));
+  max-width: min(1120px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
 }
 
 dialog::backdrop {

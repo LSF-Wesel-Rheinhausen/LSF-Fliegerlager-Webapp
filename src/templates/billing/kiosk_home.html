@@ -19,20 +19,15 @@
         <span class="kiosk-meta__item">{{ participant.get_status_display }}</span>
         <span class="kiosk-meta__item">{{ participant.completed_shifts }} / {{ participant.target_shifts }} Pflichtdienste</span>
       </div>
-      <div class="kiosk-actions">
-        <button type="button" class="button" data-open-summary-dialog>Abrechnung ansehen</button>
-      </div>
     </article>
 
     <aside class="panel kiosk-summary-card">
       <span class="kiosk-summary-card__label">Aktuelle Abrechnung</span>
       <strong class="kiosk-summary-card__value {% if summary.balance > 0 %}negative{% elif summary.balance < 0 %}positive{% endif %}">
-        {{ summary.balance|money_eur }}
+        {% if summary.balance < 0 %}-{% endif %}{{ summary.balance|abs_value|money_eur }}
       </strong>
       <div class="kiosk-summary-card__meta">
-        <p>Brutto: {{ summary.total_gross|money_eur }}</p>
-        <p>Soll: {{ summary.total_due|money_eur }}</p>
-        <p>Gezahlt und Auslagen werden im Dialog detailliert angezeigt.</p>
+        <p>Gezahlt, Förderung und Auslagen werden im Dialog detailliert angezeigt.</p>
       </div>
       <button type="button" class="button" data-open-summary-dialog>Details öffnen</button>
     </aside>
@@ -64,109 +59,50 @@
     </section>
   {% endif %}
 
-  <div class="kiosk-grid">
-    <section class="panel kiosk-card kiosk-card--accent">
-      <div class="kiosk-card__header">
-        <div class="kiosk-card__header-main">
-          <span class="kiosk-card__eyebrow">Schnellaktion</span>
-          <h2 class="kiosk-title">
-            Getränk buchen
-            <button type="button" class="kiosk-help-button" data-help-text="Tippe auf ein Getränk und wähle danach die Menge, um es auf deinen Deckel zu buchen. Falls du dich vertippt hast, kannst du den Fehler ganz unten unter 'Letzte Getränke' über das Mülleimer-Symbol sofort wieder stornieren." aria-label="Kurzhilfe Getränke">?</button>
-          </h2>
-          <p>Wähle ein Getränk und buche die Menge direkt auf deinen Deckel.</p>
-        </div>
-      </div>
-      <form method="post" class="stack kiosk-drink-form" id="drink-booking-form">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="drink">
-        <input type="hidden" name="drink-price_rule" id="drink-price-rule">
-        {{ drink_form.quantity.as_hidden }}
-        <div class="drink-card-grid" role="group" aria-label="Getränke auswählen">
-          {% for rule in drink_rules %}
-            <button
-              type="button"
-              class="drink-card"
-              data-drink-button
-              data-rule-id="{{ rule.pk }}"
-              data-rule-name="{{ rule.name }}"
-            >
-              <span class="drink-card__title">{{ rule.name }}</span>
-              <span class="drink-card__price">{{ rule.unit_price|money_eur }}</span>
-              <span class="drink-card__meta">Menge wählen</span>
-            </button>
-          {% empty %}
-            <p class="hint">Keine Getränkepreise im Lager hinterlegt.</p>
-          {% endfor %}
-        </div>
-        {% for error in drink_form.price_rule.errors %}
-          <span class="helptext error">{{ error }}</span>
-        {% endfor %}
-        {% for error in drink_form.quantity.errors %}
-          <span class="helptext error">{{ error }}</span>
-        {% endfor %}
-      </form>
-    </section>
-
-    <section class="panel kiosk-card kiosk-card--accent">
-      <div class="kiosk-card__header">
-        <div class="kiosk-card__header-main">
-          <span class="kiosk-card__eyebrow">Schnellaktion</span>
-          <h2 class="kiosk-title">
-            Essen anmelden
-            <button type="button" class="kiosk-help-button" data-help-text="Wähle im Kalender eine Mahlzeit (z.B. Frühstück). Im folgenden Fenster kannst du dich und deine Familienmitglieder an- und abmelden oder die Variante (Normal/Vegetarisch) ändern. Graue Kalendertage bedeuten, dass die Meldefrist bereits abgelaufen ist." aria-label="Kurzhilfe Mahlzeiten">?</button>
-          </h2>
-          <p>Öffne einen Tag im Kalender und speichere deine Auswahl für dich oder deine Familie.</p>
-        </div>
-      </div>
-      <div class="meal-order-status" aria-label="Essensbestellung für {{ next_order_date|date:'d.m.Y' }}">
-        <strong>Essensbestellung für {{ next_order_date|date:"d.m.Y" }}</strong>
-        {% if next_meal_order %}
-          <p>Die Bestellung wurde abgeschickt.</p>
-        {% elif next_order_locked %}
-          <p>Die Buchung ist geschlossen. Falls du noch nicht bestellt hast, melde dich bitte bei der Lagerleitung.</p>
-        {% else %}
-          <p>Die Buchung ist bis zum Stichzeitpunkt noch offen.</p>
-        {% endif %}
-      </div>
-      {{ meal_form.non_field_errors }}
-      <form method="post" class="form-grid kiosk-meal-form" id="meal-booking-form">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="meal">
-        <input type="hidden" name="meal-targets-submitted" value="1">
-        <input type="hidden" name="{{ meal_form.variant.html_name }}" value="{{ meal_default_variant }}">
-        <input type="hidden" name="{{ meal_form.meal_date.html_name }}" id="{{ meal_form.meal_date.id_for_label }}" value="{{ meal_form.meal_date.value|default:'' }}">
-        <input type="hidden" name="{{ meal_form.meal.html_name }}" id="{{ meal_form.meal.id_for_label }}" value="{{ meal_form.meal.value|default:'' }}">
-        {% for error in meal_form.meal_date.errors %}
-          <span class="helptext error">{{ error }}</span>
-        {% endfor %}
-        {% for error in meal_form.meal.errors %}
-          <span class="helptext error">{{ error }}</span>
-        {% endfor %}
-      </form>
-      <div class="meal-calendar" aria-label="Essenskalender">
-        {% include "billing/kiosk_meal_calendar_days.html" with days=meal_calendar_groups.current %}
-        {% if meal_calendar_groups.past %}
-          <details class="meal-calendar-group">
-            <summary>Vergangene Buchungen anzeigen</summary>
-            <div class="meal-calendar-group__content">
-              {% include "billing/kiosk_meal_calendar_days.html" with days=meal_calendar_groups.past %}
-            </div>
-          </details>
-        {% endif %}
-        {% if meal_calendar_groups.future %}
-          <details class="meal-calendar-group">
-            <summary>Zukünftige Buchungen anzeigen</summary>
-            <div class="meal-calendar-group__content">
-              {% include "billing/kiosk_meal_calendar_days.html" with days=meal_calendar_groups.future %}
-            </div>
-          </details>
-        {% endif %}
-      </div>
-    </section>
-  </div>
-
   <div class="kiosk-split">
     <div class="kiosk-stack">
+      <section class="panel kiosk-card kiosk-card--accent">
+        <div class="kiosk-card__header">
+          <div class="kiosk-card__header-main">
+            <span class="kiosk-card__eyebrow">Schnellaktion</span>
+            <h2 class="kiosk-title">
+              Getränk buchen
+              <button type="button" class="kiosk-help-button" data-help-text="Tippe auf ein Getränk und wähle danach die Menge, um es auf deinen Deckel zu buchen. Falls du dich vertippt hast, kannst du den Fehler ganz unten unter 'Letzte Getränke' über das Mülleimer-Symbol sofort wieder stornieren." aria-label="Kurzhilfe Getränke">?</button>
+            </h2>
+            <p>Wähle ein Getränk und buche die Menge direkt auf deinen Deckel.</p>
+          </div>
+        </div>
+        <form method="post" class="stack kiosk-drink-form" id="drink-booking-form">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="drink">
+          <input type="hidden" name="drink-price_rule" id="drink-price-rule">
+          {{ drink_form.quantity.as_hidden }}
+          <div class="drink-card-grid" role="group" aria-label="Getränke auswählen">
+            {% for rule in drink_rules %}
+              <button
+                type="button"
+                class="drink-card"
+                data-drink-button
+                data-rule-id="{{ rule.pk }}"
+                data-rule-name="{{ rule.name }}"
+              >
+                <span class="drink-card__title">{{ rule.name }}</span>
+                <span class="drink-card__price">{{ rule.unit_price|money_eur }}</span>
+                <span class="drink-card__meta">Menge wählen</span>
+              </button>
+            {% empty %}
+              <p class="hint">Keine Getränkepreise im Lager hinterlegt.</p>
+            {% endfor %}
+          </div>
+          {% for error in drink_form.price_rule.errors %}
+            <span class="helptext error">{{ error }}</span>
+          {% endfor %}
+          {% for error in drink_form.quantity.errors %}
+            <span class="helptext error">{{ error }}</span>
+          {% endfor %}
+        </form>
+      </section>
+
       <section class="panel kiosk-card kiosk-card--muted">
         <div class="kiosk-card__header kiosk-section-heading">
           <div>
@@ -256,6 +192,63 @@
     </div>
 
     <div class="kiosk-stack">
+      <section class="panel kiosk-card kiosk-card--accent">
+        <div class="kiosk-card__header">
+          <div class="kiosk-card__header-main">
+            <span class="kiosk-card__eyebrow">Schnellaktion</span>
+            <h2 class="kiosk-title">
+              Essen anmelden
+              <button type="button" class="kiosk-help-button" data-help-text="Wähle im Kalender eine Mahlzeit (z.B. Frühstück). Im folgenden Fenster kannst du dich und deine Familienmitglieder an- und abmelden oder die Variante (Normal/Vegetarisch) ändern. Graue Kalendertage bedeuten, dass die Meldefrist bereits abgelaufen ist." aria-label="Kurzhilfe Mahlzeiten">?</button>
+            </h2>
+            <p>Öffne einen Tag im Kalender und speichere deine Auswahl für dich oder deine Familie.</p>
+          </div>
+        </div>
+        <div class="meal-order-status" aria-label="Essensbestellung für {{ next_order_date|date:'d.m.Y' }}">
+          <strong>Essensbestellung für {{ next_order_date|date:"d.m.Y" }}</strong>
+          {% if next_meal_order %}
+            <p>Die Bestellung wurde abgeschickt.</p>
+          {% elif next_order_locked %}
+            <p>Die Buchung ist geschlossen. Falls du noch nicht bestellt hast, melde dich bitte bei der Lagerleitung.</p>
+          {% else %}
+            <p>Die Buchung ist bis zum Stichzeitpunkt noch offen.</p>
+          {% endif %}
+        </div>
+        {{ meal_form.non_field_errors }}
+        <form method="post" class="form-grid kiosk-meal-form" id="meal-booking-form">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="meal">
+          <input type="hidden" name="meal-targets-submitted" value="1">
+          <input type="hidden" name="{{ meal_form.variant.html_name }}" value="{{ meal_default_variant }}">
+          <input type="hidden" name="{{ meal_form.meal_date.html_name }}" id="{{ meal_form.meal_date.id_for_label }}" value="{{ meal_form.meal_date.value|default:'' }}">
+          <input type="hidden" name="{{ meal_form.meal.html_name }}" id="{{ meal_form.meal.id_for_label }}" value="{{ meal_form.meal.value|default:'' }}">
+          {% for error in meal_form.meal_date.errors %}
+            <span class="helptext error">{{ error }}</span>
+          {% endfor %}
+          {% for error in meal_form.meal.errors %}
+            <span class="helptext error">{{ error }}</span>
+          {% endfor %}
+        </form>
+        <div class="meal-calendar" aria-label="Essenskalender">
+          {% include "billing/kiosk_meal_calendar_days.html" with days=meal_calendar_groups.current %}
+          {% if meal_calendar_groups.past %}
+            <details class="meal-calendar-group">
+              <summary>Vergangene Buchungen anzeigen</summary>
+              <div class="meal-calendar-group__content">
+                {% include "billing/kiosk_meal_calendar_days.html" with days=meal_calendar_groups.past %}
+              </div>
+            </details>
+          {% endif %}
+          {% if meal_calendar_groups.future %}
+            <details class="meal-calendar-group">
+              <summary>Zukünftige Buchungen anzeigen</summary>
+              <div class="meal-calendar-group__content">
+                {% include "billing/kiosk_meal_calendar_days.html" with days=meal_calendar_groups.future %}
+              </div>
+            </details>
+          {% endif %}
+        </div>
+      </section>
+
       <section class="panel kiosk-card kiosk-card--muted">
         <div class="kiosk-card__header kiosk-section-heading">
           <div class="kiosk-card__header-main">
@@ -285,7 +278,7 @@
                 </thead>
                 <tbody>
                   {% for expense in participant_expenses %}
-                    <tr>
+                    <tr class="{% if expense.status == 'rejected' %}kiosk-table__row--rejected{% endif %}">
                       <td>
                         {% if expense.status == "pending" %}
                           <span class="kiosk-status-text kiosk-status-text--pending">Ausstehend</span>
@@ -312,16 +305,6 @@
             <p>Wenn du etwas für die Gemeinschaft vorgestreckt hast, kannst du den Beleg hier einreichen.</p>
           </div>
         {% endif %}
-      </section>
-
-      <section class="panel kiosk-card kiosk-card--muted">
-        <div class="kiosk-card__header kiosk-section-heading">
-          <div class="kiosk-card__header-main">
-            <h2>Kontakt Lagerleitung</h2>
-            <p>Öffne die Kontaktdaten direkt im Dialog, wenn bei Buchungen etwas unklar ist.</p>
-          </div>
-          <button type="button" class="button button-secondary kiosk-card__action" data-open-contact-dialog>Kontakt anzeigen</button>
-        </div>
       </section>
     </div>
   </div>
@@ -439,7 +422,7 @@
       </div>
       <div class="kiosk-dialog-summary__row kiosk-dialog-summary__row--total">
         <span>Noch offen</span>
-        <strong class="{% if summary.balance > 0 %}negative{% elif summary.balance < 0 %}positive{% endif %}">{{ summary.balance|money_eur }}</strong>
+        <strong class="{% if summary.balance > 0 %}negative{% elif summary.balance < 0 %}positive{% endif %}">{% if summary.balance < 0 %}-{% endif %}{{ summary.balance|abs_value|money_eur }}</strong>
       </div>
     </div>
   </dialog>
@@ -591,7 +574,7 @@
       });
       document.querySelector("[data-open-family-dialog]")?.addEventListener("click", () => familyDialog.showModal());
       document.querySelector("[data-open-contact-dialog]")?.addEventListener("click", () => contactDialog.showModal());
-      
+
       const summaryDialog = document.getElementById("summary-dialog");
       document.querySelector("[data-open-summary-dialog]")?.addEventListener("click", () => summaryDialog.showModal());
 
