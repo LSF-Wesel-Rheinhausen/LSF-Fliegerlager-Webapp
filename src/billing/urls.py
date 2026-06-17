@@ -49,6 +49,7 @@ urlpatterns = [
     path("camps/<int:camp_id>/prices/", views.price_rules_manage, name="price-rules-manage"),
     path("camps/<int:camp_id>/prices/new/", views.price_rule_create, name="price-rule-create"),
     path("prices/<int:price_rule_id>/edit/", views.price_rule_edit, name="price-rule-edit"),
+    path("prices/<int:price_rule_id>/delete/", views.price_rule_delete, name="price-rule-delete"),
     path("camps/<int:camp_id>/shifts/", views.shift_manage, name="shift-manage"),
     path("camps/<int:camp_id>/shifts/new/", views.shift_create, name="shift-create"),
     path("camps/<int:camp_id>/shifts/report/", views.shift_report, name="shift-report"),
@@ -65,9 +66,9 @@ urlpatterns = [
     path("expenses/<int:expense_id>/reject/", views.shared_expense_reject, name="shared-expense-reject"),
     path("camps/<int:camp_id>/import/", views.participant_import, name="participant-import"),
     path(
-        "camps/<int:camp_id>/import/template/", 
-        views.participant_import_template_view, 
-        name="participant-import-template"
+        "camps/<int:camp_id>/import/template/",
+        views.participant_import_template_view,
+        name="participant-import-template",
     ),
     path("camps/<int:camp_id>/export/settlements.csv", views.export_settlements_csv, name="export-settlements-csv"),
     path("camps/<int:camp_id>/export/drinks.csv", views.export_drinks_csv, name="export-drinks-csv"),
