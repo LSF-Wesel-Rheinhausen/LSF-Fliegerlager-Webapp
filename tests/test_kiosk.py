@@ -154,7 +154,7 @@ def test_kiosk_home_shows_leadership_contact_button(client):
 
 
 @pytest.mark.django_db
-def test_kiosk_home_renders_negative_summary_with_explicit_minus(client):
+def test_kiosk_home_renders_balance_with_correct_signs(client):
     camp = CampFactory()
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     Payment.objects.create(participant=participant, amount=Decimal("15.00"), paid_on=date(2026, 7, 1))
@@ -165,7 +165,7 @@ def test_kiosk_home_renders_negative_summary_with_explicit_minus(client):
     response = client.get(reverse("kiosk-home"))
 
     assert response.status_code == 200
-    assert b"-15,00 \xe2\x82\xac" in response.content
+    assert b"+15,00 \xe2\x82\xac" in response.content
 
 
 @pytest.mark.django_db

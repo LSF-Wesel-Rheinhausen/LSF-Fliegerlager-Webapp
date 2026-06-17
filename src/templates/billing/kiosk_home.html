@@ -24,7 +24,7 @@
     <aside class="panel kiosk-summary-card">
       <span class="kiosk-summary-card__label">Aktuelle Abrechnung</span>
       <strong class="kiosk-summary-card__value {% if summary.balance > 0 %}negative{% elif summary.balance < 0 %}positive{% endif %}">
-        {% if summary.balance < 0 %}-{% endif %}{{ summary.balance|abs_value|money_eur }}
+        {% if summary.balance > 0 %}-{% elif summary.balance < 0 %}+{% endif %}{{ summary.balance|abs_value|money_eur }}
       </strong>
       <div class="kiosk-summary-card__meta">
         <p>Gezahlt, Förderung und Auslagen werden im Dialog detailliert angezeigt.</p>
@@ -422,7 +422,7 @@
       </div>
       <div class="kiosk-dialog-summary__row kiosk-dialog-summary__row--total">
         <span>Noch offen</span>
-        <strong class="{% if summary.balance > 0 %}negative{% elif summary.balance < 0 %}positive{% endif %}">{% if summary.balance < 0 %}-{% endif %}{{ summary.balance|abs_value|money_eur }}</strong>
+        <strong class="{% if summary.balance > 0 %}negative{% elif summary.balance < 0 %}positive{% endif %}">{% if summary.balance > 0 %}-{% elif summary.balance < 0 %}+{% endif %}{{ summary.balance|abs_value|money_eur }}</strong>
       </div>
     </div>
   </dialog>
