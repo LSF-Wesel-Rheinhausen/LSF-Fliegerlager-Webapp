@@ -120,8 +120,7 @@ def test_kiosk_home_hides_normal_admin_header_and_renders_drink_dialog_controls(
     assert b'action="/logout/"' not in response.content
     assert b'class="drink-card"' in response.content
     assert b'data-rule-id="' in response.content
-    assert b"Menge w\xc3\xa4hlen" in response.content
-    assert b'id="drink-dialog"' in response.content
+    assert b'id="quick-dialog"' in response.content
     assert b'data-timeout-ms="120000"' in response.content
     assert reverse("kiosk-logout").encode() in response.content
     assert "Förderung anwenden".encode() not in response.content
@@ -229,9 +228,9 @@ def test_kiosk_home_shows_contact_hint_after_cutoff_before_order_sent(client, mo
     response = client.get(reverse("kiosk-home"))
 
     assert response.status_code == 200
-    assert b"melde dich bitte bei der Lagerleitung" in response.content
     content = response.content.decode()
-    meal_section_start = content.index("Essen anmelden")
+    meal_section_start = content.index("Kalender")
+    assert "melde dich bitte bei der Lagerleitung" in content[meal_section_start:]
     status_start = content.index("Die Buchung ist geschlossen.")
     calendar_start = content.index('<div class="meal-calendar"')
     assert meal_section_start < status_start < calendar_start
@@ -276,15 +275,15 @@ def test_kiosk_books_drink_with_camp_drink_price_and_subsidy_flag(client):
     response = client.post(
         reverse("kiosk-home"),
         {
-            "action": "drink",
-            "drink-price_rule": PriceRule.objects.get(camp=camp, kind=PriceRule.Kind.DRINK).pk,
-            "drink-quantity": 2,
+            "action": "quick",
+            "quick-price_rule": PriceRule.objects.get(camp=camp, kind=PriceRule.Kind.DRINK).pk,
+            "quick-quantity": 2,
         },
     )
 
     assert response.status_code == 302
     entry = Charge.objects.get(participant=participant, kind=Charge.Kind.DRINK)
-    assert entry.description == "Getränk"
+    assert entry.description == "Getränk (Kiosk)"
     assert entry.quantity == Decimal("2.00")
     assert entry.unit_price == Decimal("2.50")
     assert entry.foerdersatz == Decimal("1.0000")
@@ -964,3 +963,38 @@ def test_kiosk_meal_signup_without_price_rule_shows_error(client):
         or b"fehler" in response.content.lower()
     )
     assert not MealSignup.objects.filter(participant=participant).exists()
+
+
+@pytest.mark.django_db
+def test_kiosk_books_snack_successfully(client):
+    camp = CampFactory()
+    participant = ParticipantFactory(
+        camp=camp,
+        first_name="Ada",
+        last_name="Lovelace",
+    )
+    rule = PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=PriceRule.MealType.SNACK,
+        name="Mittagssnack",
+        unit_price=Decimal("4.50"),
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "quick",
+            "quick-price_rule": rule.pk,
+            "quick-quantity": 1,
+        },
+    )
+
+    assert response.status_code == 302
+    entry = Charge.objects.get(participant=participant, kind=Charge.Kind.FOOD)
+    assert entry.description == "Mittagssnack (Kiosk)"
+    assert entry.quantity == Decimal("1.00")
+    assert entry.unit_price == Decimal("4.50")

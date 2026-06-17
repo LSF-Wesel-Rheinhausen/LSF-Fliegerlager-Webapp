@@ -18,7 +18,7 @@
         <td>{{ rule.unit_price }} EUR</td>
         <td>{{ rule.foerdersatz|percent }}</td>
         {% if not hide_default %}<td>{% if rule.is_default %}Ja{% else %}Nein{% endif %}</td>{% endif %}
-        <td>
+        <td class="table-actions">
           <a class="button-link" href="{% url 'price-rule-edit' rule.pk %}" onclick="openEditDialog('{{ rule.pk }}', '{{ rule.kind }}', '{{ rule.name|escapejs }}', '{{ rule.unit_price }}', '{{ rule.foerdersatz }}', '{{ rule.is_default }}', '{{ rule.applies_to_children }}', '{{ rule.applies_to_adults }}', '{{ rule.applies_to_companions }}', '{{ rule.meal_type|escapejs }}', '{% if rule.meal_date %}{{ rule.meal_date|date:'Y-m-d' }}{% endif %}'); return false;">Bearbeiten</a>
         </td>
       </tr>

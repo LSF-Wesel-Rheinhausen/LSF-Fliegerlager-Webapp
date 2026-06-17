@@ -109,6 +109,17 @@
             </td>
           </tr>
           <tr>
+            <td>Mittagssnack</td>
+            <td>
+              {{ meal_form.snack_adult_price }}
+              <label for="{{ meal_form.snack_adult_foerdersatz.id_for_label }}">Fördersatz {{ meal_form.snack_adult_foerdersatz }} %</label>
+            </td>
+            <td>
+              {{ meal_form.snack_child_price }}
+              <label for="{{ meal_form.snack_child_foerdersatz.id_for_label }}">Fördersatz {{ meal_form.snack_child_foerdersatz }} %</label>
+            </td>
+          </tr>
+          <tr>
             <td>Abendessen</td>
             <td>
               {{ meal_form.dinner_adult_price }}
@@ -209,9 +220,13 @@
         </label>
       </div>
 
-      <div class="form-actions" style="margin-top: 14px;">
+      <div class="form-actions" style="margin-top: 14px; display: flex; justify-content: space-between; align-items: center;">
         <button type="submit" class="button">Speichern</button>
+        <button type="submit" id="delete-btn" form="delete-form" class="button button--danger" style="display: none;" onclick="return confirm('Möchtest du diese Preisregel wirklich löschen?');">Löschen</button>
       </div>
+    </form>
+    <form id="delete-form" method="post" style="display: none;">
+      {% csrf_token %}
     </form>
   </dialog>
 
@@ -227,6 +242,7 @@
       form.reset();
 
       document.getElementById('id_kind').value = kind;
+      document.getElementById('delete-btn').style.display = 'none';
       document.getElementById('id_foerdersatz').value = '0';
       document.getElementById('id_is_default').checked = false;
       document.getElementById('id_applies_to_children').checked = true;
@@ -262,6 +278,12 @@
       form.action = urlPattern.replace('999', ruleId);
 
       document.getElementById('id_kind').value = kind;
+      if (isDefault === 'True') {
+        document.getElementById('delete-btn').style.display = 'none';
+      } else {
+        document.getElementById('delete-btn').style.display = 'block';
+        document.getElementById('delete-form').action = "{% url 'price-rule-delete' '999' %}".replace('999', ruleId);
+      }
       document.getElementById('id_name').value = name;
 
       let cleanedPrice = parseFloat(unitPrice.replace(',', '.')).toFixed(2);

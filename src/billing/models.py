@@ -288,6 +288,7 @@ class PriceRule(TimeStampedModel):
     class MealType(models.TextChoices):
         BREAKFAST = "breakfast", "Frühstück"
         DINNER = "dinner", "Abendessen"
+        SNACK = "snack", "Mittagssnack"
 
     class CampFlatDuration(models.TextChoices):
         ONE_WEEK = "1w", "1 Woche"
@@ -315,6 +316,7 @@ class PriceRule(TimeStampedModel):
         validators=[MinValueValidator(Decimal("0")), MaxValueValidator(Decimal("1"))],
     )
     is_default = models.BooleanField(default=False)
+    is_archived = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["kind", "name"]
