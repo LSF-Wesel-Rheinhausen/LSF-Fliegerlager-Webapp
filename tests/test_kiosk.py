@@ -228,9 +228,9 @@ def test_kiosk_home_shows_contact_hint_after_cutoff_before_order_sent(client, mo
     response = client.get(reverse("kiosk-home"))
 
     assert response.status_code == 200
-    assert b"melde dich bitte bei der Lagerleitung" in response.content
     content = response.content.decode()
-    meal_section_start = content.index("Essen anmelden")
+    meal_section_start = content.index("Kalender")
+    assert "melde dich bitte bei der Lagerleitung" in content[meal_section_start:]
     status_start = content.index("Die Buchung ist geschlossen.")
     calendar_start = content.index('<div class="meal-calendar"')
     assert meal_section_start < status_start < calendar_start

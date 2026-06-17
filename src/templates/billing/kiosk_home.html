@@ -3,6 +3,9 @@
 {% block title %}Kiosk{% endblock %}
 {% block kiosk_nav %}
   <a class="button button-secondary" href="{% url 'user-guide' %}">Hilfe</a>
+  <button type="button" class="button" data-open-food-dialog data-kind="breakfast">Frühstück buchen</button>
+  <button type="button" class="button button-secondary" data-open-food-dialog data-kind="snack">Snack buchen</button>
+  <button type="button" class="button button-secondary" data-open-meal-dialog-new data-meal="dinner">Abendessen buchen</button>
   <button type="button" class="button button-secondary" data-open-contact-dialog>Kontakt Lagerleitung</button>
   <a class="button button-secondary" href="{% url 'kiosk-logout' %}">Abmelden</a>
 {% endblock %}
@@ -96,38 +99,6 @@
               <p class="hint">Keine Getränkepreise im Lager hinterlegt.</p>
             {% endfor %}
           </div>
-          </div>
-        </section>
-
-        <section class="panel kiosk-card kiosk-card--accent">
-          <div class="kiosk-card__header">
-            <div class="kiosk-card__header-main">
-              <span class="kiosk-card__eyebrow">Heute</span>
-              <h2 class="kiosk-title">
-                Verpflegung buchen
-                <button type="button" class="kiosk-help-button" data-help-text="Buche Frühstück oder Snacks für den heutigen Tag auf deinen Deckel." aria-label="Kurzhilfe Verpflegung">?</button>
-              </h2>
-              <p>Frühstück und Snacks für heute.</p>
-            </div>
-          </div>
-          <div class="stack kiosk-drink-form">
-            <div class="drink-card-grid" role="group" aria-label="Verpflegung auswählen">
-              {% for rule in snack_rules %}
-                <button
-                  type="button"
-                  class="drink-card"
-                  data-food-button
-                  data-rule-id="{{ rule.pk }}"
-                  data-rule-name="{{ rule.name }}"
-                  data-meal-type="{{ rule.meal_type }}"
-                >
-                  <span class="drink-card__title">{{ rule.name }}</span>
-                  <span class="drink-card__price">{{ rule.unit_price|money_eur }}</span>
-                </button>
-              {% empty %}
-                <p class="hint">Keine Verpflegung (Snacks/Frühstück) im Lager hinterlegt.</p>
-              {% endfor %}
-            </div>
           </div>
         </section>
 
@@ -231,12 +202,11 @@
       <section class="panel kiosk-card kiosk-card--accent">
         <div class="kiosk-card__header">
           <div class="kiosk-card__header-main">
-            <span class="kiosk-card__eyebrow">Schnellaktion</span>
+            <span class="kiosk-card__eyebrow">Heute</span>
             <h2 class="kiosk-title">
-              Essen anmelden
-              <button type="button" class="kiosk-help-button" data-help-text="Wähle im Kalender eine Mahlzeit (z.B. Frühstück). Im folgenden Fenster kannst du dich und deine Familienmitglieder an- und abmelden oder die Variante (Normal/Vegetarisch) ändern. Graue Kalendertage bedeuten, dass die Meldefrist bereits abgelaufen ist." aria-label="Kurzhilfe Mahlzeiten">?</button>
+              Kalender
             </h2>
-            <p>Öffne einen Tag im Kalender und speichere deine Auswahl für dich oder deine Familie.</p>
+            <p>Essensbuchungen verwalten.</p>
           </div>
         </div>
         <div class="meal-order-status" aria-label="Essensbestellung für {{ next_order_date|date:'d.m.Y' }}">
@@ -517,25 +487,40 @@
 
   <dialog id="meal-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="meal-dialog-title">
     <form method="dialog" class="dialog-heading">
-      <h2 id="meal-dialog-title">Personen auswählen</h2>
+      <h2 id="meal-dialog-title">Abendessen buchen</h2>
       <button class="button button-secondary">Schließen</button>
     </form>
-    <div class="target-list">
-      {% for target in meal_targets %}
-        <article class="target-row">
-          <label>
-            <input type="checkbox" form="meal-booking-form" name="meal-target" value="{{ target.token }}" {% if target.object.pk == participant.pk and target.kind == "participant" %}checked{% endif %}>
-            <span>{{ target.name }} · {{ target.role }}</span>
-          </label>
-          <select form="meal-booking-form" name="meal-variant-{{ target.token }}" aria-label="Variante für {{ target.name }}">
-            {% for value, label in target.variant_choices %}
-              <option value="{{ value }}">{{ label }}</option>
-            {% endfor %}
-          </select>
-        </article>
-      {% endfor %}
+
+    <div id="meal-step-date" class="stack">
+      <p>Für welchen Tag möchtest du buchen?</p>
+      <div class="quantity-grid" role="group" aria-label="Datum auswählen">
+        {% for day in meal_calendar_days %}
+          <button type="button" class="button-secondary" data-meal-date-select="{{ day.date|date:'Y-m-d' }}">
+            {% if day.date == today %}Heute{% elif day.date == tomorrow %}Morgen{% else %}{{ day.date|date:"D d.m." }}{% endif %}
+          </button>
+        {% endfor %}
+      </div>
     </div>
-    <button type="submit" form="meal-booking-form" class="button">Essensanmeldung speichern</button>
+
+    <div id="meal-step-persons" style="display: none;" class="stack">
+      <p>Wer soll eingebucht werden?</p>
+      <div class="target-list">
+        {% for target in meal_targets %}
+          <article class="target-row">
+            <label>
+              <input type="checkbox" form="meal-booking-form" name="meal-target" value="{{ target.token }}" {% if target.object.pk == participant.pk and target.kind == "participant" %}checked{% endif %}>
+              <span>{{ target.name }} &middot; {{ target.role }}</span>
+            </label>
+            <select form="meal-booking-form" name="meal-variant-{{ target.token }}" aria-label="Variante für {{ target.name }}">
+              {% for value, label in target.variant_choices %}
+                <option value="{{ value }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </article>
+        {% endfor %}
+      </div>
+      <button type="submit" form="meal-booking-form" class="button">Essensanmeldung speichern</button>
+    </div>
   </dialog>
 
   <dialog id="family-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="family-dialog-title">
@@ -601,6 +586,8 @@
       const customQuantityInput = document.getElementById("custom-drink-quantity");
       const drinkName = document.querySelector("[data-quick-dialog-name]");
       const mealDialog = document.getElementById("meal-dialog");
+      const mealStepDate = document.getElementById("meal-step-date");
+      const mealStepPersons = document.getElementById("meal-step-persons");
       const mealDateInput = document.getElementById("id_meal-meal_date");
       const mealInput = document.getElementById("id_meal-meal");
       const mealDialogTitle = document.getElementById("meal-dialog-title");
@@ -673,11 +660,30 @@
         }
       });
 
+      document.querySelectorAll("[data-open-meal-dialog-new]").forEach((button) => {
+        button.addEventListener("click", () => {
+          mealInput.value = button.dataset.meal || "dinner";
+          mealStepDate.style.display = "block";
+          mealStepPersons.style.display = "none";
+          mealDialog.showModal();
+        });
+      });
+
+      document.querySelectorAll("[data-meal-date-select]").forEach((button) => {
+        button.addEventListener("click", () => {
+          mealDateInput.value = button.dataset.mealDateSelect;
+          mealStepDate.style.display = "none";
+          mealStepPersons.style.display = "block";
+        });
+      });
+
       document.querySelectorAll("[data-open-meal-dialog]").forEach((button) => {
         button.addEventListener("click", () => {
           mealDateInput.value = button.dataset.mealDate || "";
           mealInput.value = button.dataset.meal || "";
           mealDialogTitle.textContent = `${button.dataset.mealLabel || "Mahlzeit"} buchen`;
+          mealStepDate.style.display = "none";
+          mealStepPersons.style.display = "block";
           mealDialog.showModal();
         });
       });
