@@ -601,9 +601,9 @@ def price_rules_manage(request, camp_id):
             return redirect("price-rules-manage", camp_id=camp.pk)
 
     grouped_rules = {
-        "drinks": camp.price_rules.filter(kind=PriceRule.Kind.DRINK),
-        "meals": camp.price_rules.filter(kind=PriceRule.Kind.MEAL, is_default=False),
-        "other": camp.price_rules.filter(kind__in=[PriceRule.Kind.NIGHT, PriceRule.Kind.OTHER]),
+        "drinks": camp.price_rules.filter(kind=PriceRule.Kind.DRINK, is_archived=False),
+        "meals": camp.price_rules.filter(kind=PriceRule.Kind.MEAL, is_default=False, is_archived=False),
+        "other": camp.price_rules.filter(kind__in=[PriceRule.Kind.NIGHT, PriceRule.Kind.OTHER], is_archived=False),
     }
     return render(
         request,
@@ -630,8 +630,9 @@ def price_rule_delete(request, price_rule_id):
     rule = get_object_or_404(PriceRule.objects.select_related("camp"), pk=price_rule_id)
     camp_id = rule.camp_id
     if not rule.is_default:
-        rule.delete()
-        messages.success(request, f"Preisregel '{rule.name}' gelöscht.")
+        rule.is_archived = True
+        rule.save()
+        messages.success(request, f"Preisregel '{rule.name}' archiviert.")
     else:
         messages.error(request, "Standardpreise können nicht gelöscht werden.")
     return redirect("price-rules-manage", camp_id=camp_id)
@@ -1025,6 +1026,7 @@ def _meal_price_rule(camp, meal, meal_date, is_child):
         meal_type=meal,
         applies_to_children=is_child,
         meal_date=meal_date,
+        is_archived=False,
     ).first()
     if price_rule:
         return price_rule
@@ -1034,6 +1036,7 @@ def _meal_price_rule(camp, meal, meal_date, is_child):
         meal_type=meal,
         applies_to_children=is_child,
         is_default=True,
+        is_archived=False,
         meal_date__isnull=True,
     ).first()
 

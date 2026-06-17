@@ -677,6 +677,7 @@ class KioskPinSetupForm(forms.Form):
 
 class QuickBookingForm(forms.Form):
     price_rule = forms.ModelChoiceField(label="Artikel", queryset=PriceRule.objects.none())
+    quick_date = forms.DateField(required=False)
     quantity = forms.IntegerField(
         label="Menge",
         min_value=1,
@@ -698,6 +699,7 @@ class QuickBookingForm(forms.Form):
                 Q(kind=PriceRule.Kind.DRINK)
                 | Q(kind=PriceRule.Kind.MEAL, meal_type__in=[PriceRule.MealType.BREAKFAST, PriceRule.MealType.SNACK]),
                 camp=camp,
+                is_archived=False,
             ).order_by("name")
             if participant is not None:
                 if participant.is_child:
@@ -797,6 +799,15 @@ class MealStandardPricesForm(forms.Form):
     )
     dinner_child_foerdersatz = SubsidyPercentField()
 
+    snack_adult_price = forms.DecimalField(
+        label="Mittagssnack Erwachsene", max_digits=6, decimal_places=2, min_value=0, required=False
+    )
+    snack_adult_foerdersatz = SubsidyPercentField()
+    snack_child_price = forms.DecimalField(
+        label="Mittagssnack Kinder", max_digits=6, decimal_places=2, min_value=0, required=False
+    )
+    snack_child_foerdersatz = SubsidyPercentField()
+
     def __init__(self, *args, **kwargs):
         self.camp = kwargs.pop("camp")
         super().__init__(*args, **kwargs)
@@ -804,6 +815,9 @@ class MealStandardPricesForm(forms.Form):
         self.rules = {
             "breakfast": PriceRule.objects.filter(
                 camp=self.camp, kind=PriceRule.Kind.MEAL, meal_type="breakfast", is_default=True, meal_date__isnull=True
+            ),
+            "snack": PriceRule.objects.filter(
+                camp=self.camp, kind=PriceRule.Kind.MEAL, meal_type="snack", is_default=True, meal_date__isnull=True
             ),
             "dinner": PriceRule.objects.filter(
                 camp=self.camp, kind=PriceRule.Kind.MEAL, meal_type="dinner", is_default=True, meal_date__isnull=True
@@ -820,7 +834,7 @@ class MealStandardPricesForm(forms.Form):
 
     def save(self):
         with transaction.atomic():
-            for meal_type in ["breakfast", "dinner"]:
+            for meal_type in ["breakfast", "snack", "dinner"]:
                 adult_price = self.cleaned_data.get(f"{meal_type}_adult_price")
                 adult_subsidy_rate = self.cleaned_data.get(f"{meal_type}_adult_foerdersatz")
                 child_price = self.cleaned_data.get(f"{meal_type}_child_price")
