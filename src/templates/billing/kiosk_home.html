@@ -99,7 +99,6 @@
           </div>
         </section>
 
-        {% if snack_rules %}
         <section class="panel kiosk-card kiosk-card--accent">
           <div class="kiosk-card__header">
             <div class="kiosk-card__header-main">
@@ -125,11 +124,12 @@
                   <span class="drink-card__price">{{ rule.unit_price|money_eur }}</span>
                   <span class="drink-card__meta">Buchen</span>
                 </button>
+              {% empty %}
+                <p class="hint">Keine Verpflegung (Snacks/Frühstück) im Lager hinterlegt.</p>
               {% endfor %}
             </div>
           </div>
         </section>
-        {% endif %}
 
         {% for error in quick_form.price_rule.errors %}
           <span class="helptext error">{{ error }}</span>
