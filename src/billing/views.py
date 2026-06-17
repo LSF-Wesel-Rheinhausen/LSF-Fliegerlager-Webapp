@@ -32,7 +32,6 @@ from .forms import (
     CampFlatRateSettingsForm,
     CampForm,
     ChargeForm,
-    DrinkBookingForm,
     ExpenseForm,
     FirstAdminSetupForm,
     KioskBookingLinkInviteForm,
@@ -47,6 +46,7 @@ from .forms import (
     ParticipantPinForm,
     PaymentForm,
     PriceRuleForm,
+    QuickBookingForm,
     SharedExpenseApprovalForm,
     SharedExpenseRequestForm,
     ShiftForm,
@@ -323,8 +323,9 @@ def camp_detail(request, camp_id):
     price_rules = camp.price_rules.all()
     pending_expenses = camp.expenses.filter(status=Expense.Status.PENDING)
     from .services import get_cost_center_evaluation
+
     cost_centers = get_cost_center_evaluation(camp)
-    
+
     return render(
         request,
         "billing/camp_detail.html",
@@ -805,21 +806,26 @@ def expense_create(request, camp_id):
             expense.save()
         messages.success(request, "Auslage wurde gespeichert.")
         return redirect("camp-detail", camp_id=camp.pk)
-    return render(request, "billing/form.html", {"form": form, "title": "Auslage erfassen", "cancel_url": reverse("camp-detail", args=[camp.pk])})
+    return render(
+        request,
+        "billing/form.html",
+        {"form": form, "title": "Auslage erfassen", "cancel_url": reverse("camp-detail", args=[camp.pk])},
+    )
 
 
 @editor_required
 def shared_expense_approve(request, expense_id):
     expense = get_object_or_404(Expense, pk=expense_id, status=Expense.Status.PENDING)
     camp = expense.camp
-    
+
     form = SharedExpenseApprovalForm(request.POST or None, camp=camp)
     if request.method == "POST" and form.is_valid():
         from .services import approve_shared_expense
+
         allocation_method = form.cleaned_data["allocation_method"]
         participant_ids = [int(pid) for pid in form.cleaned_data.get("participant_ids", [])]
         cost_center = form.cleaned_data.get("cost_center", "")
-        
+
         expense.allocation_method = allocation_method
         expense.cost_center = cost_center
         try:
@@ -828,15 +834,19 @@ def shared_expense_approve(request, expense_id):
         except ValidationError as e:
             messages.error(request, e.message)
             return redirect("shared-expense-approve", expense_id=expense.pk)
-        
+
         return redirect("camp-detail", camp_id=camp.pk)
-    
-    return render(request, "billing/shared_expense_approve.html", {
-        "form": form,
-        "title": f"Umlage genehmigen: {expense.description}",
-        "camp": camp,
-        "cancel_url": reverse("camp-detail", args=[camp.pk])
-    })
+
+    return render(
+        request,
+        "billing/shared_expense_approve.html",
+        {
+            "form": form,
+            "title": f"Umlage genehmigen: {expense.description}",
+            "camp": camp,
+            "cancel_url": reverse("camp-detail", args=[camp.pk]),
+        },
+    )
 
 
 @editor_required
@@ -845,6 +855,7 @@ def shared_expense_reject(request, expense_id):
     expense = get_object_or_404(Expense, pk=expense_id, status=Expense.Status.PENDING)
     rejection_reason = request.POST.get("rejection_reason", "").strip()
     from .services import reject_shared_expense
+
     reject_shared_expense(expense, rejected_by=request.user, rejection_reason=rejection_reason)
     messages.success(request, f"Antrag abgelehnt: {expense.description}")
     return redirect("camp-detail", camp_id=expense.camp.pk)
@@ -853,8 +864,8 @@ def shared_expense_reject(request, expense_id):
 @editor_required
 def participant_import_template_view(request, camp_id):
     from .exporters import participant_import_template_response
-    return participant_import_template_response()
 
+    return participant_import_template_response()
 
 
 @editor_required
@@ -1123,7 +1134,7 @@ def _kiosk_meal_calendar(camp, meal_signups):
     days = []
     for meal_date in camp_meal_dates(camp, included_dates):
         meals = []
-        for meal, _label in MealSignup.Meal.choices:
+        for meal, _label in [(MealSignup.Meal.DINNER, "Abendessen")]:
             scoped = signups_by_date_meal.get((meal_date, meal), [])
             active_signups = [signup for signup in scoped if signup.status == MealSignup.Status.ACTIVE]
             has_retracted = any(signup.status == MealSignup.Status.RETRACTED for signup in scoped)
@@ -1243,25 +1254,41 @@ def kiosk_home(request):
     next_order_date = next_catering_order_date()
     next_meal_order = meal_order_for_date(participant.camp, next_order_date)
     meal_targets = _kiosk_meal_targets(participant)
-    drink_form = DrinkBookingForm(participant=participant, prefix="drink")
+    quick_form = QuickBookingForm(participant=participant, prefix="quick")
     meal_form = MealBookingForm(participant=participant, prefix="meal")
     family_member_form = KioskFamilyMemberForm(prefix="family")
     booking_link_form = KioskBookingLinkInviteForm(inviter=participant, prefix="link")
     if request.method == "POST":
-        if request.POST.get("action") == "drink":
-            drink_form = DrinkBookingForm(request.POST, participant=participant, prefix="drink")
-            if drink_form.is_valid():
-                price_rule = drink_form.cleaned_data["price_rule"]
+        if request.POST.get("action") == "quick":
+            quick_form = QuickBookingForm(request.POST, participant=participant, prefix="quick")
+            if quick_form.is_valid():
+                target_ids = request.POST.getlist("quick-target")
+                targets = [participant]
+                if target_ids:
+                    targets = []
+                    for tid in target_ids:
+                        if tid.startswith("participant-"):
+                            targets.append(
+                                ParticipantBookingLink.objects.get(pk=tid.replace("participant-", "")).invitee
+                            )
+                        elif tid.startswith("family-"):
+                            targets.append(participant.family_members.get(pk=tid.replace("family-", "")))
+                        else:
+                            targets.append(participant)
+
+                rule = quick_form.cleaned_data["price_rule"]
                 with transaction.atomic():
-                    Charge.objects.create(
-                        participant=participant,
-                        kind=Charge.Kind.DRINK,
-                        description=price_rule.name,
-                        quantity=drink_form.cleaned_data["quantity"],
-                        unit_price=price_rule.unit_price,
-                        foerdersatz=price_rule.foerdersatz,
-                    )
-                messages.success(request, "Getränk wurde gebucht.")
+                    for target in set(targets):
+                        Charge.objects.create(
+                            participant=target,
+                            kind=Charge.Kind.DRINK if rule.kind == PriceRule.Kind.DRINK else Charge.Kind.SNACK,
+                            description=rule.name,
+                            quantity=quick_form.cleaned_data["quantity"],
+                            unit_price=rule.unit_price,
+                            foerdersatz=rule.foerdersatz,
+                            occurred_on=timezone.localdate(),
+                        )
+                messages.success(request, f"{rule.name} gebucht.")
                 return redirect("kiosk-home")
         elif request.POST.get("action") == "meal":
             meal_form = MealBookingForm(request.POST, participant=participant, prefix="meal")
@@ -1405,7 +1432,6 @@ def kiosk_home(request):
     context = {
         "participant": participant,
         "summary": participant_kiosk_summary(participant),
-        "drink_form": drink_form,
         "meal_form": meal_form,
         "meal_default_variant": meal_form.fields["variant"].choices[0][0],
         "family_member_form": family_member_form,
@@ -1414,7 +1440,9 @@ def kiosk_home(request):
         "meal_signups": meal_signups,
         "meal_calendar_days": meal_calendar_days,
         "meal_calendar_groups": _group_kiosk_meal_calendar(meal_calendar_days),
-        "drink_rules": drink_form.fields["price_rule"].queryset,
+        "drink_rules": quick_form.fields["price_rule"].queryset.filter(kind=PriceRule.Kind.DRINK),
+        "snack_rules": quick_form.fields["price_rule"].queryset.filter(kind=PriceRule.Kind.SNACK),
+        "quick_form": quick_form,
         "meal_targets": meal_targets,
         "family_members": participant.family_members.filter(is_active=True).order_by("last_name", "first_name"),
         "pending_invites": pending_invites,
@@ -1434,7 +1462,7 @@ def kiosk_shared_expense_request(request):
     participant = _kiosk_participant(request)
     if not participant:
         return redirect("kiosk-login")
-    
+
     form = SharedExpenseRequestForm(request.POST or None, request.FILES or None)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
@@ -1445,14 +1473,18 @@ def kiosk_shared_expense_request(request):
             expense.save()
         messages.success(request, "Antrag auf Gemeinschaftsausgabe eingereicht.")
         return redirect("kiosk-home")
-    
-    return render(request, "billing/form.html", {
-        "form": form,
-        "title": "Gemeinschaftsausgabe beantragen",
-        "camp": participant.camp,
-        "kiosk_autologout": True,
-        "cancel_url": reverse("kiosk-home")
-    })
+
+    return render(
+        request,
+        "billing/form.html",
+        {
+            "form": form,
+            "title": "Gemeinschaftsausgabe beantragen",
+            "camp": participant.camp,
+            "kiosk_autologout": True,
+            "cancel_url": reverse("kiosk-home"),
+        },
+    )
 
 
 def kiosk_shifts(request):

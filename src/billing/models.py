@@ -283,6 +283,7 @@ class PriceRule(TimeStampedModel):
         NIGHT = "night", "Übernachtung"
         MEAL = "meal", "Verpflegung"
         DRINK = "drink", "Getränk"
+        SNACK = "snack", "Snack/Schnellverpflegung"
         OTHER = "other", "Sonstiges"
 
     class MealType(models.TextChoices):
@@ -328,6 +329,7 @@ class Charge(TimeStampedModel):
         CAMP_FLAT = "camp_flat", "Lagerpauschale"
         FOOD = "food", "Verpflegung"
         DRINK = "drink", "Getränke"
+        SNACK = "snack", "Snack/Schnellverpflegung"
         OTHER = "other", "Sonstige Kosten"
 
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="charges")

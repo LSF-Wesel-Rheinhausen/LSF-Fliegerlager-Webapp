@@ -518,7 +518,12 @@ class ExpenseForm(forms.ModelForm):
         widgets = {
             "paid_on": forms.DateInput(attrs={"type": "date"}),
             "category": forms.Select(choices=EXPENSE_CATEGORY_CHOICES),
-            "receipt": forms.FileInput(attrs={"accept": "application/pdf,image/jpeg,image/png,image/heic,.pdf,.jpg,.jpeg,.png,.heic", "capture": "environment"}),
+            "receipt": forms.FileInput(
+                attrs={
+                    "accept": "application/pdf,image/jpeg,image/png,image/heic,.pdf,.jpg,.jpeg,.png,.heic",
+                    "capture": "environment",
+                }
+            ),
         }
 
 
@@ -536,7 +541,12 @@ class SharedExpenseRequestForm(forms.ModelForm):
         widgets = {
             "paid_on": forms.DateInput(attrs={"type": "date"}),
             "category": forms.Select(choices=EXPENSE_CATEGORY_CHOICES),
-            "receipt": forms.FileInput(attrs={"accept": "application/pdf,image/jpeg,image/png,image/heic,.pdf,.jpg,.jpeg,.png,.heic", "capture": "environment"}),
+            "receipt": forms.FileInput(
+                attrs={
+                    "accept": "application/pdf,image/jpeg,image/png,image/heic,.pdf,.jpg,.jpeg,.png,.heic",
+                    "capture": "environment",
+                }
+            ),
         }
 
 
@@ -558,7 +568,9 @@ class SharedExpenseApprovalForm(forms.ModelForm):
     def __init__(self, *args, camp=None, **kwargs):
         super().__init__(*args, **kwargs)
         if camp:
-            participants = Participant.objects.filter(camp=camp, archived_at__isnull=True).order_by("last_name", "first_name")
+            participants = Participant.objects.filter(camp=camp, archived_at__isnull=True).order_by(
+                "last_name", "first_name"
+            )
             self.fields["participant_ids"].choices = [(p.id, p.full_name) for p in participants]
         # Only require cost center if the allocation method is COST_CENTER
         self.fields["cost_center"].required = False
@@ -571,10 +583,10 @@ class SharedExpenseApprovalForm(forms.ModelForm):
 
         if allocation_method == Expense.AllocationMethod.SELECTED and not participant_ids:
             self.add_error("participant_ids", "Bitte wähle mindestens einen Teilnehmer aus.")
-        
+
         if allocation_method == Expense.AllocationMethod.COST_CENTER and not cost_center:
             self.add_error("cost_center", "Bitte wähle eine Kostenstelle aus.")
-            
+
         return cleaned_data
 
 
@@ -663,8 +675,8 @@ class KioskPinSetupForm(forms.Form):
         return cleaned_data
 
 
-class DrinkBookingForm(forms.Form):
-    price_rule = forms.ModelChoiceField(label="Getränk", queryset=PriceRule.objects.none())
+class QuickBookingForm(forms.Form):
+    price_rule = forms.ModelChoiceField(label="Artikel", queryset=PriceRule.objects.none())
     quantity = forms.IntegerField(
         label="Menge",
         min_value=1,
@@ -680,7 +692,9 @@ class DrinkBookingForm(forms.Form):
         if participant is not None:
             camp = participant.camp
         if camp is not None:
-            queryset = PriceRule.objects.filter(camp=camp, kind=PriceRule.Kind.DRINK).order_by("name")
+            queryset = PriceRule.objects.filter(
+                camp=camp, kind__in=[PriceRule.Kind.DRINK, PriceRule.Kind.SNACK]
+            ).order_by("name")
             if participant is not None:
                 if participant.is_child:
                     queryset = queryset.filter(applies_to_children=True)

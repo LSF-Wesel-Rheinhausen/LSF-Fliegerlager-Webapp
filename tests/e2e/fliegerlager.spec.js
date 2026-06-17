@@ -253,9 +253,9 @@ test("Kiosk flow: login, pin setup, drink and meal booking", async ({ page }) =>
 
   // Book a drink
   await page.getByRole("button", { name: "Apfelsaft" }).click();
-  await expect(page.locator("dialog#drink-dialog")).toBeVisible();
-  await page.locator("dialog#drink-dialog").getByRole("button", { name: "1x" }).click();
-  await expect(page.getByText("Getränk wurde gebucht.")).toBeVisible();
+  await expect(page.locator("dialog#quick-dialog")).toBeVisible();
+  await page.locator("dialog#quick-dialog").getByRole("button", { name: "1x" }).click();
+  await expect(page.getByText("Apfelsaft gebucht.")).toBeVisible();
 
   // Book a meal
   await page.getByText("Zukünftige Buchungen anzeigen").click();
