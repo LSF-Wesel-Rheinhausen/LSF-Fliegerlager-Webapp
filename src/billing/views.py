@@ -396,12 +396,44 @@ def participant_restore(request, participant_id):
 @editor_required
 def participant_detail(request, participant_id):
     participant = get_object_or_404(Participant.objects.select_related("camp"), pk=participant_id)
+
+    if request.method == "POST" and request.POST.get("action") == "add_manual_charge":
+        rule_id = request.POST.get("price_rule_id")
+        quantity = int(request.POST.get("quantity", 1))
+        description = request.POST.get("description", "").strip()
+
+        rule = get_object_or_404(PriceRule, pk=rule_id, camp=participant.camp)
+
+        charge = Charge.objects.create(
+            participant=participant,
+            price_rule=rule,
+            description=description,
+            unit_price=rule.unit_price,
+            quantity=quantity,
+            total_price=rule.unit_price * quantity,
+            foerdersatz=rule.foerdersatz,
+        )
+
+        BookingAuditLog.objects.create(
+            charge=charge,
+            participant=participant,
+            changed_by=request.user,
+            action=BookingAuditLog.Action.CREATE,
+            changes={"note": "Manuelle Buchung durch Admin"},
+        )
+
+        messages.success(request, f"Buchung '{rule.name}' hinzugefügt.")
+        return redirect("participant-detail", participant_id=participant.pk)
+
     settlement = calculate_participant_settlement(participant)
     charges = participant.charges.filter(deleted_at__isnull=True).order_by("-created_at", "-id")
     audit_logs = BookingAuditLog.objects.filter(
         Q(participant=participant) | Q(charge__participant=participant)
     ).select_related("changed_by", "charge")
     settlement_snapshots = participant.settlements.filter(run__isnull=False).select_related("run", "run__camp")
+
+    price_rules = participant.camp.price_rules.filter(is_archived=False).order_by("name")
+
     return render(
         request,
         "billing/participant_detail.html",
@@ -411,6 +443,7 @@ def participant_detail(request, participant_id):
             "charges": charges,
             "audit_logs": audit_logs,
             "settlement_snapshots": settlement_snapshots,
+            "price_rules": price_rules,
         },
     )
 

@@ -82,6 +82,7 @@
         <h2>Buchungen</h2>
         <p>Manuelle Kosten sowie Kiosk-Buchungen für Getränke und Essen.</p>
       </div>
+      <button type="button" class="button" onclick="document.getElementById('manual-charge-dialog').showModal()">Buchung hinzufügen</button>
     </div>
     <table>
       <thead>
@@ -212,4 +213,41 @@
       </tbody>
     </table>
   </section>
+
+  <dialog id="manual-charge-dialog" closedby="any">
+    <div class="toolbar compact-toolbar" style="margin-bottom: 16px;">
+      <h2 style="margin: 0;">Manuelle Buchung</h2>
+      <form method="dialog">
+        <button class="button button-secondary" style="min-height: 32px; padding: 6px 10px;">Schließen</button>
+      </form>
+    </div>
+    <form method="post" class="form-grid">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="add_manual_charge">
+
+      <p>
+        <label for="id_price_rule_id">Preisregel auswählen</label>
+        <select name="price_rule_id" id="id_price_rule_id" required style="width: 100%;">
+          {% for rule in price_rules %}
+            <option value="{{ rule.pk }}">{{ rule.name }} ({{ rule.unit_price }} EUR)</option>
+          {% endfor %}
+        </select>
+      </p>
+
+      <p>
+        <label for="id_quantity">Menge</label>
+        <input type="number" name="quantity" id="id_quantity" value="1" min="1" step="1" required>
+      </p>
+
+      <p>
+        <label for="id_description">Notiz (optional)</label>
+        <input type="text" name="description" id="id_description" placeholder="Zusätzliche Info für die Abrechnung">
+      </p>
+
+      <div class="form-actions" style="margin-top: 14px;">
+        <button type="submit" class="button">Buchen</button>
+      </div>
+    </form>
+  </dialog>
+
 {% endblock %}
