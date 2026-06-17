@@ -1,20 +1,39 @@
 {% extends "billing/kiosk_base.html" %}
 {% block title %}Kiosk-Login{% endblock %}
 {% block content %}
-  <section class="panel narrow">
-    <h1>Kiosk</h1>
-    <p class="hint">Melde dich mit deinem Namen und deiner PIN an.</p>
-    <div style="padding: 12px; background: #eef2f6; border-left: 4px solid var(--accent); border-radius: 0 4px 4px 0; margin-bottom: 16px; font-size: 0.9em;">
-      <strong>Neu hier?</strong> Wenn du dich zum ersten Mal anmeldest, kannst du dir eine eigene PIN ausdenken. Trage sie einfach ein, sie wird dann für die Zukunft gespeichert.
-    </div>
-    <form method="post" class="form-grid">
-      {% csrf_token %}
-      {{ form.as_p }}
-      <div class="form-actions">
-        <a class="button button-secondary" href="{% url 'user-guide' %}">Hilfe</a>
-        <a class="button button-secondary" href="{% url 'login' %}">Admin-Interface</a>
-        <button type="submit" class="button">Anmelden</button>
+  <section class="kiosk-login-shell">
+    <div class="kiosk-login-card">
+      <article class="panel kiosk-login-card__hero kiosk-card--accent">
+        <span class="kiosk-hero__eyebrow">Selbstbedienung</span>
+        <div class="kiosk-hero__copy">
+          <h1>Kiosk</h1>
+          <p>Melde dich mit deinem Namen und deiner PIN an, um Getränke zu buchen, Essen zu verwalten und deine Abrechnung im Blick zu behalten.</p>
+        </div>
+      </article>
+
+      <section class="panel kiosk-login-card__form">
+        <div class="kiosk-card__header-main">
+          <span class="kiosk-card__eyebrow">Anmeldung</span>
+          <h2>Teilnehmer auswählen</h2>
+          <p>Wähle deinen Namen und gib deine PIN ein.</p>
+        </div>
+        <form method="post" class="form-grid">
+          {% csrf_token %}
+          {{ form.as_p }}
+          <div class="form-actions">
+            <a class="button button-secondary" href="{% url 'user-guide' %}">Hilfe</a>
+            <a class="button button-secondary" href="{% url 'login' %}">Admin-Interface</a>
+            <button type="submit" class="button">Anmelden</button>
+          </div>
+        </form>
+      </section>
+
+      <div class="kiosk-login-card__tips">
+        <div class="kiosk-note">
+          <strong>Neu hier?</strong>
+          <p>Beim ersten Login kannst du dir direkt eine eigene PIN ausdenken. Gib sie einfach ein, sie wird danach gespeichert.</p>
+        </div>
       </div>
-    </form>
+    </div>
   </section>
 {% endblock %}

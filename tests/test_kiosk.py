@@ -7,15 +7,17 @@ from django.utils import timezone
 
 from billing.models import (
     Charge,
+    Expense,
     MealOrder,
     MealSignup,
     ParticipantBookingLink,
     ParticipantFamilyMember,
+    Payment,
     PriceRule,
     UserProfile,
 )
 from billing.views import KIOSK_PARTICIPANT_SESSION_KEY, KIOSK_PIN_SETUP_SESSION_KEY
-from tests.factories import CampFactory, ParticipantFactory, PriceRuleFactory, UserFactory
+from tests.factories import CampFactory, ExpenseFactory, ParticipantFactory, PriceRuleFactory, UserFactory
 
 
 @pytest.mark.django_db
@@ -89,6 +91,8 @@ def test_kiosk_login_links_to_admin_interface(client):
     assert response.status_code == 200
     assert reverse("login").encode() in response.content
     assert b"Admin-Interface" in response.content
+    content = response.content.decode()
+    assert content.index("Teilnehmer auswählen") < content.index("Neu hier?")
 
 
 @pytest.mark.django_db
@@ -121,6 +125,10 @@ def test_kiosk_home_hides_normal_admin_header_and_renders_drink_dialog_controls(
     assert b'data-timeout-ms="120000"' in response.content
     assert reverse("kiosk-logout").encode() in response.content
     assert "Förderung anwenden".encode() not in response.content
+    assert b"Abrechnung ansehen" not in response.content
+    assert "Details öffnen".encode() in response.content
+    assert b"Brutto:" not in response.content
+    assert b"Soll:" not in response.content
 
 
 @pytest.mark.django_db
@@ -139,9 +147,54 @@ def test_kiosk_home_shows_leadership_contact_button(client):
 
     assert response.status_code == 200
     assert b"Kontakt Lagerleitung" in response.content
+    assert response.content.count(b"Kontakt Lagerleitung") == 2
     assert b"leitung@example.test" in response.content
     assert b'href="tel:0123456"' in response.content
     assert b"0123 / 456" in response.content
+
+
+@pytest.mark.django_db
+def test_kiosk_home_renders_balance_with_correct_signs(client):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    Payment.objects.create(participant=participant, amount=Decimal("15.00"), paid_on=date(2026, 7, 1))
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.get(reverse("kiosk-home"))
+
+    assert response.status_code == 200
+    assert b"+15,00 \xe2\x82\xac" in response.content
+
+
+@pytest.mark.django_db
+def test_kiosk_home_marks_rejected_shared_expenses_and_uses_single_contact_entrypoint(client):
+    camp = CampFactory()
+    admin_user = UserFactory(username="leitung", email="leitung@example.test")
+    admin_user.is_superuser = True
+    admin_user.save()
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    ExpenseFactory(
+        participant=participant,
+        camp=camp,
+        description="Grillgut",
+        amount=Decimal("42.00"),
+        status=Expense.Status.REJECTED,
+        rejection_reason="Beleg fehlt",
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.get(reverse("kiosk-home"))
+
+    assert response.status_code == 200
+    assert b"kiosk-table__row--rejected" in response.content
+    assert b"kiosk-status-text kiosk-status-text--danger" in response.content
+    assert b"Abgelehnt" in response.content
+    assert b"Kontakt anzeigen" not in response.content
+    assert response.content.count(b"data-open-contact-dialog>Kontakt Lagerleitung</button>") == 1
 
 
 @pytest.mark.django_db
