@@ -51,6 +51,8 @@ mypy src
 npm run test:e2e
 ```
 
+**Note for AI Agents:** When running `npm run test:e2e`, you MUST set `BypassSandbox: true` because Playwright needs to access globally installed browser binaries outside the workspace sandbox (e.g., in `~/Library/Caches`).
+
 Keep commands runnable from the repository root and document all required environment variables in `.env.example`.
 
 ## 3. Coding Style & Naming Conventions
