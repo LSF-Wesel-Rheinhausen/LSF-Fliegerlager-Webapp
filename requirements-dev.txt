@@ -1,6 +1,6 @@
 -r requirements.txt
 -r requirements-updater.txt
-pytest>=9.0.3,<10
+pytest>=9.1.1,<10
 pytest-cov>=7.1.0,<8
 pytest-django>=4.12.0,<5
 pre-commit>=4.6.0,<5
