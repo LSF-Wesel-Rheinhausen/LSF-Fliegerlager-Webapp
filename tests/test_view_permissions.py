@@ -2,6 +2,7 @@ from datetime import time
 from decimal import Decimal
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils import timezone
 
@@ -119,6 +120,62 @@ def test_admin_only_get_views_allow_admin(client, admin_user, permission_dataset
     response = client.get(reverse(route_name, args=arg_getter(permission_dataset)))
 
     assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_expense_receipt_download_allows_editor(client, editor_user, permission_dataset):
+    expense = Expense.objects.create(
+        camp=permission_dataset["camp"],
+        participant=permission_dataset["participant"],
+        category="Einkauf",
+        description="Belegtest",
+        amount=Decimal("7.50"),
+        receipt=SimpleUploadedFile("rechnung.pdf", b"editor receipt", content_type="application/pdf"),
+    )
+    client.force_login(editor_user)
+
+    try:
+        response = client.get(reverse("expense-receipt", args=[expense.pk]))
+
+        assert response.status_code == 200
+        assert b"".join(response.streaming_content) == b"editor receipt"
+    finally:
+        expense.receipt.delete(save=False)
+
+
+@pytest.mark.django_db
+def test_expense_receipt_download_rejects_anonymous_without_kiosk_session(client, permission_dataset):
+    expense = Expense.objects.create(
+        camp=permission_dataset["camp"],
+        participant=permission_dataset["participant"],
+        category="Einkauf",
+        description="Privater Beleg",
+        amount=Decimal("7.50"),
+        receipt=SimpleUploadedFile("privat.pdf", b"private receipt", content_type="application/pdf"),
+    )
+
+    try:
+        response = client.get(reverse("expense-receipt", args=[expense.pk]))
+
+        assert response.status_code == 403
+    finally:
+        expense.receipt.delete(save=False)
+
+
+@pytest.mark.django_db
+def test_expense_receipt_download_returns_not_found_when_receipt_is_missing(client, editor_user, permission_dataset):
+    expense = Expense.objects.create(
+        camp=permission_dataset["camp"],
+        participant=permission_dataset["participant"],
+        category="Einkauf",
+        description="Ohne Beleg",
+        amount=Decimal("7.50"),
+    )
+    client.force_login(editor_user)
+
+    response = client.get(reverse("expense-receipt", args=[expense.pk]))
+
+    assert response.status_code == 404
 
 
 @pytest.mark.django_db

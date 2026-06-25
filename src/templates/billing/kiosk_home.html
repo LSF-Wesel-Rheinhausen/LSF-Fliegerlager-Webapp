@@ -235,6 +235,7 @@
                     <th>Beschreibung</th>
                     <th>Betrag</th>
                     <th>Datum</th>
+                    <th>Beleg</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -254,6 +255,13 @@
                       <td>{{ expense.description }}</td>
                       <td>{{ expense.amount }} €</td>
                       <td>{{ expense.paid_on|default:expense.created_at|date:"d.m.Y" }}</td>
+                      <td>
+                        {% if expense.receipt %}
+                          <a href="{% url 'expense-receipt' expense.pk %}" target="_blank" rel="noopener" class="button button-small button-secondary">Beleg ansehen</a>
+                        {% else %}
+                          <span class="muted">Kein Beleg</span>
+                        {% endif %}
+                      </td>
                     </tr>
                   {% endfor %}
                 </tbody>

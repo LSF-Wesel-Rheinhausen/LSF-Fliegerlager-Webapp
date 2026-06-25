@@ -62,6 +62,7 @@ urlpatterns = [
     path("shifts/<int:shift_id>/edit/", views.shift_edit, name="shift-edit"),
     path("shifts/<int:shift_id>/delete/", views.shift_delete, name="shift-delete"),
     path("camps/<int:camp_id>/expenses/new/", views.expense_create, name="expense-create"),
+    path("expenses/<int:expense_id>/receipt/", views.expense_receipt_download, name="expense-receipt"),
     path("expenses/<int:expense_id>/approve/", views.shared_expense_approve, name="shared-expense-approve"),
     path("expenses/<int:expense_id>/reject/", views.shared_expense_reject, name="shared-expense-reject"),
     path("camps/<int:camp_id>/import/", views.participant_import, name="participant-import"),
