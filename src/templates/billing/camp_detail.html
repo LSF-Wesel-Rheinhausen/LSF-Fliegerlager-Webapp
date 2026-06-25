@@ -81,7 +81,7 @@
             <td>{{ expense.amount }} €</td>
             <td>
               {% if expense.receipt %}
-                <a href="{{ expense.receipt.url }}" target="_blank" class="button button-small button-secondary">Beleg ansehen</a>
+                <a href="{% url 'expense-receipt' expense.pk %}" target="_blank" class="button button-small button-secondary">Beleg ansehen</a>
               {% endif %}
             </td>
             <td>

@@ -1,7 +1,9 @@
 from datetime import date, datetime, time
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils import timezone
 
@@ -165,6 +167,69 @@ def test_kiosk_home_renders_balance_with_correct_signs(client):
 
     assert response.status_code == 200
     assert b"+15,00 \xe2\x82\xac" in response.content
+
+
+@pytest.mark.django_db
+def test_kiosk_shared_expense_upload_shows_receipt_link_and_serves_file(client):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    receipt = SimpleUploadedFile("rechnung.pdf", b"test receipt", content_type="application/pdf")
+    response = client.post(
+        reverse("kiosk-shared-expense-request"),
+        {
+            "category": "Verbrauchsmaterial",
+            "description": "Schrauben",
+            "amount": "12.50",
+            "paid_on": "2026-07-01",
+            "receipt": receipt,
+        },
+    )
+
+    assert response.status_code == 302
+    expense = Expense.objects.get(participant=participant, description="Schrauben")
+    try:
+        assert expense.receipt.name.startswith("receipts/rechnung")
+        assert expense.receipt.url.startswith("/media/receipts/")
+
+        receipt_url = reverse("expense-receipt", args=[expense.pk])
+        home_response = client.get(reverse("kiosk-home"))
+        assert home_response.status_code == 200
+        assert b"Beleg" in home_response.content
+        assert receipt_url.encode() in home_response.content
+
+        assert Path(expense.receipt.path).exists()
+        file_response = client.get(receipt_url)
+        assert file_response.status_code == 200
+        assert b"".join(file_response.streaming_content) == b"test receipt"
+    finally:
+        expense.receipt.delete(save=False)
+
+
+@pytest.mark.django_db
+def test_kiosk_expense_receipt_rejects_other_participants(client):
+    camp = CampFactory()
+    viewer = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    owner = ParticipantFactory(camp=camp, first_name="Grace", last_name="Hopper")
+    expense = ExpenseFactory(
+        participant=owner,
+        camp=camp,
+        description="Fremder Beleg",
+        receipt=SimpleUploadedFile("fremd.pdf", b"private receipt", content_type="application/pdf"),
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = viewer.pk
+    session.save()
+
+    try:
+        response = client.get(reverse("expense-receipt", args=[expense.pk]))
+
+        assert response.status_code == 403
+    finally:
+        expense.receipt.delete(save=False)
 
 
 @pytest.mark.django_db

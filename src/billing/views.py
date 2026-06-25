@@ -8,11 +8,11 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
-from django.core.exceptions import ObjectDoesNotExist, ValidationError
+from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.core.signing import BadSignature, Signer
 from django.db import transaction
 from django.db.models import Q
-from django.http import HttpRequest, HttpResponse
+from django.http import FileResponse, Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -75,6 +75,7 @@ from .permissions import (
     HUEBERS_GROUP,
     admin_required,
     editor_required,
+    is_editor,
     meal_manager_required,
     superuser_required,
 )
@@ -857,6 +858,27 @@ def expense_create(request, camp_id):
         request,
         "billing/form.html",
         {"form": form, "title": "Auslage erfassen", "cancel_url": reverse("camp-detail", args=[camp.pk])},
+    )
+
+
+def expense_receipt_download(request: HttpRequest, expense_id: int) -> FileResponse:
+    """Return an uploaded expense receipt when the requester may inspect it.
+
+    Editors may inspect every receipt from the administrative camp overview.
+    Kiosk participants may only download receipts attached to their own expense
+    requests, keeping uploaded billing files out of unauthenticated public URLs.
+    """
+    expense = get_object_or_404(Expense.objects.select_related("participant"), pk=expense_id)
+    if not expense.receipt:
+        raise Http404("Kein Rechnungsbeleg vorhanden.")
+
+    participant = _kiosk_participant(request)
+    can_view_own_receipt = participant is not None and expense.participant_id == participant.pk
+    if not can_view_own_receipt and not is_editor(request.user):
+        raise PermissionDenied
+
+    return FileResponse(
+        expense.receipt.open("rb"), as_attachment=False, filename=expense.receipt.name.rsplit("/", 1)[-1]
     )
 
 
