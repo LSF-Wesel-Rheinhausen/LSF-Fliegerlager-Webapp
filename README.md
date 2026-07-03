@@ -144,6 +144,7 @@ Optionale Update-Variablen:
 - `UPDATE_HEALTH_TIMEOUT`: maximale Wartezeit auf den App-Healthcheck, standardmäßig `180`.
 - `APP_HEALTH_URL`: Healthcheck-URL, die der Update-Agent nach einem Portainer-Redeploy abfragt.
 - `TARGET_SERVICE`: Compose-Service des App-Containers, standardmäßig `app`; wird für den immutable Rollback-Digest genutzt.
+- `PORTAINER_VERIFY_SSL`: `true` prüft Portainer-HTTPS-Zertifikate. Für interne Portainer-Instanzen mit Self-Signed-Zertifikat kann `false` gesetzt werden.
 - `GHCR_TOKEN`: optional, nur für private GHCR-Images erforderlich.
 
 Bei `DJANGO_DEBUG=0` startet die Anwendung nur mit einem mindestens 50 Zeichen langen `DJANGO_SECRET_KEY` und expliziten `DJANGO_ALLOWED_HOSTS`.

@@ -1,3 +1,4 @@
+from collections.abc import Collection
 from datetime import time, timedelta
 from decimal import Decimal
 
@@ -72,7 +73,7 @@ class Camp(TimeStampedModel):
                 raise ValidationError("Das einzige Lager kann nicht deaktiviert werden.")
             return super().save(*args, **kwargs)
 
-    def validate_constraints(self, exclude: list[str] | None = None) -> None:
+    def validate_constraints(self, exclude: Collection[str] | None = None) -> None:
         """Exclude unique_active_camp from pre-save model validation since save() deactivates other camps."""
         if exclude is None:
             exclude = []

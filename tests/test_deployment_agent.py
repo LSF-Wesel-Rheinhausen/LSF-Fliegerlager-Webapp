@@ -49,7 +49,42 @@ def test_portainer_request_uses_api_key_and_endpoint_id():
     request = urlopen.call_args.args[0]
     assert request.full_url == "https://portainer.example.org/api/stacks/123?endpointId=7"
     assert request.get_header("X-api-key") == "ptr_secret"
+    assert urlopen.call_args.kwargs["context"] is None
     assert result == {"Id": 123}
+
+
+def test_portainer_request_can_disable_ssl_verification():
+    client = deployment_agent.PortainerClient(
+        base_url="https://portainer.internal",
+        api_key="ptr_secret",
+        endpoint_id="7",
+        stack_id="123",
+        verify_ssl="false",
+    )
+    response = Mock()
+    response.__enter__ = Mock(return_value=response)
+    response.__exit__ = Mock(return_value=False)
+    response.status = 200
+    response.read.return_value = b"{}"
+
+    with patch("urllib.request.urlopen", return_value=response) as urlopen:
+        client.request("GET", "/stacks/123")
+
+    context = urlopen.call_args.kwargs["context"]
+    assert context is not None
+    assert context.check_hostname is False
+    assert context.verify_mode == deployment_agent.ssl.CERT_NONE
+
+
+def test_portainer_verify_ssl_rejects_ambiguous_values():
+    with pytest.raises(deployment_agent.AgentConfigError, match="PORTAINER_VERIFY_SSL"):
+        deployment_agent.PortainerClient(
+            base_url="https://portainer.example.org",
+            api_key="ptr_secret",
+            endpoint_id="7",
+            stack_id="123",
+            verify_ssl="0",
+        )
 
 
 def test_missing_portainer_env_values_fail_clearly(monkeypatch):

@@ -879,7 +879,11 @@ def expense_receipt_download(request: HttpRequest, expense_id: int) -> FileRespo
     if not can_view_own_receipt and not is_editor(request.user):
         raise PermissionDenied
 
-    if not expense.receipt.storage.exists(expense.receipt.name):
+    receipt_name = expense.receipt.name
+    if not receipt_name:
+        raise Http404("Kein Rechnungsbeleg vorhanden.")
+
+    if not expense.receipt.storage.exists(receipt_name):
         logger.warning(
             "expense_receipt_file_missing",
             extra={"expense_id": expense.pk},
@@ -887,7 +891,9 @@ def expense_receipt_download(request: HttpRequest, expense_id: int) -> FileRespo
         raise Http404("Rechnungsbeleg wurde nicht gefunden.")
 
     return FileResponse(
-        expense.receipt.open("rb"), as_attachment=False, filename=expense.receipt.name.rsplit("/", 1)[-1]
+        expense.receipt.open("rb"),
+        as_attachment=False,
+        filename=receipt_name.rsplit("/", 1)[-1],
     )
 
 
