@@ -1,5 +1,6 @@
 import os
-from unittest.mock import Mock, patch
+import urllib.error
+from unittest.mock import Mock, call, patch
 
 import pytest
 
@@ -21,6 +22,7 @@ def test_image_metadata_reads_oci_and_change_labels():
 
     assert deployment_agent.image_metadata(image) == {
         "id": "sha256:123",
+        "image": deployment_agent.TARGET_IMAGE,
         "version": "1.2.3",
         "revision": "abc123",
         "build_date": "2026-06-09T12:00:00Z",
@@ -28,114 +30,230 @@ def test_image_metadata_reads_oci_and_change_labels():
     }
 
 
-def test_compose_up_limits_reconciliation_to_app_service(monkeypatch):
-    monkeypatch.setattr(deployment_agent, "PROJECT_NAME", "test-project")
-    monkeypatch.setattr(deployment_agent, "TARGET_SERVICE", "app")
+def test_portainer_request_uses_api_key_and_endpoint_id():
+    client = deployment_agent.PortainerClient(
+        base_url="https://portainer.example.org",
+        api_key="ptr_secret",
+        endpoint_id="7",
+        stack_id="123",
+    )
+    response = Mock()
+    response.__enter__ = Mock(return_value=response)
+    response.__exit__ = Mock(return_value=False)
+    response.status = 200
+    response.read.return_value = b'{"Id":123}'
 
-    with patch("deployment_agent.Path.is_file", return_value=True):
-        with patch("deployment_agent.get_env_file", return_value="/deployment/.env"):
-            with patch("deployment_agent.subprocess.run") as run:
-                run.return_value = Mock(returncode=0, stdout="", stderr="")
-                deployment_agent.compose_up("sha256:old-image")
+    with patch("urllib.request.urlopen", return_value=response) as urlopen:
+        result = client.request("GET", "/stacks/123", query={"endpointId": "7"})
 
-    command = run.call_args.args[0]
-    assert command[-3:] == ["--no-deps", "--force-recreate", "app"]
-    assert run.call_args.kwargs["env"]["APP_IMAGE"] == "sha256:old-image"
-    assert run.call_args.kwargs["check"] is False
-
-
-def test_compose_up_reports_stdout_and_stderr(monkeypatch):
-    monkeypatch.setattr(deployment_agent, "PROJECT_NAME", "test-project")
-    monkeypatch.setattr(deployment_agent, "TARGET_SERVICE", "app")
-
-    result = Mock(returncode=1, stdout="creating app\n", stderr="port already allocated\n")
-    with patch("deployment_agent.Path.is_file", return_value=True):
-        with patch("deployment_agent.get_env_file", return_value="/deployment/.env"):
-            with patch("deployment_agent.subprocess.run", return_value=result):
-                with pytest.raises(deployment_agent.ComposeUpError) as error:
-                    deployment_agent.compose_up("sha256:new-image", step="Neuen App-Container starten")
-
-    message = str(error.value)
-    assert "Neuen App-Container starten fehlgeschlagen." in message
-    assert "Exit-Code: 1" in message
-    assert "stdout: creating app" in message
-    assert "stderr: port already allocated" in message
-    assert "secret" not in message.lower()
+    request = urlopen.call_args.args[0]
+    assert request.full_url == "https://portainer.example.org/api/stacks/123?endpointId=7"
+    assert request.get_header("X-api-key") == "ptr_secret"
+    assert result == {"Id": 123}
 
 
-def test_wait_until_healthy_rejects_unhealthy_container(monkeypatch):
-    container = Mock()
-    container.image.id = "sha256:new"
-    container.attrs = {"State": {"Health": {"Status": "unhealthy"}}}
-    monkeypatch.setattr(deployment_agent, "service_container", lambda _service: container)
+def test_missing_portainer_env_values_fail_clearly(monkeypatch):
+    monkeypatch.setattr(deployment_agent, "PORTAINER_URL", "")
 
-    with pytest.raises(RuntimeError, match="unhealthy"):
-        deployment_agent.wait_until_healthy("sha256:new")
+    with pytest.raises(deployment_agent.AgentConfigError, match="PORTAINER_URL"):
+        deployment_agent.PortainerClient()
 
 
-def test_perform_update_records_compose_and_rollback_diagnostics(monkeypatch):
-    states = []
-    old_container = Mock()
-    old_container.image.id = "sha256:old"
-    latest = Mock(id="sha256:new", labels={})
-    compose_command = ["docker", "compose", "up", "app"]
+def test_update_stack_image_sets_app_image_in_portainer_payload():
+    client = deployment_agent.PortainerClient(
+        base_url="https://portainer.example.org",
+        api_key="ptr_secret",
+        endpoint_id="7",
+        stack_id="123",
+    )
+    stack = {
+        "Env": [{"name": "APP_IMAGE", "value": "ghcr.io/example/app:old"}],
+        "StackFileContent": "services:\n  app:\n    image: ${APP_IMAGE}\n",
+    }
 
-    monkeypatch.setattr(deployment_agent, "save_state", lambda **values: states.append(values) or values)
-    monkeypatch.setattr(deployment_agent, "service_container", lambda _service: old_container)
-    monkeypatch.setattr(deployment_agent, "docker_client", lambda: Mock(images=Mock(pull=Mock(return_value=latest))))
-    monkeypatch.setattr(deployment_agent, "create_backup", lambda: "backup.sql.gz")
-    monkeypatch.setattr(
-        deployment_agent,
-        "compose_up",
-        Mock(
-            side_effect=[
-                deployment_agent.ComposeUpError(
-                    step="Neuen App-Container starten",
-                    image="sha256:new",
-                    command=compose_command,
-                    returncode=1,
-                    stdout="creating app",
-                    stderr="port already allocated",
-                ),
-                deployment_agent.ComposeUpError(
-                    step="Rollback: alten App-Container starten",
-                    image="sha256:old",
-                    command=compose_command,
-                    returncode=1,
-                    stdout="",
-                    stderr="image unavailable",
-                ),
-            ]
-        ),
+    with patch.object(client, "get_stack", return_value=stack):
+        with patch.object(client, "request", return_value={}) as request:
+            client.update_stack_image("ghcr.io/example/app:new")
+
+    request.assert_called_once_with(
+        "PUT",
+        "/stacks/123",
+        query={"endpointId": "7"},
+        payload={
+            "env": [{"name": "APP_IMAGE", "value": "ghcr.io/example/app:new"}],
+            "prune": False,
+            "pullImage": True,
+            "stackFileContent": "services:\n  app:\n    image: ${APP_IMAGE}\n",
+        },
+        timeout=180,
     )
 
+
+def test_perform_update_rolls_back_previous_app_image(monkeypatch):
+    states = []
+    client = Mock()
+    client.get_stack.return_value = {"Env": [{"name": "APP_IMAGE", "value": "ghcr.io/example/app:old"}]}
+    client.update_stack_image.side_effect = [
+        deployment_agent.PortainerAPIError("Portainer API: update failed"),
+        None,
+    ]
+
+    monkeypatch.setattr(deployment_agent, "PortainerClient", lambda: client)
+    monkeypatch.setattr(deployment_agent, "fetch_image_metadata", lambda _image: {"id": "sha256:new"})
+    monkeypatch.setattr(deployment_agent, "create_backup", lambda: "backup.sql.gz")
+    monkeypatch.setattr(deployment_agent, "wait_until_healthy", Mock())
+    monkeypatch.setattr(deployment_agent, "save_state", lambda **values: states.append(values) or values)
+
     deployment_agent.update_lock.acquire()
     deployment_agent.perform_update()
 
+    assert client.update_stack_image.mock_calls == [
+        call(deployment_agent.TARGET_IMAGE),
+        call("ghcr.io/example/app:old"),
+    ]
     failed_state = states[-1]
     assert failed_state["phase"] == "failed"
-    assert "port already allocated" in failed_state["error"]
-    assert "image unavailable" in failed_state["rollback_error"]
+    assert "Portainer API: update failed" in failed_state["error"]
+    assert "Rollback-Image fuer APP_IMAGE: ghcr.io/example/app:old" in failed_state["recovery"]
     assert "backup.sql.gz" in failed_state["recovery"]
-    assert "sha256:old" in failed_state["recovery"]
 
 
-def test_perform_update_clears_stale_rollback_state(monkeypatch):
+def test_create_backup_uses_database_url_without_leaking_password(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        deployment_agent,
+        "DATABASE_URL",
+        "postgres://fliegerlager:super-secret-password@db:5432/fliegerlager",
+    )
+    monkeypatch.setattr(deployment_agent, "BACKUP_DIR", tmp_path)
+    result = Mock(returncode=1, stdout=b"", stderr=b"password authentication failed for user fliegerlager")
+
+    with patch("deployment_agent.subprocess.run", return_value=result) as run:
+        with pytest.raises(RuntimeError) as error:
+            deployment_agent.create_backup()
+
+    command = run.call_args.args[0]
+    assert "super-secret-password" not in command
+    assert run.call_args.kwargs["env"]["PGPASSWORD"] == "super-secret-password"
+    assert "super-secret-password" not in str(error.value)
+
+
+def test_wait_until_healthy_polls_app_health_url(monkeypatch):
+    response = Mock()
+    response.__enter__ = Mock(return_value=response)
+    response.__exit__ = Mock(return_value=False)
+    response.status = 204
+    monkeypatch.setattr(deployment_agent, "APP_HEALTH_URL", "http://app:8000/healthz/")
+
+    with patch("urllib.request.urlopen", return_value=response) as urlopen:
+        deployment_agent.wait_until_healthy()
+
+    assert urlopen.call_args.args[0] == "http://app:8000/healthz/"
+
+
+def test_check_update_detects_update_from_oci_labels(monkeypatch):
     states = []
-    old_container = Mock()
-    old_container.image.id = "sha256:old"
-    latest = Mock(id="sha256:old", labels={})
+    client = Mock()
+    client.get_stack.return_value = {"Env": [{"name": "APP_IMAGE", "value": "ghcr.io/example/app:latest"}]}
+    latest = {
+        "id": "sha256:new",
+        "image": "ghcr.io/example/app:latest",
+        "version": "1.2.4",
+        "revision": "newrev",
+        "build_date": "2026-06-10T12:00:00Z",
+        "change": "fix: updater",
+    }
 
+    monkeypatch.setattr(deployment_agent, "PortainerClient", lambda: client)
+    monkeypatch.setattr(deployment_agent, "fetch_image_metadata", lambda _image: latest)
     monkeypatch.setattr(deployment_agent, "save_state", lambda **values: states.append(values) or values)
-    monkeypatch.setattr(deployment_agent, "service_container", lambda _service: old_container)
-    monkeypatch.setattr(deployment_agent, "docker_client", lambda: Mock(images=Mock(pull=Mock(return_value=latest))))
 
-    deployment_agent.update_lock.acquire()
-    deployment_agent.perform_update()
+    result = deployment_agent.check_update(
+        {"current": {"version": "1.2.3", "revision": "oldrev", "build_date": "2026-06-09T12:00:00Z"}}
+    )
 
-    assert states[0]["rollback_error"] == ""
-    assert states[0]["recovery"] == ""
-    complete_state = states[-1]
-    assert complete_state["phase"] == "complete"
-    assert complete_state["rollback_error"] == ""
-    assert complete_state["recovery"] == ""
+    assert result["latest"] == latest
+    assert result["running"]["revision"] == "oldrev"
+    assert result["update_available"] is True
+
+
+def test_check_update_persists_no_update_status(monkeypatch):
+    states = []
+    client = Mock()
+    client.get_stack.return_value = {"Env": [{"name": "APP_IMAGE", "value": "ghcr.io/example/app:latest"}]}
+    latest = {
+        "id": "sha256:new",
+        "image": "ghcr.io/example/app:latest",
+        "version": "1.2.3",
+        "revision": "same",
+        "build_date": "2026-06-10T12:00:00Z",
+        "change": "fix: updater",
+    }
+
+    monkeypatch.setattr(deployment_agent, "PortainerClient", lambda: client)
+    monkeypatch.setattr(deployment_agent, "fetch_image_metadata", lambda _image: latest)
+    monkeypatch.setattr(deployment_agent, "save_state", lambda **values: states.append(values) or values)
+
+    result = deployment_agent.check_update(
+        {"current": {"version": "1.2.3", "revision": "same", "build_date": "2026-06-10T12:00:00Z"}}
+    )
+
+    assert result["update_available"] is False
+    assert states[-1]["update_available"] is False
+    assert states[-1]["running"]["revision"] == "same"
+
+
+def test_deployment_status_respects_persisted_update_available(monkeypatch):
+    client = Mock()
+    client.get_stack.return_value = {"Env": [{"name": "APP_IMAGE", "value": "ghcr.io/example/app:latest"}]}
+    monkeypatch.setattr(deployment_agent, "PortainerClient", lambda: client)
+    monkeypatch.setattr(
+        deployment_agent,
+        "load_state",
+        lambda: {"latest": {"id": "sha256:new"}, "phase": "checked", "update_available": False},
+    )
+
+    result = deployment_agent.deployment_status()
+
+    assert result["update_available"] is False
+
+
+def test_registry_token_request_uses_configured_ghcr_token(monkeypatch):
+    token_response = Mock()
+    token_response.__enter__ = Mock(return_value=token_response)
+    token_response.__exit__ = Mock(return_value=False)
+    token_response.read.return_value = b'{"token":"bearer-token"}'
+    token_response.status = 200
+
+    monkeypatch.setattr(deployment_agent, "GHCR_TOKEN", "private-token")
+    auth_header = 'Bearer realm="https://ghcr.io/token",service="ghcr.io",scope="repository:owner/app:pull"'
+
+    with patch("urllib.request.urlopen", return_value=token_response) as urlopen:
+        token = deployment_agent.fetch_registry_token(auth_header)
+
+    request = urlopen.call_args.args[0]
+    assert request.get_header("Authorization") == "Basic dW51c2VkOnByaXZhdGUtdG9rZW4="
+    assert token == "bearer-token"
+
+
+def test_registry_request_uses_bearer_token_after_private_registry_challenge(monkeypatch):
+    unauthorized = urllib.error.HTTPError(
+        url="https://ghcr.io/v2/owner/app/manifests/latest",
+        code=401,
+        msg="unauthorized",
+        hdrs={"WWW-Authenticate": 'Bearer realm="https://ghcr.io/token",service="ghcr.io"'},
+        fp=None,
+    )
+    manifest_response = Mock()
+    manifest_response.__enter__ = Mock(return_value=manifest_response)
+    manifest_response.__exit__ = Mock(return_value=False)
+    manifest_response.read.return_value = b"{}"
+    manifest_response.headers = {"Docker-Content-Digest": "sha256:new"}
+
+    monkeypatch.setattr(deployment_agent, "GHCR_TOKEN", "private-token")
+    monkeypatch.setattr(deployment_agent, "fetch_registry_token", Mock(return_value="bearer-token"))
+
+    with patch("urllib.request.urlopen", side_effect=[unauthorized, manifest_response]) as urlopen:
+        deployment_agent.registry_request("https://ghcr.io/v2/owner/app/manifests/latest", accept="application/json")
+
+    retried_request = urlopen.call_args_list[1].args[0]
+    assert retried_request.get_header("Authorization") == "Bearer bearer-token"

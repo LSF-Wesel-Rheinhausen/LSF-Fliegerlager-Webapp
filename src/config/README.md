@@ -25,6 +25,6 @@ Unterstuetzte Umgebungsvariablen:
 - `APP_VERSION`, `APP_REVISION`, `APP_BUILD_DATE` und `APP_CHANGE`: vom Container-Build gesetzte Versionsmetadaten.
 
 WhiteNoise liefert die durch `collectstatic` erzeugten Dateien direkt über Gunicorn aus. Der Update-Agent bleibt ein
-separater Container; der Django-Prozess erhält keinen Zugriff auf den Docker-Socket.
+separater Container; der Django-Prozess erhält keinen Zugriff auf Portainer-Zugangsdaten.
 
 `GET /healthz/` prüft die Anwendungs- und Datenbankbereitschaft. Der Endpunkt liefert ausschließlich `{"status":"ok"}` oder bei Datenbankfehlern `{"status":"unavailable"}`.

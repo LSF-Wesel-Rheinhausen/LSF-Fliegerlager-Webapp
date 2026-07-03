@@ -1,1 +1,1 @@
-docker>=7.1,<8
+# The updater currently uses only the Python standard library.

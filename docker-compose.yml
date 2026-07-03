@@ -43,14 +43,16 @@ services:
     environment:
       UPDATE_AGENT_TOKEN: ${UPDATE_AGENT_TOKEN:?UPDATE_AGENT_TOKEN must be set in .env}
       APP_IMAGE: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}
-      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-fliegerlager}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set in .env}
+      PORTAINER_URL: ${PORTAINER_URL:?PORTAINER_URL must be set in .env}
+      PORTAINER_API_KEY: ${PORTAINER_API_KEY:?PORTAINER_API_KEY must be set in .env}
+      PORTAINER_ENDPOINT_ID: ${PORTAINER_ENDPOINT_ID:?PORTAINER_ENDPOINT_ID must be set in .env}
+      PORTAINER_STACK_ID: ${PORTAINER_STACK_ID:?PORTAINER_STACK_ID must be set in .env}
+      APP_HEALTH_URL: ${APP_HEALTH_URL:-http://app:8000/healthz/}
+      GHCR_TOKEN: ${GHCR_TOKEN:-}
       UPDATE_HEALTH_TIMEOUT: ${UPDATE_HEALTH_TIMEOUT:-180}
       TZ: ${TZ:-Europe/Berlin}
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ${DOCKER_CONFIG_DIR:-./docker-config}:/root/.docker:ro
-      - ./docker-compose.yml:/deployment/docker-compose.yml:ro
-      - ./.env:/deployment/.env:ro
       - ${BACKUP_DIR:-./backups}:/backups
       - updater_state:/state
     healthcheck:
@@ -64,6 +66,7 @@ services:
       retries: 3
       start_period: 10s
     networks:
+      - frontend
       - backend
 
 volumes:

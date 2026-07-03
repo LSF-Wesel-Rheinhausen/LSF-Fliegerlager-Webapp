@@ -38,7 +38,7 @@ def parse_date(value, field_name, errors):
         return None
     val_str = str(value).strip()
     import datetime
-    
+
     # Try different date formats
     for fmt in ("%d.%m.%Y", "%Y-%m-%d", "%d.%m.%y", "%m/%d/%Y", "%Y-%m-%d %H:%M:%S"):
         try:
@@ -90,28 +90,40 @@ def parse_decimal(value, field_name, errors, default="1"):
 
 def normalize_row(raw, row_number):
     errors = []
-    
+
     mapping = {
-        "vorname": "first_name", "first_name": "first_name",
-        "nachname": "last_name", "last_name": "last_name",
-        "anreise": "arrival_date", "arrival_date": "arrival_date",
-        "abreise": "departure_date", "departure_date": "departure_date",
+        "vorname": "first_name",
+        "first_name": "first_name",
+        "nachname": "last_name",
+        "last_name": "last_name",
+        "anreise": "arrival_date",
+        "arrival_date": "arrival_date",
+        "abreise": "departure_date",
+        "departure_date": "departure_date",
         "hilfssatz": "hilfssatz",
         "berufssatz": "berufssatz",
-        "email": "email", "e-mail": "email",
-        "telefon": "phone", "phone": "phone",
+        "email": "email",
+        "e-mail": "email",
+        "telefon": "phone",
+        "phone": "phone",
         "status": "status",
-        "kind": "is_child", "is_child": "is_child",
-        "jugendgruppe": "is_youth_group", "is_youth_group": "is_youth_group",
-        "begleitperson": "is_companion", "is_companion": "is_companion",
-        "notizen": "notes", "notes": "notes",
-        "gebuchte_nächte": "booked_nights", "booked_nights": "booked_nights",
-        "ist_nächte": "actual_nights", "actual_nights": "actual_nights",
+        "kind": "is_child",
+        "is_child": "is_child",
+        "jugendgruppe": "is_youth_group",
+        "is_youth_group": "is_youth_group",
+        "begleitperson": "is_companion",
+        "is_companion": "is_companion",
+        "notizen": "notes",
+        "notes": "notes",
+        "gebuchte_nächte": "booked_nights",
+        "booked_nights": "booked_nights",
+        "ist_nächte": "actual_nights",
+        "actual_nights": "actual_nights",
     }
-    
+
     data = {}
     extra_notes = []
-    
+
     for k, v in raw.items():
         if k is None:
             continue
@@ -124,34 +136,37 @@ def normalize_row(raw, row_number):
         else:
             if str(v).strip():
                 extra_notes.append(f"{k}: {v}")
-                
+
     for column in PARTICIPANT_COLUMNS:
         data.setdefault(column, "")
-        
+
     for column in ["first_name", "last_name", "arrival_date", "departure_date", "hilfssatz", "berufssatz"]:
         if not str(data.get(column, "")).strip():
             label_map = {
-                "first_name": "Vorname", "last_name": "Nachname",
-                "arrival_date": "Anreise", "departure_date": "Abreise",
-                "hilfssatz": "Hilfssatz", "berufssatz": "Berufssatz"
+                "first_name": "Vorname",
+                "last_name": "Nachname",
+                "arrival_date": "Anreise",
+                "departure_date": "Abreise",
+                "hilfssatz": "Hilfssatz",
+                "berufssatz": "Berufssatz",
             }
             errors.append(f"{label_map.get(column, column)}: Pflichtfeld fehlt")
-            
+
     data["arrival_date"] = parse_date(data.get("arrival_date"), "Anreise", errors)
     data["departure_date"] = parse_date(data.get("departure_date"), "Abreise", errors)
 
     for column in ["booked_nights", "actual_nights"]:
         data[column] = parse_int(data.get(column), column, errors)
-        
+
     for column in ["hilfssatz", "berufssatz"]:
         val = parse_decimal(data.get(column), column, errors)
         if val is not None and (val < 0 or val > 1):
             errors.append(f"{column.capitalize()}: Wert muss zwischen 0 und 1 liegen")
         data[column] = val
-        
+
     for column in ["is_child", "is_youth_group", "is_companion"]:
         data[column] = parse_bool(data.get(column))
-        
+
     if extra_notes:
         if data["notes"]:
             data["notes"] += "\n" + "\n".join(extra_notes)
@@ -225,24 +240,24 @@ def rows_to_payload(rows):
 
 def rows_from_payload(payload):
     import datetime
-    
+
     rows = []
     for row in payload:
         data = row["data"]
         # Deserialize date strings back to date objects
-        for field in ["arrival_date", "departure_date"]:
-            if data.get(field) and isinstance(data[field], str):
+        for field_name in ["arrival_date", "departure_date"]:
+            if data.get(field_name) and isinstance(data[field_name], str):
                 try:
-                    data[field] = datetime.date.fromisoformat(data[field])
+                    data[field_name] = datetime.date.fromisoformat(data[field_name])
                 except ValueError:
                     pass
-                    
-        # Decimal fields might also be strings or floats, though JSON handles floats. 
+
+        # Decimal fields might also be strings or floats, though JSON handles floats.
         # For precision, let's leave them if Django ORM handles them, or parse them to Decimal.
-        for field in ["hilfssatz", "berufssatz", "quantity", "unit_price", "amount"]:
-            if field in data and data[field] is not None:
-                data[field] = Decimal(str(data[field]))
-                
+        for field_name in ["hilfssatz", "berufssatz", "quantity", "unit_price", "amount"]:
+            if field_name in data and data[field_name] is not None:
+                data[field_name] = Decimal(str(data[field_name]))
+
         rows.append(ImportRow(row_number=row["row_number"], data=data, errors=row.get("errors", [])))
     return rows
 
