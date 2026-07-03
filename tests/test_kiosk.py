@@ -335,6 +335,23 @@ def test_kiosk_home_shows_order_sent_for_next_day(client, monkeypatch):
 
 
 @pytest.mark.django_db
+def test_kiosk_home_shows_meal_booking_cutoff_time_before_order_sent(client, monkeypatch):
+    fixed_now = timezone.make_aware(datetime(2026, 7, 1, 10, 30))
+    monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
+    camp = CampFactory(meal_booking_cutoff_time=time(14, 45))
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.get(reverse("kiosk-home"))
+
+    assert response.status_code == 200
+    assert b"Die Buchung ist bis 14:45 Uhr m\xc3\xb6glich." in response.content
+
+
+@pytest.mark.django_db
 def test_kiosk_home_shows_contact_hint_after_cutoff_before_order_sent(client, monkeypatch):
     fixed_now = timezone.make_aware(datetime(2026, 7, 1, 18, 30))
     monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
