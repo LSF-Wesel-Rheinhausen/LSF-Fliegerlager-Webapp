@@ -1,7 +1,10 @@
-import pytest
 from decimal import Decimal
+
+import pytest
 from django.urls import reverse
+
 from tests.factories import CampFactory, ParticipantFactory, PaymentFactory, SuperUserFactory
+
 
 @pytest.mark.django_db
 def test_participant_detail_shows_donation_prompt_for_credit(client):

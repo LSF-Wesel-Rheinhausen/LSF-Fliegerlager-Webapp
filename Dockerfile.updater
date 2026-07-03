@@ -1,16 +1,14 @@
-FROM docker:29.5.0-cli
+FROM python:3.13-alpine
 
-RUN apk add --no-cache python3 py3-pip \
-    && python3 -m venv /opt/venv
+RUN apk add --no-cache postgresql-client
 
 COPY requirements-updater.txt /tmp/requirements-updater.txt
-RUN /opt/venv/bin/pip install --no-cache-dir -r /tmp/requirements-updater.txt
+RUN pip install --no-cache-dir -r /tmp/requirements-updater.txt
 
 WORKDIR /opt/updater
 COPY deployment_agent.py .
 
-ENV PATH="/opt/venv/bin:$PATH" \
-    PYTHONUNBUFFERED=1
+ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8080
 CMD ["python", "deployment_agent.py"]

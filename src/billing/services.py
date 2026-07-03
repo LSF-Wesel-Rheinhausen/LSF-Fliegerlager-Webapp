@@ -468,7 +468,7 @@ def shared_expense_charge_lines(participant):
     lines = []
     allocations = ExpenseAllocation.objects.filter(participant=participant).select_related("expense")
     for allocation in allocations:
-        date_str = allocation.expense.paid_on.strftime('%d.%m.%Y') if allocation.expense.paid_on else ''
+        date_str = allocation.expense.paid_on.strftime("%d.%m.%Y") if allocation.expense.paid_on else ""
         date_part = f" ({date_str})" if date_str else ""
         lines.append(
             build_settlement_line(
@@ -655,7 +655,7 @@ def approve_shared_expense(expense: Expense, approved_by: Any, participant_ids: 
     expense.status = Expense.Status.APPROVED
     expense.approved_by = approved_by
     expense.approved_at = timezone.now()
-    
+
     if expense.allocation_method in (Expense.AllocationMethod.NONE, Expense.AllocationMethod.COST_CENTER):
         expense.save(update_fields=["status", "approved_by", "approved_at", "allocation_method", "cost_center"])
         return
