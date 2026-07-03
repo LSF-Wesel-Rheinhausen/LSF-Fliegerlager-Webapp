@@ -1159,6 +1159,51 @@ def test_kiosk_quick_food_tiles_hide_date_specific_meal_rules(client):
 
 
 @pytest.mark.django_db
+def test_kiosk_quick_food_booking_applies_date_specific_breakfast_price(client):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    standard_rule = PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=PriceRule.MealType.BREAKFAST,
+        meal_date=None,
+        applies_to_children=False,
+        applies_to_adults=True,
+        name="Standard Frühstück",
+        unit_price=Decimal("4.00"),
+    )
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=PriceRule.MealType.BREAKFAST,
+        meal_date=date(2026, 7, 2),
+        applies_to_children=False,
+        applies_to_adults=True,
+        name="Spezial Frühstück",
+        unit_price=Decimal("6.00"),
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "quick",
+            "quick-price_rule": standard_rule.pk,
+            "quick-quantity": 1,
+            "quick-quick_date": date(2026, 7, 2).isoformat(),
+        },
+    )
+
+    assert response.status_code == 302
+    charge = Charge.objects.get(participant=participant, kind=Charge.Kind.FOOD)
+    assert charge.description == "Spezial Frühstück (Kiosk)"
+    assert charge.unit_price == Decimal("6.00")
+    assert charge.occurred_on == date(2026, 7, 2)
+
+
+@pytest.mark.django_db
 def test_kiosk_meal_signup_child_breakfast_override(client, monkeypatch):
     _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
     camp = CampFactory()

@@ -1387,25 +1387,40 @@ def kiosk_home(request):
                         if hasattr(target, "first_name") and hasattr(target, "last_name") and hasattr(target, "role"):
                             # This is a ParticipantFamilyMember
                             charge_participant = target.guardian
-                            charge_desc = f"{rule.name} (Kiosk) für {target.full_name}"
+                            target_is_child = target.is_child
+                            target_is_companion = target.role == target.Role.COMPANION
                         else:
                             charge_participant = target
-                            charge_desc = f"{rule.name} (Kiosk)"
-                            if target != participant:
-                                charge_desc = f"{rule.name} (Kiosk) für {target.full_name}"
+                            target_is_child = target.is_child
+                            target_is_companion = target.is_companion
+                        effective_rule = rule
+                        if rule.kind == PriceRule.Kind.MEAL:
+                            resolved_rule = resolve_meal_price_rule(
+                                participant.camp,
+                                rule.meal_type,
+                                occurred_on,
+                                is_child=target_is_child,
+                                is_companion=target_is_companion,
+                            )
+                            if resolved_rule is not None and resolved_rule.meal_date == occurred_on:
+                                effective_rule = resolved_rule
+                        charge_desc = f"{effective_rule.name} (Kiosk)"
+                        if target != participant:
+                            charge_desc = f"{effective_rule.name} (Kiosk) für {target.full_name}"
 
                         charge = Charge(
                             participant=charge_participant,
-                            kind=Charge.Kind.DRINK if rule.kind == PriceRule.Kind.DRINK else Charge.Kind.FOOD,
+                            kind=Charge.Kind.DRINK if effective_rule.kind == PriceRule.Kind.DRINK else Charge.Kind.FOOD,
                             description=charge_desc,
                             quantity=quick_form.cleaned_data["quantity"],
-                            unit_price=rule.unit_price,
-                            foerdersatz=rule.foerdersatz,
+                            unit_price=effective_rule.unit_price,
+                            foerdersatz=effective_rule.foerdersatz,
                             occurred_on=occurred_on,
                         )
                         charge.save()
-                messages.success(request, f"{rule.name} gebucht.")
-                return redirect("kiosk-home")
+                if not quick_form.errors:
+                    messages.success(request, f"{rule.name} gebucht.")
+                    return redirect("kiosk-home")
         elif request.POST.get("action") == "meal":
             meal_form = MealBookingForm(request.POST, participant=participant, prefix="meal")
             if meal_form.is_valid():
