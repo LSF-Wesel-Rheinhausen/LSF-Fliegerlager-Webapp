@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 from datetime import timedelta
 from typing import Any
 
@@ -106,6 +107,7 @@ from .services import (
     restore_booking_from_audit_log,
 )
 
+logger = logging.getLogger(__name__)
 signer = Signer()
 User = get_user_model()
 KIOSK_PARTICIPANT_SESSION_KEY = "kiosk_participant_id"
@@ -876,6 +878,13 @@ def expense_receipt_download(request: HttpRequest, expense_id: int) -> FileRespo
     can_view_own_receipt = participant is not None and expense.participant_id == participant.pk
     if not can_view_own_receipt and not is_editor(request.user):
         raise PermissionDenied
+
+    if not expense.receipt.storage.exists(expense.receipt.name):
+        logger.warning(
+            "expense_receipt_file_missing",
+            extra={"expense_id": expense.pk},
+        )
+        raise Http404("Rechnungsbeleg wurde nicht gefunden.")
 
     return FileResponse(
         expense.receipt.open("rb"), as_attachment=False, filename=expense.receipt.name.rsplit("/", 1)[-1]

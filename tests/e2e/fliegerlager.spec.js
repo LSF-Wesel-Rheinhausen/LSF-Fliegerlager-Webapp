@@ -55,6 +55,19 @@ async function assertNoUnexpectedOverflow(page) {
   expect(result.failures, "Elemente laufen aus der Anzeige oder aus ihrem Container").toEqual([]);
 }
 
+function addDays(date, days) {
+  const copy = new Date(date);
+  copy.setDate(copy.getDate() + days);
+  return copy;
+}
+
+function dateInputValue(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 async function setupFirstAdmin(page) {
   await page.goto("/setup/");
   if (page.url().includes("/login/")) {
@@ -93,10 +106,12 @@ async function createCamp(page, name = "Sommerlager") {
   await expect(page.getByRole("heading", { name: "Lager anlegen" })).toBeVisible();
   const suffix = Date.now().toString();
   const campName = `${name} ${suffix}`;
+  const startDate = addDays(new Date(), 1);
+  const endDate = addDays(startDate, 2);
   await page.getByLabel("Name").fill(campName);
-  await page.getByLabel("Jahr").fill("2026");
-  await page.getByLabel("Beginn").fill("2026-07-01");
-  await page.getByLabel("Ende").fill("2026-07-03");
+  await page.getByLabel("Jahr").fill(String(startDate.getFullYear()));
+  await page.getByLabel("Beginn").fill(dateInputValue(startDate));
+  await page.getByLabel("Ende").fill(dateInputValue(endDate));
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(page.getByRole("heading", { name: "Übersicht" })).toBeVisible();
   await expect(page.getByText(campName).first()).toBeVisible();

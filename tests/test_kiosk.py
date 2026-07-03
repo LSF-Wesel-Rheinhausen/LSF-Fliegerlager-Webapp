@@ -22,6 +22,11 @@ from billing.views import KIOSK_PARTICIPANT_SESSION_KEY, KIOSK_PIN_SETUP_SESSION
 from tests.factories import CampFactory, ExpenseFactory, ParticipantFactory, PriceRuleFactory, UserFactory
 
 
+def _freeze_meal_lock_time(monkeypatch, fixed_now):
+    monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
+
+
 @pytest.mark.django_db
 def test_kiosk_login_redirects_to_pin_setup_when_pin_is_missing(client):
     participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
@@ -210,6 +215,56 @@ def test_kiosk_shared_expense_upload_shows_receipt_link_and_serves_file(client):
 
 
 @pytest.mark.django_db
+def test_kiosk_shared_expense_upload_rejects_unsupported_receipt_type(client):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    receipt = SimpleUploadedFile("rechnung.txt", b"not a receipt", content_type="text/plain")
+    response = client.post(
+        reverse("kiosk-shared-expense-request"),
+        {
+            "category": "Verbrauchsmaterial",
+            "description": "Schrauben",
+            "amount": "12.50",
+            "paid_on": "2026-07-01",
+            "receipt": receipt,
+        },
+    )
+
+    assert response.status_code == 200
+    assert not Expense.objects.filter(participant=participant, description="Schrauben").exists()
+    assert b"Erlaubte Dateitypen" in response.content
+
+
+@pytest.mark.django_db
+def test_kiosk_shared_expense_upload_rejects_oversized_receipt(client):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    receipt = SimpleUploadedFile("rechnung.pdf", b"x" * (5 * 1024 * 1024 + 1), content_type="application/pdf")
+    response = client.post(
+        reverse("kiosk-shared-expense-request"),
+        {
+            "category": "Verbrauchsmaterial",
+            "description": "Schrauben",
+            "amount": "12.50",
+            "paid_on": "2026-07-01",
+            "receipt": receipt,
+        },
+    )
+
+    assert response.status_code == 200
+    assert not Expense.objects.filter(participant=participant, description="Schrauben").exists()
+    assert "höchstens 5 MB".encode() in response.content
+
+
+@pytest.mark.django_db
 def test_kiosk_expense_receipt_rejects_other_participants(client):
     camp = CampFactory()
     viewer = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
@@ -355,7 +410,8 @@ def test_kiosk_books_drink_with_camp_drink_price_and_subsidy_flag(client):
 
 
 @pytest.mark.django_db
-def test_kiosk_meal_signup_updates_existing_signup_and_creates_charge(client):
+def test_kiosk_meal_signup_updates_existing_signup_and_creates_charge(client, monkeypatch):
+    _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
     camp = CampFactory()
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     PriceRuleFactory(
@@ -536,7 +592,8 @@ def test_kiosk_meal_signup_for_today_is_locked(client, monkeypatch):
 
 
 @pytest.mark.django_db
-def test_kiosk_retracts_meal_signup_and_soft_deletes_food_charge(client):
+def test_kiosk_retracts_meal_signup_and_soft_deletes_food_charge(client, monkeypatch):
+    _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 7, 1, 10, 0)))
     camp = CampFactory()
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     charge = Charge.objects.create(
@@ -677,7 +734,8 @@ def test_kiosk_meal_signup_requires_person_when_dialog_selection_is_empty(client
 
 
 @pytest.mark.django_db
-def test_kiosk_creates_family_member_and_books_meal_on_guardian(client):
+def test_kiosk_creates_family_member_and_books_meal_on_guardian(client, monkeypatch):
+    _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
     camp = CampFactory()
     participant = ParticipantFactory(camp=camp, first_name="Vater", last_name="Muster")
     PriceRuleFactory(
@@ -778,7 +836,8 @@ def test_kiosk_booking_link_invite_accept_revoke_flow(client):
 
 
 @pytest.mark.django_db
-def test_kiosk_books_meal_for_linked_participant_on_linked_account(client):
+def test_kiosk_books_meal_for_linked_participant_on_linked_account(client, monkeypatch):
+    _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
     camp = CampFactory()
     inviter = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")
     invitee = ParticipantFactory(camp=camp, first_name="Grace", last_name="B")
@@ -919,7 +978,8 @@ def test_kiosk_drink_form_filters_by_participant_type(client):
 
 
 @pytest.mark.django_db
-def test_kiosk_meal_signup_child_breakfast_override(client):
+def test_kiosk_meal_signup_child_breakfast_override(client, monkeypatch):
+    _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
     camp = CampFactory()
     participant = ParticipantFactory(camp=camp, first_name="Timmy", is_child=True)
 

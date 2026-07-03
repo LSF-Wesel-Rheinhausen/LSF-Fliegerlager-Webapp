@@ -12,6 +12,8 @@ services:
         condition: service_healthy
     labels:
       io.lsf-fliegerlager.update-target: "true"
+    volumes:
+      - media_data:/app/src/media
     networks: [frontend, backend]
 
   db:
@@ -61,6 +63,7 @@ services:
     networks: [backend]
 
 volumes:
+  media_data:
   postgres_data:
   updater_state:
 

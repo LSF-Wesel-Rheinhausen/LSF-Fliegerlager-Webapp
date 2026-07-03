@@ -5,6 +5,7 @@ from typing import Any
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, SetPasswordForm, UserCreationForm
+from django.core.exceptions import ValidationError
 from django.core.validators import FileExtensionValidator
 from django.db import models, transaction
 
@@ -27,6 +28,28 @@ from .roles import ROLE_ADMIN, ROLE_CHOICES, user_role
 
 PERCENT_PLACES = Decimal("0.01")
 MAX_IMPORT_FILE_SIZE = 5 * 1024 * 1024
+MAX_RECEIPT_FILE_SIZE = 5 * 1024 * 1024
+ALLOWED_RECEIPT_EXTENSIONS = {"pdf", "jpg", "jpeg", "png", "heic"}
+ALLOWED_RECEIPT_CONTENT_TYPES = {"application/pdf", "image/jpeg", "image/png", "image/heic", "image/heif"}
+
+
+def validate_receipt_upload(upload: Any) -> Any:
+    """Validate uploaded expense receipts before they reach persistent storage."""
+    if not upload:
+        return upload
+
+    if upload.size > MAX_RECEIPT_FILE_SIZE:
+        raise ValidationError("Der Rechnungsbeleg darf höchstens 5 MB groß sein.")
+
+    extension = upload.name.rsplit(".", 1)[-1].lower() if "." in upload.name else ""
+    if extension not in ALLOWED_RECEIPT_EXTENSIONS:
+        raise ValidationError("Erlaubte Dateitypen: PDF, JPG, PNG oder HEIC.")
+
+    content_type = getattr(upload, "content_type", "")
+    if content_type and content_type not in ALLOWED_RECEIPT_CONTENT_TYPES:
+        raise ValidationError("Der Dateityp des Rechnungsbelegs wird nicht unterstützt.")
+
+    return upload
 
 
 def subsidy_percentage(value: Decimal) -> Decimal:
@@ -503,6 +526,10 @@ EXPENSE_CATEGORY_CHOICES = [
 
 
 class ExpenseForm(forms.ModelForm):
+    def clean_receipt(self) -> Any:
+        """Validate the optional receipt upload attached to an administrative expense."""
+        return validate_receipt_upload(self.cleaned_data.get("receipt"))
+
     class Meta:
         model = Expense
         fields = ["participant", "category", "description", "amount", "receipt", "paid_on", "reimbursable"]
@@ -528,6 +555,10 @@ class ExpenseForm(forms.ModelForm):
 
 
 class SharedExpenseRequestForm(forms.ModelForm):
+    def clean_receipt(self) -> Any:
+        """Validate the optional receipt upload attached to a kiosk expense request."""
+        return validate_receipt_upload(self.cleaned_data.get("receipt"))
+
     class Meta:
         model = Expense
         fields = ["category", "description", "amount", "receipt", "paid_on"]

@@ -179,6 +179,26 @@ def test_expense_receipt_download_returns_not_found_when_receipt_is_missing(clie
 
 
 @pytest.mark.django_db
+def test_expense_receipt_download_returns_not_found_when_file_is_missing(client, editor_user, permission_dataset):
+    expense = Expense.objects.create(
+        camp=permission_dataset["camp"],
+        participant=permission_dataset["participant"],
+        category="Einkauf",
+        description="Verwaister Beleg",
+        amount=Decimal("7.50"),
+        receipt=SimpleUploadedFile("verwaist.pdf", b"missing receipt", content_type="application/pdf"),
+    )
+    receipt_name = expense.receipt.name
+    expense.receipt.delete(save=False)
+    Expense.objects.filter(pk=expense.pk).update(receipt=receipt_name)
+    client.force_login(editor_user)
+
+    response = client.get(reverse("expense-receipt", args=[expense.pk]))
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize(
     ("route_name", "arg_getter"),
     [
