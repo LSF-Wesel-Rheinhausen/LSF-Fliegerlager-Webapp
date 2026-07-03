@@ -7,7 +7,7 @@ from django.contrib.auth.models import Group
 from django.test import override_settings
 from django.urls import reverse
 
-from billing.deployment_updates import UpdateAgentError, agent_request
+from billing.deployment_updates import UpdateAgentError, agent_request, check_for_update
 from billing.permissions import ADMIN_GROUP
 from tests.factories import SuperUserFactory, UserFactory
 
@@ -75,6 +75,35 @@ def test_agent_request_uses_bearer_token_and_parses_json():
     request = urlopen.call_args.args[0]
     assert request.get_header("Authorization") == "Bearer secret-token"
     assert result == {"phase": "idle"}
+
+
+@override_settings(
+    UPDATE_AGENT_URL="http://updater:8080",
+    UPDATE_AGENT_TOKEN="secret-token",
+    APP_VERSION="1.2.3",
+    APP_REVISION="abc123",
+    APP_BUILD_DATE="2026-06-09T12:00:00Z",
+    APP_CHANGE="feat: deployment updates",
+)
+def test_check_for_update_sends_current_build_metadata():
+    response = Mock()
+    response.__enter__ = Mock(return_value=io.BytesIO(json.dumps({"update_available": True}).encode()))
+    response.__exit__ = Mock(return_value=False)
+
+    with patch("urllib.request.urlopen", return_value=response) as urlopen:
+        result = check_for_update()
+
+    request = urlopen.call_args.args[0]
+    assert request.get_header("Content-type") == "application/json"
+    assert json.loads(request.data.decode()) == {
+        "current": {
+            "version": "1.2.3",
+            "revision": "abc123",
+            "build_date": "2026-06-09T12:00:00Z",
+            "change": "feat: deployment updates",
+        }
+    }
+    assert result == {"update_available": True}
 
 
 @override_settings(UPDATE_AGENT_URL="", UPDATE_AGENT_TOKEN="")

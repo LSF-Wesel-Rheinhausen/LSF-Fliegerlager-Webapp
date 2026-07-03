@@ -68,7 +68,8 @@ Deployment-Host nicht erforderlich. Eine eigenständige Beispielkonfiguration li
 
 Superuser können unter **Updates** das neueste Image samt letztem Change prüfen und nach Bestätigung installieren.
 Vor dem Containerwechsel erstellt der isolierte Update-Agent ein PostgreSQL-Backup und prüft anschließend den
-Healthcheck. Der Docker-Socket ist ausschließlich im nicht öffentlich erreichbaren Agent-Container eingebunden.
+Healthcheck. Der Agent steuert den Stack über Portainer Business Edition, erhält keinen Docker-Socket und bezieht alle
+Portainer-Zugangsdaten ausschließlich aus ENV/Stack-Variablen.
 
 ## Tests
 
@@ -132,6 +133,9 @@ Die wichtigsten Umgebungsvariablen stehen mit sicheren Platzhaltern in [`.env.ex
 - `UPDATE_AGENT_TOKEN`: separates langes Secret für die interne Update-API.
 - `UPDATE_AGENT_URL`: interne Agent-Adresse; im Beispiel-Compose `http://updater:8080`.
 - `APP_IMAGE`: zu installierendes App-Image, standardmäßig das veröffentlichte `latest`-Image.
+- `APP_HEALTH_URL`: Healthcheck-URL, die der Update-Agent nach einem Portainer-Redeploy abfragt.
+- `PORTAINER_URL`, `PORTAINER_API_KEY`, `PORTAINER_ENDPOINT_ID`, `PORTAINER_STACK_ID`: Portainer-Zielstack für Updates.
+- `GHCR_TOKEN`: optional, nur für private GHCR-Images erforderlich.
 
 Bei `DJANGO_DEBUG=0` startet die Anwendung nur mit einem mindestens 50 Zeichen langen `DJANGO_SECRET_KEY` und expliziten `DJANGO_ALLOWED_HOSTS`.
 

@@ -3,7 +3,7 @@ from decimal import Decimal
 
 import pytest
 
-from billing.models import Charge, PriceRule, Expense
+from billing.models import Charge, Expense, PriceRule
 from billing.services import calculate_participant_settlement
 from tests.factories import (
     CampFactory,
@@ -181,8 +181,8 @@ def test_participant_camp_flat_duration():
 
 @pytest.mark.django_db
 def test_approve_shared_expense_pro_rata():
-    from billing.services import approve_shared_expense
     from billing.models import Expense, ExpenseAllocation
+    from billing.services import approve_shared_expense
 
     camp = CampFactory()
     p1 = ParticipantFactory(camp=camp)
@@ -210,9 +210,10 @@ def test_approve_shared_expense_pro_rata():
 @pytest.mark.django_db
 def test_settlement_includes_shared_expense_allocation():
     from billing.models import Expense, ExpenseAllocation
+
     camp = CampFactory()
     participant = ParticipantFactory(camp=camp)
-    
+
     expense = ExpenseFactory(
         camp=camp,
         participant=participant,
@@ -221,11 +222,7 @@ def test_settlement_includes_shared_expense_allocation():
         status=Expense.Status.APPROVED,
         reimbursable=True,
     )
-    ExpenseAllocation.objects.create(
-        expense=expense,
-        participant=participant,
-        amount=Decimal("5.00")
-    )
+    ExpenseAllocation.objects.create(expense=expense, participant=participant, amount=Decimal("5.00"))
 
     result = calculate_participant_settlement(participant)
 

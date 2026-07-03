@@ -1,10 +1,10 @@
 -r requirements.txt
 -r requirements-updater.txt
-pytest>=9.0.3,<10
+pytest>=9.1.1,<10
 pytest-cov>=7.1.0,<8
 pytest-django>=4.12.0,<5
 pre-commit>=4.6.0,<5
-ruff>=0.15.17,<1
-mypy>=1.13,<2
+ruff>=0.15.20,<1
+mypy>=2.1.0,<3
 django-stubs>=6.0.5,<7
 factory_boy>=3.3.3,<4

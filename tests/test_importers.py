@@ -22,7 +22,7 @@ def test_csv_preview_validates_required_fields_and_numbers():
     assert rows[0].valid is False
     assert "Nachname: Pflichtfeld fehlt" in rows[0].errors
     assert "actual_nights: keine gültige Zahl" in rows[0].errors
-    
+
     assert rows[1].valid is True
     assert rows[1].data["actual_nights"] == 3
 
@@ -39,11 +39,11 @@ def test_csv_preview_validates_dates_and_rates():
 
     assert rows[0].valid is False
     assert "Anreise: ungültiges Datumsformat" in rows[0].errors[0]
-    
+
     assert rows[1].valid is False
     assert "Hilfssatz: Wert muss zwischen 0 und 1 liegen" in rows[1].errors
     assert "Berufssatz: Wert muss zwischen 0 und 1 liegen" in rows[1].errors
-    
+
     assert rows[2].valid is True
 
 
@@ -66,6 +66,7 @@ def test_csv_preview_parses_optional_and_unknown_fields():
 
 def test_csv_preview_handles_none_values():
     from billing.importers import normalize_row
+
     # Simulates what openpyxl returns for empty cells
     row = normalize_row({"Vorname": "Empty", "Nachname": "Row", "Email": None}, 1)
     assert row.data["email"] == ""
@@ -91,11 +92,9 @@ def test_save_participants_upserts_valid_rows():
 def test_participant_save_calculates_booked_nights():
     camp = CampFactory()
     import datetime
+
     participant = ParticipantFactory(
-        camp=camp, 
-        arrival_date=datetime.date(2026, 8, 1), 
-        departure_date=datetime.date(2026, 8, 10),
-        booked_nights=0
+        camp=camp, arrival_date=datetime.date(2026, 8, 1), departure_date=datetime.date(2026, 8, 10), booked_nights=0
     )
     assert participant.booked_nights == 9
 
@@ -104,10 +103,7 @@ def test_participant_save_calculates_booked_nights():
 def test_save_participants_rejects_archived_name_conflict():
     camp = CampFactory()
     ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace", archived_at="2026-06-09T12:00:00Z")
-    payload = (
-        b"Vorname,Nachname,Anreise,Abreise,Hilfssatz,Berufssatz\n"
-        b"Ada,Lovelace,01.08.2026,10.08.2026,1.0,1.0\n"
-    )
+    payload = b"Vorname,Nachname,Anreise,Abreise,Hilfssatz,Berufssatz\nAda,Lovelace,01.08.2026,10.08.2026,1.0,1.0\n"
     rows = preview_participants(BytesIO(payload), "teilnehmer.csv")
 
     with pytest.raises(ValidationError, match="archiviert"):
