@@ -6,6 +6,7 @@ import hmac
 import json
 import logging
 import os
+import ssl
 import subprocess
 import threading
 import time
@@ -28,6 +29,7 @@ PORTAINER_URL = os.getenv("PORTAINER_URL", "").rstrip("/")
 PORTAINER_API_KEY = os.getenv("PORTAINER_API_KEY", "")
 PORTAINER_ENDPOINT_ID = os.getenv("PORTAINER_ENDPOINT_ID", "")
 PORTAINER_STACK_ID = os.getenv("PORTAINER_STACK_ID", "")
+PORTAINER_VERIFY_SSL = os.getenv("PORTAINER_VERIFY_SSL", "true")
 APP_HEALTH_URL = os.getenv("APP_HEALTH_URL", "http://app:8000/healthz/")
 BACKUP_DIR = Path(os.getenv("BACKUP_DIR", "/backups"))
 DATABASE_URL = os.getenv("DATABASE_URL", "")
@@ -67,6 +69,16 @@ def require_env(name: str, value: str) -> str:
     if value.strip():
         return value
     raise AgentConfigError(f"Pflichtvariable {name} ist nicht gesetzt.")
+
+
+def parse_bool_env(name: str, value: str) -> bool:
+    """Parse a strict true/false environment value."""
+    normalized = value.strip().lower()
+    if normalized == "true":
+        return True
+    if normalized == "false":
+        return False
+    raise AgentConfigError(f"{name} muss 'true' oder 'false' sein.")
 
 
 def utc_now() -> str:
@@ -119,6 +131,7 @@ class PortainerClient:
         api_key: str | None = None,
         endpoint_id: str | None = None,
         stack_id: str | None = None,
+        verify_ssl: str | bool | None = None,
     ) -> None:
         self.base_url = require_env("PORTAINER_URL", base_url if base_url is not None else PORTAINER_URL).rstrip("/")
         self.api_key = require_env("PORTAINER_API_KEY", api_key if api_key is not None else PORTAINER_API_KEY)
@@ -127,6 +140,19 @@ class PortainerClient:
             endpoint_id if endpoint_id is not None else PORTAINER_ENDPOINT_ID,
         )
         self.stack_id = require_env("PORTAINER_STACK_ID", stack_id if stack_id is not None else PORTAINER_STACK_ID)
+        if isinstance(verify_ssl, bool):
+            self.verify_ssl = verify_ssl
+        else:
+            self.verify_ssl = parse_bool_env(
+                "PORTAINER_VERIFY_SSL",
+                verify_ssl if verify_ssl is not None else PORTAINER_VERIFY_SSL,
+            )
+
+    def ssl_context(self) -> ssl.SSLContext | None:
+        """Return the Portainer TLS context, or None for default certificate verification."""
+        if self.verify_ssl:
+            return None
+        return ssl._create_unverified_context()
 
     def raw_request(
         self,
@@ -153,7 +179,7 @@ class PortainerClient:
             },
         )
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
+            with urllib.request.urlopen(request, timeout=timeout, context=self.ssl_context()) as response:
                 if response.status == HTTPStatus.NO_CONTENT:
                     return {}
                 raw = response.read()

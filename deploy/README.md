@@ -32,6 +32,7 @@ Optionale Variablen mit Defaults:
 - `APP_HEALTH_URL`: Healthcheck-URL der App; Default `http://app:8000/healthz/`.
 - `TARGET_SERVICE`: Compose-Service des App-Containers für Rollback-Digest-Ermittlung; Default `app`.
 - `BACKUP_DIR`: Host-Verzeichnis für Backups; Default `./backups`.
+- `PORTAINER_VERIFY_SSL`: Portainer-Zertifikatsprüfung; Default `true`. Für interne Portainer-Instanzen mit Self-Signed-Zertifikat `false` setzen.
 - `GHCR_TOKEN`: nur für private GHCR-Images setzen; bei öffentlichen Images leer lassen.
 - `TZ`: Zeitzone des Updaters; Default `Europe/Berlin`.
 
