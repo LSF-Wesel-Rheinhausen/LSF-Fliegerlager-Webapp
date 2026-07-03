@@ -11,6 +11,7 @@ from billing.models import (
     Charge,
     Expense,
     MealOrder,
+    MealPlanEntry,
     MealSignup,
     ParticipantBookingLink,
     ParticipantFamilyMember,
@@ -352,6 +353,74 @@ def test_kiosk_home_shows_meal_booking_cutoff_time_before_order_sent(client, mon
 
 
 @pytest.mark.django_db
+def test_kiosk_meal_calendar_renders_all_camp_days_with_menu_and_participant_price(client, monkeypatch):
+    fixed_now = timezone.make_aware(datetime(2026, 6, 30, 10, 0))
+    monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 3))
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        is_default=True,
+        applies_to_children=False,
+        applies_to_adults=True,
+        name="Abendessen",
+        unit_price=Decimal("7.00"),
+    )
+    MealPlanEntry.objects.create(
+        camp=camp,
+        meal_date=date(2026, 7, 2),
+        meal=MealSignup.Meal.DINNER,
+        description="Pasta mit Salat",
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.get(reverse("kiosk-home"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'data-meal-date="2026-07-01"' in content
+    assert 'data-meal-date="2026-07-02"' in content
+    assert 'data-meal-date="2026-07-03"' in content
+    assert "Pasta mit Salat" in content
+    assert "7,00 €" in content
+
+
+@pytest.mark.django_db
+def test_kiosk_meal_calendar_shows_closed_days_without_booking_action(client, monkeypatch):
+    fixed_now = timezone.make_aware(datetime(2026, 7, 2, 10, 0))
+    monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 3))
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        is_default=True,
+        applies_to_children=False,
+        applies_to_adults=True,
+        name="Abendessen",
+        unit_price=Decimal("7.00"),
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.get(reverse("kiosk-home"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "Geschlossen" in content
+    assert 'data-meal-date="2026-07-01"' not in content
+    assert 'data-meal-date="2026-07-03"' in content
+
+
+@pytest.mark.django_db
 def test_kiosk_home_shows_contact_hint_after_cutoff_before_order_sent(client, monkeypatch):
     fixed_now = timezone.make_aware(datetime(2026, 7, 1, 18, 30))
     monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
@@ -463,6 +532,66 @@ def test_kiosk_meal_signup_updates_existing_signup_and_creates_charge(client, mo
     assert charge.description == "Abendessen Abendessen"
     assert charge.unit_price == Decimal("7.00")
     assert signup.charge == charge
+
+
+@pytest.mark.django_db
+def test_kiosk_meal_signup_uses_date_specific_price_only_for_matching_date(client, monkeypatch):
+    _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        is_default=True,
+        applies_to_children=False,
+        applies_to_adults=True,
+        name="Standard Abendessen",
+        unit_price=Decimal("7.00"),
+    )
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        meal_date=date(2026, 7, 2),
+        applies_to_children=False,
+        applies_to_adults=True,
+        name="Grillabend",
+        unit_price=Decimal("9.00"),
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-meal_date": date(2026, 7, 1).isoformat(),
+            "meal-meal": MealSignup.Meal.DINNER,
+            "meal-variant": MealSignup.Variant.NORMAL,
+        },
+    )
+
+    assert response.status_code == 302
+    normal_charge = Charge.objects.get(participant=participant, occurred_on=date(2026, 7, 1))
+    assert normal_charge.description == "Standard Abendessen Abendessen"
+    assert normal_charge.unit_price == Decimal("7.00")
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-meal_date": date(2026, 7, 2).isoformat(),
+            "meal-meal": MealSignup.Meal.DINNER,
+            "meal-variant": MealSignup.Variant.NORMAL,
+        },
+    )
+
+    assert response.status_code == 302
+    special_charge = Charge.objects.get(participant=participant, occurred_on=date(2026, 7, 2))
+    assert special_charge.description == "Grillabend Abendessen"
+    assert special_charge.unit_price == Decimal("9.00")
 
 
 @pytest.mark.django_db
@@ -992,6 +1121,41 @@ def test_kiosk_drink_form_filters_by_participant_type(client):
     assert b"Child Drink" not in response.content
     assert b"Companion Drink" not in response.content
     assert b"Adult Drink" in response.content
+
+
+@pytest.mark.django_db
+def test_kiosk_quick_food_tiles_hide_date_specific_meal_rules(client):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=PriceRule.MealType.BREAKFAST,
+        meal_date=None,
+        applies_to_children=False,
+        applies_to_adults=True,
+        name="Standard Frühstück",
+        unit_price=Decimal("4.00"),
+    )
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=PriceRule.MealType.BREAKFAST,
+        meal_date=date(2026, 7, 2),
+        applies_to_children=False,
+        applies_to_adults=True,
+        name="Spezial Frühstück",
+        unit_price=Decimal("6.00"),
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.get(reverse("kiosk-home"))
+
+    assert response.status_code == 200
+    assert "Standard Frühstück".encode() in response.content
+    assert "Spezial Frühstück".encode() not in response.content
 
 
 @pytest.mark.django_db

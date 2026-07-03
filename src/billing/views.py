@@ -41,6 +41,7 @@ from .forms import (
     KioskPinSetupForm,
     MealBookingForm,
     MealCutoffForm,
+    MealPlanForm,
     MealStandardPricesForm,
     ParticipantForm,
     ParticipantImportForm,
@@ -62,6 +63,7 @@ from .models import (
     Charge,
     Expense,
     MealOrder,
+    MealPlanEntry,
     MealSignup,
     Participant,
     ParticipantBookingLink,
@@ -104,6 +106,7 @@ from .services import (
     meal_order_for_date,
     next_catering_order_date,
     participant_kiosk_summary,
+    resolve_meal_price_rule,
     restore_booking_from_audit_log,
 )
 
@@ -879,7 +882,11 @@ def expense_receipt_download(request: HttpRequest, expense_id: int) -> FileRespo
     if not can_view_own_receipt and not is_editor(request.user):
         raise PermissionDenied
 
-    if not expense.receipt.storage.exists(expense.receipt.name):
+    receipt_name = expense.receipt.name
+    if not receipt_name:
+        raise Http404("Kein Rechnungsbeleg vorhanden.")
+
+    if not expense.receipt.storage.exists(receipt_name):
         logger.warning(
             "expense_receipt_file_missing",
             extra={"expense_id": expense.pk},
@@ -887,7 +894,9 @@ def expense_receipt_download(request: HttpRequest, expense_id: int) -> FileRespo
         raise Http404("Rechnungsbeleg wurde nicht gefunden.")
 
     return FileResponse(
-        expense.receipt.open("rb"), as_attachment=False, filename=expense.receipt.name.rsplit("/", 1)[-1]
+        expense.receipt.open("rb"),
+        as_attachment=False,
+        filename=receipt_name.rsplit("/", 1)[-1],
     )
 
 
@@ -1083,28 +1092,6 @@ def _variant_choices_for_booking_target(is_child):
     ]
 
 
-def _meal_price_rule(camp, meal, meal_date, is_child):
-    price_rule = PriceRule.objects.filter(
-        camp=camp,
-        kind=PriceRule.Kind.MEAL,
-        meal_type=meal,
-        applies_to_children=is_child,
-        meal_date=meal_date,
-        is_archived=False,
-    ).first()
-    if price_rule:
-        return price_rule
-    return PriceRule.objects.filter(
-        camp=camp,
-        kind=PriceRule.Kind.MEAL,
-        meal_type=meal,
-        applies_to_children=is_child,
-        is_default=True,
-        is_archived=False,
-        meal_date__isnull=True,
-    ).first()
-
-
 def _kiosk_meal_targets(participant):
     targets = [
         {
@@ -1114,6 +1101,7 @@ def _kiosk_meal_targets(participant):
             "name": participant.full_name,
             "role": "Ich",
             "is_child": participant.is_child,
+            "is_companion": participant.is_companion,
             "variant_choices": _variant_choices_for_booking_target(participant.is_child),
         }
     ]
@@ -1126,6 +1114,7 @@ def _kiosk_meal_targets(participant):
                 "name": member.full_name,
                 "role": member.get_role_display(),
                 "is_child": member.is_child,
+                "is_companion": member.role == member.Role.COMPANION,
                 "variant_choices": _variant_choices_for_booking_target(member.is_child),
             }
         )
@@ -1138,6 +1127,7 @@ def _kiosk_meal_targets(participant):
                 "name": linked_participant.full_name,
                 "role": "Verknüpft",
                 "is_child": linked_participant.is_child,
+                "is_companion": linked_participant.is_companion,
                 "variant_choices": _variant_choices_for_booking_target(linked_participant.is_child),
             }
         )
@@ -1204,20 +1194,26 @@ def _retract_meal_signup(signup):
     signup.charge.save(update_fields=["deleted_at", "deleted_by"])
 
 
-def _kiosk_meal_calendar(camp, meal_signups):
+def _kiosk_meal_calendar(camp, participant, meal_signups):
     signups_by_date_meal = {}
     included_dates = {signup.meal_date for signup in meal_signups}
     for signup in meal_signups:
         signups_by_date_meal.setdefault((signup.meal_date, signup.meal), []).append(signup)
 
+    meal_dates = camp_meal_dates(camp, included_dates)
+    menu_descriptions = {
+        entry.meal_date: entry.description
+        for entry in MealPlanEntry.objects.filter(camp=camp, meal=MealSignup.Meal.DINNER, meal_date__in=meal_dates)
+    }
     meal_labels = dict(MealSignup.Meal.choices)
     days = []
-    for meal_date in camp_meal_dates(camp, included_dates):
+    for meal_date in meal_dates:
         meals = []
         for meal, _label in [(MealSignup.Meal.DINNER, "Abendessen")]:
             scoped = signups_by_date_meal.get((meal_date, meal), [])
             active_signups = [signup for signup in scoped if signup.status == MealSignup.Status.ACTIVE]
             has_retracted = any(signup.status == MealSignup.Status.RETRACTED for signup in scoped)
+            locked = is_meal_change_locked(camp, meal_date)
             if len(active_signups) > 1:
                 status = "multiple"
                 status_label = "Mehrere Buchungen"
@@ -1227,9 +1223,19 @@ def _kiosk_meal_calendar(camp, meal_signups):
             elif has_retracted:
                 status = "retracted"
                 status_label = "Zurückgenommen"
+            elif locked:
+                status = "closed"
+                status_label = "Geschlossen"
             else:
                 status = "empty"
                 status_label = "Ungebucht"
+            price_rule = resolve_meal_price_rule(
+                camp,
+                meal,
+                meal_date,
+                is_child=participant.is_child,
+                is_companion=participant.is_companion,
+            )
             meals.append(
                 {
                     "meal": meal,
@@ -1237,7 +1243,10 @@ def _kiosk_meal_calendar(camp, meal_signups):
                     "status": status,
                     "status_label": status_label,
                     "active_signups": active_signups,
-                    "locked": is_meal_change_locked(camp, meal_date),
+                    "locked": locked,
+                    "description": menu_descriptions.get(meal_date, ""),
+                    "price_rule": price_rule,
+                    "unit_price": price_rule.unit_price if price_rule else None,
                 }
             )
         days.append({"date": meal_date, "meals": meals})
@@ -1274,12 +1283,31 @@ def camp_meal_overview(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
     next_order_date = next_catering_order_date()
     meal_overview_days = calculate_meal_overview(camp)
+    meal_dates = [day.meal_date for day in meal_overview_days]
+    meal_plan_form_data = (
+        request.POST if request.method == "POST" and request.POST.get("action") == "meal_plan" else None
+    )
+    meal_plan_form = MealPlanForm(meal_plan_form_data, camp=camp, meal_dates=meal_dates, prefix="meal_plan")
+    if request.method == "POST" and request.POST.get("action") == "meal_plan":
+        if meal_plan_form.is_valid():
+            meal_plan_form.save()
+            messages.success(request, "Speiseplan wurde gespeichert.")
+            return redirect("camp-meal-overview", camp_id=camp.pk)
+    meal_plan_rows = [
+        {
+            "day": day,
+            "description_field": meal_plan_form[MealPlanForm.field_name(day.meal_date)],
+        }
+        for day in meal_overview_days
+    ]
     return render(
         request,
         "billing/camp_meal_overview.html",
         {
             "camp": camp,
             "meal_overview_days": meal_overview_days,
+            "meal_plan_form": meal_plan_form,
+            "meal_plan_rows": meal_plan_rows,
             "next_order_day": next((day for day in meal_overview_days if day.meal_date == next_order_date), None),
             "next_order_date": next_order_date,
             "next_meal_order": meal_order_for_date(camp, next_order_date),
@@ -1401,7 +1429,13 @@ def kiosk_home(request):
                     if variant not in valid_variants:
                         invalid_variants.append(target["name"])
                         continue
-                    price_rule = _meal_price_rule(participant.camp, meal, meal_date, target["is_child"])
+                    price_rule = resolve_meal_price_rule(
+                        participant.camp,
+                        meal,
+                        meal_date,
+                        is_child=target["is_child"],
+                        is_companion=target["is_companion"],
+                    )
                     if price_rule is None:
                         missing_prices.append(target["name"])
                         continue
@@ -1509,7 +1543,14 @@ def kiosk_home(request):
         .order_by("meal_date", "meal", "participant__last_name", "participant__first_name")
     )
     meal_signups = list(meal_signups)
-    meal_calendar_days = _kiosk_meal_calendar(participant.camp, meal_signups)
+    meal_calendar_days = _kiosk_meal_calendar(participant.camp, participant, meal_signups)
+    dinner_rule = resolve_meal_price_rule(
+        participant.camp,
+        PriceRule.MealType.DINNER,
+        next_order_date,
+        is_child=participant.is_child,
+        is_companion=participant.is_companion,
+    )
     pending_invites = participant.received_booking_links.select_related("inviter").filter(
         status=ParticipantBookingLink.Status.PENDING
     )
@@ -1530,9 +1571,7 @@ def kiosk_home(request):
         "meal_calendar_groups": _group_kiosk_meal_calendar(meal_calendar_days),
         "drink_rules": quick_form.fields["price_rule"].queryset.filter(kind=PriceRule.Kind.DRINK),
         "snack_rules": quick_form.fields["price_rule"].queryset.filter(kind=PriceRule.Kind.MEAL),
-        "dinner_rule": PriceRule.objects.filter(
-            camp=participant.camp, kind=PriceRule.Kind.MEAL, meal_type=PriceRule.MealType.DINNER, is_archived=False
-        ).first(),
+        "dinner_rule": dinner_rule,
         "quick_form": quick_form,
         "meal_targets": meal_targets,
         "family_members": participant.family_members.filter(is_active=True).order_by("last_name", "first_name"),

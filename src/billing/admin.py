@@ -9,6 +9,7 @@ from .models import (
     DrinkEntry,
     Expense,
     MealOrder,
+    MealPlanEntry,
     MealSignup,
     Participant,
     ParticipantBookingLink,
@@ -124,6 +125,13 @@ class MealOrderAdmin(admin.ModelAdmin):
     list_display = ("camp", "meal_date", "ordered_at", "ordered_by")
     list_filter = ("camp", "meal_date", "ordered_at")
     search_fields = ("camp__name", "ordered_by__username", "ordered_by__email")
+
+
+@admin.register(MealPlanEntry)
+class MealPlanEntryAdmin(admin.ModelAdmin):
+    list_display = ("camp", "meal_date", "meal", "description")
+    list_filter = ("camp", "meal", "meal_date")
+    search_fields = ("camp__name", "description")
 
 
 admin.site.register(DrinkEntry)

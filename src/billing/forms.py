@@ -1,4 +1,4 @@
-from datetime import time
+from datetime import date, time
 from decimal import Decimal
 from typing import Any
 
@@ -14,6 +14,7 @@ from .models import (
     Charge,
     DailyShiftTemplate,
     Expense,
+    MealPlanEntry,
     MealSignup,
     Participant,
     ParticipantBookingLink,
@@ -731,6 +732,7 @@ class QuickBookingForm(forms.Form):
                 | Q(kind=PriceRule.Kind.MEAL, meal_type__in=[PriceRule.MealType.BREAKFAST, PriceRule.MealType.SNACK]),
                 camp=camp,
                 is_archived=False,
+                meal_date__isnull=True,
             ).order_by("name")
             if participant is not None:
                 if participant.is_child:
@@ -784,6 +786,52 @@ class KioskBookingLinkInviteForm(forms.Form):
         if existing_link:
             raise forms.ValidationError("Zwischen diesen Teilnehmern besteht bereits eine offene Verknüpfung.")
         return participant
+
+
+class MealPlanForm(forms.Form):
+    """Edit dinner menu descriptions for the visible camp meal calendar."""
+
+    def __init__(self, *args: Any, camp: Camp, meal_dates: list[date], **kwargs: Any) -> None:
+        self.camp = camp
+        self.meal_dates = meal_dates
+        super().__init__(*args, **kwargs)
+        existing_entries = {
+            entry.meal_date: entry.description
+            for entry in MealPlanEntry.objects.filter(camp=camp, meal=MealSignup.Meal.DINNER)
+        }
+        for meal_date in meal_dates:
+            field_name = self.field_name(meal_date)
+            self.fields[field_name] = forms.CharField(
+                label=f"Speiseplan {meal_date:%d.%m.%Y}",
+                required=False,
+                max_length=500,
+                initial=existing_entries.get(meal_date, ""),
+                widget=forms.Textarea(attrs={"rows": 2, "maxlength": "500"}),
+            )
+
+    @staticmethod
+    def field_name(meal_date: date) -> str:
+        """Return the stable dynamic field name for a meal date."""
+        return f"description_{meal_date:%Y%m%d}"
+
+    def save(self) -> None:
+        """Persist non-empty descriptions and remove cleared menu entries."""
+        with transaction.atomic():
+            for meal_date in self.meal_dates:
+                description = self.cleaned_data.get(self.field_name(meal_date), "").strip()
+                if description:
+                    MealPlanEntry.objects.update_or_create(
+                        camp=self.camp,
+                        meal_date=meal_date,
+                        meal=MealSignup.Meal.DINNER,
+                        defaults={"description": description},
+                    )
+                else:
+                    MealPlanEntry.objects.filter(
+                        camp=self.camp,
+                        meal_date=meal_date,
+                        meal=MealSignup.Meal.DINNER,
+                    ).delete()
 
 
 class MealBookingForm(forms.Form):

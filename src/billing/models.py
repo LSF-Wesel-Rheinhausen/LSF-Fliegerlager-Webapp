@@ -1,3 +1,4 @@
+from collections.abc import Collection
 from datetime import time, timedelta
 from decimal import Decimal
 
@@ -72,7 +73,7 @@ class Camp(TimeStampedModel):
                 raise ValidationError("Das einzige Lager kann nicht deaktiviert werden.")
             return super().save(*args, **kwargs)
 
-    def validate_constraints(self, exclude: list[str] | None = None) -> None:
+    def validate_constraints(self, exclude: Collection[str] | None = None) -> None:
         """Exclude unique_active_camp from pre-save model validation since save() deactivates other camps."""
         if exclude is None:
             exclude = []
@@ -573,6 +574,24 @@ class MealOrder(TimeStampedModel):
 
     def __str__(self):
         return f"{self.camp}: Bestellung {self.meal_date}"
+
+
+class MealPlanEntry(TimeStampedModel):
+    """Store the visible menu description for one camp meal slot."""
+
+    camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="meal_plan_entries")
+    meal_date = models.DateField()
+    meal = models.CharField(max_length=20, choices=MealSignup.Meal.choices)
+    description = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["meal_date", "meal"]
+        constraints = [
+            models.UniqueConstraint(fields=["camp", "meal_date", "meal"], name="unique_meal_plan_entry"),
+        ]
+
+    def __str__(self):
+        return f"{self.camp}: {self.get_meal_display()} {self.meal_date}"
 
 
 class DrinkEntry(TimeStampedModel):
