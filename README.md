@@ -67,9 +67,9 @@ Danach läuft die App standardmäßig unter `http://127.0.0.1:8000`. Compose ver
 Deployment-Host nicht erforderlich. Eine eigenständige Beispielkonfiguration liegt unter [`deploy/`](deploy/README.md).
 
 Superuser können unter **Updates** das neueste Image samt letztem Change prüfen und nach Bestätigung installieren.
-Vor dem Containerwechsel erstellt der isolierte Update-Agent ein PostgreSQL-Backup und prüft anschließend den
-Healthcheck. Der Agent steuert den Stack über Portainer Business Edition, erhält keinen Docker-Socket und bezieht alle
-Portainer-Zugangsdaten ausschließlich aus ENV/Stack-Variablen.
+Vor dem Containerwechsel speichert der isolierte Update-Agent den laufenden Image-Digest für Rollbacks, erstellt ein
+PostgreSQL-Backup und prüft anschließend den Healthcheck. Der Agent steuert den Stack über Portainer Business Edition,
+erhält keinen Docker-Socket und bezieht alle Portainer-Zugangsdaten ausschließlich aus ENV/Stack-Variablen.
 
 ## Tests
 
@@ -130,11 +130,20 @@ Die wichtigsten Umgebungsvariablen stehen mit sicheren Platzhaltern in [`.env.ex
 - `CSRF_TRUSTED_ORIGINS`: kommaseparierte vertrauenswürdige Origins mit Schema.
 - `DATABASE_URL`: Datenbank-URL; lokal kann SQLite genutzt werden, Docker nutzt PostgreSQL.
 - `DJANGO_HTTPS`: aktiviert in Produktion HTTPS-Redirect sowie sichere Session- und CSRF-Cookies.
+
+Pflichtvariablen für Container-Updates:
+
 - `UPDATE_AGENT_TOKEN`: separates langes Secret für die interne Update-API.
 - `UPDATE_AGENT_URL`: interne Agent-Adresse; im Beispiel-Compose `http://updater:8080`.
 - `APP_IMAGE`: zu installierendes App-Image, standardmäßig das veröffentlichte `latest`-Image.
-- `APP_HEALTH_URL`: Healthcheck-URL, die der Update-Agent nach einem Portainer-Redeploy abfragt.
+- `DATABASE_URL`: PostgreSQL-Verbindung, die der Update-Agent für Backups nutzt.
 - `PORTAINER_URL`, `PORTAINER_API_KEY`, `PORTAINER_ENDPOINT_ID`, `PORTAINER_STACK_ID`: Portainer-Zielstack für Updates.
+
+Optionale Update-Variablen:
+
+- `UPDATE_HEALTH_TIMEOUT`: maximale Wartezeit auf den App-Healthcheck, standardmäßig `180`.
+- `APP_HEALTH_URL`: Healthcheck-URL, die der Update-Agent nach einem Portainer-Redeploy abfragt.
+- `TARGET_SERVICE`: Compose-Service des App-Containers, standardmäßig `app`; wird für den immutable Rollback-Digest genutzt.
 - `GHCR_TOKEN`: optional, nur für private GHCR-Images erforderlich.
 
 Bei `DJANGO_DEBUG=0` startet die Anwendung nur mit einem mindestens 50 Zeichen langen `DJANGO_SECRET_KEY` und expliziten `DJANGO_ALLOWED_HOSTS`.
