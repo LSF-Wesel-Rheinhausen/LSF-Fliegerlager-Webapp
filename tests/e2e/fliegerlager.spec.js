@@ -106,7 +106,7 @@ async function createCamp(page, name = "Sommerlager") {
   await expect(page.getByRole("heading", { name: "Lager anlegen" })).toBeVisible();
   const suffix = Date.now().toString();
   const campName = `${name} ${suffix}`;
-  const startDate = addDays(new Date(), 1);
+  const startDate = addDays(new Date(), 2);
   const endDate = addDays(startDate, 2);
   await page.getByLabel("Name").fill(campName);
   await page.getByLabel("Jahr").fill(String(startDate.getFullYear()));
