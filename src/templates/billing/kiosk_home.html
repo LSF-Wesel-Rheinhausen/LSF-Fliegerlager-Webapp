@@ -149,6 +149,31 @@
         </div>
       </section>
 
+      <section class="panel kiosk-card kiosk-card--muted kiosk-table">
+        <div class="kiosk-table__header">
+          <h2>Letzte Getränke</h2>
+          <p>Deine letzten Buchungen im Überblick.</p>
+        </div>
+        <div class="kiosk-table__wrapper">
+          <table>
+            <thead><tr><th>Zeit</th><th>Getränk</th><th>Menge</th><th>Einzelpreis</th><th>Summe</th></tr></thead>
+            <tbody>
+              {% for entry in recent_drinks %}
+                <tr>
+                  <td>{{ entry.created_at }}</td>
+                  <td>{{ entry.description }}</td>
+                  <td>{{ entry.quantity }}</td>
+                  <td>{{ entry.unit_price|money_eur }}</td>
+                  <td>{{ entry.total|money_eur }}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="5">Noch keine Getränke gebucht.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
     </div>
 
     <div class="kiosk-stack">
@@ -368,34 +393,6 @@
       </section>
     </div>
   </div>
-
-  <div class="kiosk-grid">
-    <section class="panel kiosk-card kiosk-card--muted kiosk-table">
-      <div class="kiosk-table__header">
-        <h2>Letzte Getränke</h2>
-        <p>Deine letzten Buchungen im Überblick.</p>
-      </div>
-      <div class="kiosk-table__wrapper">
-        <table>
-          <thead><tr><th>Zeit</th><th>Getränk</th><th>Menge</th><th>Einzelpreis</th><th>Summe</th></tr></thead>
-          <tbody>
-            {% for entry in recent_drinks %}
-              <tr>
-                <td>{{ entry.created_at }}</td>
-                <td>{{ entry.description }}</td>
-                <td>{{ entry.quantity }}</td>
-                <td>{{ entry.unit_price|money_eur }}</td>
-                <td>{{ entry.total|money_eur }}</td>
-              </tr>
-            {% empty %}
-              <tr><td colspan="5">Noch keine Getränke gebucht.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  </div>
-
   <dialog id="summary-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="summary-dialog-title">
     <form method="dialog" class="dialog-heading dialog-heading--flush">
       <h2 id="summary-dialog-title">Abrechnung</h2>
