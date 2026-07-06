@@ -4,9 +4,10 @@ from decimal import Decimal
 import pytest
 from django.urls import reverse
 
-from billing.models import Charge, MealOrder, MealSignup, ParticipantFamilyMember
+from billing.models import Charge, MealOrder, MealPlanEntry, MealSignup, ParticipantFamilyMember
+from billing.permissions import HUEBERS_GROUP
 from billing.services import calculate_meal_overview
-from tests.factories import CampFactory, ParticipantFactory, SuperUserFactory
+from tests.factories import CampFactory, GroupFactory, ParticipantFactory, SuperUserFactory, UserFactory
 
 
 @pytest.mark.django_db
@@ -87,6 +88,33 @@ def test_camp_meal_overview_renders_counts_for_admin(client):
     assert b"Abendessen" in response.content
     assert b"Fr\xc3\xbchst\xc3\xbcck" not in response.content
     assert b"<strong>1</strong>" in response.content
+
+
+@pytest.mark.django_db
+def test_camp_meal_overview_renders_and_saves_menu_for_huebers(client):
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 2))
+    huebers = UserFactory()
+    huebers.groups.add(GroupFactory(name=HUEBERS_GROUP))
+    client.force_login(huebers)
+
+    response = client.get(reverse("camp-meal-overview", args=[camp.pk]))
+
+    assert response.status_code == 200
+    assert b"Speiseplan speichern" in response.content
+    assert b"meal_plan-description_20260701" in response.content
+
+    response = client.post(
+        reverse("camp-meal-overview", args=[camp.pk]),
+        {
+            "action": "meal_plan",
+            "meal_plan-description_20260701": "Pasta mit Salat",
+            "meal_plan-description_20260702": "",
+        },
+    )
+
+    assert response.status_code == 302
+    entry = MealPlanEntry.objects.get(camp=camp, meal_date=date(2026, 7, 1), meal=MealSignup.Meal.DINNER)
+    assert entry.description == "Pasta mit Salat"
 
 
 @pytest.mark.django_db

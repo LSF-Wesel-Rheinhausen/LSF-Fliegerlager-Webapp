@@ -572,6 +572,7 @@
             class="meal-booking-day meal-booking-day--{{ day.status }}"
             data-meal-date-select="{{ day.date|date:'Y-m-d' }}"
             data-meal-date-label="{{ day.date|date:'D d.m.Y' }}"
+            {% if not day.locked and day.price_rule %}data-meal-date="{{ day.date|date:'Y-m-d' }}"{% endif %}
             {% if day.locked or not day.price_rule %}disabled{% endif %}
           >
             <span class="meal-booking-day__date">
@@ -579,7 +580,9 @@
               <span>{{ day.status_label }}</span>
             </span>
             <span class="meal-booking-day__menu">
-              {% if day.price_rule %}
+              {% if day.description %}
+                {{ day.description }}
+              {% elif day.price_rule %}
                 {{ day.price_rule.name }}
               {% else %}
                 Kein Preis hinterlegt

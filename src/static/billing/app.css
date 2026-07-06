@@ -410,6 +410,18 @@ textarea {
   min-height: 90px;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .helptext {
   display: block;
   color: var(--muted);
@@ -1356,6 +1368,14 @@ textarea {
   border-radius: var(--radius-sm);
   background: #ffffff;
   font-size: 13px;
+}
+
+.meal-plan-cell {
+  min-width: 220px;
+}
+
+.meal-plan-cell textarea {
+  min-height: 72px;
 }
 
 .meal-signup-compact__row strong,

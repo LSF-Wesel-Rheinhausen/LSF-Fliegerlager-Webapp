@@ -17,6 +17,7 @@ from .models import (
     Expense,
     ExpenseAllocation,
     MealOrder,
+    MealPlanEntry,
     MealSignup,
     Participant,
     PriceRule,
@@ -51,6 +52,7 @@ class MealOverviewDay:
 
     meal_date: date
     meals: list[MealCount]
+    menu_description: str = ""
 
 
 @dataclass(frozen=True)
@@ -205,6 +207,10 @@ def calculate_meal_overview(camp: Camp) -> list[MealOverviewDay]:
         .order_by("meal_date", "meal", "variant")
     )
     dates = camp_meal_dates(camp, {signup.meal_date for signup in signups})
+    menu_descriptions = {
+        entry.meal_date: entry.description
+        for entry in MealPlanEntry.objects.filter(camp=camp, meal=MealSignup.Meal.DINNER)
+    }
     meal_labels = dict(MealSignup.Meal.choices)
     variant_labels = dict(MealSignup.Variant.choices)
     days = []
@@ -229,7 +235,13 @@ def calculate_meal_overview(camp: Camp) -> list[MealOverviewDay]:
                     retracted_total=retracted_total,
                 )
             )
-        days.append(MealOverviewDay(meal_date=meal_date, meals=meals))
+        days.append(
+            MealOverviewDay(
+                meal_date=meal_date,
+                meals=meals,
+                menu_description=menu_descriptions.get(meal_date, ""),
+            )
+        )
     return days
 
 
@@ -239,6 +251,39 @@ def _rule_applies(rule, participant):
     if not participant.is_child and not rule.applies_to_adults:
         return False
     return True
+
+
+def resolve_meal_price_rule(camp: Camp, meal: str, meal_date: date, *, is_child: bool, is_companion: bool = False):
+    """Return the applicable meal price rule for one person and date.
+
+    Args:
+        camp: Camp whose price rules are searched.
+        meal: Meal type, for example ``MealSignup.Meal.DINNER``.
+        meal_date: Date of the concrete meal booking.
+        is_child: Whether child meal pricing applies.
+        is_companion: Whether companion meal pricing applies.
+
+    Returns:
+        A date-specific rule for ``meal_date`` when one exists, otherwise the
+        default rule with ``meal_date IS NULL``. Archived rules are ignored.
+    """
+    base_queryset = PriceRule.objects.filter(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=meal,
+        is_archived=False,
+    )
+    if is_child:
+        base_queryset = base_queryset.filter(applies_to_children=True)
+    elif is_companion:
+        base_queryset = base_queryset.filter(applies_to_companions=True)
+    else:
+        base_queryset = base_queryset.filter(applies_to_adults=True)
+
+    date_rule = base_queryset.filter(meal_date=meal_date).order_by("name", "pk").first()
+    if date_rule is not None:
+        return date_rule
+    return base_queryset.filter(is_default=True, meal_date__isnull=True).order_by("name", "pk").first()
 
 
 def charge_audit_snapshot(charge: Charge) -> dict[str, str | None]:

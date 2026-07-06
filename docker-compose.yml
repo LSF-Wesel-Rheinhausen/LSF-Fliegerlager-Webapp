@@ -53,6 +53,8 @@ services:
       GHCR_TOKEN: ${GHCR_TOKEN:-}
       UPDATE_HEALTH_TIMEOUT: ${UPDATE_HEALTH_TIMEOUT:-180}
       TZ: ${TZ:-Europe/Berlin}
+      PORTAINER_VERIFY_SSL: ${PORTAINER_VERIFY_SSL:-true}
+
     volumes:
       - ${BACKUP_DIR:-./backups}:/backups
       - updater_state:/state
