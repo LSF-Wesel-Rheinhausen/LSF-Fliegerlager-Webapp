@@ -109,11 +109,9 @@
           </div>
           <div class="stack kiosk-drink-form">
             <div class="drink-card-grid" role="group" aria-label="Verpflegung auswählen">
-              <button type="button" class="drink-card" data-open-meal-dialog-new data-meal="dinner">
+              <button type="button" class="drink-card" data-open-meal-dialog-new data-meal="dinner" aria-label="Abendessen im Kalender buchen">
                 <span class="drink-card__title">Abendessen</span>
-                {% if dinner_rule %}
-                  <span class="drink-card__price">{{ dinner_rule.unit_price|money_eur }}</span>
-                {% endif %}
+                <span class="drink-card__meta">Kalender öffnen</span>
               </button>
               {% for rule in snack_rules %}
                 <button
@@ -151,18 +149,44 @@
         </div>
       </section>
 
+      <section class="panel kiosk-card kiosk-card--muted kiosk-table">
+        <div class="kiosk-table__header">
+          <h2>Letzte Getränke</h2>
+          <p>Deine letzten Buchungen im Überblick.</p>
+        </div>
+        <div class="kiosk-table__wrapper">
+          <table>
+            <thead><tr><th>Zeit</th><th>Getränk</th><th>Menge</th><th>Einzelpreis</th><th>Summe</th></tr></thead>
+            <tbody>
+              {% for entry in recent_drinks %}
+                <tr>
+                  <td>{{ entry.created_at }}</td>
+                  <td>{{ entry.description }}</td>
+                  <td>{{ entry.quantity }}</td>
+                  <td>{{ entry.unit_price|money_eur }}</td>
+                  <td>{{ entry.total|money_eur }}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="5">Noch keine Getränke gebucht.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
     </div>
 
     <div class="kiosk-stack">
       <section class="panel kiosk-card kiosk-card--accent">
-        <div class="kiosk-card__header">
+        <div class="kiosk-card__header kiosk-section-heading">
           <div class="kiosk-card__header-main">
             <span class="kiosk-card__eyebrow">Heute</span>
             <h2 class="kiosk-title">
-              Kalender
+              Essenskalender
             </h2>
-            <p>Essensbuchungen verwalten.</p>
+            <p>Deine gespeicherten Abendessen nach Lagertag.</p>
           </div>
+          <button type="button" class="button kiosk-card__action" data-open-meal-dialog-new data-meal="dinner">Essen buchen</button>
         </div>
         <div class="meal-order-status" aria-label="Essensbestellung für {{ next_order_date|date:'d.m.Y' }}">
           <strong>Essensbestellung für {{ next_order_date|date:"d.m.Y" }}</strong>
@@ -189,24 +213,40 @@
             <span class="helptext error">{{ error }}</span>
           {% endfor %}
         </form>
-        <div class="meal-calendar" aria-label="Essenskalender">
-          {% include "billing/kiosk_meal_calendar_days.html" with days=meal_calendar_groups.current %}
-          {% if meal_calendar_groups.past %}
-            <details class="meal-calendar-group">
-              <summary>Vergangene Buchungen anzeigen</summary>
-              <div class="meal-calendar-group__content">
-                {% include "billing/kiosk_meal_calendar_days.html" with days=meal_calendar_groups.past %}
-              </div>
-            </details>
-          {% endif %}
-          {% if meal_calendar_groups.future %}
-            <details class="meal-calendar-group">
-              <summary>Zukünftige Buchungen anzeigen</summary>
-              <div class="meal-calendar-group__content">
-                {% include "billing/kiosk_meal_calendar_days.html" with days=meal_calendar_groups.future %}
-              </div>
-            </details>
-          {% endif %}
+        <div class="meal-status-calendar" aria-label="Essensstatus nach Lagertag">
+          {% for day in meal_calendar_days %}
+            <button
+              type="button"
+              class="meal-status-day meal-status-day--{{ day.status }}"
+              data-open-meal-day-detail="meal-day-detail-{{ day.date|date:'Y-m-d' }}"
+              aria-label="{{ day.date|date:'D d.m.Y' }}: {{ day.status_label }}"
+            >
+              <span class="meal-status-day__weekday">{{ day.date|date:"D" }}</span>
+              <span class="meal-status-day__date">{{ day.date|date:"d.m." }}</span>
+              <span class="meal-status-day__state">{{ day.status_label }}</span>
+            </button>
+          {% empty %}
+            <p class="hint">Keine Lagertage für Essensbuchungen vorhanden.</p>
+          {% endfor %}
+        </div>
+        <dl class="meal-status-legend" aria-label="Legende Essensstatus">
+          <div><dt class="meal-status-dot meal-status-dot--booked"></dt><dd>Gebucht</dd></div>
+          <div><dt class="meal-status-dot meal-status-dot--mixed"></dt><dd>Gemischt</dd></div>
+          <div><dt class="meal-status-dot meal-status-dot--retracted"></dt><dd>Zurückgenommen</dd></div>
+          <div><dt class="meal-status-dot meal-status-dot--empty"></dt><dd>Offen</dd></div>
+          <div><dt class="meal-status-dot meal-status-dot--closed"></dt><dd>Geschlossen</dd></div>
+        </dl>
+        <div class="meal-signup-compact">
+          {% for signup in meal_signups %}
+            <div class="meal-signup-compact__row meal-signup-compact__row--{{ signup.status }}">
+              <span>{{ signup.meal_date|date:"D d.m." }}</span>
+              <strong>{% if signup.family_member %}{{ signup.family_member.full_name }}{% else %}{{ signup.participant.full_name }}{% endif %}</strong>
+              <span>{{ signup.get_variant_display }}</span>
+              <span>{{ signup.get_status_display }}</span>
+            </div>
+          {% empty %}
+            <p class="hint">Noch keine Essensanmeldungen gespeichert.</p>
+          {% endfor %}
         </div>
       </section>
 
@@ -353,59 +393,6 @@
       </section>
     </div>
   </div>
-
-  <div class="kiosk-grid">
-    <section class="panel kiosk-card kiosk-card--muted kiosk-table">
-      <div class="kiosk-table__header">
-        <h2>Letzte Getränke</h2>
-        <p>Deine letzten Buchungen im Überblick.</p>
-      </div>
-      <div class="kiosk-table__wrapper">
-        <table>
-          <thead><tr><th>Zeit</th><th>Getränk</th><th>Menge</th><th>Einzelpreis</th><th>Summe</th></tr></thead>
-          <tbody>
-            {% for entry in recent_drinks %}
-              <tr>
-                <td>{{ entry.created_at }}</td>
-                <td>{{ entry.description }}</td>
-                <td>{{ entry.quantity }}</td>
-                <td>{{ entry.unit_price|money_eur }}</td>
-                <td>{{ entry.total|money_eur }}</td>
-              </tr>
-            {% empty %}
-              <tr><td colspan="5">Noch keine Getränke gebucht.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="panel kiosk-card kiosk-card--muted kiosk-table">
-      <div class="kiosk-table__header">
-        <h2>Essensanmeldungen</h2>
-        <p>So sind deine aktuellen Anmeldungen gespeichert.</p>
-      </div>
-      <div class="kiosk-table__wrapper">
-        <table>
-          <thead><tr><th>Datum</th><th>Person</th><th>Mahlzeit</th><th>Variante</th><th>Status</th></tr></thead>
-          <tbody>
-            {% for signup in meal_signups %}
-              <tr>
-                <td>{{ signup.meal_date }}</td>
-                <td>{% if signup.family_member %}{{ signup.family_member.full_name }}{% else %}{{ signup.participant.full_name }}{% endif %}</td>
-                <td>{{ signup.get_meal_display }}</td>
-                <td>{{ signup.get_variant_display }}</td>
-                <td>{{ signup.get_status_display }}</td>
-              </tr>
-            {% empty %}
-              <tr><td colspan="5">Noch keine Essensanmeldungen vorhanden.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  </div>
-
   <dialog id="summary-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="summary-dialog-title">
     <form method="dialog" class="dialog-heading dialog-heading--flush">
       <h2 id="summary-dialog-title">Abrechnung</h2>
@@ -524,24 +511,98 @@
     </div>
   </dialog>
 
-  <dialog id="meal-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="meal-dialog-title">
+  {% for day in meal_calendar_days %}
+    <dialog id="meal-day-detail-{{ day.date|date:'Y-m-d' }}" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="meal-day-detail-title-{{ day.date|date:'Y-m-d' }}">
+      <form method="dialog" class="dialog-heading">
+        <div>
+          <h2 id="meal-day-detail-title-{{ day.date|date:'Y-m-d' }}">Essen am {{ day.date|date:"D d.m." }}</h2>
+          <p class="dialog-heading__meta">{{ day.status_label }}</p>
+        </div>
+        <button class="button button-secondary">Schließen</button>
+      </form>
+
+      {% for slot in day.meals %}
+        {% if slot.signups %}
+          <div class="target-list">
+            {% for signup in slot.signups %}
+              <article class="target-row target-row--single meal-detail-row meal-detail-row--{{ signup.status }}">
+                <div class="kiosk-list-row__content">
+                  <strong>{% if signup.family_member %}{{ signup.family_member.full_name }}{% else %}{{ signup.participant.full_name }}{% endif %}</strong>
+                  <span>{{ slot.label }} · {{ signup.get_variant_display }} · {{ signup.get_status_display }}</span>
+                </div>
+                {% if signup.status == "active" and not slot.locked %}
+                  <form method="post" class="kiosk-list-row__actions">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="meal_retract">
+                    <input type="hidden" name="meal_signup_id" value="{{ signup.pk }}">
+                    <button type="submit" class="button-secondary">Zurücknehmen</button>
+                  </form>
+                {% endif %}
+              </article>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="kiosk-empty">
+            <strong>Keine Buchung für diesen Tag.</strong>
+            {% if not slot.locked %}
+              <p>Du kannst diesen Tag über “Essen buchen” auswählen.</p>
+            {% else %}
+              <p>Dieser Tag ist für Änderungen geschlossen.</p>
+            {% endif %}
+          </div>
+        {% endif %}
+      {% endfor %}
+    </dialog>
+  {% endfor %}
+
+  <dialog id="meal-dialog" class="kiosk-dialog kiosk-dialog--wide meal-booking-dialog" aria-labelledby="meal-dialog-title">
     <form method="dialog" class="dialog-heading">
-      <h2 id="meal-dialog-title">Abendessen buchen</h2>
+      <div>
+        <h2 id="meal-dialog-title">Abendessen buchen</h2>
+        <p class="dialog-heading__meta" id="meal-dialog-meta">Wähle zuerst einen Lagertag aus.</p>
+      </div>
       <button class="button button-secondary">Schließen</button>
     </form>
 
     <div id="meal-step-date" class="stack">
-      <p>Für welchen Tag möchtest du buchen?</p>
-      <div class="quantity-grid" role="group" aria-label="Datum auswählen">
+      <div class="meal-booking-calendar" role="list" aria-label="Abendessen nach Lagertag auswählen">
         {% for day in meal_calendar_days %}
-          <button type="button" class="button-secondary" data-meal-date-select="{{ day.date|date:'Y-m-d' }}">
-            {% if day.date == today %}Heute{% elif day.date == tomorrow %}Morgen{% else %}{{ day.date|date:"D d.m." }}{% endif %}
+          <button
+            type="button"
+            class="meal-booking-day meal-booking-day--{{ day.status }}"
+            data-meal-date-select="{{ day.date|date:'Y-m-d' }}"
+            data-meal-date-label="{{ day.date|date:'D d.m.Y' }}"
+            {% if not day.locked and day.price_rule %}data-meal-date="{{ day.date|date:'Y-m-d' }}"{% endif %}
+            {% if day.locked or not day.price_rule %}disabled{% endif %}
+          >
+            <span class="meal-booking-day__date">
+              <strong>{% if day.date == today %}Heute{% elif day.date == tomorrow %}Morgen{% else %}{{ day.date|date:"D d.m." }}{% endif %}</strong>
+              <span>{{ day.status_label }}</span>
+            </span>
+            <span class="meal-booking-day__menu">
+              {% if day.description %}
+                {{ day.description }}
+              {% elif day.price_rule %}
+                {{ day.price_rule.name }}
+              {% else %}
+                Kein Preis hinterlegt
+              {% endif %}
+            </span>
+            <span class="meal-booking-day__price">
+              {% if day.price_rule %}{{ day.price_rule.unit_price|money_eur }}{% elif day.locked %}Geschlossen{% else %}Nicht buchbar{% endif %}
+            </span>
           </button>
+        {% empty %}
+          <p class="hint">Keine Lagertage für Essensbuchungen vorhanden.</p>
         {% endfor %}
       </div>
     </div>
 
     <div id="meal-step-persons" style="display: none;" class="stack">
+      <div class="kiosk-note">
+        <strong id="meal-selected-date">Ausgewählter Tag</strong>
+        <span>Wähle aus, für wen das Abendessen gebucht werden soll.</span>
+      </div>
       <p>Wer soll eingebucht werden?</p>
       <div class="target-list">
         {% for target in meal_targets %}
@@ -630,6 +691,8 @@
       const mealDateInput = document.getElementById("id_meal-meal_date");
       const mealInput = document.getElementById("id_meal-meal");
       const mealDialogTitle = document.getElementById("meal-dialog-title");
+      const mealDialogMeta = document.getElementById("meal-dialog-meta");
+      const mealSelectedDate = document.getElementById("meal-selected-date");
       const familyDialog = document.getElementById("family-dialog");
       const contactDialog = document.getElementById("contact-dialog");
 
@@ -702,6 +765,9 @@
       document.querySelectorAll("[data-open-meal-dialog-new]").forEach((button) => {
         button.addEventListener("click", () => {
           mealInput.value = button.dataset.meal || "dinner";
+          mealDateInput.value = "";
+          mealDialogTitle.textContent = "Abendessen buchen";
+          mealDialogMeta.textContent = "Wähle zuerst einen Lagertag aus.";
           mealStepDate.style.display = "block";
           mealStepPersons.style.display = "none";
           mealDialog.showModal();
@@ -711,6 +777,10 @@
       document.querySelectorAll("[data-meal-date-select]").forEach((button) => {
         button.addEventListener("click", () => {
           mealDateInput.value = button.dataset.mealDateSelect;
+          mealInput.value = "dinner";
+          mealDialogTitle.textContent = "Abendessen buchen";
+          mealDialogMeta.textContent = button.dataset.mealDateLabel || "Tag ausgewählt";
+          mealSelectedDate.textContent = `Abendessen am ${button.dataset.mealDateLabel || "ausgewählten Tag"}`;
           mealStepDate.style.display = "none";
           mealStepPersons.style.display = "block";
         });
@@ -721,9 +791,16 @@
           mealDateInput.value = button.dataset.mealDate || "";
           mealInput.value = button.dataset.meal || "";
           mealDialogTitle.textContent = `${button.dataset.mealLabel || "Mahlzeit"} buchen`;
+          mealDialogMeta.textContent = button.dataset.mealDateLabel || "Tag ausgewählt";
+          mealSelectedDate.textContent = `${button.dataset.mealLabel || "Mahlzeit"} am ${button.dataset.mealDateLabel || "ausgewählten Tag"}`;
           mealStepDate.style.display = "none";
           mealStepPersons.style.display = "block";
           mealDialog.showModal();
+        });
+      });
+      document.querySelectorAll("[data-open-meal-day-detail]").forEach((button) => {
+        button.addEventListener("click", () => {
+          document.getElementById(button.dataset.openMealDayDetail)?.showModal();
         });
       });
       document.querySelector("[data-open-family-dialog]")?.addEventListener("click", () => familyDialog.showModal());

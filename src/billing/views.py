@@ -1194,7 +1194,30 @@ def _retract_meal_signup(signup):
     signup.charge.save(update_fields=["deleted_at", "deleted_by"])
 
 
-def _kiosk_meal_calendar(camp, participant, meal_signups):
+def _meal_price_rule_for_targets(camp, meal, meal_date, participant, meal_targets):
+    participant_rule = resolve_meal_price_rule(
+        camp,
+        meal,
+        meal_date,
+        is_child=participant.is_child,
+        is_companion=participant.is_companion,
+    )
+    if participant_rule is not None:
+        return participant_rule
+    for target in meal_targets:
+        price_rule = resolve_meal_price_rule(
+            camp,
+            meal,
+            meal_date,
+            is_child=target["is_child"],
+            is_companion=target["is_companion"],
+        )
+        if price_rule is not None:
+            return price_rule
+    return None
+
+
+def _kiosk_meal_calendar(camp, participant, meal_signups, meal_targets):
     signups_by_date_meal = {}
     included_dates = {signup.meal_date for signup in meal_signups}
     for signup in meal_signups:
@@ -1212,15 +1235,15 @@ def _kiosk_meal_calendar(camp, participant, meal_signups):
         for meal, _label in [(MealSignup.Meal.DINNER, "Abendessen")]:
             scoped = signups_by_date_meal.get((meal_date, meal), [])
             active_signups = [signup for signup in scoped if signup.status == MealSignup.Status.ACTIVE]
-            has_retracted = any(signup.status == MealSignup.Status.RETRACTED for signup in scoped)
+            retracted_signups = [signup for signup in scoped if signup.status == MealSignup.Status.RETRACTED]
             locked = is_meal_change_locked(camp, meal_date)
-            if len(active_signups) > 1:
-                status = "multiple"
-                status_label = "Mehrere Buchungen"
-            elif len(active_signups) == 1:
+            if active_signups and retracted_signups:
+                status = "mixed"
+                status_label = "Teilweise zurückgenommen"
+            elif active_signups:
                 status = "booked"
                 status_label = "Gebucht"
-            elif has_retracted:
+            elif retracted_signups:
                 status = "retracted"
                 status_label = "Zurückgenommen"
             elif locked:
@@ -1229,27 +1252,35 @@ def _kiosk_meal_calendar(camp, participant, meal_signups):
             else:
                 status = "empty"
                 status_label = "Ungebucht"
-            price_rule = resolve_meal_price_rule(
-                camp,
-                meal,
-                meal_date,
-                is_child=participant.is_child,
-                is_companion=participant.is_companion,
-            )
+            price_rule = _meal_price_rule_for_targets(camp, meal, meal_date, participant, meal_targets)
             meals.append(
                 {
                     "meal": meal,
                     "label": meal_labels[meal],
                     "status": status,
                     "status_label": status_label,
+                    "signups": scoped,
                     "active_signups": active_signups,
+                    "retracted_signups": retracted_signups,
                     "locked": locked,
                     "description": menu_descriptions.get(meal_date, ""),
                     "price_rule": price_rule,
                     "unit_price": price_rule.unit_price if price_rule else None,
                 }
             )
-        days.append({"date": meal_date, "meals": meals})
+        dinner_slot = meals[0]
+        days.append(
+            {
+                "date": meal_date,
+                "status": dinner_slot["status"],
+                "status_label": dinner_slot["status_label"],
+                "locked": dinner_slot["locked"],
+                "price_rule": dinner_slot["price_rule"],
+                "unit_price": dinner_slot["unit_price"],
+                "description": dinner_slot["description"],
+                "meals": meals,
+            }
+        )
     return days
 
 
@@ -1558,7 +1589,9 @@ def kiosk_home(request):
         .order_by("meal_date", "meal", "participant__last_name", "participant__first_name")
     )
     meal_signups = list(meal_signups)
-    meal_calendar_days = _kiosk_meal_calendar(participant.camp, participant, meal_signups)
+    meal_calendar_days = _kiosk_meal_calendar(participant.camp, participant, meal_signups, meal_targets)
+    today = timezone.localdate()
+    tomorrow = today + timedelta(days=1)
     dinner_rule = resolve_meal_price_rule(
         participant.camp,
         PriceRule.MealType.DINNER,
@@ -1598,6 +1631,8 @@ def kiosk_home(request):
         "next_order_date": next_order_date,
         "next_meal_order": next_meal_order,
         "next_order_locked": is_meal_change_locked(participant.camp, next_order_date),
+        "today": today,
+        "tomorrow": tomorrow,
         "participant_expenses": participant.expenses.all().order_by("-created_at"),
     }
     return render(request, "billing/kiosk_home.html", context)

@@ -273,7 +273,7 @@ test("Kiosk flow: login, pin setup, drink and meal booking", async ({ page }) =>
   await expect(page.getByText("Apfelsaft gebucht.")).toBeVisible();
 
   // Book a meal
-  await page.getByRole("button", { name: "Abendessen" }).click();
+  await page.getByRole("button", { name: "Abendessen im Kalender buchen" }).click();
   await expect(page.locator("dialog#meal-dialog")).toBeVisible();
   await page.locator("dialog#meal-dialog").locator("button[data-meal-date-select]").first().click();
   await page.locator("dialog#meal-dialog").getByRole("button", { name: "Essensanmeldung speichern" }).click();
@@ -472,8 +472,8 @@ for (const viewport of [
 
     await expect(page.getByRole("heading", { name: "Getränk buchen" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Verpflegung buchen" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Kalender" })).toBeVisible();
-    await page.getByRole("button", { name: "Abendessen" }).click();
+    await expect(page.getByRole("heading", { name: "Essenskalender" })).toBeVisible();
+    await page.getByRole("button", { name: "Abendessen im Kalender buchen" }).click();
     await expect(page.locator("dialog#meal-dialog")).toBeVisible();
     await assertNoUnexpectedOverflow(page);
   });
