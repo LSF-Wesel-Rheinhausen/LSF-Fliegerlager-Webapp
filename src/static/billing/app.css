@@ -1111,6 +1111,17 @@ textarea {
   margin: 0;
 }
 
+.dialog-heading .button {
+  width: auto;
+}
+
+.dialog-heading__meta {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .kiosk-dialog-help {
   padding: 12px;
   background: #eef2f6;
@@ -1192,120 +1203,235 @@ textarea {
   display: none;
 }
 
-.meal-calendar {
+.meal-status-calendar {
   display: grid;
-  gap: 14px;
-}
-
-.meal-day {
-  display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
-  gap: 14px;
-  align-items: stretch;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--panel-soft);
-}
-
-.meal-day h3 {
-  margin: 0;
-  font-size: 17px;
-  line-height: 1.2;
-  letter-spacing: 0;
-}
-
-.meal-day__slots {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.meal-slot {
-  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
   gap: 10px;
-  min-height: 112px;
-  padding: 12px;
+}
+
+.meal-status-day {
+  display: grid;
+  gap: 4px;
+  min-height: 88px;
+  padding: 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: #ffffff;
+  color: var(--text);
+  text-align: left;
 }
 
-.meal-slot--booked {
-  border-color: #abefc6;
-  background: var(--ok-soft);
+.meal-status-day:hover {
+  background: #f8fafc;
+  color: var(--text);
+  transform: translateY(-1px);
 }
 
-.meal-slot--multiple {
-  border-color: #b2ddff;
-  background: #eff8ff;
+.meal-status-day__weekday {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
 }
 
-.meal-slot--retracted {
+.meal-status-day__date {
+  font-size: 18px;
+  font-weight: 850;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+
+.meal-status-day__state {
+  align-self: end;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.meal-status-day--booked,
+.meal-status-dot--booked {
+  border-color: #75e0a7;
+  background: #dcfae6;
+  color: #05603a;
+}
+
+.meal-status-day--booked:hover {
+  background: #d3f8df;
+  color: #05603a;
+}
+
+.meal-status-day--mixed,
+.meal-status-dot--mixed {
   border-color: #fedf89;
   background: #fffaeb;
+  color: #93370d;
 }
 
-.meal-slot__body {
-  display: grid;
-  gap: 2px;
+.meal-status-day--mixed:hover {
+  background: #fef0c7;
+  color: #93370d;
 }
 
-.meal-slot__body strong,
-.meal-slot__body span {
-  overflow-wrap: break-word;
-  word-break: normal;
+.meal-status-day--retracted,
+.meal-status-dot--retracted {
+  border-color: #fda29b;
+  background: #fef3f2;
+  color: #b42318;
 }
 
-.meal-slot__body span {
+.meal-status-day--retracted:hover {
+  background: #fee4e2;
+  color: #b42318;
+}
+
+.meal-status-day--closed,
+.meal-status-dot--closed {
+  border-color: #98a2b3;
+  background: #eef2f6;
+  color: #475467;
+}
+
+.meal-status-day--closed:hover {
+  background: #e4e7ec;
+  color: #475467;
+}
+
+.meal-status-day--empty,
+.meal-status-dot--empty {
+  border-color: #d0d5dd;
+  background: #ffffff;
+  color: #667085;
+}
+
+.meal-status-day--empty:hover {
+  background: #f8fafc;
+  color: #667085;
+}
+
+.meal-status-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin: 12px 0 0;
+}
+
+.meal-status-legend div {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.meal-status-legend dt,
+.meal-status-legend dd {
+  margin: 0;
+}
+
+.meal-status-legend dd {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
 }
 
-.meal-slot__bookings {
+.meal-status-dot {
+  width: 10px;
+  height: 10px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+}
+
+.meal-signup-compact {
   display: grid;
   gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+  margin-top: 14px;
 }
 
-.meal-slot__bookings li {
+.meal-signup-compact__row {
   display: grid;
-  gap: 6px;
-  padding-top: 8px;
-  border-top: 1px solid rgba(105, 115, 134, 0.18);
-}
-
-.meal-slot__bookings span {
-  font-size: 13px;
-  overflow-wrap: break-word;
-  word-break: normal;
-}
-
-.meal-slot__action {
-  align-self: end;
-}
-
-.meal-calendar-group {
+  grid-template-columns: 76px minmax(0, 1.2fr) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
   background: #ffffff;
+  font-size: 13px;
 }
 
-.meal-calendar-group summary {
-  min-height: 44px;
-  padding: 12px 14px;
-  color: var(--text);
-  font-weight: 750;
-  cursor: pointer;
+.meal-signup-compact__row strong,
+.meal-signup-compact__row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
-.meal-calendar-group__content {
+.meal-detail-row {
+  align-items: center;
+}
+
+.meal-detail-row--retracted {
+  background: #fef3f2;
+}
+
+.meal-booking-dialog {
+  max-width: min(760px, calc(100vw - 32px));
+}
+
+.meal-booking-calendar {
   display: grid;
-  gap: 14px;
-  padding: 0 14px 14px;
+  gap: 10px;
+}
+
+.meal-booking-day {
+  display: grid;
+  grid-template-columns: minmax(96px, 0.7fr) minmax(0, 1.3fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 76px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  color: var(--text);
+  text-align: left;
+}
+
+.meal-booking-day:not(:disabled):hover {
+  border-color: rgba(0, 92, 169, 0.34);
+  background: #f5faff;
+  transform: translateY(-1px);
+}
+
+.meal-booking-day:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.meal-booking-day__date,
+.meal-booking-day__menu,
+.meal-booking-day__price {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.meal-booking-day__date strong,
+.meal-booking-day__price {
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.meal-booking-day__date span,
+.meal-booking-day__menu {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.meal-booking-day__price {
+  color: var(--accent-dark);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .meal-order-panel,
@@ -1738,6 +1864,11 @@ textarea {
     flex-direction: column;
   }
 
+  .dialog-heading .button {
+    width: auto;
+    align-self: flex-start;
+  }
+
   .kiosk-list-row {
     gap: 12px;
   }
@@ -1756,12 +1887,17 @@ textarea {
     flex-direction: column;
   }
 
-  .meal-day {
+  .meal-status-calendar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .meal-signup-compact__row,
+  .meal-booking-day {
     grid-template-columns: 1fr;
   }
 
-  .meal-day__slots {
-    grid-template-columns: 1fr;
+  .meal-booking-day__price {
+    text-align: left;
   }
 
   .quantity-grid {
