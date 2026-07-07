@@ -12,6 +12,7 @@ from django.db import models, transaction
 from .models import (
     Camp,
     Charge,
+    DailySettlementBackupSettings,
     DailyShiftTemplate,
     Expense,
     MealPlanEntry,
@@ -84,6 +85,19 @@ class EmailOrUsernameAuthenticationForm(AuthenticationForm):
     password = forms.CharField(
         label="Passwort", strip=False, widget=forms.PasswordInput(attrs={"autocomplete": "current-password"})
     )
+
+
+class DailySettlementBackupSettingsForm(forms.ModelForm):
+    """Edit the singleton daily settlement backup schedule."""
+
+    class Meta:
+        model = DailySettlementBackupSettings
+        fields = ["enabled", "run_time"]
+        labels = {
+            "enabled": "Tägliche Abrechnungs-Backups aktivieren",
+            "run_time": "Uhrzeit",
+        }
+        widgets = {"run_time": forms.TimeInput(attrs={"type": "time"})}
 
 
 class FirstAdminSetupForm(UserCreationForm):

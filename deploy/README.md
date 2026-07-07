@@ -29,12 +29,16 @@ Optionale Variablen mit Defaults:
 
 - `UPDATER_IMAGE`: Updater-Container-Image; Default ist das veröffentlichte GHCR-Updater-Image.
 - `UPDATE_HEALTH_TIMEOUT`: maximale Wartezeit auf `APP_HEALTH_URL` in Sekunden; Default `180`.
+- `DAILY_SETTLEMENT_BACKUP_INTERVAL_SECONDS`: Prüfintervall des Scheduler-Containers; Default `300`.
 - `APP_HEALTH_URL`: Healthcheck-URL der App; Default `http://app:8000/healthz/`.
 - `TARGET_SERVICE`: Compose-Service des App-Containers für Rollback-Digest-Ermittlung; Default `app`.
 - `BACKUP_DIR`: Host-Verzeichnis für Backups; Default `./backups`.
 - `PORTAINER_VERIFY_SSL`: Portainer-Zertifikatsprüfung; Default `true`. Für interne Portainer-Instanzen mit Self-Signed-Zertifikat `false` setzen.
 - `GHCR_TOKEN`: nur für private GHCR-Images setzen; bei öffentlichen Images leer lassen.
 - `TZ`: Zeitzone des Updaters; Default `Europe/Berlin`.
+
+Der Compose-Service `backup-permissions` legt das Backup-Verzeichnis beim Start an und setzt es auf die App-UID/GID
+`10001:10001`, damit der nicht-root Scheduler Export-Staging-Dateien schreiben kann.
 
 ```bash
 docker compose pull

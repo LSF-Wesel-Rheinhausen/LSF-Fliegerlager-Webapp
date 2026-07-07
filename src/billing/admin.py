@@ -4,6 +4,8 @@ from .models import (
     BookingAuditLog,
     Camp,
     Charge,
+    DailySettlementBackupLog,
+    DailySettlementBackupSettings,
     DailyShiftException,
     DailyShiftTemplate,
     DrinkEntry,
@@ -106,6 +108,24 @@ class BookingAuditLogAdmin(admin.ModelAdmin):
 
 admin.site.register(Payment)
 admin.site.register(Expense)
+admin.site.register(DailySettlementBackupSettings)
+
+
+@admin.register(DailySettlementBackupLog)
+class DailySettlementBackupLogAdmin(admin.ModelAdmin):
+    list_display = ("run_date", "camp", "status", "settlement_run", "backup_file", "finished_at")
+    list_filter = ("status", "run_date")
+    search_fields = ("backup_file", "error", "camp__name")
+    readonly_fields = (
+        "camp",
+        "run_date",
+        "status",
+        "settlement_run",
+        "backup_file",
+        "error",
+        "started_at",
+        "finished_at",
+    )
 
 
 @admin.register(MealSignup)

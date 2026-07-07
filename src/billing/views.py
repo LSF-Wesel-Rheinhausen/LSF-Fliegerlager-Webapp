@@ -19,6 +19,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from .daily_settlement_backups import update_daily_backup_settings
 from .deployment_updates import UpdateAgentError, check_for_update, deployment_status, install_update
 from .exporters import (
     camp_settlement_csv,
@@ -33,6 +34,7 @@ from .forms import (
     CampFlatRateSettingsForm,
     CampForm,
     ChargeForm,
+    DailySettlementBackupSettingsForm,
     ExpenseForm,
     FirstAdminSetupForm,
     KioskBookingLinkInviteForm,
@@ -61,6 +63,8 @@ from .models import (
     BookingAuditLog,
     Camp,
     Charge,
+    DailySettlementBackupLog,
+    DailySettlementBackupSettings,
     Expense,
     MealOrder,
     MealPlanEntry,
@@ -133,10 +137,23 @@ def deployment_update(request: HttpRequest) -> HttpResponse:
         "build_date": settings.APP_BUILD_DATE,
         "change": settings.APP_CHANGE,
     }
+    backup_settings = DailySettlementBackupSettings.load()
+    backup_form = DailySettlementBackupSettingsForm(instance=backup_settings)
+    latest_backup_log = (
+        DailySettlementBackupLog.objects.select_related("camp", "settlement_run")
+        .order_by("-run_date", "-created_at")
+        .first()
+    )
     return render(
         request,
         "billing/deployment_update.html",
-        {"deployment_status": status, "agent_error": agent_error, "current": current},
+        {
+            "deployment_status": status,
+            "agent_error": agent_error,
+            "current": current,
+            "daily_backup_form": backup_form,
+            "latest_backup_log": latest_backup_log,
+        },
     )
 
 
@@ -166,6 +183,23 @@ def deployment_update_install(request: HttpRequest) -> HttpResponse:
         messages.error(request, str(error))
     else:
         messages.success(request, "Update gestartet. Die Anwendung wird in Kürze neu gestartet.")
+    return redirect("deployment-update")
+
+
+@superuser_required
+@require_POST
+def deployment_daily_backup_settings(request: HttpRequest) -> HttpResponse:
+    """Persist the daily settlement backup schedule from the Updates page."""
+    backup_settings = DailySettlementBackupSettings.load()
+    form = DailySettlementBackupSettingsForm(request.POST, instance=backup_settings)
+    if form.is_valid():
+        update_daily_backup_settings(
+            enabled=form.cleaned_data["enabled"],
+            run_time=form.cleaned_data["run_time"],
+        )
+        messages.success(request, "Tägliche Abrechnungs-Backups wurden gespeichert.")
+    else:
+        messages.error(request, "Die Backup-Einstellungen konnten nicht gespeichert werden.")
     return redirect("deployment-update")
 
 

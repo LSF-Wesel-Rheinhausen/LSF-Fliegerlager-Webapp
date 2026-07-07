@@ -4,7 +4,7 @@
   <div class="toolbar">
     <div>
       <h1>Abrechnung {{ run.camp }} · V{{ run.version }}</h1>
-      <p>Gespeichert am {{ run.created_at }} durch {{ run.calculated_by.email|default:run.calculated_by.username|default:"System" }}</p>
+      <p>{{ run.get_run_type_display }} · gespeichert am {{ run.created_at }} durch {{ run.calculated_by.email|default:run.calculated_by.username|default:"System" }}</p>
     </div>
     <div class="actions">
       <a class="button button-secondary" href="{% url 'camp-detail' run.camp.pk %}">Zur Lagerübersicht</a>

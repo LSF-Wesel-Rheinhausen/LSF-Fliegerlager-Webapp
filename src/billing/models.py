@@ -633,8 +633,13 @@ class DrinkEntry(TimeStampedModel):
 
 
 class SettlementRun(TimeStampedModel):
+    class RunType(models.TextChoices):
+        MANUAL = "manual", "Manuell"
+        DAILY_BACKUP = "daily_backup", "Tägliches Backup"
+
     camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="settlement_runs")
     version = models.PositiveIntegerField()
+    run_type = models.CharField(max_length=20, choices=RunType.choices, default=RunType.MANUAL)
     calculated_by = models.ForeignKey(
         get_user_model(),
         on_delete=models.SET_NULL,
@@ -657,6 +662,74 @@ class SettlementRun(TimeStampedModel):
 
     def __str__(self):
         return f"{self.camp}: Abrechnung V{self.version}"
+
+
+class DailySettlementBackupSettings(TimeStampedModel):
+    """Store the singleton schedule for automated settlement backup runs."""
+
+    enabled = models.BooleanField(default=False)
+    run_time = models.TimeField(default=time(5, 0))
+
+    class Meta:
+        verbose_name = "Tägliche Abrechnungs-Backup-Einstellung"
+        verbose_name_plural = "Tägliche Abrechnungs-Backup-Einstellungen"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        return super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        settings, _created = cls.objects.get_or_create(pk=1)
+        return settings
+
+    def __str__(self):
+        status = "aktiv" if self.enabled else "inaktiv"
+        return f"Tägliche Abrechnungs-Backups {status} um {self.run_time:%H:%M}"
+
+
+class DailySettlementBackupLog(TimeStampedModel):
+    """Record one attempted automated settlement backup for a camp and date."""
+
+    class Status(models.TextChoices):
+        RUNNING = "running", "Läuft"
+        SUCCESS = "success", "Erfolgreich"
+        FAILED = "failed", "Fehlgeschlagen"
+        SKIPPED = "skipped", "Übersprungen"
+
+    camp = models.ForeignKey(Camp, on_delete=models.SET_NULL, null=True, blank=True, related_name="daily_backup_logs")
+    run_date = models.DateField()
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.RUNNING)
+    settlement_run = models.ForeignKey(
+        SettlementRun,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="daily_backup_logs",
+    )
+    backup_file = models.CharField(max_length=255, blank=True)
+    error = models.TextField(blank=True)
+    started_at = models.DateTimeField(default=timezone.now)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-run_date", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["camp", "run_date"],
+                condition=models.Q(camp__isnull=False),
+                name="unique_daily_settlement_backup_per_camp_date",
+            ),
+            models.UniqueConstraint(
+                fields=["run_date"],
+                condition=models.Q(camp__isnull=True),
+                name="unique_daily_settlement_backup_no_camp_date",
+            ),
+        ]
+
+    def __str__(self):
+        camp_name = str(self.camp) if self.camp else "Kein aktives Lager"
+        return f"{camp_name}: {self.run_date} {self.get_status_display()}"
 
 
 class Settlement(TimeStampedModel):

@@ -178,6 +178,31 @@ def test_create_backup_uses_database_url_without_leaking_password(monkeypatch, t
     assert "super-secret-password" not in str(error.value)
 
 
+def test_backup_child_path_rejects_path_traversal(monkeypatch, tmp_path):
+    monkeypatch.setattr(deployment_agent, "BACKUP_DIR", tmp_path)
+
+    with pytest.raises(RuntimeError, match="ungültig"):
+        deployment_agent.backup_child_path("../outside")
+
+
+def test_create_backup_archive_contains_database_dump_and_exports(monkeypatch, tmp_path):
+    staging = tmp_path / "staging" / "run"
+    staging.mkdir(parents=True)
+    (staging / "manifest.json").write_text('{"ok": true}', encoding="utf-8")
+    monkeypatch.setattr(deployment_agent, "BACKUP_DIR", tmp_path)
+    monkeypatch.setattr(deployment_agent, "database_dump_bytes", lambda: b"-- database dump")
+
+    backup_name = deployment_agent.create_backup_archive("staging/run", "daily-test")
+
+    import tarfile
+
+    with tarfile.open(tmp_path / backup_name, "r:gz") as archive:
+        assert sorted(archive.getnames()) == ["database.sql", "exports/manifest.json"]
+        dump = archive.extractfile("database.sql")
+        assert dump is not None
+        assert dump.read() == b"-- database dump"
+
+
 def test_wait_until_healthy_polls_app_health_url(monkeypatch):
     response = Mock()
     response.__enter__ = Mock(return_value=response)

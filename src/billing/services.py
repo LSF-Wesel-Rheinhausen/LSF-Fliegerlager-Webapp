@@ -630,13 +630,18 @@ def _cost_center_snapshot_data(camp: Camp) -> list[dict[str, Any]]:
 
 
 @transaction.atomic
-def create_settlement_run(camp: Camp, calculated_by: Any) -> SettlementRun:
+def create_settlement_run(
+    camp: Camp,
+    calculated_by: Any,
+    run_type: str = SettlementRun.RunType.MANUAL,
+) -> SettlementRun:
     locked_camp = Camp.objects.select_for_update().get(pk=camp.pk)
     latest_version = locked_camp.settlement_runs.aggregate(value=Max("version"))["value"] or 0
     results = calculate_camp_settlements(locked_camp)
     run = SettlementRun.objects.create(
         camp=locked_camp,
         version=latest_version + 1,
+        run_type=run_type,
         calculated_by=calculated_by,
         participant_count=len(results),
         total_gross=money(sum((result.total_gross for result in results), ZERO)),

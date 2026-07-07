@@ -131,18 +131,19 @@
   <section class="panel stack">
     <h2>Gespeicherte Abrechnungen</h2>
     <table>
-      <thead><tr><th>Version</th><th>Zeitpunkt</th><th>Soll</th><th>Offen</th><th></th></tr></thead>
+      <thead><tr><th>Version</th><th>Typ</th><th>Zeitpunkt</th><th>Soll</th><th>Offen</th><th></th></tr></thead>
       <tbody>
         {% for snapshot in settlement_snapshots %}
           <tr>
             <td><a href="{% url 'settlement-run-detail' snapshot.run.pk %}">V{{ snapshot.run.version }}</a></td>
+            <td>{{ snapshot.run.get_run_type_display }}</td>
             <td>{{ snapshot.run.created_at }}</td>
             <td>{{ snapshot.total_due|money_eur }}</td>
             <td>{{ snapshot.balance|money_eur }}</td>
             <td><a href="{% url 'settlement-snapshot-pdf' snapshot.pk %}">PDF</a></td>
           </tr>
         {% empty %}
-          <tr><td colspan="5">Noch keine gespeicherte Abrechnung vorhanden.</td></tr>
+          <tr><td colspan="6">Noch keine gespeicherte Abrechnung vorhanden.</td></tr>
         {% endfor %}
       </tbody>
     </table>

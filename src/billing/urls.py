@@ -11,6 +11,11 @@ urlpatterns = [
     path("deployment/update/", views.deployment_update, name="deployment-update"),
     path("deployment/update/check/", views.deployment_update_check, name="deployment-update-check"),
     path("deployment/update/install/", views.deployment_update_install, name="deployment-update-install"),
+    path(
+        "deployment/update/daily-backup/",
+        views.deployment_daily_backup_settings,
+        name="deployment-daily-backup-settings",
+    ),
     path("help/", views.user_guide, name="user-guide"),
     path("help/admin/", views.admin_guide, name="admin-guide"),
     path("", views.kiosk_home, name="kiosk-root"),

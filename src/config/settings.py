@@ -120,6 +120,8 @@ LOGOUT_REDIRECT_URL = "login"
 
 UPDATE_AGENT_URL = os.getenv("UPDATE_AGENT_URL", "").rstrip("/")
 UPDATE_AGENT_TOKEN = os.getenv("UPDATE_AGENT_TOKEN", "")
+BACKUP_DIR = Path(os.getenv("BACKUP_DIR", str(ROOT_DIR / "backups")))
+DAILY_SETTLEMENT_BACKUP_INTERVAL_SECONDS = int(os.getenv("DAILY_SETTLEMENT_BACKUP_INTERVAL_SECONDS", "300"))
 APP_VERSION = os.getenv("APP_VERSION", "development")
 APP_REVISION = os.getenv("APP_REVISION", "unknown")
 APP_BUILD_DATE = os.getenv("APP_BUILD_DATE", "unknown")

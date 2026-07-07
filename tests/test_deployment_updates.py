@@ -7,7 +7,8 @@ from django.contrib.auth.models import Group
 from django.test import override_settings
 from django.urls import reverse
 
-from billing.deployment_updates import UpdateAgentError, agent_request, check_for_update
+from billing.deployment_updates import UpdateAgentError, agent_request, check_for_update, create_backup_archive
+from billing.models import DailySettlementBackupSettings
 from billing.permissions import ADMIN_GROUP
 from tests.factories import SuperUserFactory, UserFactory
 
@@ -63,6 +64,32 @@ def test_update_install_handles_agent_failure(client, superuser):
     assert "Agent nicht erreichbar" in [str(message) for message in response.context["messages"]]
 
 
+@pytest.mark.django_db
+def test_superuser_can_update_daily_backup_settings(client, superuser):
+    client.force_login(superuser)
+    with patch("billing.views.deployment_status", return_value={"phase": "idle", "message": "Bereit"}):
+        response = client.post(
+            reverse("deployment-daily-backup-settings"),
+            {"enabled": "on", "run_time": "06:15"},
+            follow=True,
+        )
+
+    backup_settings = DailySettlementBackupSettings.load()
+    assert response.status_code == 200
+    assert backup_settings.enabled is True
+    assert backup_settings.run_time.isoformat(timespec="minutes") == "06:15"
+
+
+@pytest.mark.django_db
+def test_non_superuser_cannot_update_daily_backup_settings(client, app_admin):
+    client.force_login(app_admin)
+
+    response = client.post(reverse("deployment-daily-backup-settings"), {"enabled": "on", "run_time": "06:15"})
+
+    assert response.status_code == 302
+    assert DailySettlementBackupSettings.load().enabled is False
+
+
 @override_settings(UPDATE_AGENT_URL="http://updater:8080", UPDATE_AGENT_TOKEN="secret-token")
 def test_agent_request_uses_bearer_token_and_parses_json():
     response = Mock()
@@ -104,6 +131,21 @@ def test_check_for_update_sends_current_build_metadata():
         }
     }
     assert result == {"update_available": True}
+
+
+@override_settings(UPDATE_AGENT_URL="http://updater:8080", UPDATE_AGENT_TOKEN="secret-token")
+def test_create_backup_archive_sends_staging_payload():
+    response = Mock()
+    response.__enter__ = Mock(return_value=io.BytesIO(json.dumps({"backup": "daily.tar.gz"}).encode()))
+    response.__exit__ = Mock(return_value=False)
+
+    with patch("urllib.request.urlopen", return_value=response) as urlopen:
+        result = create_backup_archive("staging/run", "daily-run")
+
+    request = urlopen.call_args.args[0]
+    assert request.full_url == "http://updater:8080/backup"
+    assert json.loads(request.data.decode()) == {"staging_dir": "staging/run", "archive_prefix": "daily-run"}
+    assert result == {"backup": "daily.tar.gz"}
 
 
 @override_settings(UPDATE_AGENT_URL="", UPDATE_AGENT_TOKEN="")
