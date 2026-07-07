@@ -151,23 +151,35 @@
 
       <section class="panel kiosk-card kiosk-card--muted kiosk-table">
         <div class="kiosk-table__header">
-          <h2>Letzte Getränke</h2>
-          <p>Deine letzten Buchungen im Überblick.</p>
+          <h2>Letzte Schnellbuchungen</h2>
+          <p>Getränke, Frühstück und Snack können 15 Minuten lang storniert werden.</p>
         </div>
         <div class="kiosk-table__wrapper">
           <table>
-            <thead><tr><th>Zeit</th><th>Getränk</th><th>Menge</th><th>Einzelpreis</th><th>Summe</th></tr></thead>
+            <thead><tr><th>Zeit</th><th>Buchung</th><th>Menge</th><th>Einzelpreis</th><th>Summe</th><th>Aktion</th></tr></thead>
             <tbody>
-              {% for entry in recent_drinks %}
+              {% for entry in recent_quick_charges %}
                 <tr>
                   <td>{{ entry.created_at }}</td>
                   <td>{{ entry.description }}</td>
                   <td>{{ entry.quantity }}</td>
                   <td>{{ entry.unit_price|money_eur }}</td>
                   <td>{{ entry.total|money_eur }}</td>
+                  <td>
+                    {% if entry.is_kiosk_cancelable %}
+                      <form method="post" class="inline-form">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="quick_cancel">
+                        <input type="hidden" name="charge_id" value="{{ entry.pk }}">
+                        <button type="submit" class="button button-secondary">Stornieren</button>
+                      </form>
+                    {% else %}
+                      <span class="muted">Nicht mehr möglich</span>
+                    {% endif %}
+                  </td>
                 </tr>
               {% empty %}
-                <tr><td colspan="5">Noch keine Getränke gebucht.</td></tr>
+                <tr><td colspan="6">Noch keine Schnellbuchungen vorhanden.</td></tr>
               {% endfor %}
             </tbody>
           </table>

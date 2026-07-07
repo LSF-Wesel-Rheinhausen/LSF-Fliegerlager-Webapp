@@ -264,7 +264,7 @@ def test_workbook_export_compares_cost_center_income_and_expenses(client):
 
 
 @pytest.mark.django_db
-def test_participant_pdf_export_returns_pdf_download(client, export_dataset):
+def test_participant_pdf_export_returns_pdf_preview(client, export_dataset):
     _camp, participant = export_dataset
     client.force_login(SuperUserFactory())
 
@@ -272,5 +272,5 @@ def test_participant_pdf_export_returns_pdf_download(client, export_dataset):
 
     assert response.status_code == 200
     assert response["Content-Type"] == "application/pdf"
-    assert response["Content-Disposition"] == f'attachment; filename="abrechnung-{participant.pk}.pdf"'
+    assert response["Content-Disposition"] == f'inline; filename="abrechnung-{participant.pk}.pdf"'
     assert response.content.startswith(b"%PDF-")

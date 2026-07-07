@@ -22,12 +22,12 @@ Der typische Ablauf:
 - Ersteinrichtung: Beim ersten Start kann der erste Admin im Browser angelegt werden; danach verwalten Admins Nutzer, Rollen und Passwörter in der Anwendung.
 - Preisverwaltung: eigene Admin-Route für Lagerpauschalen, Getränke, Standard-Mahlzeitenpreise, abweichende Tagespreise und sonstige Preisregeln.
 - Förderlogik: Jugendgruppenmitglieder erhalten je Position Förderung über `Element-Fördersatz * Hilfssatz * Berufssatz`.
-- Kiosk: separater PIN-Login mit temporärer Sperre nach wiederholten Fehlversuchen, PIN-Ersteinrichtung, Tablet-/Mobiloberfläche, automatische Abmeldung nach Inaktivität, Getränkebuchung, Essensanmeldung und Dienstwahl.
+- Kiosk: separater PIN-Login mit temporärer Sperre nach wiederholten Fehlversuchen, PIN-Ersteinrichtung, Tablet-/Mobiloberfläche, automatische Abmeldung nach Inaktivität, Schnellbuchungen für Getränke, Frühstück und Snacks mit 15-Minuten-Storno, Essensanmeldung und Dienstwahl.
 - Dienstplanung: tägliche Vorlagen, automatische Generierung über den Lagerzeitraum, manuelle Dienste, Soll-Dienste anhand gebuchter Nächte, Fortschrittsanzeige, Besetzungsauswertung und Tauschangebote.
 - Buchungsbearbeitung: Admins können Kostenpositionen stornieren, wiederherstellen und korrigieren; abrechnungsrelevante Änderungen werden im Audit-Protokoll gespeichert.
 - Teilnehmerverwaltung: Bearbeiten, verlustfreies Archivieren und Wiederherstellen; archivierte Teilnehmer bleiben historisch nachvollziehbar, sind aber nicht im Kiosk oder in neuen Abrechnungsläufen sichtbar.
 - Abrechnung: Live-Berechnung in `src/billing/services.py` sowie unveränderliche, versionierte Lagerläufe mit Bearbeiter, Zeitpunkt und historischen Exporten.
-- Import/Export: Teilnehmerimport per CSV/XLSX, Abrechnungsexporte als Lager-CSV, Getränke-CSV, Excel-Arbeitsmappe und Einzelabrechnung als PDF.
+- Import/Export: Teilnehmerimport per CSV/XLSX, Abrechnungsexporte als Lager-CSV, Getränke-CSV, Excel-Arbeitsmappe und Einzelabrechnung als PDF-Vorschau im Browser.
 
 ## Projektstruktur
 
@@ -67,8 +67,8 @@ Boolesche Werte akzeptieren unter anderem `1`, `true`, `ja`, `yes` und `x`. Dezi
 - Lagerabrechnung als CSV: Nachname, Vorname, Brutto, Förderung, Soll, Gezahlt, Vorgestreckt und Offen.
 - Getränke als CSV: historische `DrinkEntry`-Daten und aktuelle Kiosk-Getränkebuchungen aus `Charge`.
 - Excel-Arbeitsmappe: Blatt `Abrechnung` plus Blatt `Teilnehmer`.
-- Einzelabrechnung als PDF: Positionen und Summen für einen Teilnehmer.
-- Gespeicherte Lagerläufe: versionsgebundene CSV- und Excel-Dateien sowie PDF-Snapshots je Teilnehmer.
+- Einzelabrechnung als PDF: Positionen und Summen für einen Teilnehmer, als Browser-Vorschau mit Downloadmöglichkeit im PDF-Viewer.
+- Gespeicherte Lagerläufe: versionsgebundene CSV- und Excel-Dateien sowie PDF-Snapshots je Teilnehmer als Browser-Vorschau.
 
 ## Lokaler Start
 

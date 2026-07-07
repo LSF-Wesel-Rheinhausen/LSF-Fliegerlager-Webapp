@@ -115,6 +115,7 @@ signer = Signer()
 User = get_user_model()
 KIOSK_PARTICIPANT_SESSION_KEY = "kiosk_participant_id"
 KIOSK_PIN_SETUP_SESSION_KEY = "kiosk_pin_setup_participant_id"
+KIOSK_QUICK_BOOKING_CANCEL_WINDOW = timedelta(minutes=15)
 
 
 @superuser_required
@@ -1194,6 +1195,31 @@ def _retract_meal_signup(signup):
     signup.charge.save(update_fields=["deleted_at", "deleted_by"])
 
 
+def _is_kiosk_quick_charge_cancelable(charge: Charge, participant: Participant, now=None) -> bool:
+    """Return whether a kiosk participant may cancel a quick charge."""
+    current_time = now or timezone.now()
+    return (
+        charge.deleted_at is None
+        and charge.kiosk_booked_by_id is not None
+        and charge.kind in {Charge.Kind.DRINK, Charge.Kind.FOOD}
+        and charge.created_at >= current_time - KIOSK_QUICK_BOOKING_CANCEL_WINDOW
+        and (charge.participant_id == participant.pk or charge.kiosk_booked_by_id == participant.pk)
+        and not _is_charge_covered_by_settlement_run(charge)
+    )
+
+
+def _is_charge_covered_by_settlement_run(charge: Charge) -> bool:
+    """Return whether a settlement run freezes this charge for kiosk cancellation."""
+    settlement_runs = SettlementRun.objects.filter(
+        camp_id=charge.participant.camp_id,
+        created_at__gte=charge.created_at,
+    ).order_by("created_at")
+    for run in settlement_runs:
+        if charge.occurred_on is None or charge.occurred_on <= timezone.localdate(run.created_at):
+            return True
+    return False
+
+
 def _meal_price_rule_for_targets(camp, meal, meal_date, participant, meal_targets):
     participant_rule = resolve_meal_price_rule(
         camp,
@@ -1447,10 +1473,35 @@ def kiosk_home(request):
                             unit_price=effective_rule.unit_price,
                             foerdersatz=effective_rule.foerdersatz,
                             occurred_on=occurred_on,
+                            kiosk_booked_by=participant,
                         )
                         charge.save()
                 if not quick_form.errors:
                     messages.success(request, f"{rule.name} gebucht.")
+                    return redirect("kiosk-home")
+        elif request.POST.get("action") == "quick_cancel":
+            try:
+                charge_id = int(request.POST.get("charge_id", ""))
+            except ValueError:
+                charge_id = None
+            with transaction.atomic():
+                charge = (
+                    Charge.objects.select_for_update()
+                    .filter(
+                        Q(participant=participant) | Q(kiosk_booked_by=participant),
+                        pk=charge_id,
+                        kind__in=[Charge.Kind.DRINK, Charge.Kind.FOOD],
+                        deleted_at__isnull=True,
+                    )
+                    .first()
+                )
+                if charge is None or not _is_kiosk_quick_charge_cancelable(charge, participant):
+                    messages.error(request, "Diese Buchung kann nicht mehr storniert werden.")
+                else:
+                    charge.deleted_at = timezone.now()
+                    charge.deleted_by = None
+                    charge.save(update_fields=["deleted_at", "deleted_by"])
+                    messages.success(request, "Buchung wurde storniert.")
                     return redirect("kiosk-home")
         elif request.POST.get("action") == "meal":
             meal_form = MealBookingForm(request.POST, participant=participant, prefix="meal")
@@ -1575,9 +1626,20 @@ def kiosk_home(request):
                 return redirect("kiosk-home")
             messages.error(request, "Verknüpfung wurde nicht gefunden.")
 
-    recent_drinks = participant.charges.filter(kind=Charge.Kind.DRINK, deleted_at__isnull=True).order_by("-created_at")[
-        :8
-    ]
+    recent_quick_charges = list(
+        Charge.objects.select_related("participant", "kiosk_booked_by")
+        .filter(
+            Q(participant=participant) | Q(kiosk_booked_by=participant),
+            kind__in=[Charge.Kind.DRINK, Charge.Kind.FOOD],
+            deleted_at__isnull=True,
+            kiosk_booked_by__isnull=False,
+        )
+        .distinct()
+        .order_by("-created_at")[:8]
+    )
+    quick_cancel_now = timezone.now()
+    for charge in recent_quick_charges:
+        charge.is_kiosk_cancelable = _is_kiosk_quick_charge_cancelable(charge, participant, quick_cancel_now)
     linked_participant_ids = [
         target["object"].pk
         for target in meal_targets
@@ -1613,7 +1675,7 @@ def kiosk_home(request):
         "meal_default_variant": meal_form.fields["variant"].choices[0][0],
         "family_member_form": family_member_form,
         "booking_link_form": booking_link_form,
-        "recent_drinks": recent_drinks,
+        "recent_quick_charges": recent_quick_charges,
         "meal_signups": meal_signups,
         "meal_calendar_days": meal_calendar_days,
         "meal_calendar_groups": _group_kiosk_meal_calendar(meal_calendar_days),
