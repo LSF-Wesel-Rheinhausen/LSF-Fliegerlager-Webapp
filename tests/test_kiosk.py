@@ -1,4 +1,4 @@
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -595,6 +595,161 @@ def test_kiosk_books_drink_with_camp_drink_price_and_subsidy_flag(client):
     assert entry.quantity == Decimal("2.00")
     assert entry.unit_price == Decimal("2.50")
     assert entry.foerdersatz == Decimal("1.0000")
+    assert entry.kiosk_booked_by == participant
+
+
+@pytest.mark.django_db
+def test_kiosk_can_cancel_own_quick_booking_within_cancel_window(client):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    charge = Charge.objects.create(
+        participant=participant,
+        kind=Charge.Kind.DRINK,
+        description="Wasser (Kiosk)",
+        quantity=Decimal("1.00"),
+        unit_price=Decimal("1.50"),
+        kiosk_booked_by=participant,
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(reverse("kiosk-home"), {"action": "quick_cancel", "charge_id": charge.pk})
+
+    assert response.status_code == 302
+    charge.refresh_from_db()
+    assert charge.deleted_at is not None
+    assert charge.deleted_by is None
+
+
+@pytest.mark.django_db
+def test_kiosk_rejects_quick_booking_cancel_after_cancel_window(client):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    charge = Charge.objects.create(
+        participant=participant,
+        kind=Charge.Kind.DRINK,
+        description="Wasser (Kiosk)",
+        quantity=Decimal("1.00"),
+        unit_price=Decimal("1.50"),
+        kiosk_booked_by=participant,
+    )
+    Charge.objects.filter(pk=charge.pk).update(created_at=timezone.now() - timedelta(minutes=16))
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(reverse("kiosk-home"), {"action": "quick_cancel", "charge_id": charge.pk})
+
+    assert response.status_code == 200
+    charge.refresh_from_db()
+    assert charge.deleted_at is None
+
+
+@pytest.mark.django_db
+def test_kiosk_rejects_quick_booking_cancel_for_unrelated_participant(client):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    other = ParticipantFactory(camp=camp, first_name="Grace", last_name="Hopper")
+    charge = Charge.objects.create(
+        participant=other,
+        kind=Charge.Kind.DRINK,
+        description="Wasser (Kiosk)",
+        quantity=Decimal("1.00"),
+        unit_price=Decimal("1.50"),
+        kiosk_booked_by=other,
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(reverse("kiosk-home"), {"action": "quick_cancel", "charge_id": charge.pk})
+
+    assert response.status_code == 200
+    charge.refresh_from_db()
+    assert charge.deleted_at is None
+
+
+@pytest.mark.django_db
+def test_kiosk_linked_quick_booking_can_be_cancelled_by_booking_participant(client):
+    camp = CampFactory()
+    booker = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    linked = ParticipantFactory(camp=camp, first_name="Grace", last_name="Hopper")
+    ParticipantBookingLink.objects.create(
+        inviter=booker,
+        invitee=linked,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    PriceRuleFactory(camp=camp, kind=PriceRule.Kind.DRINK, name="Wasser", unit_price=Decimal("1.50"))
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = booker.pk
+    session.save()
+    client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "quick",
+            "quick-price_rule": PriceRule.objects.get(camp=camp, kind=PriceRule.Kind.DRINK).pk,
+            "quick-quantity": 1,
+            "quick-target": [f"participant-{linked.pk}"],
+        },
+    )
+    charge = Charge.objects.get(participant=linked, kind=Charge.Kind.DRINK)
+
+    response = client.post(reverse("kiosk-home"), {"action": "quick_cancel", "charge_id": charge.pk})
+
+    assert response.status_code == 302
+    charge.refresh_from_db()
+    assert charge.kiosk_booked_by == booker
+    assert charge.deleted_at is not None
+
+
+@pytest.mark.django_db
+def test_kiosk_billed_linked_participant_can_cancel_own_quick_booking(client):
+    camp = CampFactory()
+    booker = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    linked = ParticipantFactory(camp=camp, first_name="Grace", last_name="Hopper")
+    charge = Charge.objects.create(
+        participant=linked,
+        kind=Charge.Kind.DRINK,
+        description="Wasser (Kiosk) für Grace Hopper",
+        quantity=Decimal("1.00"),
+        unit_price=Decimal("1.50"),
+        kiosk_booked_by=booker,
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = linked.pk
+    session.save()
+
+    response = client.post(reverse("kiosk-home"), {"action": "quick_cancel", "charge_id": charge.pk})
+
+    assert response.status_code == 302
+    charge.refresh_from_db()
+    assert charge.deleted_at is not None
+
+
+@pytest.mark.django_db
+def test_kiosk_home_shows_quick_booking_cancel_action(client):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    Charge.objects.create(
+        participant=participant,
+        kind=Charge.Kind.FOOD,
+        description="Frühstück (Kiosk)",
+        quantity=Decimal("1.00"),
+        unit_price=Decimal("4.00"),
+        kiosk_booked_by=participant,
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.get(reverse("kiosk-home"))
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert "Letzte Schnellbuchungen" in content
+    assert "quick_cancel" in content
+    assert "Stornieren" in content
 
 
 @pytest.mark.django_db

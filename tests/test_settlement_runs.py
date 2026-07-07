@@ -100,6 +100,7 @@ def test_historical_exports_use_snapshot_data(client):
     workbook = load_workbook(BytesIO(workbook_response.content), data_only=True)
     assert workbook["Abrechnung"]["A2"].value == "Ada Lovelace"
     assert pdf_response.status_code == 200
+    assert pdf_response["Content-Disposition"] == f'inline; filename="abrechnung-{snapshot.pk}-v{run.version}.pdf"'
     assert pdf_response.content.startswith(b"%PDF-")
 
 

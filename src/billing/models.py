@@ -353,6 +353,14 @@ class Charge(TimeStampedModel):
         blank=True,
         related_name="deleted_charges",
     )
+    kiosk_booked_by = models.ForeignKey(
+        Participant,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="kiosk_created_charges",
+        help_text="Teilnehmer, der diese Kiosk-Schnellbuchung ausgelöst hat.",
+    )
 
     class Meta:
         ordering = ["participant", "kind", "description"]

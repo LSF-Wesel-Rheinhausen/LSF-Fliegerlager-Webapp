@@ -562,7 +562,7 @@ def participant_pdf_response(participant):
     pdf.save()
 
     response = HttpResponse(output.getvalue(), content_type="application/pdf")
-    response["Content-Disposition"] = f'attachment; filename="abrechnung-{participant.pk}.pdf"'
+    response["Content-Disposition"] = f'inline; filename="abrechnung-{participant.pk}.pdf"'
     return response
 
 
@@ -670,5 +670,5 @@ def settlement_snapshot_pdf_response(snapshot: Settlement) -> HttpResponse:
     pdf.showPage()
     pdf.save()
     response = HttpResponse(output.getvalue(), content_type="application/pdf")
-    response["Content-Disposition"] = f'attachment; filename="abrechnung-{snapshot.pk}-v{run.version}.pdf"'
+    response["Content-Disposition"] = f'inline; filename="abrechnung-{snapshot.pk}-v{run.version}.pdf"'
     return response

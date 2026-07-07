@@ -20,3 +20,14 @@ def test_participant_detail_shows_donation_prompt_for_credit(client):
     content = response.content.decode("utf-8")
     assert "Möchtest du das Guthaben" in content
     assert "IBAN oder PayPal" in content
+
+
+@pytest.mark.django_db
+def test_base_layout_renders_favicon(client):
+    client.force_login(SuperUserFactory())
+
+    response = client.get(reverse("camp-list"))
+
+    assert response.status_code == 200
+    assert 'rel="icon"' in response.content.decode("utf-8")
+    assert "billing/logo.jpg" in response.content.decode("utf-8")
