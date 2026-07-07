@@ -1204,7 +1204,20 @@ def _is_kiosk_quick_charge_cancelable(charge: Charge, participant: Participant, 
         and charge.kind in {Charge.Kind.DRINK, Charge.Kind.FOOD}
         and charge.created_at >= current_time - KIOSK_QUICK_BOOKING_CANCEL_WINDOW
         and (charge.participant_id == participant.pk or charge.kiosk_booked_by_id == participant.pk)
+        and not _is_charge_covered_by_settlement_run(charge)
     )
+
+
+def _is_charge_covered_by_settlement_run(charge: Charge) -> bool:
+    """Return whether a settlement run freezes this charge for kiosk cancellation."""
+    settlement_runs = SettlementRun.objects.filter(
+        camp_id=charge.participant.camp_id,
+        created_at__gte=charge.created_at,
+    ).order_by("created_at")
+    for run in settlement_runs:
+        if charge.occurred_on is None or charge.occurred_on <= timezone.localdate(run.created_at):
+            return True
+    return False
 
 
 def _meal_price_rule_for_targets(camp, meal, meal_date, participant, meal_targets):
@@ -1619,6 +1632,7 @@ def kiosk_home(request):
             Q(participant=participant) | Q(kiosk_booked_by=participant),
             kind__in=[Charge.Kind.DRINK, Charge.Kind.FOOD],
             deleted_at__isnull=True,
+            kiosk_booked_by__isnull=False,
         )
         .distinct()
         .order_by("-created_at")[:8]
