@@ -11,12 +11,16 @@
     <article class="panel kiosk-hero__intro kiosk-card--accent">
       <span class="kiosk-hero__eyebrow">Mein Kiosk</span>
       <div class="kiosk-hero__copy">
-        <h1>{{ participant.full_name }}</h1>
+        <h1>{{ kiosk_actor.full_name }}</h1>
         <p>Buche Getränke und Essen, verwalte Mitbuchungen und behalte deine Abrechnung im Blick, ohne zwischen Seiten zu springen.</p>
       </div>
       <div class="kiosk-meta">
         <span class="kiosk-meta__item">{{ participant.camp }}</span>
-        <span class="kiosk-meta__item">{{ participant.get_status_display }}</span>
+        {% if kiosk_actor_is_family_member %}
+          <span class="kiosk-meta__item">Begleitperson von {{ participant.full_name }}</span>
+        {% else %}
+          <span class="kiosk-meta__item">{{ participant.get_status_display }}</span>
+        {% endif %}
         <span class="kiosk-meta__item">{{ participant.completed_shifts }} / {{ participant.target_shifts }} Pflichtdienste</span>
       </div>
     </article>
@@ -153,7 +157,7 @@
         <div class="kiosk-card__header kiosk-section-heading">
           <div class="kiosk-card__header-main">
             <h2 class="kiosk-title">Check-in</h2>
-            <p>Pflege An- und Abreise für dich und freigegebene Mitbuchungen.</p>
+            <p>Pflege An- und Abreise für dich, Begleitpersonen und freigegebene Mitbuchungen.</p>
           </div>
           <button type="button" class="button kiosk-card__action" data-open-checkin-dialog>Eintragen</button>
         </div>
@@ -523,7 +527,7 @@
         {% for target in meal_targets %}
           <article class="target-row">
             <label>
-              <input type="checkbox" form="quick-booking-form" name="quick-target" value="{{ target.token }}" {% if target.object.pk == participant.pk and target.kind == "participant" %}checked{% endif %}>
+              <input type="checkbox" form="quick-booking-form" name="quick-target" value="{{ target.token }}" {% if target.token == default_booking_target_token %}checked{% endif %}>
               <span>{{ target.name }} · {{ target.role }}</span>
             </label>
           </article>
@@ -630,7 +634,7 @@
         {% for target in meal_targets %}
           <article class="target-row">
             <label>
-              <input type="checkbox" form="meal-booking-form" name="meal-target" value="{{ target.token }}" {% if target.object.pk == participant.pk and target.kind == "participant" %}checked{% endif %}>
+              <input type="checkbox" form="meal-booking-form" name="meal-target" value="{{ target.token }}" {% if target.token == default_booking_target_token %}checked{% endif %}>
               <span>{{ target.name }} &middot; {{ target.role }}</span>
             </label>
             <select form="meal-booking-form" name="meal-variant-{{ target.token }}" aria-label="Variante für {{ target.name }}">
@@ -664,7 +668,7 @@
     <form method="dialog" class="dialog-heading">
       <div>
         <h2 id="checkin-dialog-title">Check-in</h2>
-        <p class="dialog-heading__meta">An- und Abreise für freigegebene Teilnehmerprofile.</p>
+        <p class="dialog-heading__meta">An- und Abreise für dich, Begleitpersonen und freigegebene Teilnehmerprofile.</p>
       </div>
       <button class="button button-secondary">Schließen</button>
     </form>
@@ -672,35 +676,35 @@
       {% csrf_token %}
       <input type="hidden" name="action" value="checkin">
       <div class="target-list">
-        {% for checkin_participant in checkin_participants %}
+        {% for checkin_target in checkin_participants %}
           <article class="target-row">
             <div class="kiosk-list-row__content">
-              <strong>{{ checkin_participant.full_name }}</strong>
-              <span>{% if checkin_participant.pk == participant.pk %}Ich{% else %}Verknüpft{% endif %}</span>
+              <strong>{{ checkin_target.name }}</strong>
+              <span>{{ checkin_target.role }}</span>
             </div>
-            <input type="hidden" name="checkin_participant_id" value="{{ checkin_participant.pk }}">
+            <input type="hidden" name="checkin_target" value="{{ checkin_target.token }}">
             <p class="dialog-field">
-              <label for="arrival-date-{{ checkin_participant.pk }}">Anreise</label>
+              <label for="arrival-date-{{ checkin_target.token }}">Anreise</label>
               <input
-                id="arrival-date-{{ checkin_participant.pk }}"
-                name="arrival_date_{{ checkin_participant.pk }}"
+                id="arrival-date-{{ checkin_target.token }}"
+                name="arrival_date_{{ checkin_target.token }}"
                 type="date"
                 inputmode="numeric"
-                value="{{ checkin_participant.arrival_date|date:'Y-m-d' }}"
-                {% if participant.camp.starts_on %}min="{{ participant.camp.starts_on|date:'Y-m-d' }}"{% endif %}
-                {% if participant.camp.ends_on %}max="{{ participant.camp.ends_on|date:'Y-m-d' }}"{% endif %}
+                value="{{ checkin_target.object.arrival_date|date:'Y-m-d' }}"
+                {% if checkin_target.camp.starts_on %}min="{{ checkin_target.camp.starts_on|date:'Y-m-d' }}"{% endif %}
+                {% if checkin_target.camp.ends_on %}max="{{ checkin_target.camp.ends_on|date:'Y-m-d' }}"{% endif %}
               >
             </p>
             <p class="dialog-field">
-              <label for="departure-date-{{ checkin_participant.pk }}">Abreise</label>
+              <label for="departure-date-{{ checkin_target.token }}">Abreise</label>
               <input
-                id="departure-date-{{ checkin_participant.pk }}"
-                name="departure_date_{{ checkin_participant.pk }}"
+                id="departure-date-{{ checkin_target.token }}"
+                name="departure_date_{{ checkin_target.token }}"
                 type="date"
                 inputmode="numeric"
-                value="{{ checkin_participant.departure_date|date:'Y-m-d' }}"
-                {% if participant.camp.starts_on %}min="{{ participant.camp.starts_on|date:'Y-m-d' }}"{% endif %}
-                {% if participant.camp.ends_on %}max="{{ participant.camp.ends_on|date:'Y-m-d' }}"{% endif %}
+                value="{{ checkin_target.object.departure_date|date:'Y-m-d' }}"
+                {% if checkin_target.camp.starts_on %}min="{{ checkin_target.camp.starts_on|date:'Y-m-d' }}"{% endif %}
+                {% if checkin_target.camp.ends_on %}max="{{ checkin_target.camp.ends_on|date:'Y-m-d' }}"{% endif %}
               >
             </p>
           </article>

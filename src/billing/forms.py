@@ -20,6 +20,7 @@ from .models import (
     Participant,
     ParticipantBookingLink,
     ParticipantFamilyMember,
+    ParticipantFamilyMemberPin,
     ParticipantPin,
     Payment,
     PriceRule,
@@ -676,7 +677,7 @@ class ParticipantPinForm(forms.Form):
 
 
 class KioskLoginForm(forms.Form):
-    participant = forms.ModelChoiceField(label="Teilnehmer", queryset=Participant.objects.none())
+    participant = forms.ChoiceField(label="Teilnehmer")
     pin = forms.CharField(
         label="PIN",
         strip=True,
@@ -685,16 +686,71 @@ class KioskLoginForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["participant"].queryset = Participant.objects.filter(
-            camp__is_active=True, archived_at__isnull=True
-        ).select_related("camp")
+        self.login_targets = self._login_targets()
+        self.fields["participant"].choices = [(target["token"], target["label"]) for target in self.login_targets]
         self.missing_pin_participant = None
+        self.missing_pin_family_member = None
+
+    def _login_targets(self) -> list[dict[str, Any]]:
+        participants = Participant.objects.filter(camp__is_active=True, archived_at__isnull=True).select_related("camp")
+        targets = [
+            {
+                "token": f"participant-{participant.pk}",
+                "label": participant.full_name,
+                "participant": participant,
+                "family_member": None,
+            }
+            for participant in participants
+        ]
+        family_members = (
+            ParticipantFamilyMember.objects.select_related("guardian", "guardian__camp")
+            .filter(
+                guardian__camp__is_active=True,
+                guardian__archived_at__isnull=True,
+                role=ParticipantFamilyMember.Role.COMPANION,
+                is_active=True,
+            )
+            .order_by("last_name", "first_name", "pk")
+        )
+        targets.extend(
+            {
+                "token": f"family-{family_member.pk}",
+                "label": f"{family_member.full_name} (Begleitung von {family_member.guardian.full_name})",
+                "participant": family_member.guardian,
+                "family_member": family_member,
+            }
+            for family_member in family_members
+        )
+        return sorted(targets, key=lambda target: target["label"])
+
+    def _target_for_token(self, token: str) -> dict[str, Any] | None:
+        return next((target for target in self.login_targets if target["token"] == token), None)
 
     def clean(self):
         cleaned_data = super().clean()
-        participant = cleaned_data.get("participant")
+        target = self._target_for_token(cleaned_data.get("participant", ""))
         pin = cleaned_data.get("pin")
-        if participant:
+        if target:
+            participant = target["participant"]
+            family_member = target["family_member"]
+            if family_member is not None:
+                try:
+                    family_pin = family_member.pin
+                except ParticipantFamilyMemberPin.DoesNotExist:
+                    family_pin = None
+                if family_pin is None or family_pin.must_set_pin or not family_pin.pin_hash:
+                    self.missing_pin_participant = participant
+                    self.missing_pin_family_member = family_member
+                    raise forms.ValidationError("Für diesen Begleiter ist noch kein PIN gesetzt.", code="missing_pin")
+                if family_pin.is_locked:
+                    raise forms.ValidationError(
+                        "Zu viele Fehlversuche. Bitte warte fünf Minuten und versuche es erneut.", code="pin_locked"
+                    )
+                if pin and not family_pin.check_pin(pin):
+                    raise forms.ValidationError("Teilnehmer oder PIN ist ungültig.", code="invalid_pin")
+                cleaned_data["participant"] = participant
+                cleaned_data["family_member"] = family_member
+                return cleaned_data
             try:
                 participant_pin = participant.pin
             except ParticipantPin.DoesNotExist:
@@ -708,6 +764,8 @@ class KioskLoginForm(forms.Form):
                 )
             if pin and not participant_pin.check_pin(pin):
                 raise forms.ValidationError("Teilnehmer oder PIN ist ungültig.", code="invalid_pin")
+            cleaned_data["participant"] = participant
+            cleaned_data["family_member"] = None
         return cleaned_data
 
 

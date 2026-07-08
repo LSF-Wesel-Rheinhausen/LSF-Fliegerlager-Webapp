@@ -16,6 +16,7 @@ from .models import (
     Participant,
     ParticipantBookingLink,
     ParticipantFamilyMember,
+    ParticipantFamilyMemberPin,
     ParticipantPin,
     Payment,
     PriceRule,
@@ -44,6 +45,7 @@ class ParticipantAdmin(admin.ModelAdmin):
 
 
 admin.site.register(ParticipantPin)
+admin.site.register(ParticipantFamilyMemberPin)
 admin.site.register(UserProfile)
 
 

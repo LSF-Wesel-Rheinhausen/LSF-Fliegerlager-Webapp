@@ -233,6 +233,8 @@ class ParticipantFamilyMember(TimeStampedModel):
     first_name = models.CharField(max_length=120)
     last_name = models.CharField(max_length=120)
     role = models.CharField(max_length=20, choices=Role.choices)
+    arrival_date = models.DateField(null=True, blank=True)
+    departure_date = models.DateField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -250,6 +252,59 @@ class ParticipantFamilyMember(TimeStampedModel):
 
     def __str__(self):
         return f"{self.full_name} ({self.guardian})"
+
+
+class ParticipantFamilyMemberPin(TimeStampedModel):
+    """Store the kiosk PIN for a companion family member."""
+
+    MAX_FAILED_ATTEMPTS = 5
+    LOCK_MINUTES = 5
+
+    family_member = models.OneToOneField(ParticipantFamilyMember, on_delete=models.CASCADE, related_name="pin")
+    pin_hash = models.CharField(max_length=256, blank=True)
+    must_set_pin = models.BooleanField(default=True)
+    failed_attempts = models.PositiveSmallIntegerField(default=0)
+    locked_until = models.DateTimeField(null=True, blank=True)
+
+    def set_pin(self, raw_pin: str) -> None:
+        """Persist a hashed kiosk PIN for this companion."""
+        self.pin_hash = make_password(raw_pin)
+        self.must_set_pin = False
+        self.failed_attempts = 0
+        self.locked_until = None
+
+    def reset_pin(self) -> None:
+        """Force the companion to choose a new kiosk PIN."""
+        self.pin_hash = ""
+        self.must_set_pin = True
+        self.failed_attempts = 0
+        self.locked_until = None
+
+    @property
+    def is_locked(self) -> bool:
+        """Return whether failed PIN attempts temporarily block login."""
+        return self.locked_until is not None and self.locked_until > timezone.now()
+
+    def check_pin(self, raw_pin: str) -> bool:
+        """Validate a raw PIN and apply lockout accounting."""
+        if not self.pin_hash or self.is_locked:
+            return False
+        if check_password(raw_pin, self.pin_hash):
+            if self.failed_attempts or self.locked_until is not None:
+                self.failed_attempts = 0
+                self.locked_until = None
+                self.save(update_fields=["failed_attempts", "locked_until", "updated_at"])
+            return True
+
+        self.failed_attempts += 1
+        if self.failed_attempts >= self.MAX_FAILED_ATTEMPTS:
+            self.locked_until = timezone.now() + timedelta(minutes=self.LOCK_MINUTES)
+            self.failed_attempts = 0
+        self.save(update_fields=["failed_attempts", "locked_until", "updated_at"])
+        return False
+
+    def __str__(self):
+        return f"PIN {self.family_member}"
 
 
 class ParticipantBookingLink(TimeStampedModel):

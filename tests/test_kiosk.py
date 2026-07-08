@@ -20,7 +20,12 @@ from billing.models import (
     UserProfile,
 )
 from billing.services import create_settlement_run
-from billing.views import KIOSK_PARTICIPANT_SESSION_KEY, KIOSK_PIN_SETUP_SESSION_KEY
+from billing.views import (
+    KIOSK_FAMILY_MEMBER_SESSION_KEY,
+    KIOSK_PARTICIPANT_SESSION_KEY,
+    KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY,
+    KIOSK_PIN_SETUP_SESSION_KEY,
+)
 from tests.factories import CampFactory, ExpenseFactory, ParticipantFactory, PriceRuleFactory, UserFactory
 
 
@@ -33,7 +38,7 @@ def _freeze_meal_lock_time(monkeypatch, fixed_now):
 def test_kiosk_login_redirects_to_pin_setup_when_pin_is_missing(client):
     participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
 
-    response = client.post(reverse("kiosk-login"), {"participant": participant.pk, "pin": "1234"})
+    response = client.post(reverse("kiosk-login"), {"participant": f"participant-{participant.pk}", "pin": "1234"})
 
     assert response.status_code == 302
     assert response["Location"] == reverse("kiosk-pin-setup")
@@ -62,12 +67,80 @@ def test_kiosk_pin_setup_sets_pin_and_logs_participant_in(client):
 
 
 @pytest.mark.django_db
+def test_kiosk_login_redirects_companion_to_pin_setup_when_pin_is_missing(client):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    companion = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Grace",
+        last_name="Hopper",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+
+    response = client.post(reverse("kiosk-login"), {"participant": f"family-{companion.pk}", "pin": "1234"})
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("kiosk-pin-setup")
+    assert client.session[KIOSK_PIN_SETUP_SESSION_KEY] == participant.pk
+    assert client.session[KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY] == companion.pk
+    assert KIOSK_PARTICIPANT_SESSION_KEY not in client.session
+
+
+@pytest.mark.django_db
+def test_kiosk_pin_setup_sets_companion_pin_and_logs_guardian_in(client):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    companion = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Grace",
+        last_name="Hopper",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    session = client.session
+    session[KIOSK_PIN_SETUP_SESSION_KEY] = participant.pk
+    session[KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-pin-setup"),
+        {"pin": "2468", "pin_repeat": "2468"},
+    )
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("kiosk-home")
+    companion.pin.refresh_from_db()
+    assert companion.pin.check_pin("2468") is True
+    assert client.session[KIOSK_PARTICIPANT_SESSION_KEY] == participant.pk
+    assert client.session[KIOSK_FAMILY_MEMBER_SESSION_KEY] == companion.pk
+    assert KIOSK_PIN_SETUP_SESSION_KEY not in client.session
+    assert KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY not in client.session
+
+
+@pytest.mark.django_db
+def test_kiosk_login_accepts_companion_pin_and_uses_guardian_session(client):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    companion = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Grace",
+        last_name="Hopper",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    companion.pin.set_pin("1234")
+    companion.pin.save()
+
+    response = client.post(reverse("kiosk-login"), {"participant": f"family-{companion.pk}", "pin": "1234"})
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("kiosk-home")
+    assert client.session[KIOSK_PARTICIPANT_SESSION_KEY] == participant.pk
+    assert client.session[KIOSK_FAMILY_MEMBER_SESSION_KEY] == companion.pk
+
+
+@pytest.mark.django_db
 def test_kiosk_login_rejects_invalid_pin_for_existing_pin(client):
     participant = ParticipantFactory(first_name="Grace", last_name="Hopper")
     participant.pin.set_pin("1234")
     participant.pin.save()
 
-    response = client.post(reverse("kiosk-login"), {"participant": participant.pk, "pin": "9999"})
+    response = client.post(reverse("kiosk-login"), {"participant": f"participant-{participant.pk}", "pin": "9999"})
 
     assert response.status_code == 200
     assert KIOSK_PARTICIPANT_SESSION_KEY not in client.session
@@ -82,10 +155,10 @@ def test_kiosk_login_locks_pin_after_repeated_failures(client):
     participant.pin.save()
 
     for _ in range(participant.pin.MAX_FAILED_ATTEMPTS):
-        client.post(reverse("kiosk-login"), {"participant": participant.pk, "pin": "9999"})
+        client.post(reverse("kiosk-login"), {"participant": f"participant-{participant.pk}", "pin": "9999"})
 
     participant.pin.refresh_from_db()
-    response = client.post(reverse("kiosk-login"), {"participant": participant.pk, "pin": "1234"})
+    response = client.post(reverse("kiosk-login"), {"participant": f"participant-{participant.pk}", "pin": "1234"})
 
     assert participant.pin.is_locked is True
     assert response.status_code == 200
@@ -159,11 +232,11 @@ def test_kiosk_checkin_updates_own_and_linked_participant_dates(client):
         reverse("kiosk-home"),
         {
             "action": "checkin",
-            "checkin_participant_id": [str(participant.pk), str(linked.pk)],
-            f"arrival_date_{participant.pk}": "2026-07-02",
-            f"departure_date_{participant.pk}": "2026-07-10",
-            f"arrival_date_{linked.pk}": "2026-07-03",
-            f"departure_date_{linked.pk}": "2026-07-09",
+            "checkin_target": [f"participant-{participant.pk}", f"participant-{linked.pk}"],
+            f"arrival_date_participant-{participant.pk}": "2026-07-02",
+            f"departure_date_participant-{participant.pk}": "2026-07-10",
+            f"arrival_date_participant-{linked.pk}": "2026-07-03",
+            f"departure_date_participant-{linked.pk}": "2026-07-09",
         },
     )
 
@@ -191,9 +264,9 @@ def test_kiosk_checkin_rejects_unlinked_participant(client):
         reverse("kiosk-home"),
         {
             "action": "checkin",
-            "checkin_participant_id": [str(unlinked.pk)],
-            f"arrival_date_{unlinked.pk}": "2026-07-02",
-            f"departure_date_{unlinked.pk}": "2026-07-10",
+            "checkin_target": [f"participant-{unlinked.pk}"],
+            f"arrival_date_participant-{unlinked.pk}": "2026-07-02",
+            f"departure_date_participant-{unlinked.pk}": "2026-07-10",
         },
     )
 
@@ -216,9 +289,9 @@ def test_kiosk_checkin_rejects_departure_before_arrival(client):
         reverse("kiosk-home"),
         {
             "action": "checkin",
-            "checkin_participant_id": [str(participant.pk)],
-            f"arrival_date_{participant.pk}": "2026-07-10",
-            f"departure_date_{participant.pk}": "2026-07-02",
+            "checkin_target": [f"participant-{participant.pk}"],
+            f"arrival_date_participant-{participant.pk}": "2026-07-10",
+            f"departure_date_participant-{participant.pk}": "2026-07-02",
         },
     )
 
@@ -227,6 +300,91 @@ def test_kiosk_checkin_rejects_departure_before_arrival(client):
     assert participant.arrival_date is None
     assert participant.departure_date is None
     assert "Die Abreise für Ada A muss nach der Anreise liegen.".encode() in response.content
+
+
+@pytest.mark.django_db
+def test_kiosk_checkin_updates_companion_and_rejects_child_target(client):
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 14))
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")
+    companion = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Grace",
+        last_name="A",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    child = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Kind",
+        last_name="A",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "checkin",
+            "checkin_target": [f"family-{companion.pk}", f"family-{child.pk}"],
+            f"arrival_date_family-{companion.pk}": "2026-07-02",
+            f"departure_date_family-{companion.pk}": "2026-07-10",
+            f"arrival_date_family-{child.pk}": "2026-07-03",
+            f"departure_date_family-{child.pk}": "2026-07-09",
+        },
+    )
+
+    assert response.status_code == 200
+    companion.refresh_from_db()
+    child.refresh_from_db()
+    assert companion.arrival_date is None
+    assert companion.departure_date is None
+    assert child.arrival_date is None
+    assert child.departure_date is None
+    assert "Ein Teilnehmer darf über diesen Kiosk nicht bearbeitet werden.".encode() in response.content
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "checkin",
+            "checkin_target": [f"family-{companion.pk}"],
+            f"arrival_date_family-{companion.pk}": "2026-07-02",
+            f"departure_date_family-{companion.pk}": "2026-07-10",
+        },
+    )
+
+    assert response.status_code == 302
+    companion.refresh_from_db()
+    assert companion.arrival_date == date(2026, 7, 2)
+    assert companion.departure_date == date(2026, 7, 10)
+
+
+@pytest.mark.django_db
+def test_kiosk_home_checkin_dialog_lists_companion_but_not_child(client):
+    participant = ParticipantFactory(first_name="Ada", last_name="A")
+    ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Grace",
+        last_name="A",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Kind",
+        last_name="A",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.get(reverse("kiosk-home"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    checkin_dialog = content[content.index('id="checkin-dialog"') :]
+    assert "Grace A" in checkin_dialog
+    assert "Kind A" not in checkin_dialog
 
 
 @pytest.mark.django_db
