@@ -266,6 +266,20 @@ test("Kiosk flow: login, pin setup, drink and meal booking", async ({ page }) =>
   await expect(page).toHaveURL(/.*\/kiosk\//);
   await expect(page.getByText("PIN wurde gesetzt.")).toBeVisible();
 
+  // Check-in can be entered from the kiosk.
+  const checkinArrival = dateInputValue(addDays(new Date(), 2));
+  const checkinDeparture = dateInputValue(addDays(new Date(), 4));
+  await page.getByRole("button", { name: "Eintragen" }).click();
+  await expect(page.locator("dialog#checkin-dialog")).toBeVisible();
+  await page.locator("dialog#checkin-dialog").getByLabel("Anreise").fill(checkinArrival);
+  await page.locator("dialog#checkin-dialog").getByLabel("Abreise").fill(checkinDeparture);
+  await page.locator("dialog#checkin-dialog").getByRole("button", { name: "Check-in speichern" }).click();
+  await expect(page.getByText("Check-in-Daten wurden gespeichert.")).toBeVisible();
+  await page.getByRole("button", { name: "Eintragen" }).click();
+  await expect(page.locator("dialog#checkin-dialog").getByLabel("Anreise")).toHaveValue(checkinArrival);
+  await expect(page.locator("dialog#checkin-dialog").getByLabel("Abreise")).toHaveValue(checkinDeparture);
+  await page.keyboard.press("Escape");
+
   // Book a drink
   await page.getByRole("button", { name: "Apfelsaft" }).click();
   await expect(page.locator("dialog#quick-dialog")).toBeVisible();
