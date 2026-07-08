@@ -543,6 +543,8 @@ def changelog_between_versions(latest: dict[str, Any], current: dict[str, str]) 
         if latest_revision and entry["revision"] == latest_revision:
             end_index = index
 
+    if current_revision and start_index == -1:
+        return []
     if start_index >= end_index:
         return []
     return entries[start_index + 1 : end_index + 1]

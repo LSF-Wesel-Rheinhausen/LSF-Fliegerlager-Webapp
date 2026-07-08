@@ -15,8 +15,8 @@ def git_output(*args: str) -> str:
 
 
 def last_revision_for(path: Path) -> str:
-    """Return the most recent commit that touched a changelog file."""
-    output = git_output("log", "-1", "--format=%H", "--", str(path.relative_to(ROOT)))
+    """Return the mainline commit that introduced or last changed a changelog file."""
+    output = git_output("log", "--first-parent", "-1", "--format=%H", "--", str(path.relative_to(ROOT)))
     return output or "unknown"
 
 

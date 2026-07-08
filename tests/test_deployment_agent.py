@@ -281,6 +281,21 @@ def test_changelog_between_versions_keeps_entries_after_current_revision():
     assert [entry["title"] for entry in result] == ["Two", "Three"]
 
 
+def test_changelog_between_versions_hides_history_when_current_revision_is_unknown():
+    latest = {
+        "revision": "rev3",
+        "changelog": [
+            {"revision": "rev1", "title": "One", "body": ""},
+            {"revision": "rev2", "title": "Two", "body": ""},
+            {"revision": "rev3", "title": "Three", "body": ""},
+        ],
+    }
+
+    result = deployment_agent.changelog_between_versions(latest, {"revision": "merge-revision-not-in-manifest"})
+
+    assert result == []
+
+
 def test_check_update_detects_rebuild_with_same_revision(monkeypatch):
     client = Mock()
     client.get_stack.return_value = {"Env": [{"name": "APP_IMAGE", "value": "ghcr.io/example/app:latest"}]}
