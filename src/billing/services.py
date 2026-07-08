@@ -699,31 +699,35 @@ def participant_kiosk_summary(participant):
 
 @transaction.atomic
 def approve_shared_expense(expense: Expense, approved_by: Any, participant_ids: list[int] | None = None) -> None:
-    if expense.status != Expense.Status.PENDING:
+    locked_expense = Expense.objects.select_for_update().get(pk=expense.pk)
+    if locked_expense.status != Expense.Status.PENDING:
         raise ValidationError("Nur ausstehende Ausgaben können genehmigt werden.")
 
-    expense.status = Expense.Status.APPROVED
-    expense.approved_by = approved_by
-    expense.approved_at = timezone.now()
+    locked_expense.status = Expense.Status.APPROVED
+    locked_expense.approved_by = approved_by
+    locked_expense.approved_at = timezone.now()
 
-    if expense.allocation_method in (Expense.AllocationMethod.NONE, Expense.AllocationMethod.COST_CENTER):
-        expense.save(update_fields=["status", "approved_by", "approved_at", "allocation_method", "cost_center"])
+    if locked_expense.allocation_method in (Expense.AllocationMethod.NONE, Expense.AllocationMethod.COST_CENTER):
+        locked_expense.save(update_fields=["status", "approved_by", "approved_at", "allocation_method", "cost_center"])
+        expense.status = locked_expense.status
+        expense.approved_by = locked_expense.approved_by
+        expense.approved_at = locked_expense.approved_at
         return
 
     participants = []
-    if expense.allocation_method == Expense.AllocationMethod.ALL_ACTIVE:
-        participants = list(Participant.objects.filter(camp=expense.camp, archived_at__isnull=True))
-    elif expense.allocation_method == Expense.AllocationMethod.SELECTED:
+    if locked_expense.allocation_method == Expense.AllocationMethod.ALL_ACTIVE:
+        participants = list(Participant.objects.filter(camp=locked_expense.camp, archived_at__isnull=True))
+    elif locked_expense.allocation_method == Expense.AllocationMethod.SELECTED:
         if not participant_ids:
             raise ValidationError("Es wurden keine Teilnehmer für die Umlage ausgewählt.")
-        participants = list(Participant.objects.filter(id__in=participant_ids, camp=expense.camp))
+        participants = list(Participant.objects.filter(id__in=participant_ids, camp=locked_expense.camp))
 
     if not participants:
         raise ValidationError("Es konnten keine Teilnehmer für die Umlage ermittelt werden.")
 
     count = len(participants)
-    base_amount_per_person = money(expense.amount / Decimal(count))
-    remainder = expense.amount - (base_amount_per_person * count)
+    base_amount_per_person = money(locked_expense.amount / Decimal(count))
+    remainder = locked_expense.amount - (base_amount_per_person * count)
 
     allocations = []
     for p in participants:
@@ -734,10 +738,13 @@ def approve_shared_expense(expense: Expense, approved_by: Any, participant_ids: 
         elif remainder < 0:
             amount -= Decimal("0.01")
             remainder += Decimal("0.01")
-        allocations.append(ExpenseAllocation(expense=expense, participant=p, amount=amount))
+        allocations.append(ExpenseAllocation(expense=locked_expense, participant=p, amount=amount))
 
     ExpenseAllocation.objects.bulk_create(allocations)
-    expense.save(update_fields=["status", "approved_by", "approved_at", "allocation_method", "cost_center"])
+    locked_expense.save(update_fields=["status", "approved_by", "approved_at", "allocation_method", "cost_center"])
+    expense.status = locked_expense.status
+    expense.approved_by = locked_expense.approved_by
+    expense.approved_at = locked_expense.approved_at
 
 
 @transaction.atomic
