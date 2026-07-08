@@ -65,6 +65,20 @@ def test_update_install_handles_agent_failure(client, superuser):
 
 
 @pytest.mark.django_db
+def test_update_install_starts_agent(client, superuser):
+    client.force_login(superuser)
+
+    with patch("billing.views.install_update", return_value={"status": "accepted"}) as install:
+        response = client.post(reverse("deployment-update-install"), follow=True)
+
+    assert response.status_code == 200
+    install.assert_called_once_with()
+    assert "Update gestartet. Die Anwendung wird in Kürze neu gestartet." in [
+        str(message) for message in response.context["messages"]
+    ]
+
+
+@pytest.mark.django_db
 def test_superuser_can_update_daily_backup_settings(client, superuser):
     client.force_login(superuser)
     with patch("billing.views.deployment_status", return_value={"phase": "idle", "message": "Bereit"}):
@@ -155,6 +169,29 @@ def test_deployment_page_renders_update_changelog(client, superuser):
     assert "Änderungen seit installierter Version" in response.content.decode("utf-8")
     assert "Kiosk verbessert" in response.content.decode("utf-8")
     assert "Schnellbuchung stabilisiert" in response.content.decode("utf-8")
+
+
+@pytest.mark.django_db
+def test_deployment_page_renders_update_dialog_script_as_external_asset(client, superuser):
+    client.force_login(superuser)
+
+    with patch(
+        "billing.views.deployment_status",
+        return_value={
+            "phase": "checked",
+            "message": "Update verfügbar",
+            "update_available": True,
+            "latest": {"version": "1.2.4", "revision": "newrev", "build_date": "2026-07-08"},
+        },
+    ):
+        response = client.get(reverse("deployment-update"))
+
+    content = response.content.decode("utf-8")
+    assert response.status_code == 200
+    assert 'data-dialog-open="update-confirmation"' in content
+    assert 'action="/deployment/update/install/"' in content
+    assert 'data-cfasync="false" defer src="/static/billing/deployment_update.js"' in content
+    assert 'document.querySelectorAll("[data-dialog-open]")' not in content
 
 
 @override_settings(UPDATE_AGENT_URL="http://updater:8080", UPDATE_AGENT_TOKEN="secret-token")
