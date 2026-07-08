@@ -1,4 +1,4 @@
-# Portainer SSL-Verifikation konfigurierbar (PR TBD)
+# Portainer SSL-Verifikation konfigurierbar (PR #114)
 
 Der Portainer-basierte Update-Agent kann die TLS-Zertifikatsprüfung für interne Portainer-Instanzen mit Self-Signed-Zertifikat gezielt deaktivieren.
 
