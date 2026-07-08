@@ -11,7 +11,7 @@ on:
 permissions:
   contents: read
   actions: write
-  pull-requests: write
+  issues: write
 
 jobs:
   zap_scan:
@@ -34,15 +34,5 @@ jobs:
         uses: zaproxy/action-baseline@v0.15.0
         with:
           target: 'http://localhost:8000'
-          allow_issue_writing: false
           artifact_name: 'zap-scan'
           cmd_options: '-a'
-
-      - name: Comment PR with ZAP Results
-        if: github.event_name == 'pull_request' && always()
-        run: |
-          if [ -f zap_out.md ]; then
-            gh pr comment ${{ github.event.pull_request.number }} --body-file zap_out.md
-          fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
