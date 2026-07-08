@@ -15,9 +15,6 @@ jobs:
   zap_scan:
     runs-on: ubuntu-latest
     name: OWASP ZAP Baseline Scan
-    permissions:
-      contents: read
-      issues: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,4 +32,5 @@ jobs:
         uses: zaproxy/action-baseline@v0.12.0
         with:
           target: 'http://localhost:8000'
+          allow_issue_writing: false
           cmd_options: '-a'
