@@ -33,4 +33,5 @@ jobs:
         with:
           target: 'http://localhost:8000'
           allow_issue_writing: false
+          artifact_name: 'zap-scan'
           cmd_options: '-a'
