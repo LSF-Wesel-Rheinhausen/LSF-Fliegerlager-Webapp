@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+from unittest.mock import patch
 
 import pytest
 
@@ -205,6 +206,28 @@ def test_approve_shared_expense_pro_rata():
 
     amounts = sorted([a.amount for a in allocations])
     assert amounts == [Decimal("4.00"), Decimal("4.00"), Decimal("4.00")]
+
+
+@pytest.mark.django_db
+def test_approve_shared_expense_locks_current_expense_row():
+    from billing.services import approve_shared_expense
+
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp)
+    expense = ExpenseFactory(
+        camp=camp,
+        participant=participant,
+        amount=Decimal("12.00"),
+        allocation_method=Expense.AllocationMethod.NONE,
+        status=Expense.Status.PENDING,
+    )
+
+    with patch("billing.services.Expense.objects.select_for_update", wraps=Expense.objects.select_for_update) as locked:
+        approve_shared_expense(expense, approved_by=None)
+
+    locked.assert_called_once_with()
+    expense.refresh_from_db()
+    assert expense.status == Expense.Status.APPROVED
 
 
 @pytest.mark.django_db

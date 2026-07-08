@@ -125,6 +125,41 @@ def test_settlement_csv_exports_calculated_kiosk_charges_payments_and_expenses(c
 
 
 @pytest.mark.django_db
+def test_csv_exports_escape_formula_like_text_values(client):
+    camp = CampFactory(year=2026)
+    participant = ParticipantFactory(
+        camp=camp,
+        first_name="+SUM(1,1)",
+        last_name="=cmd",
+        actual_nights=1,
+    )
+    ChargeFactory(
+        participant=participant,
+        kind=Charge.Kind.DRINK,
+        description="@malicious",
+        quantity=Decimal("1.00"),
+        unit_price=Decimal("2.00"),
+    )
+    client.force_login(SuperUserFactory())
+
+    settlement_response = client.get(reverse("export-settlements-csv", args=[camp.pk]))
+    drinks_response = client.get(reverse("export-drinks-csv", args=[camp.pk]))
+
+    assert csv_rows(settlement_response)[1][:2] == ["'=cmd", "'+SUM(1,1)"]
+    assert csv_rows(drinks_response)[1][:3] == ["'=cmd", "'+SUM(1,1)", "'@malicious"]
+
+
+@pytest.mark.django_db
+def test_csv_exports_leave_regular_text_values_unchanged(client, export_dataset):
+    camp, _participant = export_dataset
+    client.force_login(SuperUserFactory())
+
+    response = client.get(reverse("export-drinks-csv", args=[camp.pk]))
+
+    assert csv_rows(response)[2][:3] == ["Lovelace", "Ada", "Cola"]
+
+
+@pytest.mark.django_db
 def test_participant_import_template_export_contains_headers_and_examples(client, export_dataset):
     camp, _participant = export_dataset
     client.force_login(SuperUserFactory())

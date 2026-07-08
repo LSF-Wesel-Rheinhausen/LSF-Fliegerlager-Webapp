@@ -1,6 +1,8 @@
 import csv
+from collections.abc import Iterable
 from decimal import Decimal
 from io import BytesIO, StringIO
+from typing import Any
 
 from django.conf import settings
 from django.http import HttpResponse
@@ -11,12 +13,28 @@ from reportlab.pdfgen import canvas
 from .models import Charge, DrinkEntry, Participant, Settlement, SettlementRun
 from .services import calculate_camp_settlements, calculate_participant_settlement, get_cost_center_evaluation, money
 
+CSV_FORMULA_PREFIXES = ("=", "+", "-", "@")
+
+
+def safe_csv_cell(value: Any) -> Any:
+    """Return a CSV cell value that spreadsheet apps cannot interpret as a formula."""
+    if not isinstance(value, str):
+        return value
+    if value.lstrip().startswith(CSV_FORMULA_PREFIXES):
+        return f"'{value}"
+    return value
+
+
+def safe_csv_row(row: Iterable[Any]) -> list[Any]:
+    """Return a CSV row with formula-like text cells escaped."""
+    return [safe_csv_cell(value) for value in row]
+
 
 def csv_response(filename, rows, headers):
     buffer = StringIO()
     writer = csv.writer(buffer)
-    writer.writerow(headers)
-    writer.writerows(rows)
+    writer.writerow(safe_csv_row(headers))
+    writer.writerows(safe_csv_row(row) for row in rows)
     response = HttpResponse(buffer.getvalue(), content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
@@ -26,18 +44,20 @@ def settlement_run_csv_bytes(run: SettlementRun) -> bytes:
     """Render a versioned settlement run CSV from immutable snapshots."""
     buffer = StringIO()
     writer = csv.writer(buffer)
-    writer.writerow(["Teilnehmer", "Brutto", "Förderung", "Soll", "Gezahlt", "Vorgestreckt", "Offen"])
+    writer.writerow(safe_csv_row(["Teilnehmer", "Brutto", "Förderung", "Soll", "Gezahlt", "Vorgestreckt", "Offen"]))
     for snapshot in run.settlements.all():
         writer.writerow(
-            [
-                snapshot.participant_name,
-                snapshot.total_gross,
-                snapshot.total_subsidy,
-                snapshot.total_due,
-                snapshot.total_paid,
-                snapshot.total_advanced,
-                snapshot.balance,
-            ]
+            safe_csv_row(
+                [
+                    snapshot.participant_name,
+                    snapshot.total_gross,
+                    snapshot.total_subsidy,
+                    snapshot.total_due,
+                    snapshot.total_paid,
+                    snapshot.total_advanced,
+                    snapshot.balance,
+                ]
+            )
         )
     return buffer.getvalue().encode("utf-8")
 
