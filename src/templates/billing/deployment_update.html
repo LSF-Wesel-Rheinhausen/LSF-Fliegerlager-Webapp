@@ -72,6 +72,24 @@
         <button type="button" class="button-danger" data-dialog-open="update-confirmation">Update installieren</button>
       </section>
     {% endif %}
+
+    {% if deployment_status.changelog %}
+      <section class="panel stack">
+        <div>
+          <h2>{% if deployment_status.phase == "complete" %}Installierte Änderungen{% else %}Änderungen seit installierter Version{% endif %}</h2>
+          <p>Diese Einträge stammen aus den Changelog-Dateien zwischen installierter und verfügbarer Revision.</p>
+        </div>
+        <div class="changelog-list">
+          {% for entry in deployment_status.changelog %}
+            <article class="changelog-entry">
+              <h3>{{ entry.title }}</h3>
+              {% if entry.body %}<p>{{ entry.body|linebreaksbr }}</p>{% endif %}
+              {% if entry.path %}<p class="hint"><code>{{ entry.path }}</code></p>{% endif %}
+            </article>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
   {% endif %}
 
   <section class="panel stack">
@@ -121,7 +139,7 @@
     </form>
   </dialog>
 
-  <script>
+  <script nonce="{{ request.csp_nonce }}">
     document.querySelectorAll("[data-dialog-open]").forEach((button) => {
       button.addEventListener("click", () => document.getElementById(button.dataset.dialogOpen).showModal());
     });

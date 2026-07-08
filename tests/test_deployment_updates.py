@@ -133,6 +133,30 @@ def test_check_for_update_sends_current_build_metadata():
     assert result == {"update_available": True}
 
 
+@pytest.mark.django_db
+def test_deployment_page_renders_update_changelog(client, superuser):
+    client.force_login(superuser)
+    with patch(
+        "billing.views.deployment_status",
+        return_value={
+            "phase": "checked",
+            "message": "Bereit",
+            "changelog": [
+                {
+                    "title": "Kiosk verbessert",
+                    "body": "- Schnellbuchung stabilisiert\n- PDF-Vorschau ergänzt",
+                }
+            ],
+        },
+    ):
+        response = client.get(reverse("deployment-update"))
+
+    assert response.status_code == 200
+    assert "Änderungen seit installierter Version" in response.content.decode("utf-8")
+    assert "Kiosk verbessert" in response.content.decode("utf-8")
+    assert "Schnellbuchung stabilisiert" in response.content.decode("utf-8")
+
+
 @override_settings(UPDATE_AGENT_URL="http://updater:8080", UPDATE_AGENT_TOKEN="secret-token")
 def test_create_backup_archive_sends_staging_payload():
     response = Mock()

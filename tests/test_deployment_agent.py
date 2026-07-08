@@ -17,6 +17,9 @@ def test_image_metadata_reads_oci_and_change_labels():
             "org.opencontainers.image.revision": "abc123",
             "org.opencontainers.image.created": "2026-06-09T12:00:00Z",
             "io.lsf-fliegerlager.change": "feat: deployment updates",
+            "io.lsf-fliegerlager.changelog": (
+                '[{"revision":"abc123","title":"Deployment updates","body":"Updater hardening"}]'
+            ),
         },
     )
 
@@ -27,7 +30,23 @@ def test_image_metadata_reads_oci_and_change_labels():
         "revision": "abc123",
         "build_date": "2026-06-09T12:00:00Z",
         "change": "feat: deployment updates",
+        "changelog": [{"revision": "abc123", "title": "Deployment updates", "body": "Updater hardening", "path": ""}],
     }
+
+
+def test_image_metadata_ignores_invalid_changelog_labels():
+    image = Mock(
+        id="sha256:123",
+        labels={
+            "org.opencontainers.image.version": "1.2.3",
+            "org.opencontainers.image.revision": "abc123",
+            "org.opencontainers.image.created": "2026-06-09T12:00:00Z",
+            "io.lsf-fliegerlager.change": "feat: deployment updates",
+            "io.lsf-fliegerlager.changelog": '{"not":"a-list"}',
+        },
+    )
+
+    assert deployment_agent.image_metadata(image)["changelog"] == []
 
 
 def test_portainer_request_uses_api_key_and_endpoint_id():
@@ -227,6 +246,10 @@ def test_check_update_detects_update_from_oci_labels(monkeypatch):
         "revision": "newrev",
         "build_date": "2026-06-10T12:00:00Z",
         "change": "fix: updater",
+        "changelog": [
+            {"revision": "oldrev", "title": "Old", "body": "Already installed"},
+            {"revision": "newrev", "title": "New", "body": "Install me"},
+        ],
     }
 
     monkeypatch.setattr(deployment_agent, "PortainerClient", lambda: client)
@@ -240,6 +263,22 @@ def test_check_update_detects_update_from_oci_labels(monkeypatch):
     assert result["latest"] == latest
     assert result["running"]["revision"] == "oldrev"
     assert result["update_available"] is True
+    assert result["changelog"] == [{"revision": "newrev", "title": "New", "body": "Install me", "path": ""}]
+
+
+def test_changelog_between_versions_keeps_entries_after_current_revision():
+    latest = {
+        "revision": "rev3",
+        "changelog": [
+            {"revision": "rev1", "title": "One", "body": ""},
+            {"revision": "rev2", "title": "Two", "body": ""},
+            {"revision": "rev3", "title": "Three", "body": ""},
+        ],
+    }
+
+    result = deployment_agent.changelog_between_versions(latest, {"revision": "rev1"})
+
+    assert [entry["title"] for entry in result] == ["Two", "Three"]
 
 
 def test_check_update_detects_rebuild_with_same_revision(monkeypatch):

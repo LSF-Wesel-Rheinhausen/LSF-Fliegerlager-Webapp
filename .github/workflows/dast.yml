@@ -25,8 +25,14 @@ jobs:
         run: |
           # Build test image
           docker build -t lsf-webapp:test .
-          # Run the application in the background on port 8000
-          docker run -d -p 8000:8000 --name lsf-webapp -e DJANGO_DEBUG=1 -e DJANGO_SECRET_KEY=dev-only-change-me lsf-webapp:test python manage.py runserver 0.0.0.0:8000
+          # Run the production entrypoint so ZAP scans Gunicorn and WhiteNoise, not Django's dev static handler.
+          docker run -d \
+            -p 8000:8000 \
+            --name lsf-webapp \
+            -e DJANGO_DEBUG=0 \
+            -e DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1 \
+            -e DJANGO_SECRET_KEY=test-only-zap-secret-with-more-than-fifty-characters-1234567890 \
+            lsf-webapp:test
           # Wait for the server to be ready
           sleep 10
 
@@ -34,5 +40,6 @@ jobs:
         uses: zaproxy/action-baseline@v0.15.0
         with:
           target: 'http://localhost:8000'
+          rules_file_name: '.zap/rules.tsv'
           artifact_name: 'zap-scan'
           cmd_options: '-a'

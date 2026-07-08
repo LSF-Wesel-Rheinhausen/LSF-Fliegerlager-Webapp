@@ -15,13 +15,15 @@ ARG APP_VERSION=development
 ARG APP_REVISION=unknown
 ARG APP_BUILD_DATE=unknown
 ARG APP_CHANGE="Unbekannter Build"
+ARG APP_CHANGELOG="[]"
 
 LABEL org.opencontainers.image.title="LSF Fliegerlager Webapp" \
       org.opencontainers.image.source="https://github.com/LSF-Wesel-Rheinhausen/LSF-Fliegerlager-Webapp" \
       org.opencontainers.image.version="${APP_VERSION}" \
       org.opencontainers.image.revision="${APP_REVISION}" \
       org.opencontainers.image.created="${APP_BUILD_DATE}" \
-      io.lsf-fliegerlager.change="${APP_CHANGE}"
+      io.lsf-fliegerlager.change="${APP_CHANGE}" \
+      io.lsf-fliegerlager.changelog="${APP_CHANGELOG}"
 
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -29,7 +31,8 @@ ENV PATH="/opt/venv/bin:$PATH" \
     APP_VERSION="${APP_VERSION}" \
     APP_REVISION="${APP_REVISION}" \
     APP_BUILD_DATE="${APP_BUILD_DATE}" \
-    APP_CHANGE="${APP_CHANGE}"
+    APP_CHANGE="${APP_CHANGE}" \
+    APP_CHANGELOG="${APP_CHANGELOG}"
 
 RUN groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --home-dir /app app
