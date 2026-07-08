@@ -30,7 +30,7 @@
           <button type="submit">PIN zurücksetzen</button>
         </form>
       {% endif %}
-      <a class="button" href="{% url 'export-participant-pdf' participant.pk %}">Einzelabrechnung als PDF herunterladen</a>
+      <a class="button" href="{% url 'export-participant-pdf' participant.pk %}" data-pdf-popup="true">Einzelabrechnung als PDF öffnen</a>
     </div>
   </div>
 
@@ -140,7 +140,7 @@
             <td>{{ snapshot.run.created_at }}</td>
             <td>{{ snapshot.total_due|money_eur }}</td>
             <td>{{ snapshot.balance|money_eur }}</td>
-            <td><a href="{% url 'settlement-snapshot-pdf' snapshot.pk %}">PDF</a></td>
+            <td><a href="{% url 'settlement-snapshot-pdf' snapshot.pk %}" data-pdf-popup="true">PDF</a></td>
           </tr>
         {% empty %}
           <tr><td colspan="6">Noch keine gespeicherte Abrechnung vorhanden.</td></tr>

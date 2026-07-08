@@ -44,5 +44,46 @@
       {% endfor %}
       {% block content %}{% endblock %}
     </main>
+
+    <dialog id="global-pdf-dialog" class="pdf-dialog">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="margin: 0; font-size: 1.125rem;">PDF Vorschau</h3>
+        <form method="dialog">
+          <button class="button button-secondary" style="padding: 4px 12px; font-size: 0.875rem;">Schließen</button>
+        </form>
+      </div>
+      <iframe id="global-pdf-iframe" src="about:blank"></iframe>
+    </dialog>
+
+    <script>
+      document.addEventListener('DOMContentLoaded', () => {
+        const dialog = document.getElementById('global-pdf-dialog');
+        const iframe = document.getElementById('global-pdf-iframe');
+
+        if (!dialog || !iframe) return;
+
+        document.querySelectorAll('a[data-pdf-popup]').forEach(link => {
+          link.addEventListener('click', (e) => {
+            e.preventDefault();
+            iframe.src = link.href;
+            dialog.showModal();
+          });
+        });
+
+        // Close on backdrop click
+        dialog.addEventListener('click', (e) => {
+          const rect = dialog.getBoundingClientRect();
+          const inDialog = rect.top <= e.clientY && e.clientY <= rect.top + rect.height &&
+                           rect.left <= e.clientX && e.clientX <= rect.left + rect.width;
+          if (!inDialog) {
+            dialog.close();
+          }
+        });
+
+        dialog.addEventListener('close', () => {
+          iframe.src = 'about:blank';
+        });
+      });
+    </script>
   </body>
 </html>
