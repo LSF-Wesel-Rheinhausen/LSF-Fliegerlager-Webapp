@@ -184,7 +184,16 @@ test("Admin archives a participant and creates a versioned settlement run", asyn
   await createParticipant(page, "Ada", "Lovelace");
 
   await page.getByRole("link", { name: "Teilnehmer bearbeiten" }).click();
+  const adminArrival = dateInputValue(addDays(new Date(), 2));
+  const adminDeparture = dateInputValue(addDays(new Date(), 4));
   await page.getByLabel("Vorname").fill("Augusta Ada");
+  await page.getByLabel("Anreise").fill(adminArrival);
+  await page.getByLabel("Abreise").fill(adminDeparture);
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByRole("heading", { name: "Augusta Ada Lovelace" })).toBeVisible();
+  await page.getByRole("link", { name: "Teilnehmer bearbeiten" }).click();
+  await expect(page.getByLabel("Anreise")).toHaveValue(adminArrival);
+  await expect(page.getByLabel("Abreise")).toHaveValue(adminDeparture);
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(page.getByRole("heading", { name: "Augusta Ada Lovelace" })).toBeVisible();
 
