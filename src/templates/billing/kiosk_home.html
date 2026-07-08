@@ -689,7 +689,7 @@
   </dialog>
 {% endblock %}
 {% block scripts %}
-  <script>
+  <script nonce="{{ request.csp_nonce }}">
     (() => {
       const drinkDialog = document.getElementById("quick-dialog");
       const drinkForm = document.getElementById("quick-booking-form");

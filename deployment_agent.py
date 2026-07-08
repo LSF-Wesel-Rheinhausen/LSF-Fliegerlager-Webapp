@@ -50,6 +50,7 @@ OCI_LABELS = {
     "revision": "org.opencontainers.image.revision",
     "build_date": "org.opencontainers.image.created",
     "change": "io.lsf-fliegerlager.change",
+    "changelog": "io.lsf-fliegerlager.changelog",
 }
 MANIFEST_ACCEPT = ", ".join(
     [
@@ -419,7 +420,7 @@ def choose_manifest_descriptor(index: dict[str, Any]) -> dict[str, Any]:
     return first
 
 
-def fetch_image_metadata(image: str) -> dict[str, str]:
+def fetch_image_metadata(image: str) -> dict[str, Any]:
     """Read OCI labels and digest metadata for an image from its registry."""
     registry, repository, reference = parse_image_reference(image)
     manifest_url = f"https://{registry}/v2/{repository}/manifests/{reference}"
@@ -457,7 +458,31 @@ def fetch_image_metadata(image: str) -> dict[str, str]:
     )
 
 
-def image_metadata(image: Any) -> dict[str, str]:
+def normalized_changelog_entries(raw_changelog: Any) -> list[dict[str, str]]:
+    """Return UI-safe changelog entries from an OCI label value."""
+    if isinstance(raw_changelog, str):
+        try:
+            raw_changelog = json.loads(raw_changelog)
+        except json.JSONDecodeError:
+            return []
+    if not isinstance(raw_changelog, list):
+        return []
+
+    entries = []
+    for item in raw_changelog:
+        if not isinstance(item, dict):
+            continue
+        revision = str(item.get("revision", "")).strip()
+        title = str(item.get("title", "")).strip()
+        body = str(item.get("body", "")).strip()
+        path = str(item.get("path", "")).strip()
+        if not revision or not title:
+            continue
+        entries.append({"revision": revision, "title": title, "body": body, "path": path})
+    return entries
+
+
+def image_metadata(image: Any) -> dict[str, Any]:
     """Normalize OCI image metadata from Docker-like objects or dict payloads."""
     if isinstance(image, dict):
         labels = image.get("labels") or {}
@@ -474,6 +499,7 @@ def image_metadata(image: Any) -> dict[str, str]:
         "revision": str(labels.get(OCI_LABELS["revision"], "unknown")),
         "build_date": str(labels.get(OCI_LABELS["build_date"], "unknown")),
         "change": str(labels.get(OCI_LABELS["change"], "Unbekannter Change")),
+        "changelog": normalized_changelog_entries(labels.get(OCI_LABELS["changelog"], "[]")),
     }
 
 
@@ -485,7 +511,7 @@ def current_metadata_from_payload(payload: dict[str, Any] | None) -> dict[str, s
     return {key: str(value) for key, value in current.items() if value is not None}
 
 
-def has_update(latest: dict[str, str], current: dict[str, str], current_image: str) -> bool:
+def has_update(latest: dict[str, Any], current: dict[str, str], current_image: str) -> bool:
     """Compare latest OCI labels with the currently running Django build metadata."""
     compared = False
     for key in ("revision", "version", "build_date"):
@@ -498,6 +524,30 @@ def has_update(latest: dict[str, str], current: dict[str, str], current_image: s
     if compared:
         return False
     return latest.get("image") != current_image
+
+
+def changelog_between_versions(latest: dict[str, Any], current: dict[str, str]) -> list[dict[str, str]]:
+    """Return changelog entries after the current revision up to the latest revision."""
+    entries = normalized_changelog_entries(latest.get("changelog", []))
+    if not entries:
+        return []
+
+    current_revision = current.get("revision") or current.get("version") or ""
+    latest_revision = str(latest.get("revision") or latest.get("version") or "")
+    start_index = -1
+    end_index = len(entries) - 1
+
+    for index, entry in enumerate(entries):
+        if current_revision and entry["revision"] == current_revision:
+            start_index = index
+        if latest_revision and entry["revision"] == latest_revision:
+            end_index = index
+
+    if current_revision and start_index == -1:
+        return []
+    if start_index >= end_index:
+        return []
+    return entries[start_index + 1 : end_index + 1]
 
 
 def deployment_status() -> dict[str, Any]:
@@ -522,6 +572,7 @@ def check_update(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     latest = fetch_image_metadata(TARGET_IMAGE)
     current = current_metadata_from_payload(payload)
     update_available = has_update(latest, current, running_image)
+    changelog = changelog_between_versions(latest, current)
     state = save_state(
         phase="checked",
         message="Image-Pruefung abgeschlossen.",
@@ -531,6 +582,7 @@ def check_update(payload: dict[str, Any] | None = None) -> dict[str, Any]:
         latest=latest,
         running={"image": running_image, **current},
         update_available=update_available,
+        changelog=changelog,
         checked_at=utc_now(),
     )
     return state
@@ -696,6 +748,7 @@ def perform_update() -> None:
         old_image = immutable_running_image(client)
         step = "Neuestes Image pruefen"
         latest = fetch_image_metadata(TARGET_IMAGE)
+        checked_changelog = normalized_changelog_entries(load_state().get("changelog", []))
         step = "Datenbank-Backup erstellen"
         backup_name = create_backup()
         save_state(
@@ -719,6 +772,7 @@ def perform_update() -> None:
             installed=latest,
             running={"image": TARGET_IMAGE},
             update_available=False,
+            changelog=checked_changelog,
             backup=backup_name,
             completed_at=utc_now(),
         )

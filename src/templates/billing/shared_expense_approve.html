@@ -10,7 +10,7 @@
       </div>
     </form>
   </section>
-  <script>
+  <script nonce="{{ request.csp_nonce }}">
     document.addEventListener("DOMContentLoaded", () => {
       const methodSelect = document.getElementById("id_allocation_method");
       const participantWrapper = document.getElementById("id_participant_ids")?.closest("p");

@@ -319,7 +319,7 @@
       </div>
     </form>
   </dialog>
-<script>
+<script nonce="{{ request.csp_nonce }}">
   (() => {
     document.querySelectorAll("[data-dialog-open]").forEach((button) => {
       button.addEventListener("click", () => {

@@ -230,7 +230,7 @@
     </form>
   </dialog>
 
-  <script>
+  <script nonce="{{ request.csp_nonce }}">
     function openCreateDialog(kind, kindLabel) {
       const dialog = document.getElementById('price-rule-dialog');
       const form = document.getElementById('dialog-form');

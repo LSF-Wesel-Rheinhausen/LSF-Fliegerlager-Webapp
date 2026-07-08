@@ -18,7 +18,7 @@
             {% if participant %}
               <span class="kiosk-brand__context">
                 <span id="kiosk-greeting">Hallo</span> <strong>{{ participant.first_name }}</strong>
-                <script>
+                <script nonce="{{ request.csp_nonce }}">
                   (function() {
                     const greetings = ["Hallo", "Moin", "Servus", "Willkommen", "Hey", "Gude", "Grüß dich"];
                     document.getElementById("kiosk-greeting").innerText = greetings[Math.floor(Math.random() * greetings.length)];
@@ -54,7 +54,7 @@
       {% block content %}{% endblock %}
     </main>
     {% if kiosk_autologout %}
-      <script>
+      <script nonce="{{ request.csp_nonce }}">
         (() => {
           const logoutUrl = "{% url 'kiosk-logout' %}";
           const timerRoot = document.querySelector("[data-kiosk-countdown-root]");
@@ -113,7 +113,7 @@
       <div id="kiosk-help-content" class="kiosk-dialog-help">
       </div>
     </dialog>
-    <script>
+    <script nonce="{{ request.csp_nonce }}">
       document.addEventListener("click", (e) => {
         const btn = e.target.closest(".kiosk-help-button");
         if (btn) {

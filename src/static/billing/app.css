@@ -328,6 +328,21 @@ tbody tr:hover {
   margin-bottom: 20px;
 }
 
+.changelog-list {
+  display: grid;
+  gap: 12px;
+}
+
+.changelog-entry {
+  border-left: 3px solid var(--accent);
+  padding-left: 14px;
+}
+
+.changelog-entry h3,
+.changelog-entry p {
+  margin-block: 0 8px;
+}
+
 .error-text {
   color: var(--danger);
 }

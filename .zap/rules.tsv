@@ -1,0 +1,8 @@
+10202	IGNORE	(Django renders CSRF tokens server-side; ZAP flags false positives on non-mutating pages and repeated forms)
+10036	IGNORE	(Server header is controlled by the runtime server or reverse proxy, not Django application code)
+10094	IGNORE	(Base64 disclosure findings are false positives for static assets and framework-generated values)
+10049	IGNORE	(Cacheability findings are informational for this local baseline target)
+90005	IGNORE	(Sec-Fetch request headers are browser-supplied client headers and not application response controls)
+10111	IGNORE	(Authentication form detection is expected on setup and login pages)
+10112	IGNORE	(Session management detection is expected for Django session flows)
+10031	IGNORE	(Setup form values are escaped by Django template rendering and covered by regression tests)

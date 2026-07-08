@@ -95,7 +95,7 @@
     </form>
   </dialog>
 
-  <script>
+  <script nonce="{{ request.csp_nonce }}">
     function openCreateDialog() {
       const dialog = document.getElementById('template-dialog');
       const form = document.getElementById('dialog-form');

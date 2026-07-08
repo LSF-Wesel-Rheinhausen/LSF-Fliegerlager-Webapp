@@ -26,6 +26,11 @@ jobs:
         run: |
           echo "change=$(git log -1 --pretty=%s)" >> "$GITHUB_OUTPUT"
           echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          {
+            echo "changelog<<EOF"
+            python scripts/build_changelog_manifest.py
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build application image for tests
         uses: docker/build-push-action@v7
@@ -38,6 +43,7 @@ jobs:
             APP_REVISION=${{ github.sha }}
             APP_BUILD_DATE=${{ steps.metadata.outputs.created }}
             APP_CHANGE=${{ steps.metadata.outputs.change }}
+            APP_CHANGELOG=${{ steps.metadata.outputs.changelog }}
 
       - name: Build updater image for tests
         uses: docker/build-push-action@v7
@@ -85,6 +91,7 @@ jobs:
             APP_REVISION=${{ github.sha }}
             APP_BUILD_DATE=${{ steps.metadata.outputs.created }}
             APP_CHANGE=${{ steps.metadata.outputs.change }}
+            APP_CHANGELOG=${{ steps.metadata.outputs.changelog }}
 
       - name: Publish updater image
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

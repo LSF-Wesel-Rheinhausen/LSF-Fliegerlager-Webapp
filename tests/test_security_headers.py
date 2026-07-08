@@ -6,19 +6,16 @@ from django.urls import reverse
 @pytest.mark.django_db
 def test_common_security_headers_are_set(client):
     response = client.get(reverse("kiosk-login"))
+    csp = response["Content-Security-Policy"]
 
     assert response.status_code == 200
-    assert response["Content-Security-Policy"] == (
-        "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline'; "
-        "style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data:; "
-        "font-src 'self'; "
-        "connect-src 'self'; "
-        "frame-ancestors 'none'; "
-        "base-uri 'self'; "
-        "form-action 'self'"
-    )
+    assert "default-src 'self'" in csp
+    assert "script-src 'self' 'nonce-" in csp
+    assert "style-src 'self' 'nonce-" in csp
+    assert "script-src 'self' 'unsafe-inline'" not in csp
+    assert "style-src 'self' 'unsafe-inline'" not in csp
+    assert "script-src-attr 'unsafe-inline'" in csp
+    assert "style-src-attr 'unsafe-inline'" in csp
     assert response["Cross-Origin-Embedder-Policy"] == "require-corp"
     assert response["Cross-Origin-Opener-Policy"] == "same-origin"
     assert response["Cross-Origin-Resource-Policy"] == "same-origin"

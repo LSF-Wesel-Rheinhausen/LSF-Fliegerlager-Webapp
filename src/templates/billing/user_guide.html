@@ -5,7 +5,7 @@
   <a class="button button-secondary" href="{% url 'kiosk-home' %}">Zurück</a>
 {% endblock %}
 {% block content %}
-<style>
+<style nonce="{{ request.csp_nonce }}">
   .guide-section {
     margin-bottom: 3rem;
   }

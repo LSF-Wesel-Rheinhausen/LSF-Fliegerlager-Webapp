@@ -42,6 +42,24 @@ def test_setup_creates_first_admin_and_logs_in(client):
 
 
 @pytest.mark.django_db
+def test_setup_form_escapes_rejected_user_input(client):
+    response = client.post(
+        reverse("setup"),
+        {
+            "username": '"><script>alert(1)</script>',
+            "email": "not-an-email",
+            "password1": "strong-test-pass-123",
+            "password2": "different-pass-123",
+        },
+    )
+    content = response.content.decode("utf-8")
+
+    assert response.status_code == 200
+    assert '"><script>alert(1)</script>' not in content
+    assert "&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;" in content
+
+
+@pytest.mark.django_db
 def test_root_opens_kiosk_login(client):
     response = client.get("/")
 
