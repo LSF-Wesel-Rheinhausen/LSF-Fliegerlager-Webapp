@@ -149,6 +149,16 @@
         </div>
       </section>
 
+      <section class="panel kiosk-card kiosk-card--muted">
+        <div class="kiosk-card__header kiosk-section-heading">
+          <div class="kiosk-card__header-main">
+            <h2 class="kiosk-title">Check-in</h2>
+            <p>Pflege An- und Abreise für dich und freigegebene Mitbuchungen.</p>
+          </div>
+          <button type="button" class="button kiosk-card__action" data-open-checkin-dialog>Eintragen</button>
+        </div>
+      </section>
+
       <section class="panel kiosk-card kiosk-card--muted kiosk-table">
         <div class="kiosk-table__header">
           <h2>Letzte Schnellbuchungen</h2>
@@ -650,6 +660,58 @@
     </form>
   </dialog>
 
+  <dialog id="checkin-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="checkin-dialog-title">
+    <form method="dialog" class="dialog-heading">
+      <div>
+        <h2 id="checkin-dialog-title">Check-in</h2>
+        <p class="dialog-heading__meta">An- und Abreise für freigegebene Teilnehmerprofile.</p>
+      </div>
+      <button class="button button-secondary">Schließen</button>
+    </form>
+    <form method="post" class="form-grid">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="checkin">
+      <div class="target-list">
+        {% for checkin_participant in checkin_participants %}
+          <article class="target-row">
+            <div class="kiosk-list-row__content">
+              <strong>{{ checkin_participant.full_name }}</strong>
+              <span>{% if checkin_participant.pk == participant.pk %}Ich{% else %}Verknüpft{% endif %}</span>
+            </div>
+            <input type="hidden" name="checkin_participant_id" value="{{ checkin_participant.pk }}">
+            <p class="dialog-field">
+              <label for="arrival-date-{{ checkin_participant.pk }}">Anreise</label>
+              <input
+                id="arrival-date-{{ checkin_participant.pk }}"
+                name="arrival_date_{{ checkin_participant.pk }}"
+                type="date"
+                inputmode="numeric"
+                value="{{ checkin_participant.arrival_date|date:'Y-m-d' }}"
+                {% if participant.camp.starts_on %}min="{{ participant.camp.starts_on|date:'Y-m-d' }}"{% endif %}
+                {% if participant.camp.ends_on %}max="{{ participant.camp.ends_on|date:'Y-m-d' }}"{% endif %}
+              >
+            </p>
+            <p class="dialog-field">
+              <label for="departure-date-{{ checkin_participant.pk }}">Abreise</label>
+              <input
+                id="departure-date-{{ checkin_participant.pk }}"
+                name="departure_date_{{ checkin_participant.pk }}"
+                type="date"
+                inputmode="numeric"
+                value="{{ checkin_participant.departure_date|date:'Y-m-d' }}"
+                {% if participant.camp.starts_on %}min="{{ participant.camp.starts_on|date:'Y-m-d' }}"{% endif %}
+                {% if participant.camp.ends_on %}max="{{ participant.camp.ends_on|date:'Y-m-d' }}"{% endif %}
+              >
+            </p>
+          </article>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button type="submit">Check-in speichern</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="contact-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="contact-dialog-title">
     <form method="dialog" class="dialog-heading">
       <h2 id="contact-dialog-title">Kontakt Lagerleitung</h2>
@@ -706,6 +768,7 @@
       const mealDialogMeta = document.getElementById("meal-dialog-meta");
       const mealSelectedDate = document.getElementById("meal-selected-date");
       const familyDialog = document.getElementById("family-dialog");
+      const checkinDialog = document.getElementById("checkin-dialog");
       const contactDialog = document.getElementById("contact-dialog");
 
       document.querySelectorAll("[data-quick-button]").forEach((button) => {
@@ -816,6 +879,7 @@
         });
       });
       document.querySelector("[data-open-family-dialog]")?.addEventListener("click", () => familyDialog.showModal());
+      document.querySelector("[data-open-checkin-dialog]")?.addEventListener("click", () => checkinDialog.showModal());
       document.querySelector("[data-open-contact-dialog]")?.addEventListener("click", () => contactDialog.showModal());
 
       const summaryDialog = document.getElementById("summary-dialog");

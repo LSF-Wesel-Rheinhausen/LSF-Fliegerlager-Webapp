@@ -135,8 +135,98 @@ def test_kiosk_home_hides_normal_admin_header_and_renders_drink_dialog_controls(
     assert "Förderung anwenden".encode() not in response.content
     assert b"Abrechnung ansehen" not in response.content
     assert "Details öffnen".encode() in response.content
+    assert b'id="checkin-dialog"' in response.content
+    assert b"data-open-checkin-dialog" in response.content
     assert b"Brutto:" not in response.content
     assert b"Soll:" not in response.content
+
+
+@pytest.mark.django_db
+def test_kiosk_checkin_updates_own_and_linked_participant_dates(client):
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 14))
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")
+    linked = ParticipantFactory(camp=camp, first_name="Grace", last_name="B")
+    ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=linked,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "checkin",
+            "checkin_participant_id": [str(participant.pk), str(linked.pk)],
+            f"arrival_date_{participant.pk}": "2026-07-02",
+            f"departure_date_{participant.pk}": "2026-07-10",
+            f"arrival_date_{linked.pk}": "2026-07-03",
+            f"departure_date_{linked.pk}": "2026-07-09",
+        },
+    )
+
+    assert response.status_code == 302
+    participant.refresh_from_db()
+    linked.refresh_from_db()
+    assert participant.arrival_date == date(2026, 7, 2)
+    assert participant.departure_date == date(2026, 7, 10)
+    assert participant.booked_nights == 8
+    assert linked.arrival_date == date(2026, 7, 3)
+    assert linked.departure_date == date(2026, 7, 9)
+    assert linked.booked_nights == 6
+
+
+@pytest.mark.django_db
+def test_kiosk_checkin_rejects_unlinked_participant(client):
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 14))
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")
+    unlinked = ParticipantFactory(camp=camp, first_name="Grace", last_name="B")
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "checkin",
+            "checkin_participant_id": [str(unlinked.pk)],
+            f"arrival_date_{unlinked.pk}": "2026-07-02",
+            f"departure_date_{unlinked.pk}": "2026-07-10",
+        },
+    )
+
+    assert response.status_code == 200
+    unlinked.refresh_from_db()
+    assert unlinked.arrival_date is None
+    assert unlinked.departure_date is None
+    assert "Ein Teilnehmer darf über diesen Kiosk nicht bearbeitet werden.".encode() in response.content
+
+
+@pytest.mark.django_db
+def test_kiosk_checkin_rejects_departure_before_arrival(client):
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 14))
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "checkin",
+            "checkin_participant_id": [str(participant.pk)],
+            f"arrival_date_{participant.pk}": "2026-07-10",
+            f"departure_date_{participant.pk}": "2026-07-02",
+        },
+    )
+
+    assert response.status_code == 200
+    participant.refresh_from_db()
+    assert participant.arrival_date is None
+    assert participant.departure_date is None
+    assert "Die Abreise für Ada A muss nach der Anreise liegen.".encode() in response.content
 
 
 @pytest.mark.django_db

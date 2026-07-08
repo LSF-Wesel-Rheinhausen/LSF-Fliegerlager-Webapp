@@ -301,6 +301,8 @@ class ParticipantForm(forms.ModelForm):
             "is_companion",
             "hilfssatz",
             "berufssatz",
+            "arrival_date",
+            "departure_date",
             "booked_nights",
             "actual_nights",
             "notes",
@@ -316,6 +318,8 @@ class ParticipantForm(forms.ModelForm):
             "is_companion": "Begleitperson",
             "hilfssatz": "Hilfssatz",
             "berufssatz": "Berufssatz",
+            "arrival_date": "Anreise",
+            "departure_date": "Abreise",
             "booked_nights": "Gebuchte Nächte",
             "actual_nights": "Tatsächliche Nächte",
             "notes": "Notizen",
@@ -323,7 +327,18 @@ class ParticipantForm(forms.ModelForm):
         widgets = {
             "hilfssatz": forms.NumberInput(attrs={"step": "0.0001", "min": "0", "max": "1"}),
             "berufssatz": forms.NumberInput(attrs={"step": "0.0001", "min": "0", "max": "1"}),
+            "arrival_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+            "departure_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
         }
+
+    def clean(self) -> dict[str, Any]:
+        """Validate that the departure date is after the arrival date."""
+        cleaned_data = super().clean() or {}
+        arrival_date = cleaned_data.get("arrival_date")
+        departure_date = cleaned_data.get("departure_date")
+        if arrival_date and departure_date and departure_date <= arrival_date:
+            self.add_error("departure_date", "Die Abreise muss nach der Anreise liegen.")
+        return cleaned_data
 
 
 class PriceRuleForm(forms.ModelForm):

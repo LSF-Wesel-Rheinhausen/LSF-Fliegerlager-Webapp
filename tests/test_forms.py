@@ -1,8 +1,9 @@
+from datetime import date
 from decimal import Decimal
 
 import pytest
 
-from billing.forms import CampForm, FirstAdminSetupForm, KioskLoginForm, UserCreateForm, UserEditForm
+from billing.forms import CampForm, FirstAdminSetupForm, KioskLoginForm, ParticipantForm, UserCreateForm, UserEditForm
 from billing.roles import ROLE_EDITOR
 from tests.factories import CampFactory, ParticipantFactory, SuperUserFactory
 
@@ -111,6 +112,64 @@ def test_user_edit_form_prevents_superuser_role_change():
     )
     assert not form.is_valid()
     assert "Superuser bleiben immer Admins." in form.errors["role"]
+
+
+@pytest.mark.django_db
+def test_participant_form_accepts_arrival_and_departure_dates():
+    form = ParticipantForm(
+        data={
+            "first_name": "Ada",
+            "last_name": "Lovelace",
+            "email": "",
+            "phone": "",
+            "status": "registered",
+            "hilfssatz": "1.0000",
+            "berufssatz": "1.0000",
+            "arrival_date": "2026-07-01",
+            "departure_date": "2026-07-10",
+            "booked_nights": "0",
+            "actual_nights": "0",
+            "notes": "",
+        }
+    )
+
+    assert form.is_valid(), form.errors
+    participant = form.save(commit=False)
+    assert participant.arrival_date.isoformat() == "2026-07-01"
+    assert participant.departure_date.isoformat() == "2026-07-10"
+
+
+@pytest.mark.django_db
+def test_participant_form_rejects_departure_before_arrival():
+    form = ParticipantForm(
+        data={
+            "first_name": "Ada",
+            "last_name": "Lovelace",
+            "email": "",
+            "phone": "",
+            "status": "registered",
+            "hilfssatz": "1.0000",
+            "berufssatz": "1.0000",
+            "arrival_date": "2026-07-10",
+            "departure_date": "2026-07-01",
+            "booked_nights": "0",
+            "actual_nights": "0",
+            "notes": "",
+        }
+    )
+
+    assert not form.is_valid()
+    assert "Die Abreise muss nach der Anreise liegen." in form.errors["departure_date"]
+
+
+@pytest.mark.django_db
+def test_participant_form_renders_date_inputs_with_iso_values():
+    participant = ParticipantFactory(arrival_date=date(2026, 7, 1), departure_date=date(2026, 7, 10))
+
+    content = ParticipantForm(instance=participant).as_p()
+
+    assert 'name="arrival_date" value="2026-07-01"' in content
+    assert 'name="departure_date" value="2026-07-10"' in content
 
 
 @pytest.mark.django_db

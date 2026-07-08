@@ -17,6 +17,7 @@ from django.http import FileResponse, Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_POST
 
 from .daily_settlement_backups import update_daily_backup_settings
@@ -1115,6 +1116,76 @@ def _linked_booking_participants(participant):
     return sorted(linked_participants, key=lambda item: (item.last_name, item.first_name, item.pk))
 
 
+def _kiosk_checkin_participants(participant):
+    return [participant, *_linked_booking_participants(participant)]
+
+
+def _parse_kiosk_checkin_date(value, field_label, participant_name, errors):
+    stripped_value = (value or "").strip()
+    if not stripped_value:
+        return None
+    parsed = parse_date(stripped_value)
+    if parsed is None:
+        errors.append(f"{field_label} für {participant_name} ist kein gültiges Datum.")
+    return parsed
+
+
+def _validate_kiosk_checkin_dates(target, arrival_date, departure_date, errors):
+    if arrival_date and departure_date and departure_date <= arrival_date:
+        errors.append(f"Die Abreise für {target.full_name} muss nach der Anreise liegen.")
+    if target.camp.starts_on and arrival_date and arrival_date < target.camp.starts_on:
+        errors.append(f"Die Anreise für {target.full_name} liegt vor Lagerbeginn.")
+    if target.camp.ends_on and arrival_date and arrival_date > target.camp.ends_on:
+        errors.append(f"Die Anreise für {target.full_name} liegt nach Lagerende.")
+    if target.camp.starts_on and departure_date and departure_date < target.camp.starts_on:
+        errors.append(f"Die Abreise für {target.full_name} liegt vor Lagerbeginn.")
+    if target.camp.ends_on and departure_date and departure_date > target.camp.ends_on:
+        errors.append(f"Die Abreise für {target.full_name} liegt nach Lagerende.")
+
+
+def _update_kiosk_checkin_dates(request, participant, checkin_participants):
+    participants_by_id = {str(item.pk): item for item in checkin_participants}
+    submitted_ids = request.POST.getlist("checkin_participant_id")
+    updates = []
+    errors = []
+
+    for participant_id in submitted_ids:
+        target = participants_by_id.get(participant_id)
+        if target is None:
+            errors.append("Ein Teilnehmer darf über diesen Kiosk nicht bearbeitet werden.")
+            continue
+        arrival_date = _parse_kiosk_checkin_date(
+            request.POST.get(f"arrival_date_{participant_id}"),
+            "Anreise",
+            target.full_name,
+            errors,
+        )
+        departure_date = _parse_kiosk_checkin_date(
+            request.POST.get(f"departure_date_{participant_id}"),
+            "Abreise",
+            target.full_name,
+            errors,
+        )
+        _validate_kiosk_checkin_dates(target, arrival_date, departure_date, errors)
+        updates.append((target, arrival_date, departure_date))
+
+    if errors:
+        for error in errors:
+            messages.error(request, error)
+        return False
+
+    with transaction.atomic():
+        for target, arrival_date, departure_date in updates:
+            target.arrival_date = arrival_date
+            target.departure_date = departure_date
+            target.booked_nights = (
+                max((departure_date - arrival_date).days, 0) if arrival_date and departure_date else 0
+            )
+            target.save(update_fields=["arrival_date", "departure_date", "booked_nights", "updated_at"])
+    messages.success(request, "Check-in-Daten wurden gespeichert.")
+    return True
+
+
 def _variant_choices_for_booking_target(is_child):
     if is_child:
         return [
@@ -1453,6 +1524,7 @@ def kiosk_home(request):
     next_order_date = next_catering_order_date()
     next_meal_order = meal_order_for_date(participant.camp, next_order_date)
     meal_targets = _kiosk_meal_targets(participant)
+    checkin_participants = _kiosk_checkin_participants(participant)
     quick_form = QuickBookingForm(participant=participant, prefix="quick")
     meal_form = MealBookingForm(participant=participant, prefix="meal")
     family_member_form = KioskFamilyMemberForm(prefix="family")
@@ -1659,6 +1731,9 @@ def kiosk_home(request):
                 messages.success(request, success_message)
                 return redirect("kiosk-home")
             messages.error(request, "Verknüpfung wurde nicht gefunden.")
+        elif request.POST.get("action") == "checkin":
+            if _update_kiosk_checkin_dates(request, participant, checkin_participants):
+                return redirect("kiosk-home")
 
     recent_quick_charges = list(
         Charge.objects.select_related("participant", "kiosk_booked_by")
@@ -1718,6 +1793,7 @@ def kiosk_home(request):
         "dinner_rule": dinner_rule,
         "quick_form": quick_form,
         "meal_targets": meal_targets,
+        "checkin_participants": checkin_participants,
         "family_members": participant.family_members.filter(is_active=True).order_by("last_name", "first_name"),
         "pending_invites": pending_invites,
         "sent_invites": sent_invites,
