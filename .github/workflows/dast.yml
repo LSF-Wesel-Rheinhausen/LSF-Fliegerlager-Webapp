@@ -15,6 +15,9 @@ jobs:
   zap_scan:
     runs-on: ubuntu-latest
     name: OWASP ZAP Baseline Scan
+    permissions:
+      contents: read
+      issues: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
