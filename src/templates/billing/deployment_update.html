@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Container-Update{% endblock %}
 {% block content %}
   <div class="toolbar">
@@ -139,12 +140,5 @@
     </form>
   </dialog>
 
-  <script nonce="{{ request.csp_nonce }}">
-    document.querySelectorAll("[data-dialog-open]").forEach((button) => {
-      button.addEventListener("click", () => document.getElementById(button.dataset.dialogOpen).showModal());
-    });
-    document.querySelectorAll("[data-dialog-close]").forEach((button) => {
-      button.addEventListener("click", () => button.closest("dialog").close());
-    });
-  </script>
+  <script data-cfasync="false" defer src="{% static 'billing/deployment_update.js' %}"></script>
 {% endblock %}
