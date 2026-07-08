@@ -1,0 +1,38 @@
+name: DAST ZAP Scan
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    - cron: '0 5 * * 1'
+
+permissions:
+  contents: read
+  actions: write
+  issues: write
+
+jobs:
+  zap_scan:
+    runs-on: ubuntu-latest
+    name: OWASP ZAP Baseline Scan
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and Start Application
+        run: |
+          # Build test image
+          docker build -t lsf-webapp:test .
+          # Run the application in the background on port 8000
+          docker run -d -p 8000:8000 --name lsf-webapp -e DJANGO_DEBUG=1 -e DJANGO_SECRET_KEY=dev-only-change-me lsf-webapp:test python manage.py runserver 0.0.0.0:8000
+          # Wait for the server to be ready
+          sleep 10
+
+      - name: ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.15.0
+        with:
+          target: 'http://localhost:8000'
+          artifact_name: 'zap-scan'
+          cmd_options: '-a'
