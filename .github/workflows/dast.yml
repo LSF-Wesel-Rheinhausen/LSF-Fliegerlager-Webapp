@@ -8,6 +8,9 @@ on:
   schedule:
     - cron: '0 5 * * 1'
 
+permissions:
+  contents: read
+
 jobs:
   zap_scan:
     runs-on: ubuntu-latest
