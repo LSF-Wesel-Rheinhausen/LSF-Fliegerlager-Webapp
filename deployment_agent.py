@@ -3,11 +3,14 @@ from __future__ import annotations
 import base64
 import gzip
 import hmac
+import io
 import json
 import logging
 import os
+import re
 import ssl
 import subprocess
+import tarfile
 import threading
 import time
 import urllib.error
@@ -36,6 +39,8 @@ DATABASE_URL = os.getenv("DATABASE_URL", "")
 GHCR_TOKEN = os.getenv("GHCR_TOKEN", "")
 HEALTH_TIMEOUT = int(os.getenv("UPDATE_HEALTH_TIMEOUT", "180"))
 STATE_FILE = Path(os.getenv("UPDATE_STATE_FILE", "/state/status.json"))
+BACKUP_STAGING_PATTERN = re.compile(r"^staging/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+BACKUP_ARCHIVE_PREFIX_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$")
 
 update_lock = threading.Lock()
 state_lock = threading.Lock()
@@ -548,8 +553,8 @@ def parse_database_url(database_url: str) -> dict[str, str]:
     }
 
 
-def create_backup() -> str:
-    """Create a gzipped PostgreSQL backup using DATABASE_URL connection details."""
+def database_dump_bytes() -> bytes:
+    """Return a PostgreSQL dump without writing credentials to process arguments."""
     connection = parse_database_url(DATABASE_URL)
     command = [
         "pg_dump",
@@ -574,13 +579,71 @@ def create_backup() -> str:
     if result.returncode != 0:
         stderr = limit_output(result.stderr.decode("utf-8", errors="replace"))
         raise RuntimeError(f"Datenbank-Backup fehlgeschlagen: {stderr}")
+    if not result.stdout:
+        raise RuntimeError("Datenbank-Backup ist leer.")
+    return result.stdout
+
+
+def create_backup() -> str:
+    """Create a gzipped PostgreSQL backup using DATABASE_URL connection details."""
+    dump = database_dump_bytes()
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     filename = f"fliegerlager-before-update-{datetime.now(UTC):%Y%m%dT%H%M%SZ}.sql.gz"
     backup_path = BACKUP_DIR / filename
     with gzip.open(backup_path, "wb") as backup:
-        backup.write(result.stdout)
+        backup.write(dump)
     if backup_path.stat().st_size == 0:
         raise RuntimeError("Datenbank-Backup ist leer.")
+    return filename
+
+
+def backup_child_path(relative_path: str) -> Path:
+    """Resolve a backup child path and reject traversal outside BACKUP_DIR."""
+    if not BACKUP_STAGING_PATTERN.fullmatch(relative_path):
+        raise RuntimeError("Backup-Pfad ist ungültig.")
+    backup_root = BACKUP_DIR.resolve()
+    staging_name = relative_path.removeprefix("staging/")
+    candidate = backup_root / "staging" / staging_name
+    if backup_root != candidate and backup_root not in candidate.parents:
+        raise RuntimeError("Backup-Pfad verlässt das Backup-Verzeichnis.")
+    return candidate
+
+
+def safe_archive_prefix(value: str) -> str:
+    """Normalize a user supplied archive prefix to a filename-safe value."""
+    if not BACKUP_ARCHIVE_PREFIX_PATTERN.fullmatch(value):
+        raise RuntimeError("Backup-Archivname ist ungültig.")
+    return value
+
+
+def safe_staging_file(path: Path, staging_path: Path) -> Path:
+    """Resolve a staged export file and reject anything outside the staging directory."""
+    resolved_path = path.resolve()
+    resolved_staging = staging_path.resolve()
+    if resolved_staging not in resolved_path.parents:
+        raise RuntimeError("Backup-Staging-Datei verlässt das Staging-Verzeichnis.")
+    return resolved_path
+
+
+def create_backup_archive(staging_dir: str, archive_prefix: str) -> str:
+    """Create a tar.gz archive containing pg_dump output and prepared export files."""
+    staging_path = backup_child_path(staging_dir)
+    if not staging_path.is_dir():
+        raise RuntimeError("Backup-Staging-Verzeichnis wurde nicht gefunden.")
+
+    dump = database_dump_bytes()
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    filename = f"{safe_archive_prefix(archive_prefix)}-{datetime.now(UTC):%Y%m%dT%H%M%SZ}.tar.gz"
+    archive_path = BACKUP_DIR / filename
+    with tarfile.open(archive_path, "w:gz") as archive:
+        dump_info = tarfile.TarInfo("database.sql")
+        dump_info.size = len(dump)
+        dump_info.mtime = int(time.time())
+        archive.addfile(dump_info, io.BytesIO(dump))
+        for path in sorted(staging_path.rglob("*")):
+            export_path = safe_staging_file(path, staging_path)
+            if export_path.is_file():
+                archive.add(export_path, arcname=f"exports/{export_path.relative_to(staging_path).as_posix()}")
     return filename
 
 
@@ -736,6 +799,13 @@ class RequestHandler(BaseHTTPRequestHandler):
                 thread = threading.Thread(target=perform_update, name="deployment-update", daemon=True)
                 thread.start()
                 self.respond(HTTPStatus.ACCEPTED, {"status": "accepted"})
+            elif self.command == "POST" and self.path == "/backup":
+                payload = read_json_body(self)
+                backup_name = create_backup_archive(
+                    str(payload.get("staging_dir", "")),
+                    str(payload.get("archive_prefix", "")),
+                )
+                self.respond(HTTPStatus.OK, {"backup": backup_name})
             else:
                 self.respond(HTTPStatus.NOT_FOUND, {"error": "not_found"})
         except (AgentConfigError, PortainerAPIError, OSError, RuntimeError) as error:

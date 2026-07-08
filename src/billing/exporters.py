@@ -22,6 +22,26 @@ def csv_response(filename, rows, headers):
     return response
 
 
+def settlement_run_csv_bytes(run: SettlementRun) -> bytes:
+    """Render a versioned settlement run CSV from immutable snapshots."""
+    buffer = StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["Teilnehmer", "Brutto", "Förderung", "Soll", "Gezahlt", "Vorgestreckt", "Offen"])
+    for snapshot in run.settlements.all():
+        writer.writerow(
+            [
+                snapshot.participant_name,
+                snapshot.total_gross,
+                snapshot.total_subsidy,
+                snapshot.total_due,
+                snapshot.total_paid,
+                snapshot.total_advanced,
+                snapshot.balance,
+            ]
+        )
+    return buffer.getvalue().encode("utf-8")
+
+
 def _format_money_cells(sheet, row: int, columns: tuple[int, ...]) -> None:
     for column in columns:
         sheet.cell(row=row, column=column).number_format = "#,##0.00"
@@ -567,26 +587,13 @@ def participant_pdf_response(participant):
 
 
 def settlement_run_csv(run: SettlementRun) -> HttpResponse:
-    rows = [
-        [
-            snapshot.participant_name,
-            snapshot.total_gross,
-            snapshot.total_subsidy,
-            snapshot.total_due,
-            snapshot.total_paid,
-            snapshot.total_advanced,
-            snapshot.balance,
-        ]
-        for snapshot in run.settlements.all()
-    ]
-    return csv_response(
-        f"abrechnung-{run.camp.year}-v{run.version}.csv",
-        rows,
-        ["Teilnehmer", "Brutto", "Förderung", "Soll", "Gezahlt", "Vorgestreckt", "Offen"],
-    )
+    response = HttpResponse(settlement_run_csv_bytes(run), content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = f'attachment; filename="abrechnung-{run.camp.year}-v{run.version}.csv"'
+    return response
 
 
-def settlement_run_workbook_response(run: SettlementRun) -> HttpResponse:
+def settlement_run_workbook_bytes(run: SettlementRun) -> bytes:
+    """Render a versioned settlement run workbook from immutable snapshots."""
     workbook = Workbook()
     summary = workbook.active
     summary.title = "Abrechnung"
@@ -610,15 +617,20 @@ def settlement_run_workbook_response(run: SettlementRun) -> HttpResponse:
 
     output = BytesIO()
     workbook.save(output)
+    return output.getvalue()
+
+
+def settlement_run_workbook_response(run: SettlementRun) -> HttpResponse:
     response = HttpResponse(
-        output.getvalue(),
+        settlement_run_workbook_bytes(run),
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
     response["Content-Disposition"] = f'attachment; filename="abrechnung-{run.camp.year}-v{run.version}.xlsx"'
     return response
 
 
-def settlement_snapshot_pdf_response(snapshot: Settlement) -> HttpResponse:
+def settlement_snapshot_pdf_bytes(snapshot: Settlement) -> bytes:
+    """Render a PDF invoice from a settlement snapshot without persisting it."""
     run = snapshot.run
     if run is None:
         raise ValueError("Historical settlement PDF requires a versioned run.")
@@ -669,6 +681,13 @@ def settlement_snapshot_pdf_response(snapshot: Settlement) -> HttpResponse:
 
     pdf.showPage()
     pdf.save()
-    response = HttpResponse(output.getvalue(), content_type="application/pdf")
+    return output.getvalue()
+
+
+def settlement_snapshot_pdf_response(snapshot: Settlement) -> HttpResponse:
+    run = snapshot.run
+    if run is None:
+        raise ValueError("Historical settlement PDF requires a versioned run.")
+    response = HttpResponse(settlement_snapshot_pdf_bytes(snapshot), content_type="application/pdf")
     response["Content-Disposition"] = f'inline; filename="abrechnung-{snapshot.pk}-v{run.version}.pdf"'
     return response

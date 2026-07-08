@@ -50,18 +50,19 @@
       <strong>Kurzhilfe:</strong> Ein <em>Abrechnungslauf</em> friert den aktuellen Stand (Auslagen, Getränke, Dienste) dauerhaft ein. Erstelle ihn erst, wenn das Lager vorbei ist oder eine finale Zwischenabrechnung benötigt wird. Nach dem Fixieren können für diesen Lauf keine Änderungen mehr vorgenommen werden.
     </div>
     <table>
-      <thead><tr><th>Version</th><th>Zeitpunkt</th><th>Bearbeiter</th><th>Teilnehmer</th><th>Offen</th></tr></thead>
+      <thead><tr><th>Version</th><th>Typ</th><th>Zeitpunkt</th><th>Bearbeiter</th><th>Teilnehmer</th><th>Offen</th></tr></thead>
       <tbody>
         {% for run in settlement_runs %}
           <tr>
             <td><a href="{% url 'settlement-run-detail' run.pk %}">V{{ run.version }}</a></td>
+            <td>{{ run.get_run_type_display }}</td>
             <td>{{ run.created_at }}</td>
             <td>{{ run.calculated_by.email|default:run.calculated_by.username|default:"System" }}</td>
             <td>{{ run.participant_count }}</td>
             <td>{{ run.balance|money_eur }}</td>
           </tr>
         {% empty %}
-          <tr><td colspan="5">Noch keine Abrechnungsläufe gespeichert.</td></tr>
+          <tr><td colspan="6">Noch keine Abrechnungsläufe gespeichert.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -329,7 +330,7 @@
     const dialog = document.getElementById("reject-dialog");
     const form = document.getElementById("reject-form");
     const descEl = document.getElementById("reject-expense-desc");
-    
+
     document.querySelectorAll("[data-open-reject-dialog]").forEach((button) => {
       button.addEventListener("click", () => {
         const expenseId = button.dataset.expenseId;

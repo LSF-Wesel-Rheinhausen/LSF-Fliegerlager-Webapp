@@ -74,6 +74,38 @@
     {% endif %}
   {% endif %}
 
+  <section class="panel stack">
+    <div>
+      <h2>Tägliche Abrechnungs-Backups</h2>
+      <p>Erzeugt automatisch einen historischen Abrechnungslauf für das aktive Lager und archiviert Datenbank, CSV, Excel und PDFs.</p>
+    </div>
+    <form method="post" action="{% url 'deployment-daily-backup-settings' %}" class="form-grid">
+      {% csrf_token %}
+      <div class="field-row">
+        {{ daily_backup_form.enabled }}
+        <label for="{{ daily_backup_form.enabled.id_for_label }}">{{ daily_backup_form.enabled.label }}</label>
+      </div>
+      <div>
+        <label for="{{ daily_backup_form.run_time.id_for_label }}">{{ daily_backup_form.run_time.label }}</label>
+        {{ daily_backup_form.run_time }}
+        {% for error in daily_backup_form.run_time.errors %}<p class="error-text">{{ error }}</p>{% endfor %}
+      </div>
+      <div class="actions">
+        <button type="submit">Backup-Zeit speichern</button>
+      </div>
+    </form>
+    {% if latest_backup_log %}
+      <dl class="metadata-list">
+        <div><dt>Letzter Lauf</dt><dd>{{ latest_backup_log.run_date }} · {{ latest_backup_log.get_status_display }}</dd></div>
+        <div><dt>Run-Version</dt><dd>{% if latest_backup_log.settlement_run %}V{{ latest_backup_log.settlement_run.version }} · {{ latest_backup_log.settlement_run.get_run_type_display }}{% else %}-{% endif %}</dd></div>
+        <div><dt>Backup-Datei</dt><dd>{% if latest_backup_log.backup_file %}<code>{{ latest_backup_log.backup_file }}</code>{% else %}-{% endif %}</dd></div>
+        {% if latest_backup_log.error %}<div><dt>Fehler</dt><dd class="error-text">{{ latest_backup_log.error }}</dd></div>{% endif %}
+      </dl>
+    {% else %}
+      <p>Noch kein täglicher Lauf protokolliert.</p>
+    {% endif %}
+  </section>
+
   <dialog id="update-confirmation" aria-labelledby="update-confirmation-title">
     <div class="dialog-heading">
       <div>

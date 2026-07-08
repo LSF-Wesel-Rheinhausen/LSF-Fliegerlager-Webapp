@@ -76,3 +76,13 @@ def check_for_update() -> dict[str, Any]:
 def install_update() -> dict[str, Any]:
     """Ask the agent to install the configured application image."""
     return agent_request("/install", method="POST")
+
+
+def create_backup_archive(staging_dir: str, archive_prefix: str) -> dict[str, Any]:
+    """Ask the agent to archive a prepared export staging directory with a database dump."""
+    return agent_request(
+        "/backup",
+        method="POST",
+        timeout=240,
+        payload={"staging_dir": staging_dir, "archive_prefix": archive_prefix},
+    )

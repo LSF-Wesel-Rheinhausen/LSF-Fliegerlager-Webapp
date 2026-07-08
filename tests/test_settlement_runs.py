@@ -29,6 +29,7 @@ def test_create_settlement_run_versions_immutable_participant_snapshots():
     first_snapshot.refresh_from_db()
     assert first.version == 1
     assert second.version == 2
+    assert first.run_type == SettlementRun.RunType.MANUAL
     assert first_snapshot.participant_name == "Ada Lovelace"
     assert first_snapshot.total_due == Decimal("10.00")
     assert second.settlements.get().total_due == Decimal("20.00")
@@ -61,6 +62,7 @@ def test_admin_can_create_and_view_settlement_run(client):
     detail = client.get(response["Location"])
     assert detail.status_code == 200
     assert b"V1" in detail.content
+    assert b"Manuell" in detail.content
 
 
 @pytest.mark.django_db

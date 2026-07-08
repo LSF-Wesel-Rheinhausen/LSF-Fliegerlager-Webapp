@@ -22,6 +22,8 @@ Unterstuetzte Umgebungsvariablen:
 - `CSRF_TRUSTED_ORIGINS`: kommaseparierte Origins inklusive Schema.
 - `DATABASE_URL`: Datenbank-URL via `dj-database-url`; ohne Wert wird `src/db.sqlite3` genutzt.
 - `UPDATE_AGENT_URL` und `UPDATE_AGENT_TOKEN`: interne, nur für Superuser-Aktionen verwendete Update-Agent-Verbindung.
+- `BACKUP_DIR`: gemeinsames Backup-Verzeichnis im Container; Compose setzt für App, Scheduler und Updater `/backups`.
+- `DAILY_SETTLEMENT_BACKUP_INTERVAL_SECONDS`: Prüfintervall des Scheduler-Containers; Default `300`.
 - `APP_VERSION`, `APP_REVISION`, `APP_BUILD_DATE` und `APP_CHANGE`: vom Container-Build gesetzte Versionsmetadaten.
 
 WhiteNoise liefert die durch `collectstatic` erzeugten Dateien direkt über Gunicorn aus. Der Update-Agent bleibt ein
