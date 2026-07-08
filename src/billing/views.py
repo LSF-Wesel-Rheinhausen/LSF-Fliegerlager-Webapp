@@ -72,6 +72,9 @@ from .models import (
     MealSignup,
     Participant,
     ParticipantBookingLink,
+    ParticipantFamilyMember,
+    ParticipantFamilyMemberPin,
+    ParticipantPin,
     PriceRule,
     Settlement,
     SettlementRun,
@@ -119,7 +122,9 @@ logger = logging.getLogger(__name__)
 signer = Signer()
 User = get_user_model()
 KIOSK_PARTICIPANT_SESSION_KEY = "kiosk_participant_id"
+KIOSK_FAMILY_MEMBER_SESSION_KEY = "kiosk_family_member_id"
 KIOSK_PIN_SETUP_SESSION_KEY = "kiosk_pin_setup_participant_id"
+KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY = "kiosk_pin_setup_family_member_id"
 KIOSK_QUICK_BOOKING_CANCEL_WINDOW = timedelta(minutes=15)
 
 
@@ -1066,20 +1071,56 @@ def _kiosk_participant_from_session(request, session_key):
     )
 
 
+def _kiosk_family_member_from_session(request, participant):
+    family_member_id = request.session.get(KIOSK_FAMILY_MEMBER_SESSION_KEY)
+    if not family_member_id or participant is None:
+        return None
+    family_member = (
+        ParticipantFamilyMember.objects.select_related("guardian", "guardian__camp")
+        .filter(
+            pk=family_member_id,
+            guardian=participant,
+            guardian__camp__is_active=True,
+            guardian__archived_at__isnull=True,
+            role=ParticipantFamilyMember.Role.COMPANION,
+            is_active=True,
+        )
+        .first()
+    )
+    if family_member is None:
+        request.session.pop(KIOSK_FAMILY_MEMBER_SESSION_KEY, None)
+    return family_member
+
+
 def kiosk_login(request):
     if request.session.get(KIOSK_PARTICIPANT_SESSION_KEY):
         if _kiosk_participant(request) is not None:
             return redirect("kiosk-home")
         else:
             request.session.pop(KIOSK_PARTICIPANT_SESSION_KEY, None)
+            request.session.pop(KIOSK_FAMILY_MEMBER_SESSION_KEY, None)
 
     form = KioskLoginForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         request.session[KIOSK_PARTICIPANT_SESSION_KEY] = form.cleaned_data["participant"].pk
+        family_member = form.cleaned_data.get("family_member")
+        if family_member is not None:
+            request.session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = family_member.pk
+        else:
+            request.session.pop(KIOSK_FAMILY_MEMBER_SESSION_KEY, None)
         messages.success(request, "Du bist im Kiosk angemeldet.")
         return redirect("kiosk-home")
+    if request.method == "POST" and getattr(form, "missing_pin_family_member", None) is not None:
+        request.session[KIOSK_PIN_SETUP_SESSION_KEY] = form.missing_pin_participant.pk
+        request.session[KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY] = form.missing_pin_family_member.pk
+        messages.info(
+            request,
+            "Für diesen Begleiter ist noch kein PIN gesetzt. Bitte lege jetzt einen neuen PIN fest.",
+        )
+        return redirect("kiosk-pin-setup")
     if request.method == "POST" and getattr(form, "missing_pin_participant", None) is not None:
         request.session[KIOSK_PIN_SETUP_SESSION_KEY] = form.missing_pin_participant.pk
+        request.session.pop(KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY, None)
         messages.info(
             request,
             "Für diesen Teilnehmer ist noch kein PIN gesetzt. Bitte lege jetzt einen neuen PIN fest.",
@@ -1091,13 +1132,19 @@ def kiosk_login(request):
 
 def kiosk_logout(request):
     request.session.pop(KIOSK_PARTICIPANT_SESSION_KEY, None)
+    request.session.pop(KIOSK_FAMILY_MEMBER_SESSION_KEY, None)
     request.session.pop(KIOSK_PIN_SETUP_SESSION_KEY, None)
+    request.session.pop(KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY, None)
     messages.success(request, "Du wurdest vom Kiosk abgemeldet.")
     return redirect("kiosk-login")
 
 
 def _kiosk_participant(request):
     return _kiosk_participant_from_session(request, KIOSK_PARTICIPANT_SESSION_KEY)
+
+
+def _kiosk_family_member(request, participant):
+    return _kiosk_family_member_from_session(request, participant)
 
 
 def _accepted_booking_links(participant):
@@ -1117,7 +1164,39 @@ def _linked_booking_participants(participant):
 
 
 def _kiosk_checkin_participants(participant):
-    return [participant, *_linked_booking_participants(participant)]
+    targets = [
+        {
+            "token": f"participant-{participant.pk}",
+            "object": participant,
+            "name": participant.full_name,
+            "role": "Ich",
+            "camp": participant.camp,
+        }
+    ]
+    for member in participant.family_members.filter(
+        is_active=True,
+        role=ParticipantFamilyMember.Role.COMPANION,
+    ).order_by("last_name", "first_name"):
+        targets.append(
+            {
+                "token": f"family-{member.pk}",
+                "object": member,
+                "name": member.full_name,
+                "role": member.get_role_display(),
+                "camp": participant.camp,
+            }
+        )
+    for linked_participant in _linked_booking_participants(participant):
+        targets.append(
+            {
+                "token": f"participant-{linked_participant.pk}",
+                "object": linked_participant,
+                "name": linked_participant.full_name,
+                "role": "Verknüpft",
+                "camp": linked_participant.camp,
+            }
+        )
+    return targets
 
 
 def _parse_kiosk_checkin_date(value, field_label, participant_name, errors):
@@ -1130,44 +1209,45 @@ def _parse_kiosk_checkin_date(value, field_label, participant_name, errors):
     return parsed
 
 
-def _validate_kiosk_checkin_dates(target, arrival_date, departure_date, errors):
+def _validate_kiosk_checkin_dates(target, camp, arrival_date, departure_date, errors):
     if arrival_date and departure_date and departure_date <= arrival_date:
         errors.append(f"Die Abreise für {target.full_name} muss nach der Anreise liegen.")
-    if target.camp.starts_on and arrival_date and arrival_date < target.camp.starts_on:
+    if camp.starts_on and arrival_date and arrival_date < camp.starts_on:
         errors.append(f"Die Anreise für {target.full_name} liegt vor Lagerbeginn.")
-    if target.camp.ends_on and arrival_date and arrival_date > target.camp.ends_on:
+    if camp.ends_on and arrival_date and arrival_date > camp.ends_on:
         errors.append(f"Die Anreise für {target.full_name} liegt nach Lagerende.")
-    if target.camp.starts_on and departure_date and departure_date < target.camp.starts_on:
+    if camp.starts_on and departure_date and departure_date < camp.starts_on:
         errors.append(f"Die Abreise für {target.full_name} liegt vor Lagerbeginn.")
-    if target.camp.ends_on and departure_date and departure_date > target.camp.ends_on:
+    if camp.ends_on and departure_date and departure_date > camp.ends_on:
         errors.append(f"Die Abreise für {target.full_name} liegt nach Lagerende.")
 
 
 def _update_kiosk_checkin_dates(request, participant, checkin_participants):
-    participants_by_id = {str(item.pk): item for item in checkin_participants}
-    submitted_ids = request.POST.getlist("checkin_participant_id")
+    targets_by_token = {target["token"]: target for target in checkin_participants}
+    submitted_tokens = request.POST.getlist("checkin_target")
     updates = []
     errors = []
 
-    for participant_id in submitted_ids:
-        target = participants_by_id.get(participant_id)
+    for token in submitted_tokens:
+        target = targets_by_token.get(token)
         if target is None:
             errors.append("Ein Teilnehmer darf über diesen Kiosk nicht bearbeitet werden.")
             continue
+        target_object = target["object"]
         arrival_date = _parse_kiosk_checkin_date(
-            request.POST.get(f"arrival_date_{participant_id}"),
+            request.POST.get(f"arrival_date_{token}"),
             "Anreise",
-            target.full_name,
+            target["name"],
             errors,
         )
         departure_date = _parse_kiosk_checkin_date(
-            request.POST.get(f"departure_date_{participant_id}"),
+            request.POST.get(f"departure_date_{token}"),
             "Abreise",
-            target.full_name,
+            target["name"],
             errors,
         )
-        _validate_kiosk_checkin_dates(target, arrival_date, departure_date, errors)
-        updates.append((target, arrival_date, departure_date))
+        _validate_kiosk_checkin_dates(target_object, target["camp"], arrival_date, departure_date, errors)
+        updates.append((target_object, arrival_date, departure_date))
 
     if errors:
         for error in errors:
@@ -1178,10 +1258,13 @@ def _update_kiosk_checkin_dates(request, participant, checkin_participants):
         for target, arrival_date, departure_date in updates:
             target.arrival_date = arrival_date
             target.departure_date = departure_date
-            target.booked_nights = (
-                max((departure_date - arrival_date).days, 0) if arrival_date and departure_date else 0
-            )
-            target.save(update_fields=["arrival_date", "departure_date", "booked_nights", "updated_at"])
+            update_fields = ["arrival_date", "departure_date", "updated_at"]
+            if isinstance(target, Participant):
+                target.booked_nights = (
+                    max((departure_date - arrival_date).days, 0) if arrival_date and departure_date else 0
+                )
+                update_fields.append("booked_nights")
+            target.save(update_fields=update_fields)
     messages.success(request, "Check-in-Daten wurden gespeichert.")
     return True
 
@@ -1496,23 +1579,51 @@ def kiosk_pin_setup(request):
     participant = _kiosk_participant_from_session(request, KIOSK_PIN_SETUP_SESSION_KEY)
     if participant is None:
         return redirect("kiosk-login")
-    if not participant.pin.must_set_pin and participant.pin.pin_hash:
+    family_member_id = request.session.get(KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY)
+    family_member = None
+    if family_member_id:
+        family_member = (
+            ParticipantFamilyMember.objects.select_related("guardian", "guardian__camp")
+            .filter(
+                pk=family_member_id,
+                guardian=participant,
+                role=ParticipantFamilyMember.Role.COMPANION,
+                is_active=True,
+            )
+            .first()
+        )
+        if family_member is None:
+            request.session.pop(KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY, None)
+            return redirect("kiosk-login")
+
+    if family_member is not None:
+        pin_holder = family_member
+        pin_record, _created = ParticipantFamilyMemberPin.objects.get_or_create(family_member=family_member)
+    else:
+        pin_holder = participant
+        pin_record, _created = ParticipantPin.objects.get_or_create(participant=participant)
+    if not pin_record.must_set_pin and pin_record.pin_hash:
         return redirect("kiosk-home")
 
     form = KioskPinSetupForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
-            participant.pin.set_pin(form.cleaned_data["pin"])
-            participant.pin.save()
+            pin_record.set_pin(form.cleaned_data["pin"])
+            pin_record.save()
             request.session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+            if family_member is not None:
+                request.session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = family_member.pk
+            else:
+                request.session.pop(KIOSK_FAMILY_MEMBER_SESSION_KEY, None)
             request.session.pop(KIOSK_PIN_SETUP_SESSION_KEY, None)
+            request.session.pop(KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY, None)
         messages.success(request, "PIN wurde gesetzt. Du bist jetzt im Kiosk angemeldet.")
         return redirect("kiosk-home")
 
     return render(
         request,
         "billing/kiosk_pin_setup.html",
-        {"form": form, "participant": participant, "kiosk_autologout": True},
+        {"form": form, "participant": pin_holder, "kiosk_autologout": True},
     )
 
 
@@ -1521,6 +1632,11 @@ def kiosk_home(request):
     if participant is None:
         return redirect("kiosk-login")
 
+    active_family_member = _kiosk_family_member(request, participant)
+    default_booking_target = active_family_member or participant
+    default_booking_target_token = (
+        f"family-{active_family_member.pk}" if active_family_member is not None else f"participant-{participant.pk}"
+    )
     next_order_date = next_catering_order_date()
     next_meal_order = meal_order_for_date(participant.camp, next_order_date)
     meal_targets = _kiosk_meal_targets(participant)
@@ -1534,7 +1650,7 @@ def kiosk_home(request):
             quick_form = QuickBookingForm(request.POST, participant=participant, prefix="quick")
             if quick_form.is_valid():
                 target_ids = request.POST.getlist("quick-target")
-                targets = [participant]
+                targets = [default_booking_target]
                 if target_ids:
                     targets_by_token = _target_lookup(meal_targets)
                     selected_targets = [
@@ -1619,7 +1735,7 @@ def kiosk_home(request):
                 selected_tokens = request.POST.getlist("meal-target")
                 targets_by_token = _target_lookup(meal_targets)
                 if not selected_tokens and request.POST.get("meal-targets-submitted") != "1":
-                    selected_tokens = [f"participant-{participant.pk}"]
+                    selected_tokens = [default_booking_target_token]
                 selected_targets = [targets_by_token[token] for token in selected_tokens if token in targets_by_token]
                 if not selected_targets:
                     meal_form.add_error(None, "Bitte mindestens eine Person auswählen.")
@@ -1779,6 +1895,9 @@ def kiosk_home(request):
     accepted_links = _accepted_booking_links(participant)
     context = {
         "participant": participant,
+        "kiosk_actor": default_booking_target,
+        "kiosk_actor_is_family_member": active_family_member is not None,
+        "default_booking_target_token": default_booking_target_token,
         "summary": participant_kiosk_summary(participant),
         "meal_form": meal_form,
         "meal_default_variant": meal_form.fields["variant"].choices[0][0],

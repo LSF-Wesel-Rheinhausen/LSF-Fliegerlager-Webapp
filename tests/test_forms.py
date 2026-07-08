@@ -4,6 +4,7 @@ from decimal import Decimal
 import pytest
 
 from billing.forms import CampForm, FirstAdminSetupForm, KioskLoginForm, ParticipantForm, UserCreateForm, UserEditForm
+from billing.models import ParticipantFamilyMember
 from billing.roles import ROLE_EDITOR
 from tests.factories import CampFactory, ParticipantFactory, SuperUserFactory
 
@@ -62,10 +63,35 @@ def test_kiosk_login_form_only_lists_non_archived_participants_from_active_camp(
     hidden = ParticipantFactory(camp=inactive_camp)
 
     form = KioskLoginForm()
+    choices = dict(form.fields["participant"].choices)
 
-    assert list(form.fields["participant"].queryset) == [visible]
-    assert archived not in form.fields["participant"].queryset
-    assert hidden not in form.fields["participant"].queryset
+    assert choices == {f"participant-{visible.pk}": visible.full_name}
+    assert f"participant-{archived.pk}" not in choices
+    assert f"participant-{hidden.pk}" not in choices
+
+
+@pytest.mark.django_db
+def test_kiosk_login_form_lists_companions_but_not_children():
+    active_camp = CampFactory(is_active=True)
+    guardian = ParticipantFactory(camp=active_camp, first_name="Ada", last_name="Lovelace")
+    companion = ParticipantFamilyMember.objects.create(
+        guardian=guardian,
+        first_name="Grace",
+        last_name="Hopper",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    child = ParticipantFamilyMember.objects.create(
+        guardian=guardian,
+        first_name="Kind",
+        last_name="Lovelace",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+
+    form = KioskLoginForm()
+    choices = dict(form.fields["participant"].choices)
+
+    assert choices[f"family-{companion.pk}"] == "Grace Hopper (Begleitung von Ada Lovelace)"
+    assert f"family-{child.pk}" not in choices
 
 
 @pytest.mark.django_db
