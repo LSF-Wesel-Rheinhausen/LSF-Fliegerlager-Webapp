@@ -90,7 +90,7 @@ def test_kiosk_login_form_lists_companions_but_not_children():
     form = KioskLoginForm()
     choices = dict(form.fields["participant"].choices)
 
-    assert choices[f"family-{companion.pk}"] == "Grace Hopper (Begleitung von Ada Lovelace)"
+    assert choices[f"family-{companion.pk}"] == "Grace Hopper"
     assert f"family-{child.pk}" not in choices
 
 

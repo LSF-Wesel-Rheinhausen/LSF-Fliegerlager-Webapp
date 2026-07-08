@@ -699,29 +699,27 @@ class KioskLoginForm(forms.Form):
                 "label": participant.full_name,
                 "participant": participant,
                 "family_member": None,
+                "sort_key": (participant.last_name.lower(), participant.first_name.lower(), participant.pk),
             }
             for participant in participants
         ]
-        family_members = (
-            ParticipantFamilyMember.objects.select_related("guardian", "guardian__camp")
-            .filter(
-                guardian__camp__is_active=True,
-                guardian__archived_at__isnull=True,
-                role=ParticipantFamilyMember.Role.COMPANION,
-                is_active=True,
-            )
-            .order_by("last_name", "first_name", "pk")
+        family_members = ParticipantFamilyMember.objects.select_related("guardian", "guardian__camp").filter(
+            guardian__camp__is_active=True,
+            guardian__archived_at__isnull=True,
+            role=ParticipantFamilyMember.Role.COMPANION,
+            is_active=True,
         )
         targets.extend(
             {
                 "token": f"family-{family_member.pk}",
-                "label": f"{family_member.full_name} (Begleitung von {family_member.guardian.full_name})",
+                "label": family_member.full_name,
                 "participant": family_member.guardian,
                 "family_member": family_member,
+                "sort_key": (family_member.last_name.lower(), family_member.first_name.lower(), family_member.pk),
             }
             for family_member in family_members
         )
-        return sorted(targets, key=lambda target: target["label"])
+        return sorted(targets, key=lambda target: target["sort_key"])
 
     def _target_for_token(self, token: str) -> dict[str, Any] | None:
         return next((target for target in self.login_targets if target["token"] == token), None)
