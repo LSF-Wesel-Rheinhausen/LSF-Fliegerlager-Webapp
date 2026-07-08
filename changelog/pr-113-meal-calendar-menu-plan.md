@@ -1,4 +1,4 @@
-# Essenskalender & Speiseplanpflege (PR TBD)
+# Essenskalender & Speiseplanpflege (PR #113)
 
 Dieses Feature macht den Kiosk-Essensbereich zu einem echten Buchungskalender und ergänzt die Speiseplanpflege in der Essensübersicht.
 
