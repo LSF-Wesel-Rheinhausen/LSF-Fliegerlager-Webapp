@@ -104,6 +104,10 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"] if (BASE_DIR / "static").exists() else []
+# Static assets are served from the application origin. WhiteNoise defaults to a
+# wildcard CORS header for CDN use, which is unnecessary here and weakens the
+# same-origin policy enforced by SecurityHeadersMiddleware.
+WHITENOISE_ALLOW_ALL_ORIGINS = False
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {

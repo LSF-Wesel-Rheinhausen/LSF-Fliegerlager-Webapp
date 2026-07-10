@@ -1,5 +1,10 @@
 # Aktuelle TODOs
 
-*Die Meilensteine "Dienstpläne & Kiosk-Erweiterungen" sowie "Stabilisierung der E2E-Tests" (Behebung aller Playwright-Flakiness & Zombie-Prozesse) sind erfolgreich abgeschlossen.*
+Die folgenden offenen GitHub-Issues werden in dieser Prioritaet umgesetzt:
 
-Alle aktuellen Phasen sind abgeschlossen.
+- [ ] #125 Optionales Authelia Single Sign-on fuer bestehende Admin-Konten integrieren
+- [ ] #143/#144 Essensdialog um atomare Mehrfachbuchungen erweitern
+- [ ] #145 Stornierung der letzten Schnellbuchungen mobil nutzbar machen
+- [ ] #146 Leeren Pflicht-Platzhalter im Kiosk-Login ergaenzen
+
+Abgeschlossene Arbeitspakete werden nach ihrer Umsetzung aus dieser Liste entfernt.

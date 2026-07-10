@@ -1,6 +1,11 @@
 import pytest
 from django.conf import settings
+from django.http import HttpResponse
+from django.test import RequestFactory, override_settings
 from django.urls import reverse
+from whitenoise.middleware import WhiteNoiseMiddleware
+
+from config.middleware import SecurityHeadersMiddleware
 
 
 @pytest.mark.django_db
@@ -28,3 +33,29 @@ def test_security_headers_middleware_wraps_static_file_middleware():
     whitenoise_index = settings.MIDDLEWARE.index("whitenoise.middleware.WhiteNoiseMiddleware")
 
     assert security_headers_index < whitenoise_index
+
+
+def test_whitenoise_does_not_add_wildcard_cors_header():
+    assert settings.WHITENOISE_ALLOW_ALL_ORIGINS is False
+
+
+@override_settings(DEBUG=False)
+@pytest.mark.django_db
+def test_static_responses_keep_same_origin_protection(tmp_path):
+    static_file = tmp_path / "billing" / "app.css"
+    static_file.parent.mkdir(parents=True)
+    static_file.write_text("body { color: black; }", encoding="utf-8")
+
+    with override_settings(STATIC_ROOT=tmp_path):
+        static_handler = WhiteNoiseMiddleware(lambda request: HttpResponse(status=404))
+        middleware = SecurityHeadersMiddleware(static_handler)
+        response = middleware(RequestFactory().get("/static/billing/app.css"))
+
+    try:
+        assert response.status_code == 200
+        assert "Access-Control-Allow-Origin" not in response
+        assert response["Cross-Origin-Resource-Policy"] == "same-origin"
+        assert response["Cross-Origin-Embedder-Policy"] == "require-corp"
+        assert response["Cross-Origin-Opener-Policy"] == "same-origin"
+    finally:
+        response.close()
