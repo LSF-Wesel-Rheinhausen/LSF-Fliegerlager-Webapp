@@ -1,8 +1,10 @@
+graphify-out/cost.json
+.rtk/
+CLAUDE.md
 .venv/
 .cache/
 .codex/
 .DS_Store
-graphify-out/
 output/
 __pycache__/
 *.py[cod]
