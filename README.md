@@ -130,6 +130,12 @@ Die wichtigsten Umgebungsvariablen stehen mit sicheren Platzhaltern in [`.env.ex
 - `CSRF_TRUSTED_ORIGINS`: kommaseparierte vertrauenswürdige Origins mit Schema.
 - `DATABASE_URL`: Datenbank-URL; lokal kann SQLite genutzt werden, Docker nutzt PostgreSQL.
 - `DJANGO_HTTPS`: aktiviert in Produktion HTTPS-Redirect sowie sichere Session- und CSRF-Cookies.
+- `AUTHELIA_SSO_ENABLED`: aktiviert optional Trusted-Header-SSO fuer vorhandene aktive Konten.
+- `AUTHELIA_SSO_EMAIL_HEADER`: vom kontrollierten Proxy neu gesetzter E-Mail-Header, standardmaessig `Remote-Email`.
+
+Bei aktiviertem Authelia-SSO darf die App nicht direkt erreichbar sein. Der Reverse Proxy muss clientseitige
+Identitaetsheader entfernen und `Remote-Email` ausschliesslich aus Authelias Forward-Auth-Antwort setzen. Django legt
+weder Konten noch Rollen aus Authelia an; Details stehen in [`deploy/README.md`](deploy/README.md).
 
 Pflichtvariablen für Container-Updates:
 
