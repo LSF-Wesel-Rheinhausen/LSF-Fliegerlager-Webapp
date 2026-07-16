@@ -1,184 +1,89 @@
-# Repository Guidelines & Best Practices
+# Agent Instructions
 
-## 1. Project Structure & Module Organization
+## Scope And Precedence
 
-Application code resides in `src/`. The core Django project configuration is located in `src/config/`, and the main domain application is in `src/billing/`.
+- These rules apply to the entire repository. A closer nested `AGENTS.md` may add or override rules for its subtree.
+- Read `TODO.md` before starting. The current user request remains the task; `TODO.md` supplies relevant context, not unrelated work. Update only entries directly completed by the task.
+- Inspect only the files needed for the task. Preserve all pre-existing working-tree changes and never stage, rewrite, or remove unrelated work.
+- Follow `CONTRIBUTING.md` for human-facing setup and pull-request conventions.
 
-- `src/billing/models.py`: models for camps, user profiles, participants, pricing, payments, expenses, meals, kiosk access, shifts, and settlements. If this file grows too large, refactor it into a `models/` package with cohesive modules.
-- `src/billing/services.py`: core business logic, including settlement and kiosk-summary logic. Keep views thin and share calculations through services.
-- `src/billing/importers.py` and `src/billing/exporters.py`: CSV/XLSX/PDF import and export helpers.
-- `src/templates/`: server-rendered HTML templates.
-- `src/static/`: static assets such as CSS, JavaScript, and images.
-- `tests/`: pytest-based automated test suite.
+## Workflow
 
-Golden rule: keep new modules small, cohesive, and domain-focused. Root-level files are reserved for global configuration, documentation, or build/deployment manifests.
+1. **Explore:** inspect the relevant tree, contracts, tests, and history. For codebase questions, query Graphify first as described below.
+2. **Plan:** before editing, present a concrete plan and wait for explicit implementation approval unless the user already granted it.
+3. **Implement:** make the smallest coherent change. Add or update tests before or with behavioral code.
+4. **Verify:** run focused checks first, then every required full check. Review the diff and observable behavior.
+5. **Commit:** publish one coherent task after verification using the Git workflow below.
 
-## 2. Build, Test, and Development Commands
+- Resolve risky ambiguity by asking the user directly; never write clarification questions into tracked files.
+- Troubleshoot from a stated hypothesis and interpret each result. Do not repeat the same failed approach; after three equivalent blockers, report the evidence and required external action.
+- Never weaken, skip, or delete tests to obtain a passing result. Distinguish regressions from documented pre-existing or environmental failures.
 
-Local setup:
+## Project Map
 
-```bash
-python -m venv .venv
-. .venv/bin/activate
-pip install -r requirements-dev.txt
-pre-commit install
-npm install
-python src/manage.py migrate
-python src/manage.py bootstrap_roles
-python src/manage.py createsuperuser
-python src/manage.py runserver
-```
+- `src/config/`: Django settings, middleware, and root routing.
+- `src/billing/`: domain app. Keep views thin; put shared calculations and workflows in services.
+- `src/billing/importers.py` and `exporters.py`: validated file boundaries and generated reports.
+- `src/templates/` and `src/static/`: server-rendered UI and assets.
+- `tests/`: pytest tests, factories, and Playwright E2E coverage.
+- `scripts/`: canonical local setup, test, and operational helpers.
 
-Dependency management: the project currently uses `requirements.txt` and `requirements-dev.txt`. Prefer migrating to `uv` or Poetry with a deterministic lock file before adding larger dependency sets.
+## Commands
 
-Docker setup:
+Run commands from the repository root. Use the existing `.venv` and `package-lock.json`; do not migrate package managers unless requested.
 
-```bash
-cp .env.example .env
-docker compose up --build
-```
+| Purpose | Command |
+| --- | --- |
+| Django check | `.venv/bin/python src/manage.py check` |
+| Focused Python test | `.venv/bin/python -m pytest tests/test_<area>.py` |
+| Python suite | `.venv/bin/python -m pytest` |
+| Lint and format check | `.venv/bin/python -m ruff check .` and `.venv/bin/python -m ruff format --check .` |
+| Type check | `.venv/bin/python -m mypy src` |
+| Browser suite | `npm run test:e2e` |
+| Full local verification | `npm run test:local` followed by `.venv/bin/python -m mypy src` |
 
-Security warning: never commit `.env` files or real secrets. Keep only safe placeholders in `.env.example`. Secret scanning is configured through pre-commit and should also run in CI.
+- Playwright needs access to browser binaries outside the workspace sandbox; request the required sandbox escalation for `npm run test:e2e`.
+- Tests must not use external networks, real APIs, or real email delivery. Mock only I/O boundaries and time; test domain logic directly.
+- Use `tests/factories.py` for reusable data and assert exact results and side effects, including a relevant failure or edge case.
 
-Tests and checks:
+## Engineering Rules
 
-```bash
-.venv/bin/python src/manage.py check
-.venv/bin/python -m pytest
-ruff check .
-ruff format --check .
-mypy src
-npm run test:e2e
-```
+- Prefer KISS, explicit names, typed contracts, guard clauses, and focused patches. Add abstractions only when they remove current complexity or duplication.
+- Refactor legacy code only when necessary to make the requested change safe; keep that refactor scoped and covered by characterization tests.
+- Document public APIs and non-obvious contracts with standard docstrings, including parameters, return values, and raised exceptions where applicable. Comments explain rationale, not syntax.
+- Make optional values explicit in type contracts. Management commands and data migrations must be idempotent.
+- Keep calculations as pure as practical and isolate file, email, API, and storage effects behind dedicated helpers.
+- Prevent N+1 queries with `select_related()` or `prefetch_related()` when iterating relations. Use `transaction.atomic()` for financial and settlement-altering writes.
+- Use the Django ORM and parameterized operations. Raw SQL requires explicit justification and focused tests.
 
-**Note for AI Agents:** When running `npm run test:e2e`, you MUST set `BypassSandbox: true` because Playwright needs to access globally installed browser binaries outside the workspace sandbox (e.g., in `~/Library/Caches`).
+## Security And Privacy
 
-Keep commands runnable from the repository root and document all required environment variables in `.env.example`.
+- Validate untrusted input at the form, importer, or API boundary for type, length, format, and allowed values.
+- Never commit or log secrets, passwords, PINs, payment details, imported personal data, or other PII. Do not use `print()` for diagnostics; use structured logging only where operationally useful, with correlation IDs on critical request paths.
+- Use environment variables or a secret manager for secrets and `secrets`, not `random`, for security-sensitive values.
+- Validate uploaded file content as well as extensions, sanitize filenames, and use Django storage or secure temporary directories to prevent traversal.
+- Verify a dependency's exact package name and current repository compatibility before proposing it. Ask before adding any undeclared third-party dependency.
+- Catch specific exceptions. A broad boundary exception must log safe diagnostic context and preserve the stack trace; never use `except Exception: pass`.
 
-## 3. Coding Style & Naming Conventions
+## Frontend
 
-Python formatting and linting are enforced by Ruff. Do not rely on manual formatting rules when tooling can enforce them.
+- Use semantic, accessible, mobile-first HTML. Every control needs an associated label or accessible name; actions use `<button>` rather than scripted placeholder links.
+- Keep templates presentational, reuse includes, avoid inline styles and jQuery, and prefer existing vanilla JavaScript, Flexbox, and Grid patterns.
+- Prefer native `<dialog>` workflows for in-context create/edit actions, with progressive enhancement. Confirm destructive or settlement-altering actions and report outcomes through Django messages.
+- Format currency and dates consistently with the configured locale.
+- Verify visible changes at desktop and mobile viewports, including overflow, focus behavior, and error states; include screenshots in the PR.
 
-Use type hints for all new Python functions and methods, especially services, import/export helpers, and settlement code.
+## Git And Pull Requests
 
-Naming:
+- After one completed user task with repository changes, automatically create a Conventional Commit, push the task branch, and create or update one pull request without asking again.
+- Stage only files changed for the current task. Never include pre-existing staged or unstaged changes. Do not push directly to `main`.
+- Before committing changes under `src/` or `tests/`, run `.venv/bin/python -m pytest` and `npm run test:e2e` plus all other relevant checks. Never commit known failing checks.
+- Any change under `src/` requires a `changelog/` entry. Use `<branch-name>.md` until a PR number exists, then rename it to `pr-<number>-<short-title>.md`.
+- If authentication, permissions, or remote state blocks publishing, keep the verified local commit intact and report the exact blocker; never bypass security controls.
 
-- `snake_case` for modules, functions, variables, and database fields.
-- `PascalCase` for classes, including Django models and forms.
-- `UPPER_SNAKE_CASE` for constants.
+## Graphify
 
-Templates and CSS use 2-space indentation. Keep templates presentation-focused; business logic belongs in services or model properties.
-
-## 4. Testing Guidelines
-
-Use `pytest` and `pytest-django`. Place tests in `tests/` and name them after the behavior under test, for example `test_settlements.py` or `test_importers.py`.
-
-Every new feature must include tests for the happy path and at least one relevant edge or failure case.
-
-Critical paths require strong test coverage:
-
-- settlement math and financial calculations
-- data imports and parsing validation
-- permission checks
-- data exports
-- kiosk booking flows
-- meal ordering and shift assignment flows
-
-## 5. Commit & Pull Request Guidelines
-
-Use Conventional Commits:
-
-- `feat: add invoice total calculation`
-- `fix(import): resolve participant CSV validation error`
-- `docs: update kiosk setup guide`
-- `chore: add pre-commit configuration`
-
-Pull requests should include a clear summary, rationale, test results, and linked issues when available. Include screenshots or sample output for visible UI changes, generated reports, or modified exports. CI must pass before review. **For features, major refactorings, and relevant bugfixes, a changelog entry MUST be created in the `changelog/` directory following the format `pr-<number>-<short-title>.md`.**
-
-**CRITICAL AGENT WORKFLOW**: Every time a logical sub-task or milestone is completed, you MUST automatically run the git workflow: stage all changes, create a descriptive commit, push the branch, and create a Pull Request via GitHub CLI, without asking for permission first. **Before committing ANY code changes, you MUST run the test suite (`.venv/bin/python -m pytest` and `npm run test:e2e`) to ensure nothing is broken. Do not commit failing tests.**
-
-## 6. AI & Agent-Specific Instructions
-
-Always read and process `TODO.md` before initiating work. Treat it as primary user input and clear implemented items once completed.
-
-Before editing, inspect the current project tree. Keep changes narrowly scoped to the requested task. Do not perform unrelated restructuring.
-
-Update this guideline document whenever build tools, testing frameworks, or conventions change.
-
-## 7. Django ORM & Performance Guidelines
-
-AI agents must prioritize database performance and efficient ORM usage.
-
-- Prevent N+1 queries: use `select_related()` for `ForeignKey` and `OneToOneField` relationships when queried data will be iterated in business logic or templates.
-- Use `prefetch_related()` for `ManyToManyField` and reverse `ForeignKey` relationships when iterating related collections.
-- Wrap critical financial operations, such as payments, settlements, kiosk bookings, and settlement persistence, in `transaction.atomic()` to preserve data integrity.
-- Avoid raw SQL. Use the Django ORM natively. Only use `.raw()` or `connection.cursor()` if explicitly requested and heavily documented.
-
-## 8. Security & Data Privacy
-
-Billing data is sensitive. Treat participant details, payment details, and imported files accordingly.
-
-- Never log personally identifiable information, payment details, raw passwords, PINs, or secrets.
-- Do not use `print()` for diagnostics. Use Python's standard `logging` module.
-- Do not use `except Exception: pass`. Catch specific exceptions such as `ValidationError` or `ObjectDoesNotExist`. If a broad top-level exception is unavoidable, log the stack trace immediately.
-- Never trust user input or imported CSV/XLSX contents. Validate incoming data at the form, importer, or service layer before model instantiation.
-
-## 9. Strict AI Behavior Constraints
-
-- No hallucinated dependencies: do not import or use third-party libraries that are not already present in `requirements.txt`, `requirements-dev.txt`, or `pyproject.toml` without explicitly asking for permission first.
-- Idempotency: Django management commands and data migration scripts must be safe to run multiple times without duplicating data or crashing.
-- Ambiguity resolution: if a requirement in `TODO.md` is ambiguous, incomplete, or conflicts with the existing architecture, write a clarifying question as a comment at the top of `TODO.md` and stop execution.
-- Refactoring boundaries: only modify files directly related to the current task. Do not perform drive-by refactorings of unrelated modules unless explicitly instructed.
-
-## 10. Side Effects & Pure Functions
-
-- Keep business logic in `services.py` as pure as practical. Isolate side effects, such as sending emails, calling external APIs, generating PDFs, or writing files, into dedicated helper functions or adapters.
-- For CSV/PDF/XLSX exports, use robust temporary directories through `tempfile` or Django's `default_storage` API. Do not write generated files to hardcoded relative paths.
-
-## 11. Advanced Testing & Mocking
-
-- Automated tests must never hit external network resources, real APIs, or send real emails.
-- Use `unittest.mock` or `pytest-mock` to patch external services, file system operations, and time-sensitive behavior.
-- When generating larger reusable test data, prefer `factory_boy` factories over scattered ORM `.create()` calls. If `factory_boy` is not yet installed, ask before adding it.
-
-## 12. Security: Cryptography & File Handling
-
-- Never use Python's standard `random` module for tokens, passwords, payment references, PINs, or any security-sensitive strings. Use `secrets`.
-- For CSV/XLSX imports through a web interface, do not trust file extensions. Validate file content and type before processing. If MIME validation requires a new package such as `python-magic`, ask before adding the dependency.
-- Protect file handling against directory traversal by using `os.path.basename()`, Django's upload sanitization, or storage APIs.
-
-## 13. Context & Code Documentation
-
-- Explain why, not what. Comments should document business rationale, edge cases, or workarounds rather than narrating obvious code.
-- Use `Optional[...]` or `| None` whenever a function can accept or return `None`. Strict typing should make `None` edge cases explicit.
-
-## 14. UI/UX Design & Frontend Best Practices
-
-AI agents must follow modern web standards for server-rendered Django templates.
-
-- Use semantic HTML and accessibility-friendly structure. Prefer elements such as `nav`, `main`, `section`, `article`, and `dialog` over generic `div` or `span` where semantics exist.
-- Use `<button type="button">` or `<button type="submit">` for actions. Do not use `<a href="#">` with JavaScript handlers.
-- Ensure every form input has an associated `label`.
-- Follow a mobile-first approach. Tables, grids, and forms must remain functional on small screens.
-- Use CSS Flexbox and CSS Grid for layout. Avoid inline styles; use CSS classes.
-- Do not use jQuery. Use modern vanilla JavaScript, `fetch()`, and native DOM APIs.
-- If dynamic behavior is needed, prefer lightweight declarative tools suitable for Django, such as HTMX or Alpine.js, over heavy SPA frameworks unless explicitly requested.
-- Keep templates DRY with inheritance and includes. Reuse UI fragments for repeated form fields, tables, buttons, and panels.
-- Keep templates presentation-focused. Move complex formatting logic to services, model properties, or custom template filters.
-- Destructive or settlement-altering actions must include a clear confirmation step.
-- Use Django's `messages` framework for success, error, and warning feedback after form submissions.
-- Format currency and dates consistently according to the project's locale conventions.
-- Popups/Modals Preference: For workflows that require creating/editing data within an overview or management page (e.g. managing prices), prioritize using native HTML5 `<dialog>` elements (popups) with clean progressive enhancement fallbacks instead of redirecting the user away. Keep the user in the context of the page they are working on.
-
-## graphify
-
-This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
-
-When the user types `/graphify`, invoke the `skill` tool with `skill: "graphify"` before doing anything else.
-
-Rules:
-- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
-- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
-- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
-- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+- When the user types `/graphify`, invoke the Graphify skill before doing anything else.
+- When `graphify-out/graph.json` exists, begin codebase questions with `graphify query "<question>"`; use `graphify path` or `graphify explain` for focused relationships.
+- Use `graphify-out/wiki/index.md` for broad navigation. Read `GRAPH_REPORT.md` only when focused queries are insufficient.
+- Dirty generated graph files are expected and do not invalidate queries. After modifying source code, run `graphify update .`; do not stage unrelated generated output.
