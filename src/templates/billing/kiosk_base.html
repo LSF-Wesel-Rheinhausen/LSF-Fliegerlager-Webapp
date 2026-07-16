@@ -6,7 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Kiosk{% endblock %}</title>
     <link rel="icon" type="image/jpeg" href="{% static 'billing/logo.jpg' %}">
-    <link rel="stylesheet" href="{% static 'billing/app.css' %}?v=4">
+    <script src="{% static 'billing/theme.js' %}?v=1"></script>
+    <link rel="stylesheet" href="{% static 'billing/app.css' %}?v=5">
   </head>
   <body class="kiosk-shell">
     <header class="topbar kiosk-topbar">
@@ -30,6 +31,7 @@
         </a>
       </div>
       <div class="kiosk-header-actions">
+        {% include "includes/theme_toggle.html" %}
         {% if kiosk_autologout %}
           <div
             class="kiosk-timer"

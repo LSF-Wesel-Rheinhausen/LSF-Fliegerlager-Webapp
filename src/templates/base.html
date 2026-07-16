@@ -6,7 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Fliegerlager-Abrechnung{% endblock %}</title>
     <link rel="icon" type="image/jpeg" href="{% static 'billing/logo.jpg' %}">
-    <link rel="stylesheet" href="{% static 'billing/app.css' %}?v=4">
+    <script src="{% static 'billing/theme.js' %}?v=1"></script>
+    <link rel="stylesheet" href="{% static 'billing/app.css' %}?v=5">
   </head>
   <body>
     <header class="topbar">
@@ -21,7 +22,8 @@
           <span class="status-badge" style="margin: 0; background: var(--accent-soft); color: var(--accent-dark); border-color: rgba(0,92,169,0.2);">{{ participant.camp.name }} {{ participant.camp.year }}</span>
         {% endif %}
       </div>
-      <nav>
+      <nav aria-label="Kopfzeile">
+        {% include "includes/theme_toggle.html" %}
         {% if user.is_authenticated %}
           <a class="button button-secondary nav-link" href="{% url 'admin-guide' %}">Hilfe</a>
           {% if user|can_manage_users %}

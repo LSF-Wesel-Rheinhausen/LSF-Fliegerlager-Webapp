@@ -306,6 +306,29 @@ test("Kiosk flow: login, pin setup, drink and meal booking", async ({ page }) =>
   await expect(page).toHaveURL(/.*\/kiosk\/login\//);
 });
 
+test("Theme switch persists across kiosk and admin layouts", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.goto("/kiosk/login/");
+
+  const themeToggle = page.locator("[data-theme-toggle]");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(page.getByLabel("Teilnehmer")).toHaveValue("");
+  await expect(page.getByLabel("Teilnehmer").locator("option").first()).toHaveText("Bitte Teilnehmer auswählen");
+  await expect(themeToggle).toHaveAttribute("role", "switch");
+  await expect(themeToggle).toHaveAttribute("aria-checked", "false");
+
+  await themeToggle.click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(themeToggle).toHaveAttribute("aria-checked", "true");
+
+  await page.goto("/login/");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(page.locator("[data-theme-toggle]")).toHaveAttribute("aria-checked", "true");
+
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+});
+
 test("Import flow: upload CSV and confirm", async ({ page }) => {
   await setupFirstAdmin(page);
   const campName = await createCamp(page, "Sommerlager Import");

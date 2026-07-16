@@ -687,7 +687,10 @@ class KioskLoginForm(forms.Form):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.login_targets = self._login_targets()
-        self.fields["participant"].choices = [(target["token"], target["label"]) for target in self.login_targets]
+        self.fields["participant"].choices = [
+            ("", "Bitte Teilnehmer auswählen"),
+            *((target["token"], target["label"]) for target in self.login_targets),
+        ]
         self.missing_pin_participant = None
         self.missing_pin_family_member = None
 
@@ -721,7 +724,12 @@ class KioskLoginForm(forms.Form):
             }
             for family_member in family_members
         )
-        return sorted(targets, key=lambda target: target["label"])
+
+        def name_sort_key(target: dict[str, Any]) -> tuple[str, str, str]:
+            person = target["family_member"] or target["participant"]
+            return (person.last_name.casefold(), person.first_name.casefold(), target["token"])
+
+        return sorted(targets, key=name_sort_key)
 
     def _target_for_token(self, token: str) -> dict[str, Any] | None:
         return next((target for target in self.login_targets if target["token"] == token), None)
