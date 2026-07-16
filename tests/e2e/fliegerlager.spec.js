@@ -329,6 +329,15 @@ test("Theme switch persists across kiosk and admin layouts", async ({ page }) =>
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 });
 
+test("Theme follows the system preference without a saved selection", async ({ page, browserName }) => {
+  test.skip(browserName === "firefox", "Firefox does not support Playwright color-scheme emulation.");
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.goto("/kiosk/login/");
+
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(page.locator("[data-theme-toggle]")).toHaveAttribute("aria-checked", "true");
+});
+
 test("Import flow: upload CSV and confirm", async ({ page }) => {
   await setupFirstAdmin(page);
   const campName = await createCamp(page, "Sommerlager Import");

@@ -35,6 +35,16 @@ def _freeze_meal_lock_time(monkeypatch, fixed_now):
 
 
 @pytest.mark.django_db
+def test_kiosk_login_rejects_empty_participant_placeholder(client):
+    response = client.post(reverse("kiosk-login"), {"participant": "", "pin": "1234"})
+
+    assert response.status_code == 200
+    assert "participant" in response.context["form"].errors
+    assert KIOSK_PARTICIPANT_SESSION_KEY not in client.session
+    assert KIOSK_PIN_SETUP_SESSION_KEY not in client.session
+
+
+@pytest.mark.django_db
 def test_kiosk_login_redirects_to_pin_setup_when_pin_is_missing(client):
     participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
 
