@@ -58,6 +58,10 @@ const test = base.extend({
       DJANGO_ALLOWED_HOSTS: '127.0.0.1,localhost',
       DJANGO_DEBUG: '1',
       DJANGO_SECRET_KEY: 'test_sk_playwright_local_only',
+      PASSKEY_ENABLED: '1',
+      PASSKEY_RP_ID: '127.0.0.1',
+      PASSKEY_RP_NAME: 'Fliegerlager E2E',
+      PASSKEY_ORIGIN: baseURL,
     };
 
     const serverProcess = spawn('bash', ['scripts/start-e2e.sh'], { env, cwd: process.cwd() });

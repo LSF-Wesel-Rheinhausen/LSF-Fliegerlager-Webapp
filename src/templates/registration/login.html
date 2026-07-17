@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Anmelden{% endblock %}
 {% block content %}
   <section class="panel narrow">
@@ -12,5 +13,20 @@
         <button type="submit" class="button">Anmelden</button>
       </div>
     </form>
+    {% if passkey_enabled %}
+      <div class="auth-separator" aria-hidden="true"><span>oder</span></div>
+      <div class="stack">
+        <button
+          type="button"
+          class="button button-secondary"
+          data-passkey-login
+          data-options-url="{% url 'passkey-authentication-options' %}"
+          data-verify-url="{% url 'passkey-authentication-verify' %}"
+          data-next="{{ next|default:'' }}"
+        >Mit Passkey anmelden</button>
+        <p class="message error" role="alert" data-passkey-status hidden></p>
+      </div>
+      <script src="{% static 'billing/passkeys.js' %}" defer></script>
+    {% endif %}
   </section>
 {% endblock %}

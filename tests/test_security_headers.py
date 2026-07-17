@@ -1,3 +1,5 @@
+import re
+
 import pytest
 from django.conf import settings
 from django.http import HttpResponse
@@ -6,6 +8,7 @@ from django.urls import reverse
 from whitenoise.middleware import WhiteNoiseMiddleware
 
 from config.middleware import SecurityHeadersMiddleware
+from tests.factories import UserFactory
 
 
 @pytest.mark.django_db
@@ -26,6 +29,17 @@ def test_common_security_headers_are_set(client):
     assert response["Cross-Origin-Resource-Policy"] == "same-origin"
     assert response["Permissions-Policy"] == "camera=(), geolocation=(), microphone=(), payment=()"
     assert response["X-Content-Type-Options"] == "nosniff"
+
+
+@pytest.mark.django_db
+def test_base_template_inline_script_uses_the_response_csp_nonce(client):
+    UserFactory()
+
+    response = client.get(reverse("login"))
+    nonce_match = re.search(r"script-src 'self' 'nonce-([^']+)'", response["Content-Security-Policy"])
+
+    assert nonce_match is not None
+    assert f'<script nonce="{nonce_match.group(1)}">'.encode() in response.content
 
 
 def test_security_headers_middleware_wraps_static_file_middleware():

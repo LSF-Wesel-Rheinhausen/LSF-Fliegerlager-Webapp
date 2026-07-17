@@ -29,6 +29,35 @@ class UserProfile(TimeStampedModel):
         return f"Profil {self.user}"
 
 
+class PasskeyCredential(TimeStampedModel):
+    """Store a verified WebAuthn credential for an application user."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="passkey_credentials",
+    )
+    name = models.CharField(max_length=120)
+    credential_id = models.BinaryField(unique=True)
+    public_key = models.BinaryField()
+    sign_count = models.PositiveBigIntegerField(default=0)
+    transports = models.JSONField(default=list, blank=True)
+    device_type = models.CharField(max_length=32, blank=True)
+    backed_up = models.BooleanField(default=False)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["name", "created_at"]
+
+    @property
+    def user_handle(self) -> bytes:
+        """Return the stable, non-PII WebAuthn user handle for this account."""
+        return self.user_id.to_bytes(8, byteorder="big", signed=False)
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.user})"
+
+
 class Camp(TimeStampedModel):
     name = models.CharField(max_length=160)
     year = models.PositiveIntegerField()

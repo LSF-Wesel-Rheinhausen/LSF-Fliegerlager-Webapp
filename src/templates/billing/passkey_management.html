@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Passkeys{% endblock %}
+{% block content %}
+  <section class="panel narrow passkey-management">
+    <h1>Passkeys</h1>
+    <form
+      class="stack"
+      data-passkey-register
+      data-options-url="{% url 'passkey-registration-options' %}"
+      data-verify-url="{% url 'passkey-registration-verify' %}"
+    >
+      {% csrf_token %}
+      <label for="passkey-name">Bezeichnung</label>
+      <input id="passkey-name" name="passkey_name" maxlength="120" required autocomplete="off">
+      <div class="form-actions">
+        <button type="submit" class="button">Passkey hinzufügen</button>
+      </div>
+      <p class="message error" role="alert" data-passkey-status hidden></p>
+    </form>
+    <ul class="passkey-list" aria-label="Registrierte Passkeys">
+      {% for credential in passkey_credentials %}
+        <li>
+          <div>
+            <strong>{{ credential.name }}</strong>
+            <span class="hint">
+              Erstellt {{ credential.created_at|date:"d.m.Y" }}
+              {% if credential.last_used_at %} · Zuletzt verwendet {{ credential.last_used_at|date:"d.m.Y H:i" }}{% endif %}
+            </span>
+          </div>
+          <form
+            method="post"
+            action="{% url 'passkey-delete' credential.pk %}"
+            data-confirm="Diesen Passkey wirklich entfernen?"
+          >
+            {% csrf_token %}
+            <button type="submit" class="button button-secondary">Entfernen</button>
+          </form>
+        </li>
+      {% empty %}
+        <li class="hint">Keine Passkeys registriert.</li>
+      {% endfor %}
+    </ul>
+  </section>
+  <script src="{% static 'billing/passkeys.js' %}" defer></script>
+{% endblock %}

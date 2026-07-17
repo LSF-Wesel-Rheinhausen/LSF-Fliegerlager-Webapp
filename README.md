@@ -15,7 +15,7 @@ Web-App zur Verwaltung und Abrechnung eines Vereins-Fliegerlagers. Die Anwendung
 ## Funktionen in V1
 
 - Lager/Jahre mit Preisen und Abrechnungsregeln verwalten
-- Vereinsnutzer mit E-Mail-/Passwort-Login, Nutzerverwaltung, Passwort-Reset durch Admins und Rollen `Admin` und `Bearbeiter`
+- Vereinsnutzer mit E-Mail-/Passwort-Login, optionalen Passkeys, Authelia-SSO, Nutzerverwaltung, Passwort-Reset durch Admins und Rollen `Admin` und `Bearbeiter`
 - Teilnehmer, Zahlungen, Kostenpositionen und vorgestreckte Beträge pflegen
 - Teilnehmer bearbeiten, ohne Datenverlust archivieren und wiederherstellen; im Kiosk ist ausschließlich das aktive Lager sichtbar
 - Menschenlesbare Buchungsnummern im Format `B#00001`
@@ -132,10 +132,15 @@ Die wichtigsten Umgebungsvariablen stehen mit sicheren Platzhaltern in [`.env.ex
 - `DJANGO_HTTPS`: aktiviert in Produktion HTTPS-Redirect sowie sichere Session- und CSRF-Cookies.
 - `AUTHELIA_SSO_ENABLED`: aktiviert optional Trusted-Header-SSO fuer vorhandene aktive Konten.
 - `AUTHELIA_SSO_EMAIL_HEADER`: vom kontrollierten Proxy neu gesetzter E-Mail-Header, standardmaessig `Remote-Email`.
+- `PASSKEY_ENABLED`: aktiviert die Passkey-Registrierung und den benutzernamenlosen Verwaltungslogin.
+- `PASSKEY_RP_ID`: öffentlicher Hostname ohne Schema und Port, beispielsweise `app.example.org`.
+- `PASSKEY_RP_NAME`: im Authenticator angezeigter Name der Anwendung.
+- `PASSKEY_ORIGIN`: exakter öffentlicher Origin; außerhalb von `localhost` ist HTTPS Pflicht.
 
 Bei aktiviertem Authelia-SSO darf die App nicht direkt erreichbar sein. Der Reverse Proxy muss clientseitige
 Identitaetsheader entfernen und `Remote-Email` ausschliesslich aus Authelias Forward-Auth-Antwort setzen. Django legt
 weder Konten noch Rollen aus Authelia an; Details stehen in [`deploy/README.md`](deploy/README.md).
+Passkey-Betrieb und Recovery sind in [`docs/passkeys.md`](docs/passkeys.md) beschrieben.
 
 Pflichtvariablen für Container-Updates:
 

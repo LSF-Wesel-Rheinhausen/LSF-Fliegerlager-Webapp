@@ -3,7 +3,8 @@
 Servergerenderte Django-Templates.
 
 - `base.html`: Gemeinsames Layout mit Topbar, Vereinslogo, Nachrichten und Inhaltsbereich.
-- `registration/login.html`: Login-Seite mit deutschem Formular.
+- `registration/login.html`: Login-Seite mit Passwort- und optionalem Passkey-Einstieg.
+- `billing/passkey_management.html`: Selbstverwaltung benannter Passkeys für angemeldete Verwaltungsnutzer.
 - `billing/setup.html`: Ersteinrichtung fuer den ersten Admin-Benutzer.
 - `billing/user_list.html`: Nutzerverwaltung mit Rollen, Status, Bearbeitung und Passwort-Reset.
 - `billing/camp_list.html`: Lageruebersicht.
