@@ -1,0 +1,1277 @@
+{
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/.githooks/pre-commit": {
+    "mtime": 1780315505.3207211,
+    "ast_hash": "f1f4db5bd5ba4962734a469828d8819d",
+    "semantic_hash": "f1f4db5bd5ba4962734a469828d8819d"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/package.json": {
+    "mtime": 1783078531.0361297,
+    "ast_hash": "c31039a5fe9a02375ff1f8696e1797ab",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/playwright.config.js": {
+    "mtime": 1781718540.6181614,
+    "ast_hash": "f68cbb9306d1df1f082857bc535a57b9",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/scripts/codex-cleanup.sh": {
+    "mtime": 1780315505.3235679,
+    "ast_hash": "34140e55342bbd252a4ec1277d996914",
+    "semantic_hash": "34140e55342bbd252a4ec1277d996914"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/scripts/codex-setup.sh": {
+    "mtime": 1780315505.3236518,
+    "ast_hash": "568264a8ff7901aa5becd7913012b55f",
+    "semantic_hash": "568264a8ff7901aa5becd7913012b55f"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/scripts/codex-start.sh": {
+    "mtime": 1780328514.5483952,
+    "ast_hash": "b0b65aa7297e1662d4800ccd264d56f4",
+    "semantic_hash": "b0b65aa7297e1662d4800ccd264d56f4"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/scripts/start-e2e.sh": {
+    "mtime": 1781718540.6184535,
+    "ast_hash": "bd5248384ff5b8581d6de5d65b718994",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/scripts/test-local.sh": {
+    "mtime": 1780315505.3239262,
+    "ast_hash": "f0af27ed74e7fd9032499d3141f91b7b",
+    "semantic_hash": "f0af27ed74e7fd9032499d3141f91b7b"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/__init__.py": {
+    "mtime": 1780315505.3241792,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/admin.py": {
+    "mtime": 1783541208.8481233,
+    "ast_hash": "f13932e9abca34f4c4170ab80f2366bd",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/apps.py": {
+    "mtime": 1780315505.3243737,
+    "ast_hash": "32f9c5e3b6883a8ab772de34058fed2c",
+    "semantic_hash": "32f9c5e3b6883a8ab772de34058fed2c"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/auth.py": {
+    "mtime": 1784206874.248889,
+    "ast_hash": "dc420dcf928ea6d20003d36be7f27261",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/exporters.py": {
+    "mtime": 1783512856.2520273,
+    "ast_hash": "88a530c87eac851773bf235f262b150c",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/forms.py": {
+    "mtime": 1784272711.8018243,
+    "ast_hash": "393833547272e293dc319edad998ef82",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/importers.py": {
+    "mtime": 1783078531.0389447,
+    "ast_hash": "acb52505a7148a8b6215549460aebdb5",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/management/__init__.py": {
+    "mtime": 1780315505.3248932,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/management/commands/__init__.py": {
+    "mtime": 1780315505.3250098,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/management/commands/bootstrap_roles.py": {
+    "mtime": 1781685698.4742613,
+    "ast_hash": "1e9e8bdfffdcc687a2cc911a10716c46",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0001_initial.py": {
+    "mtime": 1780315505.3252945,
+    "ast_hash": "888d5906d1c7d4786e71d982ebe348db",
+    "semantic_hash": "888d5906d1c7d4786e71d982ebe348db"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0002_camp_foerdersatz_charge_foerderfaehig_and_more.py": {
+    "mtime": 1780315505.3253932,
+    "ast_hash": "b35d3e4735166a5e98edad6e0aa02480",
+    "semantic_hash": "b35d3e4735166a5e98edad6e0aa02480"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0003_repair_pricerule_camp_flat_fields.py": {
+    "mtime": 1780315505.325472,
+    "ast_hash": "785b110f65f9544042b25e2eabac0002",
+    "semantic_hash": "785b110f65f9544042b25e2eabac0002"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/__init__.py": {
+    "mtime": 1780315505.3255103,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/models.py": {
+    "mtime": 1783541208.849435,
+    "ast_hash": "ee876be60c47582cca5b19189baeb191",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/permissions.py": {
+    "mtime": 1781685698.4780898,
+    "ast_hash": "f8dd3b7520c6e99754833ab658150fad",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/roles.py": {
+    "mtime": 1781685698.4783618,
+    "ast_hash": "6c9b46ad0029baef6c3ccf517a5dded8",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/services.py": {
+    "mtime": 1783512856.2524717,
+    "ast_hash": "15079afd26ccbc8955952b51ecacb727",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/signals.py": {
+    "mtime": 1783541208.8497589,
+    "ast_hash": "d4c03515e2dec7361c361e1c6106d021",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/templatetags/__init__.py": {
+    "mtime": 1780315505.326062,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/templatetags/billing_format.py": {
+    "mtime": 1781718540.620206,
+    "ast_hash": "8fc0f1c6b0866521326992c7a5689c4a",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/urls.py": {
+    "mtime": 1783499764.54512,
+    "ast_hash": "54ff63dad84b5dc1d5b1f698a637ae48",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/views.py": {
+    "mtime": 1784272711.9366014,
+    "ast_hash": "1d26404fff805e546cb4d166251371b2",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/config/__init__.py": {
+    "mtime": 1780315505.3265507,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/config/asgi.py": {
+    "mtime": 1780315505.3266363,
+    "ast_hash": "70550369a38f6707300e206b7520011b",
+    "semantic_hash": "70550369a38f6707300e206b7520011b"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/config/settings.py": {
+    "mtime": 1784206874.2520385,
+    "ast_hash": "bfa12166868a588cfc93f84133555ee1",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/config/urls.py": {
+    "mtime": 1783066915.7450764,
+    "ast_hash": "e5318883f465f1769c97ebc1ddf7ee4d",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/config/wsgi.py": {
+    "mtime": 1780315505.3268614,
+    "ast_hash": "9680b2dae081306faf4ea0aa8776fd67",
+    "semantic_hash": "9680b2dae081306faf4ea0aa8776fd67"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/manage.py": {
+    "mtime": 1780315505.3269303,
+    "ast_hash": "727537ceb1286c8f2e8cfa3b79f28c03",
+    "semantic_hash": "727537ceb1286c8f2e8cfa3b79f28c03"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/e2e/fliegerlager.spec.js": {
+    "mtime": 1784272746.1729105,
+    "ast_hash": "714e1f377912a59e2a74bfc5fdefe7d9",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/factories.py": {
+    "mtime": 1780315505.329328,
+    "ast_hash": "3620358ca86cf991c832ac45b832bd73",
+    "semantic_hash": "3620358ca86cf991c832ac45b832bd73"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_auth.py": {
+    "mtime": 1781685698.4944487,
+    "ast_hash": "1c962c0d06d815d4d89b819aacddc202",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_importers.py": {
+    "mtime": 1783078531.0444412,
+    "ast_hash": "02183a3a3d4e334135ff3b8becb1c290",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_kiosk.py": {
+    "mtime": 1784272701.2774777,
+    "ast_hash": "d20be6fd29917b4ce69de4bbf6c2152d",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_permissions.py": {
+    "mtime": 1781685698.4965107,
+    "ast_hash": "eaa064d15c6f9b3a9de76687b8823c8c",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_price_rules.py": {
+    "mtime": 1781685698.4967823,
+    "ast_hash": "0931ca4baf6f5973db5df344173f55d9",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_settlements.py": {
+    "mtime": 1783512856.2536566,
+    "ast_hash": "378bc44def324b5cbbff9c7230e4462c",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_setup_flow.py": {
+    "mtime": 1783541208.8553228,
+    "ast_hash": "5178f37924d4c05501eb79277e716f38",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/.github/workflows/README.md": {
+    "mtime": 1781685698.3374968,
+    "ast_hash": "d78b1f278bf2338132e1e53f03561e32",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/.github/workflows/ci.yml": {
+    "mtime": 1783078531.0317535,
+    "ast_hash": "41f7f6c497d78829fef340fa67fdc0c2",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/.pre-commit-config.yaml": {
+    "mtime": 1781685698.3386996,
+    "ast_hash": "9e05d542156ea6433af1a3fc7919afe7",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/AGENTS.md": {
+    "mtime": 1784273121.473436,
+    "ast_hash": "f4a68a0bc54a4d72c340760a9ba0fc28",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/CONTRIBUTING.md": {
+    "mtime": 1784206874.2428784,
+    "ast_hash": "040330aeb91b7716cc0f18b37901329b",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/FILES.md": {
+    "mtime": 1784205723.7749977,
+    "ast_hash": "7a56e73ce12e59443ae26619d2e98ea3",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/README.md": {
+    "mtime": 1784206874.243417,
+    "ast_hash": "37409709f427f0a6511f69feafea480a",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/TODO.md": {
+    "mtime": 1784272952.5267012,
+    "ast_hash": "8ce853de5ba8db118a3d84818332055d",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/docker-compose.yml": {
+    "mtime": 1783499764.539964,
+    "ast_hash": "07b2aa355360ac99631b2d60e29c5f99",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/docs/README.md": {
+    "mtime": 1783499764.540303,
+    "ast_hash": "f806054604d1a709faa23a35ea2e6c35",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/docs/architecture.html": {
+    "mtime": 1781685698.3450024,
+    "ast_hash": "08e732c26709f615801de1e26ba229c1",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/docs/development.html": {
+    "mtime": 1781685698.345253,
+    "ast_hash": "e77fb7b173198df6ca09d21ebd67f277",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/docs/index.html": {
+    "mtime": 1781685698.3462915,
+    "ast_hash": "d5a2d5e00a2cc57b3f22b322400d3698",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/docs/operations.html": {
+    "mtime": 1784206874.2484658,
+    "ast_hash": "279f3760114feb2fab25cec96d0084f0",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/requirements-dev.txt": {
+    "mtime": 1783078531.0365164,
+    "ast_hash": "bac4740e5a011e935ea08b74eedfb18e",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/requirements.txt": {
+    "mtime": 1783078531.037082,
+    "ast_hash": "744d5a3f1d579bd425f688974161971d",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/scripts/README.md": {
+    "mtime": 1781685698.4706848,
+    "ast_hash": "534ba1b21c939c11cb4435381307ad7a",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/README.md": {
+    "mtime": 1781685698.4728875,
+    "ast_hash": "d35dfb34e03d04314f1fd90c3ad18684",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/config/README.md": {
+    "mtime": 1784206874.2509015,
+    "ast_hash": "c0e041d696a60b4de3655868a7912892",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/static/billing/README.md": {
+    "mtime": 1781685698.4796717,
+    "ast_hash": "b92a96fb0a452933c6670741b2b88957",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/README.md": {
+    "mtime": 1781685698.4893775,
+    "ast_hash": "a8e0a01bfe223f92b7127d2223e3cd51",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/base.html": {
+    "mtime": 1784207111.129981,
+    "ast_hash": "783befc90126513169cf88d345282205",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/camp_detail.html": {
+    "mtime": 1783541208.8513184,
+    "ast_hash": "7b241bdcbdf7987f3f511ad6ee08f79a",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/camp_list.html": {
+    "mtime": 1781685698.4900985,
+    "ast_hash": "0c782cf038698daf6075fb1c70b60b2f",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/form.html": {
+    "mtime": 1781685698.4903448,
+    "ast_hash": "4a18ba658b90d7da81a117639cef7890",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/import_preview.html": {
+    "mtime": 1781685698.4904504,
+    "ast_hash": "8f457c9f485daacd2dc3ab4d0cedbb70",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/kiosk_base.html": {
+    "mtime": 1784207111.2910862,
+    "ast_hash": "24621fd8cadd07dfa16b10d83afee3ae",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/kiosk_home.html": {
+    "mtime": 1784272712.0894878,
+    "ast_hash": "97c397bd9f5d027da9e577abebf50a55",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/kiosk_login.html": {
+    "mtime": 1781718540.6225479,
+    "ast_hash": "edcda37bade375c513b2076ad7aed980",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/kiosk_pin_setup.html": {
+    "mtime": 1781718540.6229217,
+    "ast_hash": "d3beccaec4d3df6b644f0ba7797c7c24",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/participant_detail.html": {
+    "mtime": 1783542481.4429443,
+    "ast_hash": "ed9873927f06db57aad14a75e566ca67",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/price_rule_table.html": {
+    "mtime": 1781718540.623772,
+    "ast_hash": "9a5d6830661ed393af396999a29a023e",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/price_rules_manage.html": {
+    "mtime": 1783541208.8523374,
+    "ast_hash": "cf4bbef7505d2cbdab7c8c70936ae298",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/setup.html": {
+    "mtime": 1780315505.3288186,
+    "ast_hash": "77241e7f0783f0b2df726eed85e14dfe",
+    "semantic_hash": "77241e7f0783f0b2df726eed85e14dfe"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/registration/login.html": {
+    "mtime": 1781685698.493336,
+    "ast_hash": "ca8898deb989215431048e0d136a6d17",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/README.md": {
+    "mtime": 1781685698.4939384,
+    "ast_hash": "e9e5833c04f11d9600895f4aee2a8b7c",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/e2e/README.md": {
+    "mtime": 1781685698.4940352,
+    "ast_hash": "f046e06cee4766daf6cf44433dd2676f",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/static/billing/logo.jpg": {
+    "mtime": 1780315505.3275836,
+    "ast_hash": "85b17405711a364fbcca8bdfb8e26142",
+    "semantic_hash": "85b17405711a364fbcca8bdfb8e26142"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_user_management.py": {
+    "mtime": 1781685698.497707,
+    "ast_hash": "912de3ea1d961b61440849d255eb4ef0",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/graphify-out/memory/query_20260601_133742_why_does_participant_connect_billing_forms_admin_t.md": {
+    "mtime": 1783727753.4923022,
+    "ast_hash": "6f6a9f3afb6ff32692ebaeeab7946846",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/user_list.html": {
+    "mtime": 1781685698.493035,
+    "ast_hash": "61d4720532d50dff40b4f9e3fb61f444",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0004_pricerule_applies_to_companions.py": {
+    "mtime": 1780328514.5494473,
+    "ast_hash": "82659b68199ce52fd050f2b26b6bffb7",
+    "semantic_hash": "82659b68199ce52fd050f2b26b6bffb7"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0005_pricerule_meal_date_pricerule_meal_type.py": {
+    "mtime": 1780328514.5498185,
+    "ast_hash": "753f19cb4921c930726008bd1f0a9c5d",
+    "semantic_hash": "753f19cb4921c930726008bd1f0a9c5d"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0006_alter_mealsignup_meal_alter_pricerule_meal_type.py": {
+    "mtime": 1780328514.550058,
+    "ast_hash": "fa121fa10d1072c9c4079e31fcd911cd",
+    "semantic_hash": "fa121fa10d1072c9c4079e31fcd911cd"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_exporters.py": {
+    "mtime": 1783512856.2532625,
+    "ast_hash": "28cf251135b351950daf582dda57443a",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_view_permissions.py": {
+    "mtime": 1783069021.5510385,
+    "ast_hash": "d2a18aa9cb49ac3b997c32a361c197d9",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0007_bookingauditlog.py": {
+    "mtime": 1780406122.980998,
+    "ast_hash": "9e5b9fc876cde058531070258b3461e1",
+    "semantic_hash": "9e5b9fc876cde058531070258b3461e1"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_booking_audit.py": {
+    "mtime": 1781685698.4948366,
+    "ast_hash": "c518da7635231a3fa455f39673f023b1",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/__init__.py": {
+    "mtime": 1780407306.731046,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/README.md": {
+    "mtime": 1781685698.3396463,
+    "ast_hash": "d6d8da2efc17f878bd25231e32548737",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/feature-auditable-booking-edit.md": {
+    "mtime": 1780406122.9800441,
+    "ast_hash": "837c7ab07974760e8eb4fc52c4538465",
+    "semantic_hash": "837c7ab07974760e8eb4fc52c4538465"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-12-modern-web-guidance.md": {
+    "mtime": 1780410014.9899533,
+    "ast_hash": "96038da5555679e5839d308e694b9113",
+    "semantic_hash": "96038da5555679e5839d308e694b9113"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-14-fix-e2e-script.md": {
+    "mtime": 1780410014.9901662,
+    "ast_hash": "0f2b31e2975ff754cb33e9aecd1cc39f",
+    "semantic_hash": "0f2b31e2975ff754cb33e9aecd1cc39f"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/.github/dependabot.yml": {
+    "mtime": 1780410014.9880981,
+    "ast_hash": "26aaf3a4823b0adf34e77a531353bf7e",
+    "semantic_hash": "26aaf3a4823b0adf34e77a531353bf7e"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/.github/workflows/changelog-check.yml": {
+    "mtime": 1783078531.0314503,
+    "ast_hash": "35e0b76f3360b64818e55b92325175e5",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/.github/workflows/docker.yml": {
+    "mtime": 1783541208.843578,
+    "ast_hash": "fa0f1f5588f06b441f97763e77a171c9",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/.github/workflows/pr-title.yml": {
+    "mtime": 1780410014.9885287,
+    "ast_hash": "1f1d49f737dc101f7aff7d0f986ea860",
+    "semantic_hash": "1f1d49f737dc101f7aff7d0f986ea860"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/.github/workflows/security.yml": {
+    "mtime": 1783078531.032233,
+    "ast_hash": "bbca76471d64f283e89313bdc0e461e5",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/docs-update-project-documentation.md": {
+    "mtime": 1780509469.8347068,
+    "ast_hash": "cf3234113c5b76f8ce18ba8a258c5383",
+    "semantic_hash": "cf3234113c5b76f8ce18ba8a258c5383"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-16-docker-ci.md": {
+    "mtime": 1780410014.990419,
+    "ast_hash": "cae65567ace3de732837f7c55698a2dd",
+    "semantic_hash": "cae65567ace3de732837f7c55698a2dd"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-29-remove-redundant-settlement-table.md": {
+    "mtime": 1780509469.8349366,
+    "ast_hash": "9e307ed18935248cf4277e8294c95919",
+    "semantic_hash": "9e307ed18935248cf4277e8294c95919"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-30-layout-adjustments.md": {
+    "mtime": 1780509469.8351524,
+    "ast_hash": "4e05a380f90c2257d266cbf34bd19ca7",
+    "semantic_hash": "4e05a380f90c2257d266cbf34bd19ca7"
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0008_preserve_deleted_booking_audit_logs.py": {
+    "mtime": 1780517985.6447198,
+    "ast_hash": "6cbd60d6b8818377493a6134a00e7e76",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/main.md": {
+    "mtime": 1780517985.643732,
+    "ast_hash": "7a69721605862e516d453fcdca3638d2",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0009_charge_soft_delete.py": {
+    "mtime": 1780573430.6856415,
+    "ast_hash": "770398614de4bd700e60c5b309b785f8",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0010_participantbookinglink_participantfamilymember_and_more.py": {
+    "mtime": 1780584229.3611357,
+    "ast_hash": "9b76f885e0e556901c987bbf775d704f",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/e2e/fixtures.js": {
+    "mtime": 1780584229.3633752,
+    "ast_hash": "890534328aae9b17bb039a4fc78699ee",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_forms.py": {
+    "mtime": 1784207002.7977955,
+    "ast_hash": "92eb65e71ee468de358f523ed32c0659",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-35-booking-references.md": {
+    "mtime": 1780573430.6823702,
+    "ast_hash": "45144ea0cd7b7d137948f7776ec13914",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-36-pytest-cov.md": {
+    "mtime": 1780573430.6828234,
+    "ast_hash": "284001d6c942b59a161d96b217e36f2f",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-36-test-coverage.md": {
+    "mtime": 1780573430.6830204,
+    "ast_hash": "7c4fcdcf638325386d4eecd7e3ed8c4b",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/main-kiosk-family-bookings.md": {
+    "mtime": 1780584229.3597515,
+    "ast_hash": "4e17c364b4ffd45bd7d2af3b8b66f332",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/fix-kiosk-drink-card-alignment.md": {
+    "mtime": 1781685698.3411446,
+    "ast_hash": "8be6611979a83be0686752147e254f77",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/config/views.py": {
+    "mtime": 1781685698.479566,
+    "ast_hash": "88f6cb6cf4d7840ab95fd1889ab4efd7",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_error_pages.py": {
+    "mtime": 1781685698.495039,
+    "ast_hash": "7c1d1fcfe033d76e14dd9e7db03225e7",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/fix-custom-404-page.md": {
+    "mtime": 1781685698.340874,
+    "ast_hash": "c296973f95ee5df7008552794725a994",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/404.html": {
+    "mtime": 1781685698.489235,
+    "ast_hash": "4a80953b903990c0702045acbeac80d5",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0011_camp_meal_booking_cutoff_time_mealsignup_charge_and_more.py": {
+    "mtime": 1781685698.4745333,
+    "ast_hash": "558963dcdfbaedd5a305f32981c89a65",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0012_mealorder.py": {
+    "mtime": 1781685698.4747941,
+    "ast_hash": "b53bb072943225bf8aa2572882468002",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_meal_overview.py": {
+    "mtime": 1783499764.5526028,
+    "ast_hash": "41a4be556ba945e330daaf9a28e78021",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/fix-catering-overview-dinner-only.md": {
+    "mtime": 1781685698.340535,
+    "ast_hash": "9e751afba2944c0fe71d5feb4a141adc",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/fix-kiosk-past-meal-lock.md": {
+    "mtime": 1781685698.341644,
+    "ast_hash": "e6e3afd5462f45d47480fb6d3b1e5efb",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/kiosk-lock-huebers-role.md": {
+    "mtime": 1781685698.341935,
+    "ast_hash": "d849d0c748550b67385661c5f447c451",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/meal-booking-calendar-cutoff.md": {
+    "mtime": 1781685698.3422143,
+    "ast_hash": "0fbfb259c150b3590415792d47370091",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/meal-order-status.md": {
+    "mtime": 1781685698.342486,
+    "ast_hash": "9475c6eba1e4800d97b095fa8355b223",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/camp_meal_overview.html": {
+    "mtime": 1783499764.548425,
+    "ast_hash": "582e4fbad434d15c2f18952e0981e40e",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/kiosk_meal_calendar_days.html": {
+    "mtime": 1783499764.549464,
+    "ast_hash": "ffe108547c25404900883df450b84678",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/fix-kiosk-leadership-contact.md": {
+    "mtime": 1781685698.3414164,
+    "ast_hash": "568a2d044a9f3167ff82448ce2babfdb",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0013_userprofile.py": {
+    "mtime": 1781685698.4752758,
+    "ast_hash": "42e32ca4eaeb2d453da46d7551a5d67b",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/feature-user-profile-phone.md": {
+    "mtime": 1781685698.340181,
+    "ast_hash": "f947ec508a13eee805268dd54ddefe12",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0013_remove_legacy_charge_cancellation_columns.py": {
+    "mtime": 1781685698.4750302,
+    "ast_hash": "98f4ac0be2f1d59f5b49dd62eaea6617",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0014_subsidy_rate_per_price_element.py": {
+    "mtime": 1781685698.4754696,
+    "ast_hash": "8f9c8068ee5906366ebd50a09d918660",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0015_merge_20260608_1855.py": {
+    "mtime": 1781685698.4757812,
+    "ast_hash": "989921fe3cf782363d9b63b8c3aaedb5",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0015_participantpin_login_lockout.py": {
+    "mtime": 1781685698.4760094,
+    "ast_hash": "cbca58f05235f7e6b25cbf7e02666c56",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0016_camp_shift_ratio_per_night_shift_shiftassignment.py": {
+    "mtime": 1781685698.4763854,
+    "ast_hash": "75095a23b9a35b55509ffe19eb6363b4",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0017_merge_20260608_2030.py": {
+    "mtime": 1781685698.4766297,
+    "ast_hash": "cfc7cbf8b0a6853cc17853aba2bdc939",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0018_shiftassignment_offered_for_exchange.py": {
+    "mtime": 1781685698.4768662,
+    "ast_hash": "3cf3317723d99dd47dad28eeaa927fae",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0019_dailyshifttemplate_dailyshiftexception.py": {
+    "mtime": 1781685698.4771943,
+    "ast_hash": "ffc362a53b7cec14464fcee8580dd767",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_kiosk_shifts.py": {
+    "mtime": 1781685698.4958107,
+    "ast_hash": "e2cbe1446746262c095e48254abc9df4",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_migrations.py": {
+    "mtime": 1781685698.4960904,
+    "ast_hash": "cc7cadf96df40aa3d3cbf067df5b3842",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_shift_templates.py": {
+    "mtime": 1781685698.4972794,
+    "ast_hash": "a23a511053c1951414a9ef42012bd247",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_shifts.py": {
+    "mtime": 1781685698.497351,
+    "ast_hash": "91da72cbe33fd02939e7cadaf845081b",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-48-fix-kiosk-charge-schema.md": {
+    "mtime": 1781685698.3426986,
+    "ast_hash": "8aff176bed568cda53bb98383f9f9ee0",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-49-individual-subsidy-rates.md": {
+    "mtime": 1781685698.3429105,
+    "ast_hash": "0da1979eede8186818c7cb6802a72e84",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-50-security-hardening.md": {
+    "mtime": 1781685698.3430498,
+    "ast_hash": "a24db205c1ece324e35171844ff6e9d6",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-52-kiosk-shifts.md": {
+    "mtime": 1781685698.3433795,
+    "ast_hash": "d606242c6be6d115fded3c5cfa8b3abc",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/security_best_practices_report.md": {
+    "mtime": 1783502318.995857,
+    "ast_hash": "a9dae94cb85e07a4daf4237a782f39a0",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/kiosk_shifts.html": {
+    "mtime": 1781718540.6230934,
+    "ast_hash": "37bd1dc9f6748dc0b00fa4426ceb5d00",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/shift_manage.html": {
+    "mtime": 1781685698.4920402,
+    "ast_hash": "7d90b52e9082d8e8bc4cb06eada86fc6",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/shift_report.html": {
+    "mtime": 1783541208.8526816,
+    "ast_hash": "a841824a057c702ad532413eebca8945",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/shift_templates_manage.html": {
+    "mtime": 1783541208.8528545,
+    "ast_hash": "ebac60a0e5f024abf56f1b0f09f8ed95",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-53-dienstplaene-kiosk.md": {
+    "mtime": 1781685698.343599,
+    "ast_hash": "799611a2d2274701d4b265b5ba6418b4",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/deployment_agent.py": {
+    "mtime": 1783541208.8475535,
+    "ast_hash": "e108ed5cb1be205812e387d0ebcfa6e6",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/scripts/make_gifs.py": {
+    "mtime": 1783078531.0374892,
+    "ast_hash": "5dba775e4d633a669a66117f8f51f89f",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/scripts/postgres-backup.sh": {
+    "mtime": 1781685698.4708467,
+    "ast_hash": "3ae07565ec90f8157ea6c96e28850010",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/scripts/postgres-restore.sh": {
+    "mtime": 1781685698.4709082,
+    "ast_hash": "9955fbc7265b94927d9dccaa4fd9af10",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/scripts/record_gifs.js": {
+    "mtime": 1781685698.4710023,
+    "ast_hash": "78e805587e9144c10d49a23f2cd388cb",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/scripts/setup_gif_db.py": {
+    "mtime": 1783078531.037767,
+    "ast_hash": "6283e87fc860800613e77db631ea1c66",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/skills-lock.json": {
+    "mtime": 1784273703.5130317,
+    "ast_hash": "57e0aedce0b777345ec8ea182b542503",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/deployment_updates.py": {
+    "mtime": 1783499764.5419834,
+    "ast_hash": "34ab3ad1ac7b99dbed53c91d6480e80b",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0020_participant_archiving_single_active_camp.py": {
+    "mtime": 1781685698.4772582,
+    "ast_hash": "1f44612ea7a421b675a1295bbfe6a3be",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0021_settlementrun_versioned_snapshots.py": {
+    "mtime": 1781685698.4773254,
+    "ast_hash": "10aa833f26721bee3fcc4f29077d1523",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0022_alter_mealsignup_variant.py": {
+    "mtime": 1781685698.4773903,
+    "ast_hash": "37c75b512d49de5a718006c7f6861293",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0023_camp_iban_camp_paypal_link.py": {
+    "mtime": 1781685698.4774544,
+    "ast_hash": "91db19643e9fab32ed65fadaa750997e",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0024_participant_arrival_date_participant_departure_date.py": {
+    "mtime": 1781685698.477518,
+    "ast_hash": "916ce653e6dd55a35c42e8d73416d5aa",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0025_expense_allocation_method_expense_approved_at_and_more.py": {
+    "mtime": 1781685698.4775848,
+    "ast_hash": "ae1dbe06fecbe68ace864a2d2ee88fab",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0026_expense_receipt.py": {
+    "mtime": 1781685698.4776442,
+    "ast_hash": "75cb903a41c555352858c7ee70db90ce",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0027_expense_rejection_reason.py": {
+    "mtime": 1781685698.4777057,
+    "ast_hash": "f808ff94b71ca461fd1742942cef3c89",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0028_expense_cost_center_alter_expense_allocation_method.py": {
+    "mtime": 1781685698.4777694,
+    "ast_hash": "b7fb864c5d2f462795e6457af56162e0",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0029_settlementrun_cost_center_data.py": {
+    "mtime": 1781685698.4778275,
+    "ast_hash": "bff4b5cc4eb2940daaef0cacea892365",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_deployment_agent.py": {
+    "mtime": 1783541208.8539338,
+    "ast_hash": "fcd0e6a7ae2df1500f8505e07d565be8",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_deployment_updates.py": {
+    "mtime": 1783542480.6625912,
+    "ast_hash": "5a3e55a5ba93495211e8b1eb017d393e",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_participant_archiving.py": {
+    "mtime": 1781685698.4961672,
+    "ast_hash": "7a88261e3d9c42cb90b9e5f1e2413e7e",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_settlement_runs.py": {
+    "mtime": 1783499764.55281,
+    "ast_hash": "f5c85ad3eb2fe4c3078ddbe029242800",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_ui_improvements.py": {
+    "mtime": 1783499764.5530014,
+    "ast_hash": "7744733d89ff09eb7b27167da1eca063",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/ci-cache-playwright-browsers.md": {
+    "mtime": 1781685698.3397074,
+    "ast_hash": "5d0afa4d05a13dbd7b551fd3c7109a0f",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/docs-refresh-all-documentation.md": {
+    "mtime": 1781685698.339773,
+    "ast_hash": "a2aa62acc0c25cd7a604eed259166a59",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/fix-deployment-update-diagnostics.md": {
+    "mtime": 1781685698.3409388,
+    "ast_hash": "ddd693e45ac6f0dab36fd6560b69f550",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/fix-mobile-layout-breaks.md": {
+    "mtime": 1781685698.3417072,
+    "ast_hash": "36c40e2f5cb2f9096eabf70c71cb79f6",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-0-kiosk-ux-refresh.md": {
+    "mtime": 1781718540.6170285,
+    "ast_hash": "87497ae80503260c6228e047f5f60d0d",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-55-ui-settlement-operations.md": {
+    "mtime": 1781685698.34366,
+    "ast_hash": "60baab8612a49445ffdbfcf00c843e8b",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-56-container-deployment.md": {
+    "mtime": 1781685698.3437226,
+    "ast_hash": "6cfda52f1d8fe8b69a013d096bd5c0b6",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-69-shared-expenses.md": {
+    "mtime": 1781685698.343782,
+    "ast_hash": "731ad175b5cb617d3dc8f7e8805ad859",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-71-user-documentation.md": {
+    "mtime": 1781685698.3438447,
+    "ast_hash": "a9f65e48fddeec5321e6cb5eef82c9dc",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-76-mobile-tables-scrollable.md": {
+    "mtime": 1781685698.3439074,
+    "ast_hash": "3d9a372ea12318c978d3e81bd29139a8",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-78-phase-2-product-polish.md": {
+    "mtime": 1781685698.3439686,
+    "ast_hash": "e94eefbea09ee3a56c17b77cdac1c87a",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-79-pdf-final-polish.md": {
+    "mtime": 1781685698.3440266,
+    "ast_hash": "38010bbb06208b26753d600fb1d2226b",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-80-kiosk-documentation-gifs.md": {
+    "mtime": 1781685698.3440847,
+    "ast_hash": "d04c63cdf17f6e0b039f512774b4e349",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-83-cost-center-evaluation.md": {
+    "mtime": 1781685698.3441427,
+    "ast_hash": "539edc9d14e0279b45c2d9c06fe00299",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-85-kiosk-layout-improvements.md": {
+    "mtime": 1781718540.6172743,
+    "ast_hash": "3a2de4db88ab5d90a7c705fdf4b54b1f",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/deploy/README.md": {
+    "mtime": 1784206874.2474701,
+    "ast_hash": "27a2137d89a2550b595a03c9bee9462d",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/deploy/docker-compose.example.yml": {
+    "mtime": 1783499764.5392728,
+    "ast_hash": "7976cf1e125d27d4fec8406ec3cee49b",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/docs/user_guide.html": {
+    "mtime": 1783499764.540955,
+    "ast_hash": "bccdaf48c60198c9a26e7e5a60b75cec",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/requirements-updater.txt": {
+    "mtime": 1783078531.0367777,
+    "ast_hash": "0433954925eb98f9116ca9f861b3c8d0",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/admin_guide.html": {
+    "mtime": 1783499764.5477333,
+    "ast_hash": "ce3131e7d2212a50fc62adddd05dc929",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/deployment_update.html": {
+    "mtime": 1783542480.6619215,
+    "ast_hash": "0fd0e9a9e36358c0d13a800de46dce46",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/settlement_run_detail.html": {
+    "mtime": 1783542481.443202,
+    "ast_hash": "19de3d473921c44d8510a2e69b98a9ac",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/shared_expense_approve.html": {
+    "mtime": 1783541208.852506,
+    "ast_hash": "f1c9c8583b759fe888034abcd9ed8fd6",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/user_guide.html": {
+    "mtime": 1783541208.8530378,
+    "ast_hash": "eb52d5dd2ea00ea294b0a815df4a5a74",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/test_results.txt": {
+    "mtime": 1781685698.4938142,
+    "ast_hash": "5ebd666b4694bec338228bdf09dda371",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/test_euro.pdf": {
+    "mtime": 1781685698.4936132,
+    "ast_hash": "9b3515cac76cbaffb745d25c722602c0",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/docs/images/admin-camp-overview.png": {
+    "mtime": 1781685698.345715,
+    "ast_hash": "0d2ace2904f737dc4562f9ff275a1e62",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/docs/images/kiosk-shift-planning.png": {
+    "mtime": 1781685698.3461509,
+    "ast_hash": "c00949c5473af72a79e6d2cc11101748",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/static/billing/docs/kiosk_drinks.gif": {
+    "mtime": 1781685698.4810452,
+    "ast_hash": "549439ea054653cc35532cb82a120288",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/static/billing/docs/kiosk_family.gif": {
+    "mtime": 1781685698.4832947,
+    "ast_hash": "2993d4521f8b082788e861290caa23ef",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/static/billing/docs/kiosk_login.gif": {
+    "mtime": 1781685698.4850183,
+    "ast_hash": "ef6dbc21cca6cd196f65aec4e987dc85",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/static/billing/docs/kiosk_meals.gif": {
+    "mtime": 1781685698.4853666,
+    "ast_hash": "0a698c15fd662335790ff1db56bee8ae",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/static/billing/docs/kiosk_shifts.gif": {
+    "mtime": 1781685698.4864397,
+    "ast_hash": "8289c2d9552f6c677f60ead1fc2b1b2c",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/test_drinks.png": {
+    "mtime": 1781685698.4935365,
+    "ast_hash": "d7a60af007d23a5c22979d333b4c4e00",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/test_login.png": {
+    "mtime": 1781685698.4937356,
+    "ast_hash": "e8cef00b38a9c5ddf4ed4910a1992852",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0030_alter_pricerule_meal_type.py": {
+    "mtime": 1781718540.619341,
+    "ast_hash": "a1cafb6763d241c9e6a13388825553d3",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0031_pricerule_is_archived.py": {
+    "mtime": 1781718540.6195724,
+    "ast_hash": "c5c5ff597eef1a371e42af7a7e28fe25",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-90-kiosk-snacks.md": {
+    "mtime": 1781718540.6175227,
+    "ast_hash": "d3addf396f930a8d545cc70956bb2f69",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-94-uploaded-receipts-visible.md": {
+    "mtime": 1783066915.7429483,
+    "ast_hash": "32037bb550ff4803848a54716ebf0ba9",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-104-portainer-updater.md": {
+    "mtime": 1783078531.0333338,
+    "ast_hash": "d9523e097fd24564f65fa442d972d1e3",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0032_mealplanentry.py": {
+    "mtime": 1783499764.5435889,
+    "ast_hash": "4e3b0c2e43f600965fdd4ecb607c52a6",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/docs/dependency-graph-audit.md": {
+    "mtime": 1783499764.5406303,
+    "ast_hash": "20e9b7cac35d9231958fa518bf1d8ca8",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0033_charge_kiosk_booked_by.py": {
+    "mtime": 1783499764.5438397,
+    "ast_hash": "5b5bc1e5adaf706c231475228a4b59f0",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-126-kiosk-quick-cancel-pdf-favicon-docs.md": {
+    "mtime": 1783499764.5364478,
+    "ast_hash": "f0fa3dc8d9e70353a31fa948fc638eb8",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/daily_settlement_backups.py": {
+    "mtime": 1783499764.541724,
+    "ast_hash": "058d35850c1ce6bffa47d87c96f7d5a7",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/management/commands/run_daily_settlement_backup.py": {
+    "mtime": 1783499764.5433314,
+    "ast_hash": "9e791e003c4273e1a91411b78c6691da",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0034_daily_settlement_backups.py": {
+    "mtime": 1783499764.544086,
+    "ast_hash": "27a18c3cac86bba0ec7ab47c2138a444",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_daily_settlement_backups.py": {
+    "mtime": 1783499764.550841,
+    "ast_hash": "8b460215cead41fb3e374477838715b5",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/config/middleware.py": {
+    "mtime": 1784206874.2514203,
+    "ast_hash": "5c3c64a18673d92657f789ce1a68a2cd",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_security_headers.py": {
+    "mtime": 1784206874.2533047,
+    "ast_hash": "572f41ed464e3424cfbbdb20ca3e3e06",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/.github/workflows/dast.yml": {
+    "mtime": 1783541208.8432736,
+    "ast_hash": "b1afb0e4597d67c6c39621c19d12312a",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-129-security-audit.md": {
+    "mtime": 1783502318.9954214,
+    "ast_hash": "16b7bf3d1e4210caa7661148ffabdb0e",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/scripts/build_changelog_manifest.py": {
+    "mtime": 1783541208.8478372,
+    "ast_hash": "729262fff1b58b55e284447558f45021",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0035_family_member_travel_dates.py": {
+    "mtime": 1783541208.8487413,
+    "ast_hash": "8d9f57a2752514d9fcfc3b0392c566e5",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/migrations/0036_family_member_pin.py": {
+    "mtime": 1783541208.849087,
+    "ast_hash": "41016d262a17566ed52026d23d87e8b4",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/static/billing/deployment_update.js": {
+    "mtime": 1783542480.6615772,
+    "ast_hash": "3f214a128aaee5891fbb8287a0a47457",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/fix-deployment-update-dialog-csp.md": {
+    "mtime": 1783542480.6570766,
+    "ast_hash": "bc58b1073523f674c204736e60b63a53",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-107-kiosk-receipt-storage.md": {
+    "mtime": 1783542480.6574957,
+    "ast_hash": "97b460d0117f1738c6e75d8380f2e148",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-108-meal-cutoff-hint.md": {
+    "mtime": 1783542480.657869,
+    "ast_hash": "244937b6a552d08d2dd1bbbca70eddb0",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-113-meal-calendar-menu-plan.md": {
+    "mtime": 1783542480.6581414,
+    "ast_hash": "9ba6b95d3a66c715f660a8d7c9b7d101",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-114-portainer-ssl-verify.md": {
+    "mtime": 1783542480.6584113,
+    "ast_hash": "36b73d27b9c32a132c43f0de836b4df5",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-117-kiosk-meal-booking-ux.md": {
+    "mtime": 1783542480.6588542,
+    "ast_hash": "c11f573c75b79258016900275c7d533d",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-128-daily-settlement-backups.md": {
+    "mtime": 1783542480.6592815,
+    "ast_hash": "7153f98532256840ff3fff7747170ccf",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-132-security-zap-hardening.md": {
+    "mtime": 1783542480.6596,
+    "ast_hash": "6d6b475a3567a849590c2e4175dcf071",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-134-updater-changelog-zap-followup.md": {
+    "mtime": 1783542480.6599445,
+    "ast_hash": "77e76be00ca7785b0d09b427b5ce42a2",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-139-kiosk-checkin-dialog.md": {
+    "mtime": 1783541208.8467906,
+    "ast_hash": "a1e422e6d98f981dc6adc71f2c2a6ba9",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-141-pdf-popup.md": {
+    "mtime": 1783542481.4410903,
+    "ast_hash": "a2162894e92bc908e35a309011b3364e",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-77-deployment-env-fix.md": {
+    "mtime": 1783542480.6602502,
+    "ast_hash": "d5b865a81e43770023cb6c491f92edd3",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-84-cost-center-result-visibility.md": {
+    "mtime": 1783542480.6608868,
+    "ast_hash": "cebba00dc1575d6d95f83783389b5ae7",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/config/sso.py": {
+    "mtime": 1784206874.2524512,
+    "ast_hash": "aba95d2c8e91f5f029ce07c97486c360",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/static/billing/theme.js": {
+    "mtime": 1784207110.9770262,
+    "ast_hash": "35c236d0925665facd69beb8f144eaf4",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_authelia_sso.py": {
+    "mtime": 1784206874.2528224,
+    "ast_hash": "fa91f3e748380fed87ef6f78fa6baac6",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-151-open-issues-140-146.md": {
+    "mtime": 1784272952.6670854,
+    "ast_hash": "6282e946de4f3ab4474aeeb79341aeb7",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/includes/theme_toggle.html": {
+    "mtime": 1784207110.8314638,
+    "ast_hash": "ea2e218c2144632c03871ce5dd992360",
+    "semantic_hash": ""
+  }
+}

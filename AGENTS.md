@@ -84,6 +84,12 @@ Critical paths require strong test coverage:
 - kiosk booking flows
 - meal ordering and shift assignment flows
 
+### Dynamic UI/UX Verification
+
+For every UI/UX change, AI agents must first implement the smallest runnable UI slice and then exercise the affected user flow dynamically with a Playwright-controlled browser before writing or updating automated UI tests. Test the real application state and relevant interactions at representative desktop and mobile viewports; include light and dark themes when affected. Check visible results, keyboard operation, disabled and error states, layout overflow or overlap, browser console errors, and failed network requests. Capture screenshots for visible changes when they provide useful review evidence.
+
+After the dynamic check, encode the verified behavior and discovered edge cases in deterministic Playwright and/or pytest regression tests, then run the required automated checks. Dynamic browser testing complements rather than replaces automated coverage. Domain and service logic remains test-first; this UI-specific sequence exists so automated browser assertions reflect a behavior that has already been validated from the user's perspective.
+
 ## 5. Commit & Pull Request Guidelines
 
 Use Conventional Commits:
