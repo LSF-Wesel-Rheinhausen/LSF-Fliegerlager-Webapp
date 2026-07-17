@@ -607,13 +607,16 @@ textarea {
 .kiosk-topbar__brand {
   display: flex;
   flex: 1 1 auto;
+  min-width: 0;
   justify-content: center;
 }
 
 .kiosk-brand {
-  flex-shrink: 0;
+  flex: 1 1 auto;
   justify-content: center;
   gap: 12px;
+  min-width: 0;
+  max-width: 100%;
   flex-wrap: wrap;
 }
 
@@ -621,6 +624,9 @@ textarea {
   display: flex;
   gap: 12px;
   align-items: baseline;
+  justify-content: center;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .kiosk-brand__label {
@@ -630,6 +636,9 @@ textarea {
 .kiosk-brand__context {
   color: var(--muted);
   font-weight: 700;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   pointer-events: none;
 }
 
@@ -1554,7 +1563,6 @@ textarea {
 .meal-booking-day:not([aria-disabled="true"]):hover {
   border-color: rgba(0, 92, 169, 0.34);
   background: #f5faff;
-  transform: translateY(-1px);
 }
 
 .meal-booking-day[aria-disabled="true"] {

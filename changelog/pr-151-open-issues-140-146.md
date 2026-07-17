@@ -7,3 +7,4 @@
 - Der Abendessendialog bucht mehrere Lagertage und Personen atomar, zeigt bestehende Buchungen sowie Sperrgruende und fuehrt danach zum aktualisierten Kalender zurueck (#143, #144).
 - Fruehstueck und Snacks bleiben taggleiche Schnellbuchungen ohne Kalenderauswahl; nur Abendessen verwendet den Lagertagskalender (#143).
 - Letzte Schnellbuchungen sind als responsive Liste ohne horizontales Scrollen aufgebaut und werden ueber einen eindeutigen Bestaetigungsdialog storniert (#145).
+- Lange Kiosk-Namen brechen auch im mobilen Querformat sauber um; Kalenderzeilen veraendern beim Hover nicht mehr ihre Position und bleiben dadurch in WebKit stabil bedienbar.

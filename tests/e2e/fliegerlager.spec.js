@@ -239,11 +239,11 @@ test("Admin can open and close price rule dialogs natively", async ({ page }) =>
 
 test("Kiosk flow: login, pin setup, drink and meal booking", async ({ page }) => {
   await setupFirstAdmin(page);
-  await createCamp(page, "Sommerlager Kiosk");
+  const campName = await createCamp(page, "Sommerlager Kiosk");
   await createParticipant(page, "Marie", "Curie");
 
   await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
-  await page.getByText("Sommerlager Kiosk").click();
+  await page.getByRole("link", { name: campName, exact: true }).click();
 
   // Create drink price rule
   await page.getByRole("link", { name: "Preise verwalten" }).first().click();
@@ -533,11 +533,11 @@ for (const viewport of [
   test(`Kiosk meal and drink layout has no overflow in ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await setupFirstAdmin(page);
-    await createCamp(page, "Sommerlager Kiosk Mobile");
+    const campName = await createCamp(page, "Sommerlager Kiosk Mobile");
     await createParticipant(page, "Mobile", "ExtremLangerUngetrennterTeilnehmername");
 
     await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
-    await page.getByText("Sommerlager Kiosk Mobile").click();
+    await page.getByRole("link", { name: campName, exact: true }).click();
     await page.getByRole("link", { name: "Preise verwalten" }).first().click();
     await page.locator('input[name="meal-breakfast_adult_price"]').fill("5.00");
     await page.locator('input[name="meal-dinner_adult_price"]').fill("7.00");
