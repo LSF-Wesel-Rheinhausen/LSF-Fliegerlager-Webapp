@@ -17,6 +17,8 @@ Unterstuetzte Umgebungsvariablen:
 - `DJANGO_ALLOWED_HOSTS`: kommaseparierte Hostliste; bei `DJANGO_DEBUG=0` ist ein Wert Pflicht.
 - `DJANGO_HTTPS`: `1` aktiviert HTTPS-Redirect sowie sichere Session- und CSRF-Cookies.
 - `DJANGO_TRUST_PROXY_SSL_HEADER`: nur auf `1` setzen, wenn ein kontrollierter Reverse Proxy `X-Forwarded-Proto` bereinigt und setzt.
+- `AUTHELIA_SSO_ENABLED`: `1` aktiviert Trusted-Header-SSO fuer bereits bestehende aktive Django-Konten; Default `0`.
+- `AUTHELIA_SSO_EMAIL_HEADER`: vom kontrollierten Proxy gesetzter E-Mail-Header; Default `Remote-Email`.
 - `DJANGO_HSTS_SECONDS`: HSTS-Dauer; erst nach erfolgreichem HTTPS-Betrieb schrittweise von `0` erhoehen.
 - `DJANGO_HSTS_INCLUDE_SUBDOMAINS` und `DJANGO_HSTS_PRELOAD`: nur nach separater Pruefung aktivieren.
 - `CSRF_TRUSTED_ORIGINS`: kommaseparierte Origins inklusive Schema.
@@ -28,5 +30,10 @@ Unterstuetzte Umgebungsvariablen:
 
 WhiteNoise liefert die durch `collectstatic` erzeugten Dateien direkt über Gunicorn aus. Der Update-Agent bleibt ein
 separater Container; der Django-Prozess erhält keinen Zugriff auf Portainer-Zugangsdaten.
+
+Trusted-Header-SSO vertraut einem unsignierten internen Header. Bei Aktivierung darf die App deshalb nicht direkt
+erreichbar sein. Der Reverse Proxy muss eingehende Identitaetsheader entfernen und `Remote-Email` ausschliesslich aus
+Authelias Forward-Auth-Antwort neu setzen. Die Anwendung ordnet diese E-Mail case-insensitiv genau einem vorhandenen,
+aktiven Benutzer zu. Sie erstellt keine Konten und uebernimmt weder `Remote-Groups` noch andere Authelia-Rollen.
 
 `GET /healthz/` prüft die Anwendungs- und Datenbankbereitschaft. Der Endpunkt liefert ausschließlich `{"status":"ok"}` oder bei Datenbankfehlern `{"status":"unavailable"}`.

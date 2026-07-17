@@ -239,11 +239,11 @@ test("Admin can open and close price rule dialogs natively", async ({ page }) =>
 
 test("Kiosk flow: login, pin setup, drink and meal booking", async ({ page }) => {
   await setupFirstAdmin(page);
-  await createCamp(page, "Sommerlager Kiosk");
+  const campName = await createCamp(page, "Sommerlager Kiosk");
   await createParticipant(page, "Marie", "Curie");
 
   await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
-  await page.getByText("Sommerlager Kiosk").click();
+  await page.getByRole("link", { name: campName, exact: true }).click();
 
   // Create drink price rule
   await page.getByRole("link", { name: "Preise verwalten" }).first().click();
@@ -289,21 +289,80 @@ test("Kiosk flow: login, pin setup, drink and meal booking", async ({ page }) =>
   await expect(page.locator("dialog#checkin-dialog").getByLabel("Abreise")).toHaveValue(checkinDeparture);
   await page.keyboard.press("Escape");
 
+  // Breakfast is a same-day quick booking and skips the meal calendar.
+  await page.locator("[data-food-button]").first().click();
+  await expect(page.locator("dialog#food-dialog")).toBeVisible();
+  await expect(page.locator("#food-step-date")).toHaveCount(0);
+  await expect(page.locator("dialog#food-dialog").getByText("Wer soll eingebucht werden?")).toBeVisible();
+  await page.locator("dialog#food-dialog").getByRole("button", { name: "Kostenpflichtig buchen" }).click();
+  await expect(page.getByText(/Standard Frühstück.*gebucht\./)).toBeVisible();
+
   // Book a drink
   await page.getByRole("button", { name: "Apfelsaft" }).click();
   await expect(page.locator("dialog#quick-dialog")).toBeVisible();
   await page.locator("dialog#quick-dialog").getByRole("button", { name: "1x" }).click();
   await expect(page.getByText("Apfelsaft gebucht.")).toBeVisible();
 
-  // Book a meal
+  // The cancellation action stays directly usable on a phone-sized viewport.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await assertNoUnexpectedOverflow(page);
+  await page.locator("[data-open-quick-cancel-dialog]").first().click();
+  await expect(page.locator("dialog#quick-cancel-dialog")).toBeVisible();
+  await expect(page.locator("dialog#quick-cancel-dialog")).toContainText("Apfelsaft");
+  await page.locator("dialog#quick-cancel-dialog").getByRole("button", { name: "Jetzt stornieren" }).click();
+  await expect(page.getByText("Buchung wurde storniert.")).toBeVisible();
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  // Book the same participant for two meal dates in one submission.
   await page.getByRole("button", { name: "Abendessen im Kalender buchen" }).click();
   await expect(page.locator("dialog#meal-dialog")).toBeVisible();
-  await page.locator("dialog#meal-dialog").locator("button[data-meal-date-select]").first().click();
+  const mealDateChoices = page.locator("dialog#meal-dialog input[data-meal-date-checkbox]:not([disabled])");
+  await mealDateChoices.nth(0).check();
+  await mealDateChoices.nth(1).check();
+  await page.locator("dialog#meal-dialog").getByRole("button", { name: "Weiter" }).click();
+  await expect(page.locator("#meal-selected-date")).toContainText("2 Tage ausgewählt");
   await page.locator("dialog#meal-dialog").getByRole("button", { name: "Essensanmeldung speichern" }).click();
-  await expect(page.getByText("Essensanmeldung wurde gespeichert.")).toBeVisible();
+  await expect(page.getByText("Essensanmeldung wurde für 2 Tage und 1 Person gespeichert.")).toBeVisible();
+  await expect(page).toHaveURL(/.*\/kiosk\/#meal-calendar$/);
+
+  await page.getByRole("button", { name: "Abendessen im Kalender buchen" }).click();
+  await expect(page.locator("dialog#meal-dialog").getByText("Gebucht für Marie Curie").first()).toBeVisible();
+  await page.keyboard.press("Escape");
 
   await page.getByRole("link", { name: "Abmelden" }).click();
   await expect(page).toHaveURL(/.*\/kiosk\/login\//);
+});
+
+test("Theme switch persists across kiosk and admin layouts", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.goto("/kiosk/login/");
+
+  const themeToggle = page.locator("[data-theme-toggle]");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(page.getByLabel("Teilnehmer")).toHaveValue("");
+  await expect(page.getByLabel("Teilnehmer").locator("option").first()).toHaveText("Bitte Teilnehmer auswählen");
+  await expect(themeToggle).toHaveAttribute("role", "switch");
+  await expect(themeToggle).toHaveAttribute("aria-checked", "false");
+
+  await themeToggle.click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(themeToggle).toHaveAttribute("aria-checked", "true");
+
+  await page.goto("/login/");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(page.locator("[data-theme-toggle]")).toHaveAttribute("aria-checked", "true");
+
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+});
+
+test("Theme follows the system preference without a saved selection", async ({ page, browserName }) => {
+  test.skip(browserName === "firefox", "Firefox does not support Playwright color-scheme emulation.");
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.goto("/kiosk/login/");
+
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(page.locator("[data-theme-toggle]")).toHaveAttribute("aria-checked", "true");
 });
 
 test("Import flow: upload CSV and confirm", async ({ page }) => {
@@ -474,11 +533,11 @@ for (const viewport of [
   test(`Kiosk meal and drink layout has no overflow in ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await setupFirstAdmin(page);
-    await createCamp(page, "Sommerlager Kiosk Mobile");
+    const campName = await createCamp(page, "Sommerlager Kiosk Mobile");
     await createParticipant(page, "Mobile", "ExtremLangerUngetrennterTeilnehmername");
 
     await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
-    await page.getByText("Sommerlager Kiosk Mobile").click();
+    await page.getByRole("link", { name: campName, exact: true }).click();
     await page.getByRole("link", { name: "Preise verwalten" }).first().click();
     await page.locator('input[name="meal-breakfast_adult_price"]').fill("5.00");
     await page.locator('input[name="meal-dinner_adult_price"]').fill("7.00");

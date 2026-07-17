@@ -51,6 +51,31 @@ Standardmäßig bindet die App nur an `127.0.0.1:8000`, passend für einen Rever
 direkten Zugriff im lokalen Netz kann `APP_BIND_ADDRESS=0.0.0.0` gesetzt werden. Bei HTTPS hinter einem kontrollierten
 Proxy bleiben `DJANGO_HTTPS=1` und `DJANGO_TRUST_PROXY_SSL_HEADER=1` aktiv.
 
+## Authelia Trusted-Header-SSO
+
+Optional kann Authelia bereits vorhandene Django-Benutzer ueber deren eindeutige E-Mail-Adresse anmelden:
+
+```dotenv
+AUTHELIA_SSO_ENABLED=1
+AUTHELIA_SSO_EMAIL_HEADER=Remote-Email
+```
+
+Der Header ist nicht signiert und darf nur innerhalb der kontrollierten Proxy-Verbindung verwendet werden. Vor der
+Aktivierung gelten deshalb alle folgenden Anforderungen:
+
+- Port `8000` darf fuer Clients nicht direkt erreichbar sein; `APP_BIND_ADDRESS=127.0.0.1` beibehalten oder den Zugriff
+  gleichwertig per Firewall beziehungsweise privatem Proxy-Netz sperren.
+- Der Reverse Proxy entfernt jeden vom Client gesendeten `Remote-Email`-Header und setzt ihn ausschliesslich aus
+  Authelias Forward-Auth-Antwort neu. Weitere Identitaetsheader wie `Remote-Groups` werden nicht an Django uebernommen.
+- Bei einem Proxy-Container ist nur dessen feste Quell-IP zu vertrauen. Ein komplettes gemeinsam genutztes Docker-Netz
+  ist keine ausreichende Vertrauensgrenze.
+- Jede Authelia-E-Mail muss case-insensitiv genau einem aktiven Django-Konto entsprechen. Unbekannte, doppelte,
+  ungueltige und inaktive Konten werden mit einer generischen Antwort abgelehnt.
+
+Django legt keine Benutzer an und veraendert weder Gruppen noch `is_staff`/`is_superuser`. Die vorhandenen
+Anwendungsrollen bleiben allein fuer die Autorisierung massgeblich. Fehlt der konfigurierte Header, bleibt der
+Passwort-Login als Fallback verfuegbar.
+
 ## Updates
 
 Ein Django-Superuser öffnet **Updates**, prüft das bereitgestellte `latest`-Image und bestätigt die Installation. Der

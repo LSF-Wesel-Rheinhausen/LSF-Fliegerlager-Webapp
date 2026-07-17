@@ -65,9 +65,32 @@ def test_kiosk_login_form_only_lists_non_archived_participants_from_active_camp(
     form = KioskLoginForm()
     choices = dict(form.fields["participant"].choices)
 
-    assert choices == {f"participant-{visible.pk}": visible.full_name}
+    assert choices == {"": "Bitte Teilnehmer auswählen", f"participant-{visible.pk}": visible.full_name}
     assert f"participant-{archived.pk}" not in choices
     assert f"participant-{hidden.pk}" not in choices
+
+
+@pytest.mark.django_db
+def test_kiosk_login_form_starts_empty_and_sorts_targets_by_last_name():
+    camp = CampFactory(is_active=True)
+    lovelace = ParticipantFactory(camp=camp, first_name="Ada", last_name="lovelace")
+    adler = ParticipantFactory(camp=camp, first_name="Berta", last_name="Adler")
+    hopper = ParticipantFamilyMember.objects.create(
+        guardian=lovelace,
+        first_name="Grace",
+        last_name="Hopper",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+
+    form = KioskLoginForm()
+
+    assert list(form.fields["participant"].choices) == [
+        ("", "Bitte Teilnehmer auswählen"),
+        (f"participant-{adler.pk}", "Berta Adler"),
+        (f"family-{hopper.pk}", "Grace Hopper (Begleitung von Ada lovelace)"),
+        (f"participant-{lovelace.pk}", "Ada lovelace"),
+    ]
+    assert 'value="" selected>Bitte Teilnehmer auswählen</option>' in form.as_p()
 
 
 @pytest.mark.django_db

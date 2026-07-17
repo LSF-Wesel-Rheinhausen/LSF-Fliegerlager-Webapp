@@ -48,11 +48,14 @@ python src/manage.py runserver</code></pre>
           <li><code>CSRF_TRUSTED_ORIGINS</code>: kommaseparierte Origins inklusive Schema.</li>
           <li><code>DJANGO_HTTPS=1</code>: aktiviert HTTPS-Redirect sowie sichere Session- und CSRF-Cookies.</li>
           <li><code>DJANGO_TRUST_PROXY_SSL_HEADER=1</code>: nur hinter einem kontrollierten Proxy aktivieren, der <code>X-Forwarded-Proto</code> bereinigt.</li>
+          <li><code>AUTHELIA_SSO_ENABLED=1</code>: aktiviert optional Trusted-Header-SSO für vorhandene aktive Django-Konten.</li>
+          <li><code>AUTHELIA_SSO_EMAIL_HEADER</code>: vom Proxy neu gesetzter E-Mail-Header, standardmäßig <code>Remote-Email</code>.</li>
           <li><code>DJANGO_HSTS_SECONDS</code>: HSTS erst nach verifiziertem HTTPS-Betrieb schrittweise aktivieren.</li>
           <li><code>DATABASE_URL</code>: Datenbank-URL; Docker nutzt PostgreSQL, E2E nutzt SQLite.</li>
           <li><code>UPDATE_AGENT_TOKEN</code>: separates langes Secret für die interne Update-API.</li>
           <li><code>APP_IMAGE</code>: freigegebenes GHCR-App-Image, standardmäßig <code>latest</code>.</li>
         </ul>
+        <p>Bei aktiviertem Authelia-SSO darf Port 8000 nicht direkt erreichbar sein. Der kontrollierte Reverse Proxy muss jeden clientseitigen Identitätsheader entfernen und <code>Remote-Email</code> ausschließlich aus Authelias Forward-Auth-Antwort setzen. Django erstellt keine Konten und übernimmt keine Authelia-Gruppen; die bestehenden Rollen bleiben maßgeblich.</p>
       </section>
 
       <section>

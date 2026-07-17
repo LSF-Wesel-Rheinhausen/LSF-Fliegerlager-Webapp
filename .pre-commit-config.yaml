@@ -3,6 +3,8 @@ repos:
     rev: v6.0.0
     hooks:
       - id: check-added-large-files
+        # Canonical Graphify artifacts are deterministic and intentionally versioned.
+        exclude: ^graphify-out/(graph\.json|graph\.html)$
       - id: check-ast
       - id: check-json
       - id: check-toml

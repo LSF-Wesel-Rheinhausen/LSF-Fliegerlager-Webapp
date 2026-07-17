@@ -4,6 +4,8 @@ from pathlib import Path
 import dj_database_url
 from django.core.exceptions import ImproperlyConfigured
 
+from config.sso import validate_authelia_email_header
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 ROOT_DIR = BASE_DIR.parent
 
@@ -32,6 +34,14 @@ SECURE_HSTS_PRELOAD = HTTPS_ENABLED and os.getenv("DJANGO_HSTS_PRELOAD", "0") ==
 if os.getenv("DJANGO_TRUST_PROXY_SSL_HEADER", "0") == "1":
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
+AUTHELIA_SSO_ENABLED = os.getenv("AUTHELIA_SSO_ENABLED", "0") == "1"
+_authelia_sso_email_header = os.getenv("AUTHELIA_SSO_EMAIL_HEADER", "Remote-Email")
+AUTHELIA_SSO_EMAIL_HEADER = (
+    validate_authelia_email_header(_authelia_sso_email_header)
+    if AUTHELIA_SSO_ENABLED
+    else _authelia_sso_email_header.strip()
+)
+
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 
@@ -53,6 +63,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "config.middleware.AutheliaSSOMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -93,6 +104,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 AUTHENTICATION_BACKENDS = [
     "billing.auth.EmailOrUsernameBackend",
+    "billing.auth.AutheliaEmailBackend",
     "django.contrib.auth.backends.ModelBackend",
 ]
 
@@ -104,6 +116,10 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"] if (BASE_DIR / "static").exists() else []
+# Static assets are served from the application origin. WhiteNoise defaults to a
+# wildcard CORS header for CDN use, which is unnecessary here and weakens the
+# same-origin policy enforced by SecurityHeadersMiddleware.
+WHITENOISE_ALLOW_ALL_ORIGINS = False
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {

@@ -1,4 +1,5 @@
 :root {
+  color-scheme: light;
   --bg: #f6f7f9;
   --panel: #ffffff;
   --panel-soft: #fbfcfd;
@@ -14,9 +15,35 @@
   --danger-soft: #fef3f2;
   --ok: #067647;
   --ok-soft: #ecfdf3;
+  --button-bg: var(--accent);
+  --button-hover: var(--accent-dark);
+  --button-text: #ffffff;
   --shadow: 0 12px 32px rgba(32, 37, 45, 0.08);
   --radius: 8px;
   --radius-sm: 6px;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #101417;
+  --panel: #1a2026;
+  --panel-soft: #222a32;
+  --text: #f1f4f6;
+  --muted: #abb6c2;
+  --line: #35414c;
+  --line-strong: #566574;
+  --accent: #6cbaf0;
+  --accent-dark: #a8d8f8;
+  --accent-soft: #183a52;
+  --focus: #83c5f4;
+  --danger: #ff9b93;
+  --danger-soft: #452326;
+  --ok: #6bd7a3;
+  --ok-soft: #193a2d;
+  --button-bg: #176fae;
+  --button-hover: #2388cb;
+  --button-text: #ffffff;
+  --shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
 }
 
 * {
@@ -167,10 +194,10 @@ button,
   max-width: 100%;
   min-height: 36px;
   padding: 8px 13px;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--button-bg);
   border-radius: 6px;
-  background: var(--accent);
-  color: #ffffff;
+  background: var(--button-bg);
+  color: var(--button-text);
   font: inherit;
   font-weight: 650;
   line-height: 1.2;
@@ -181,8 +208,8 @@ button,
 
 button:hover,
 .button:hover {
-  background: var(--accent-dark);
-  color: #ffffff;
+  background: var(--button-hover);
+  color: var(--button-text);
   text-decoration: none;
 }
 
@@ -201,6 +228,32 @@ button:hover,
 .button-danger {
   border-color: var(--danger);
   background: var(--danger);
+}
+
+.theme-toggle {
+  flex: 0 0 38px;
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  min-height: 38px;
+  padding: 0;
+}
+
+.theme-toggle__icon {
+  font-size: 19px;
+  line-height: 1;
+}
+
+.theme-toggle__icon--dark {
+  display: none;
+}
+
+:root[data-theme="dark"] .theme-toggle__icon--light {
+  display: none;
+}
+
+:root[data-theme="dark"] .theme-toggle__icon--dark {
+  display: inline;
 }
 
 .notice-warning {
@@ -554,13 +607,16 @@ textarea {
 .kiosk-topbar__brand {
   display: flex;
   flex: 1 1 auto;
+  min-width: 0;
   justify-content: center;
 }
 
 .kiosk-brand {
-  flex-shrink: 0;
+  flex: 1 1 auto;
   justify-content: center;
   gap: 12px;
+  min-width: 0;
+  max-width: 100%;
   flex-wrap: wrap;
 }
 
@@ -568,6 +624,9 @@ textarea {
   display: flex;
   gap: 12px;
   align-items: baseline;
+  justify-content: center;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .kiosk-brand__label {
@@ -577,6 +636,9 @@ textarea {
 .kiosk-brand__context {
   color: var(--muted);
   font-weight: 700;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   pointer-events: none;
 }
 
@@ -645,8 +707,8 @@ textarea {
   min-height: 28px;
   border: none;
   border-radius: 50%;
-  background: var(--accent);
-  color: #ffffff;
+  background: var(--button-bg);
+  color: var(--button-text);
   font-size: 14px;
   font-weight: 800;
   line-height: 1;
@@ -656,7 +718,7 @@ textarea {
 }
 
 .kiosk-help-button:hover {
-  background: color-mix(in srgb, var(--accent) 82%, black);
+  background: var(--button-hover);
 }
 
 .kiosk-help-button:focus-visible {
@@ -1053,6 +1115,73 @@ textarea {
   white-space: normal;
 }
 
+.quick-booking-list {
+  display: grid;
+  gap: 8px;
+}
+
+.quick-booking-row {
+  display: grid;
+  grid-template-areas: "main meta action";
+  grid-template-columns: minmax(0, 1.2fr) minmax(270px, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-soft);
+}
+
+.quick-booking-row__main {
+  grid-area: main;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.quick-booking-row__main strong,
+.quick-booking-row__main time {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.quick-booking-row__main time {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.quick-booking-row__meta {
+  grid-area: meta;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.quick-booking-row__meta div {
+  display: grid;
+  gap: 2px;
+}
+
+.quick-booking-row__meta dt {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.quick-booking-row__meta dd {
+  margin: 0;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.quick-booking-row__action {
+  grid-area: action;
+  min-width: 132px;
+  text-align: right;
+}
+
 .kiosk-status-text {
   display: inline-flex;
   align-items: center;
@@ -1418,7 +1547,7 @@ textarea {
 
 .meal-booking-day {
   display: grid;
-  grid-template-columns: minmax(96px, 0.7fr) minmax(0, 1.3fr) auto;
+  grid-template-columns: auto minmax(96px, 0.7fr) minmax(0, 1.3fr) auto;
   gap: 12px;
   align-items: center;
   min-height: 76px;
@@ -1427,18 +1556,30 @@ textarea {
   border-radius: var(--radius-sm);
   background: #ffffff;
   color: var(--text);
+  cursor: pointer;
   text-align: left;
 }
 
-.meal-booking-day:not(:disabled):hover {
+.meal-booking-day:not([aria-disabled="true"]):hover {
   border-color: rgba(0, 92, 169, 0.34);
   background: #f5faff;
-  transform: translateY(-1px);
 }
 
-.meal-booking-day:disabled {
+.meal-booking-day[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.7;
+}
+
+.meal-booking-day--selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.meal-booking-day > input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  margin: 0;
 }
 
 .meal-booking-day__date,
@@ -1461,6 +1602,30 @@ textarea {
   font-size: 13px;
   font-weight: 700;
   overflow-wrap: anywhere;
+}
+
+.meal-booking-day__menu-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.meal-booking-day__menu strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.meal-booking-day__lock {
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.meal-booking-day__booked {
+  color: var(--ok);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .meal-booking-day__price {
@@ -1912,6 +2077,20 @@ textarea {
     width: 100%;
   }
 
+  .quick-booking-row {
+    grid-template-areas:
+      "main"
+      "action"
+      "meta";
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .quick-booking-row__action {
+    min-width: 0;
+    text-align: left;
+  }
+
 
   .target-row {
     grid-template-columns: 1fr;
@@ -1928,7 +2107,18 @@ textarea {
 
   .meal-signup-compact__row,
   .meal-booking-day {
-    grid-template-columns: 1fr;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .meal-booking-day > input[type="checkbox"] {
+    grid-row: 1 / span 3;
+    align-self: start;
+  }
+
+  .meal-booking-day__date,
+  .meal-booking-day__menu,
+  .meal-booking-day__price {
+    grid-column: 2;
   }
 
   .meal-booking-day__price {
@@ -2084,4 +2274,194 @@ dialog::backdrop {
   display: flex;
   gap: 8px;
   align-items: center;
+}
+
+:root[data-theme="dark"] .topbar {
+  background: #171c21;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.32);
+}
+
+:root[data-theme="dark"] .button-secondary,
+:root[data-theme="dark"] table,
+:root[data-theme="dark"] input,
+:root[data-theme="dark"] select,
+:root[data-theme="dark"] textarea,
+:root[data-theme="dark"] .metric,
+:root[data-theme="dark"] .exportbar a,
+:root[data-theme="dark"] .meal-status-day,
+:root[data-theme="dark"] .meal-signup-compact__row,
+:root[data-theme="dark"] .meal-booking-day,
+:root[data-theme="dark"] .shift-card {
+  background: var(--panel);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .quick-booking-row {
+  background: var(--panel-soft);
+}
+
+:root[data-theme="dark"] .button-secondary:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
+:root[data-theme="dark"] th,
+:root[data-theme="dark"] .status-badge--muted,
+:root[data-theme="dark"] .kiosk-dialog-help {
+  background: var(--panel-soft);
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .form-grid label,
+:root[data-theme="dark"] .exportbar a,
+:root[data-theme="dark"] .kiosk-meta__item,
+:root[data-theme="dark"] .kiosk-summary-card__meta p,
+:root[data-theme="dark"] .kiosk-pill,
+:root[data-theme="dark"] .shift-card__meta {
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] tbody tr:hover,
+:root[data-theme="dark"] .meal-status-day:hover,
+:root[data-theme="dark"] .meal-booking-day:not([aria-disabled="true"]):hover,
+:root[data-theme="dark"] .drink-card:hover {
+  background: var(--accent-soft);
+}
+
+:root[data-theme="dark"] .meal-booking-day--selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+:root[data-theme="dark"] .kiosk-shell {
+  background: var(--bg);
+}
+
+:root[data-theme="dark"] .kiosk-topbar {
+  background: rgba(23, 28, 33, 0.94);
+}
+
+:root[data-theme="dark"] .kiosk-hero__intro::before,
+:root[data-theme="dark"] .kiosk-summary-card::before {
+  background: none;
+}
+
+:root[data-theme="dark"] .kiosk-meta__item,
+:root[data-theme="dark"] .kiosk-pill,
+:root[data-theme="dark"] .meal-order-status,
+:root[data-theme="dark"] .shift-card--offer .coworker-badge {
+  background: var(--panel-soft);
+  border-color: var(--line);
+}
+
+:root[data-theme="dark"] .kiosk-summary-card,
+:root[data-theme="dark"] .kiosk-card--accent,
+:root[data-theme="dark"] .kiosk-card--muted,
+:root[data-theme="dark"] .drink-card {
+  background: var(--panel);
+  border-color: var(--line);
+}
+
+:root[data-theme="dark"] .kiosk-card--success,
+:root[data-theme="dark"] .kiosk-note--success,
+:root[data-theme="dark"] .shift-progress__celebration,
+:root[data-theme="dark"] .kiosk-status-text--ok {
+  background: var(--ok-soft);
+  border-color: color-mix(in srgb, var(--ok) 45%, var(--line));
+  color: var(--ok);
+}
+
+:root[data-theme="dark"] .kiosk-note {
+  background: var(--accent-soft);
+}
+
+:root[data-theme="dark"] .notice-warning,
+:root[data-theme="dark"] .kiosk-timer.is-urgent,
+:root[data-theme="dark"] .kiosk-note--warn,
+:root[data-theme="dark"] .kiosk-status-text--pending {
+  background: #3b2d17;
+  border-color: #806127;
+  color: #ffd48a;
+}
+
+:root[data-theme="dark"] .errorlist,
+:root[data-theme="dark"] .kiosk-timer.is-critical,
+:root[data-theme="dark"] .kiosk-table__wrapper .data-table tbody tr.kiosk-table__row--rejected,
+:root[data-theme="dark"] .kiosk-status-text--danger,
+:root[data-theme="dark"] .meal-detail-row--retracted {
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+  color: var(--danger);
+}
+
+:root[data-theme="dark"] .status-badge--ok,
+:root[data-theme="dark"] .message {
+  background: var(--ok-soft);
+  border-color: color-mix(in srgb, var(--ok) 45%, var(--line));
+  color: var(--ok);
+}
+
+:root[data-theme="dark"] .meal-status-day--booked,
+:root[data-theme="dark"] .meal-status-dot--booked,
+:root[data-theme="dark"] .meal-status-day--booked:hover {
+  border-color: #3e9a6e;
+  background: #193a2d;
+  color: #8ce2b7;
+}
+
+:root[data-theme="dark"] .meal-status-day--mixed,
+:root[data-theme="dark"] .meal-status-dot--mixed,
+:root[data-theme="dark"] .meal-status-day--mixed:hover {
+  border-color: #8a6a2d;
+  background: #3b2d17;
+  color: #ffd48a;
+}
+
+:root[data-theme="dark"] .meal-status-day--retracted,
+:root[data-theme="dark"] .meal-status-dot--retracted,
+:root[data-theme="dark"] .meal-status-day--retracted:hover {
+  border-color: #a64f52;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+:root[data-theme="dark"] .meal-status-day--closed,
+:root[data-theme="dark"] .meal-status-dot--closed,
+:root[data-theme="dark"] .meal-status-day--closed:hover {
+  border-color: var(--line-strong);
+  background: var(--panel-soft);
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .meal-status-day--empty,
+:root[data-theme="dark"] .meal-status-dot--empty,
+:root[data-theme="dark"] .meal-status-day--empty:hover {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .shift-card--offer {
+  background: color-mix(in srgb, var(--ok) 9%, var(--panel));
+}
+
+:root[data-theme="dark"] .shift-badge--ok {
+  background: color-mix(in srgb, var(--ok) 16%, var(--panel));
+}
+
+:root[data-theme="dark"] .shift-badge--danger {
+  background: color-mix(in srgb, var(--danger) 16%, var(--panel));
+}
+
+:root[data-theme="dark"] dialog {
+  color: var(--text);
+}
+
+@media (max-width: 780px) {
+  .topbar nav .theme-toggle,
+  .kiosk-header-actions .theme-toggle {
+    align-self: flex-end;
+    width: 38px;
+  }
 }

@@ -1451,6 +1451,7 @@ def _kiosk_meal_calendar(camp, participant, meal_signups, meal_targets):
             active_signups = [signup for signup in scoped if signup.status == MealSignup.Status.ACTIVE]
             retracted_signups = [signup for signup in scoped if signup.status == MealSignup.Status.RETRACTED]
             locked = is_meal_change_locked(camp, meal_date)
+            lock_message = meal_change_lock_message(camp, meal_date) if locked else ""
             if active_signups and retracted_signups:
                 status = "mixed"
                 status_label = "Teilweise zurückgenommen"
@@ -1475,8 +1476,13 @@ def _kiosk_meal_calendar(camp, participant, meal_signups, meal_targets):
                     "status_label": status_label,
                     "signups": scoped,
                     "active_signups": active_signups,
+                    "active_signup_names": [
+                        signup.family_member.full_name if signup.family_member_id else signup.participant.full_name
+                        for signup in active_signups
+                    ],
                     "retracted_signups": retracted_signups,
                     "locked": locked,
+                    "lock_message": lock_message,
                     "description": menu_descriptions.get(meal_date, ""),
                     "price_rule": price_rule,
                     "unit_price": price_rule.unit_price if price_rule else None,
@@ -1489,6 +1495,7 @@ def _kiosk_meal_calendar(camp, participant, meal_signups, meal_targets):
                 "status": dinner_slot["status"],
                 "status_label": dinner_slot["status_label"],
                 "locked": dinner_slot["locked"],
+                "lock_message": dinner_slot["lock_message"],
                 "price_rule": dinner_slot["price_rule"],
                 "unit_price": dinner_slot["unit_price"],
                 "description": dinner_slot["description"],
@@ -1660,7 +1667,7 @@ def kiosk_home(request):
                         targets = selected_targets
 
                 rule = quick_form.cleaned_data["price_rule"]
-                occurred_on = quick_form.cleaned_data.get("quick_date") or timezone.localdate()
+                occurred_on = timezone.localdate()
                 with transaction.atomic():
                     for target in set(targets):
                         if hasattr(target, "first_name") and hasattr(target, "last_name") and hasattr(target, "role"):
@@ -1728,14 +1735,17 @@ def kiosk_home(request):
         elif request.POST.get("action") == "meal":
             meal_form = MealBookingForm(request.POST, participant=participant, prefix="meal")
             if meal_form.is_valid():
-                meal_date = meal_form.cleaned_data["meal_date"]
+                meal_dates = meal_form.cleaned_data["meal_dates"]
                 meal = meal_form.cleaned_data["meal"]
-                if is_meal_change_locked(participant.camp, meal_date):
-                    meal_form.add_error(None, meal_change_lock_message(participant.camp, meal_date))
-                selected_tokens = request.POST.getlist("meal-target")
+                for meal_date in meal_dates:
+                    if is_meal_change_locked(participant.camp, meal_date):
+                        meal_form.add_error(None, meal_change_lock_message(participant.camp, meal_date))
+                selected_tokens = list(dict.fromkeys(request.POST.getlist("meal-target")))
                 targets_by_token = _target_lookup(meal_targets)
                 if not selected_tokens and request.POST.get("meal-targets-submitted") != "1":
                     selected_tokens = [default_booking_target_token]
+                if any(token not in targets_by_token for token in selected_tokens):
+                    meal_form.add_error(None, "Mindestens eine ausgewählte Person ist nicht verfügbar.")
                 selected_targets = [targets_by_token[token] for token in selected_tokens if token in targets_by_token]
                 if not selected_targets:
                     meal_form.add_error(None, "Bitte mindestens eine Person auswählen.")
@@ -1748,17 +1758,18 @@ def kiosk_home(request):
                     if variant not in valid_variants:
                         invalid_variants.append(target["name"])
                         continue
-                    price_rule = resolve_meal_price_rule(
-                        participant.camp,
-                        meal,
-                        meal_date,
-                        is_child=target["is_child"],
-                        is_companion=target["is_companion"],
-                    )
-                    if price_rule is None:
-                        missing_prices.append(target["name"])
-                        continue
-                    bookings.append((target, variant, price_rule))
+                    for meal_date in meal_dates:
+                        price_rule = resolve_meal_price_rule(
+                            participant.camp,
+                            meal,
+                            meal_date,
+                            is_child=target["is_child"],
+                            is_companion=target["is_companion"],
+                        )
+                        if price_rule is None:
+                            missing_prices.append(f"{target['name']} am {meal_date:%d.%m.%Y}")
+                            continue
+                        bookings.append((target, meal_date, variant, price_rule))
                 if invalid_variants:
                     meal_form.add_error(None, "Bitte für jede ausgewählte Person eine gültige Variante auswählen.")
                 if missing_prices:
@@ -1768,10 +1779,16 @@ def kiosk_home(request):
                     )
                 if not meal_form.errors:
                     with transaction.atomic():
-                        for target, variant, price_rule in bookings:
+                        for target, meal_date, variant, price_rule in bookings:
                             _book_meal_for_target(target, meal_date, meal, variant, price_rule)
-                    messages.success(request, "Essensanmeldung wurde gespeichert.")
-                    return redirect("kiosk-home")
+                    day_label = "Tag" if len(meal_dates) == 1 else "Tage"
+                    person_label = "Person" if len(selected_targets) == 1 else "Personen"
+                    messages.success(
+                        request,
+                        f"Essensanmeldung wurde für {len(meal_dates)} {day_label} und "
+                        f"{len(selected_targets)} {person_label} gespeichert.",
+                    )
+                    return redirect(f"{reverse('kiosk-home')}#meal-calendar")
         elif request.POST.get("action") == "meal_retract":
             signup_id = request.POST.get("meal_signup_id")
             targets_by_token = _target_lookup(meal_targets)
@@ -1877,6 +1894,20 @@ def kiosk_home(request):
     )
     meal_signups = list(meal_signups)
     meal_calendar_days = _kiosk_meal_calendar(participant.camp, participant, meal_signups, meal_targets)
+    is_meal_post = request.method == "POST" and request.POST.get("action") == "meal"
+    selected_meal_date_values = set(request.POST.getlist(meal_form.add_prefix("meal_dates"))) if is_meal_post else set()
+    for meal_calendar_day in meal_calendar_days:
+        meal_calendar_day["selected"] = meal_calendar_day["date"].isoformat() in selected_meal_date_values
+    selected_meal_target_tokens = set(request.POST.getlist("meal-target")) if is_meal_post else set()
+    if not selected_meal_target_tokens and (not is_meal_post or request.POST.get("meal-targets-submitted") != "1"):
+        selected_meal_target_tokens = {default_booking_target_token}
+    for meal_target in meal_targets:
+        meal_target["meal_selected"] = meal_target["token"] in selected_meal_target_tokens
+        meal_target["selected_variant"] = (
+            request.POST.get(f"meal-variant-{meal_target['token']}")
+            if is_meal_post
+            else meal_target["variant_choices"][0][0]
+        )
     today = timezone.localdate()
     tomorrow = today + timedelta(days=1)
     dinner_rule = resolve_meal_price_rule(
@@ -1907,6 +1938,8 @@ def kiosk_home(request):
         "meal_signups": meal_signups,
         "meal_calendar_days": meal_calendar_days,
         "meal_calendar_groups": _group_kiosk_meal_calendar(meal_calendar_days),
+        "meal_dialog_open": is_meal_post and bool(meal_form.errors),
+        "meal_dialog_step": "persons" if selected_meal_date_values else "dates",
         "drink_rules": quick_form.fields["price_rule"].queryset.filter(kind=PriceRule.Kind.DRINK),
         "snack_rules": quick_form.fields["price_rule"].queryset.filter(kind=PriceRule.Kind.MEAL),
         "dinner_rule": dinner_rule,
