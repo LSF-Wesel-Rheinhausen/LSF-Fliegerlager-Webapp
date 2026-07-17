@@ -1,6 +1,6 @@
 from datetime import date, time
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from django import forms
 from django.contrib.auth import get_user_model
@@ -804,7 +804,6 @@ class KioskPinSetupForm(forms.Form):
 
 class QuickBookingForm(forms.Form):
     price_rule = forms.ModelChoiceField(label="Artikel", queryset=PriceRule.objects.none())
-    quick_date = forms.DateField(required=False)
     quantity = forms.IntegerField(
         label="Menge",
         min_value=1,
@@ -930,28 +929,61 @@ class MealPlanForm(forms.Form):
 
 
 class MealBookingForm(forms.Form):
-    meal_date = forms.DateField(label="Datum", widget=forms.DateInput(attrs={"type": "date"}))
+    meal_dates = forms.TypedMultipleChoiceField(
+        label="Lagertage",
+        choices=(),
+        coerce=date.fromisoformat,
+        empty_value=[],
+        error_messages={"required": "Bitte mindestens einen Lagertag auswählen."},
+    )
     meal = forms.ChoiceField(label="Mahlzeit", choices=MealSignup.Meal.choices)
     variant = forms.ChoiceField(label="Variante", choices=MealSignup.Variant.choices)
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Limit selectable dates to the participant's configured camp days."""
         participant = kwargs.pop("participant", None)
         kwargs.pop("camp", None)
         super().__init__(*args, **kwargs)
         if participant is not None:
-            from django.utils import timezone
+            from .services import camp_meal_dates
 
-            self.fields["meal_date"].initial = timezone.now().date()
+            meal_dates_field = cast(forms.TypedMultipleChoiceField, self.fields["meal_dates"])
+            variant_field = cast(forms.ChoiceField, self.fields["variant"])
+            camp = participant.camp
+            if camp.starts_on and camp.ends_on and camp.starts_on <= camp.ends_on:
+                selectable_dates = camp_meal_dates(camp)
+            elif self.is_bound:
+                getlist = getattr(self.data, "getlist", None)
+                if callable(getlist):
+                    raw_dates = getlist(self.add_prefix("meal_dates"))
+                else:
+                    raw_value = self.data.get(self.add_prefix("meal_dates"), [])
+                    raw_dates = raw_value if isinstance(raw_value, list | tuple) else [raw_value]
+                selectable_dates = []
+                for raw_date in raw_dates:
+                    try:
+                        selectable_dates.append(date.fromisoformat(raw_date))
+                    except (TypeError, ValueError):
+                        continue
+            else:
+                selectable_dates = camp_meal_dates(camp)
+            meal_dates_field.choices = [
+                (meal_date.isoformat(), meal_date.strftime("%d.%m.%Y")) for meal_date in sorted(set(selectable_dates))
+            ]
             if participant.is_child:
-                self.fields["variant"].choices = [
+                variant_field.choices = [
                     (MealSignup.Variant.NORMAL_CHILD, "Mit Fleisch (Kind)"),
                     (MealSignup.Variant.VEGAN_CHILD, "Vegan/Vegetarisch (Kind)"),
                 ]
             else:
-                self.fields["variant"].choices = [
+                variant_field.choices = [
                     (MealSignup.Variant.NORMAL, "Mit Fleisch"),
                     (MealSignup.Variant.VEGAN, "Vegan/Vegetarisch"),
                 ]
+
+    def clean_meal_dates(self) -> list[date]:
+        """Return unique selected camp dates in chronological order."""
+        return sorted(set(self.cleaned_data["meal_dates"]))
 
 
 class MealStandardPricesForm(forms.Form):

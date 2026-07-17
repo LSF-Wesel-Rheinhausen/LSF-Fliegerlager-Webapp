@@ -70,7 +70,6 @@
           <input type="hidden" name="action" value="quick">
           <input type="hidden" name="quick-price_rule" id="quick-price-rule" value="">
           <input type="hidden" name="quick-quantity" id="id_quick-quantity" value="1">
-          <input type="hidden" name="quick-quick_date" id="quick-date" value="">
 
         <section class="panel kiosk-card kiosk-card--accent">
           <div class="kiosk-card__header">
@@ -124,7 +123,6 @@
                   data-food-button
                   data-rule-id="{{ rule.pk }}"
                   data-rule-name="{{ rule.name }}"
-                  data-meal-type="{{ rule.meal_type }}"
                 >
                   <span class="drink-card__title">{{ rule.name }}</span>
                   <span class="drink-card__price">{{ rule.unit_price|money_eur }}</span>
@@ -168,42 +166,43 @@
           <h2>Letzte Schnellbuchungen</h2>
           <p>Getränke, Frühstück und Snack können 15 Minuten lang storniert werden.</p>
         </div>
-        <div class="kiosk-table__wrapper">
-          <table>
-            <thead><tr><th>Zeit</th><th>Buchung</th><th>Menge</th><th>Einzelpreis</th><th>Summe</th><th>Aktion</th></tr></thead>
-            <tbody>
-              {% for entry in recent_quick_charges %}
-                <tr>
-                  <td>{{ entry.created_at }}</td>
-                  <td>{{ entry.description }}</td>
-                  <td>{{ entry.quantity }}</td>
-                  <td>{{ entry.unit_price|money_eur }}</td>
-                  <td>{{ entry.total|money_eur }}</td>
-                  <td>
-                    {% if entry.is_kiosk_cancelable %}
-                      <form method="post" class="inline-form">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="quick_cancel">
-                        <input type="hidden" name="charge_id" value="{{ entry.pk }}">
-                        <button type="submit" class="button button-secondary">Stornieren</button>
-                      </form>
-                    {% else %}
-                      <span class="muted">Nicht mehr möglich</span>
-                    {% endif %}
-                  </td>
-                </tr>
-              {% empty %}
-                <tr><td colspan="6">Noch keine Schnellbuchungen vorhanden.</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
+        <div class="quick-booking-list" role="list">
+          {% for entry in recent_quick_charges %}
+            <article class="quick-booking-row" role="listitem">
+              <div class="quick-booking-row__main">
+                <strong>{{ entry.description }}</strong>
+                <time datetime="{{ entry.created_at|date:'c' }}">{{ entry.created_at|date:"d.m.Y H:i" }} Uhr</time>
+              </div>
+              <div class="quick-booking-row__action">
+                {% if entry.is_kiosk_cancelable %}
+                  <button
+                    type="button"
+                    class="button button-secondary"
+                    data-open-quick-cancel-dialog
+                    data-charge-id="{{ entry.pk }}"
+                    data-charge-description="{{ entry.description }}"
+                    data-charge-total="{{ entry.total|money_eur }}"
+                  >Stornieren</button>
+                {% else %}
+                  <span class="muted">Nicht mehr möglich</span>
+                {% endif %}
+              </div>
+              <dl class="quick-booking-row__meta">
+                <div><dt>Menge</dt><dd>{{ entry.quantity }}</dd></div>
+                <div><dt>Einzelpreis</dt><dd>{{ entry.unit_price|money_eur }}</dd></div>
+                <div><dt>Summe</dt><dd>{{ entry.total|money_eur }}</dd></div>
+              </dl>
+            </article>
+          {% empty %}
+            <p class="kiosk-empty">Noch keine Schnellbuchungen vorhanden.</p>
+          {% endfor %}
         </div>
       </section>
 
     </div>
 
     <div class="kiosk-stack">
-      <section class="panel kiosk-card kiosk-card--accent">
+      <section class="panel kiosk-card kiosk-card--accent" id="meal-calendar">
         <div class="kiosk-card__header kiosk-section-heading">
           <div class="kiosk-card__header-main">
             <span class="kiosk-card__eyebrow">Heute</span>
@@ -224,20 +223,12 @@
             <p>Die Buchung ist bis {{ participant.camp.meal_booking_cutoff_time|time:"H:i" }} Uhr möglich.</p>
           {% endif %}
         </div>
-        {{ meal_form.non_field_errors }}
         <form method="post" class="form-grid kiosk-meal-form" id="meal-booking-form">
           {% csrf_token %}
           <input type="hidden" name="action" value="meal">
           <input type="hidden" name="meal-targets-submitted" value="1">
           <input type="hidden" name="{{ meal_form.variant.html_name }}" value="{{ meal_default_variant }}">
-          <input type="hidden" name="{{ meal_form.meal_date.html_name }}" id="{{ meal_form.meal_date.id_for_label }}" value="{{ meal_form.meal_date.value|default:'' }}">
           <input type="hidden" name="{{ meal_form.meal.html_name }}" id="{{ meal_form.meal.id_for_label }}" value="{{ meal_form.meal.value|default:'' }}">
-          {% for error in meal_form.meal_date.errors %}
-            <span class="helptext error">{{ error }}</span>
-          {% endfor %}
-          {% for error in meal_form.meal.errors %}
-            <span class="helptext error">{{ error }}</span>
-          {% endfor %}
         </form>
         <div class="meal-status-calendar" aria-label="Essensstatus nach Lagertag">
           {% for day in meal_calendar_days %}
@@ -419,6 +410,29 @@
       </section>
     </div>
   </div>
+  <dialog id="quick-cancel-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="quick-cancel-dialog-title">
+    <form method="dialog" class="dialog-heading">
+      <div>
+        <h2 id="quick-cancel-dialog-title">Schnellbuchung stornieren</h2>
+        <p class="dialog-heading__meta">Die Buchung wird aus deiner Abrechnung entfernt.</p>
+      </div>
+      <button class="button button-secondary">Schließen</button>
+    </form>
+    <div class="kiosk-note">
+      <strong id="quick-cancel-description"></strong>
+      <span id="quick-cancel-total"></span>
+    </div>
+    <form method="post" id="quick-cancel-form">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="quick_cancel">
+      <input type="hidden" name="charge_id" id="quick-cancel-charge-id" value="">
+      <div class="dialog-actions">
+        <button type="button" class="button button-secondary" data-close-quick-cancel-dialog>Abbrechen</button>
+        <button type="submit" class="button button-danger">Jetzt stornieren</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="summary-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="summary-dialog-title">
     <form method="dialog" class="dialog-heading dialog-heading--flush">
       <h2 id="summary-dialog-title">Abrechnung</h2>
@@ -510,18 +524,7 @@
     </form>
     <p class="hint" id="food-dialog-name"></p>
 
-    <div id="food-step-date" style="display: none;" class="stack">
-      <p>Für welchen Tag möchtest du buchen?</p>
-      <div class="quantity-grid" role="group" aria-label="Datum auswählen" id="food-date-buttons">
-        {% for day in meal_calendar_days %}
-          <button type="button" class="button-secondary" data-food-date="{{ day.date|date:'Y-m-d' }}">
-            {% if day.date == today %}Heute{% elif day.date == tomorrow %}Morgen{% else %}{{ day.date|date:"D d.m." }}{% endif %}
-          </button>
-        {% endfor %}
-      </div>
-    </div>
-
-    <div id="food-step-persons" style="display: none;" class="stack">
+    <div class="stack">
       <p>Wer soll eingebucht werden?</p>
       <div class="target-list">
         {% for target in meal_targets %}
@@ -546,6 +549,13 @@
         </div>
         <button class="button button-secondary">Schließen</button>
       </form>
+
+      {% if day.locked %}
+        <div class="kiosk-note">
+          <strong>Nicht auswählbar</strong>
+          <span>{{ day.lock_message }}</span>
+        </div>
+      {% endif %}
 
       {% for slot in day.meals %}
         {% if slot.signups %}
@@ -590,37 +600,65 @@
       <button class="button button-secondary">Schließen</button>
     </form>
 
+    {% if meal_form.errors %}
+      <div class="kiosk-note meal-booking-errors" role="alert">
+        {{ meal_form.non_field_errors }}
+        {% for error in meal_form.meal_dates.errors %}<span class="helptext error">{{ error }}</span>{% endfor %}
+        {% for error in meal_form.meal.errors %}<span class="helptext error">{{ error }}</span>{% endfor %}
+        {% for error in meal_form.variant.errors %}<span class="helptext error">{{ error }}</span>{% endfor %}
+      </div>
+    {% endif %}
+
     <div id="meal-step-date" class="stack">
-      <div class="meal-booking-calendar" role="list" aria-label="Abendessen nach Lagertag auswählen">
+      <div class="meal-booking-calendar" role="group" aria-label="Abendessen nach Lagertag auswählen">
         {% for day in meal_calendar_days %}
-          <button
-            type="button"
+          <label
             class="meal-booking-day meal-booking-day--{{ day.status }}"
             data-meal-date-select="{{ day.date|date:'Y-m-d' }}"
-            data-meal-date-label="{{ day.date|date:'D d.m.Y' }}"
             {% if not day.locked and day.price_rule %}data-meal-date="{{ day.date|date:'Y-m-d' }}"{% endif %}
-            {% if day.locked or not day.price_rule %}disabled{% endif %}
+            {% if day.locked or not day.price_rule %}aria-disabled="true"{% endif %}
           >
+            <input
+              type="checkbox"
+              form="meal-booking-form"
+              name="{{ meal_form.meal_dates.html_name }}"
+              value="{{ day.date|date:'Y-m-d' }}"
+              data-meal-date-checkbox
+              data-meal-date-label="{{ day.date|date:'D d.m.Y' }}"
+              {% if day.selected %}checked{% endif %}
+              {% if day.locked or not day.price_rule %}disabled{% endif %}
+            >
             <span class="meal-booking-day__date">
               <strong>{% if day.date == today %}Heute{% elif day.date == tomorrow %}Morgen{% else %}{{ day.date|date:"D d.m." }}{% endif %}</strong>
               <span>{{ day.status_label }}</span>
             </span>
             <span class="meal-booking-day__menu">
               {% if day.description %}
-                {{ day.description }}
+                <span class="meal-booking-day__menu-label">Menü</span>
+                <strong>{{ day.description }}</strong>
               {% elif day.price_rule %}
-                {{ day.price_rule.name }}
+                <span class="meal-booking-day__menu-label">Preisregel</span>
+                <strong>{{ day.price_rule.name }}</strong>
               {% else %}
                 Kein Preis hinterlegt
+              {% endif %}
+              {% if day.locked %}
+                <span class="meal-booking-day__lock">Nicht auswählbar: {{ day.lock_message }}</span>
+              {% endif %}
+              {% if day.meals.0.active_signup_names %}
+                <span class="meal-booking-day__booked">Gebucht für {{ day.meals.0.active_signup_names|join:", " }}</span>
               {% endif %}
             </span>
             <span class="meal-booking-day__price">
               {% if day.price_rule %}{{ day.price_rule.unit_price|money_eur }}{% elif day.locked %}Geschlossen{% else %}Nicht buchbar{% endif %}
             </span>
-          </button>
+          </label>
         {% empty %}
           <p class="hint">Keine Lagertage für Essensbuchungen vorhanden.</p>
         {% endfor %}
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="button" id="meal-continue-to-persons" disabled>Weiter</button>
       </div>
     </div>
 
@@ -634,18 +672,21 @@
         {% for target in meal_targets %}
           <article class="target-row">
             <label>
-              <input type="checkbox" form="meal-booking-form" name="meal-target" value="{{ target.token }}" {% if target.token == default_booking_target_token %}checked{% endif %}>
+              <input type="checkbox" form="meal-booking-form" name="meal-target" value="{{ target.token }}" {% if target.meal_selected %}checked{% endif %}>
               <span>{{ target.name }} &middot; {{ target.role }}</span>
             </label>
             <select form="meal-booking-form" name="meal-variant-{{ target.token }}" aria-label="Variante für {{ target.name }}">
               {% for value, label in target.variant_choices %}
-                <option value="{{ value }}">{{ label }}</option>
+                <option value="{{ value }}" {% if value == target.selected_variant %}selected{% endif %}>{{ label }}</option>
               {% endfor %}
             </select>
           </article>
         {% endfor %}
       </div>
-      <button type="submit" form="meal-booking-form" class="button">Essensanmeldung speichern</button>
+      <div class="dialog-actions">
+        <button type="button" class="button button-secondary" id="meal-back-to-dates">Zurück</button>
+        <button type="submit" form="meal-booking-form" class="button">Essensanmeldung speichern</button>
+      </div>
     </div>
   </dialog>
 
@@ -766,7 +807,9 @@
       const mealDialog = document.getElementById("meal-dialog");
       const mealStepDate = document.getElementById("meal-step-date");
       const mealStepPersons = document.getElementById("meal-step-persons");
-      const mealDateInput = document.getElementById("id_meal-meal_date");
+      const mealDateCheckboxes = [...document.querySelectorAll("[data-meal-date-checkbox]")];
+      const mealContinueButton = document.getElementById("meal-continue-to-persons");
+      const mealBackButton = document.getElementById("meal-back-to-dates");
       const mealInput = document.getElementById("id_meal-meal");
       const mealDialogTitle = document.getElementById("meal-dialog-title");
       const mealDialogMeta = document.getElementById("meal-dialog-meta");
@@ -774,11 +817,14 @@
       const familyDialog = document.getElementById("family-dialog");
       const checkinDialog = document.getElementById("checkin-dialog");
       const contactDialog = document.getElementById("contact-dialog");
+      const quickCancelDialog = document.getElementById("quick-cancel-dialog");
+      const quickCancelChargeId = document.getElementById("quick-cancel-charge-id");
+      const quickCancelDescription = document.getElementById("quick-cancel-description");
+      const quickCancelTotal = document.getElementById("quick-cancel-total");
 
       document.querySelectorAll("[data-quick-button]").forEach((button) => {
         button.addEventListener("click", () => {
           priceRuleInput.value = button.dataset.ruleId;
-          document.getElementById("quick-date").value = "";
           customQuantityInput.value = "";
           drinkName.textContent = button.dataset.ruleName || "";
           drinkDialog.showModal();
@@ -788,33 +834,12 @@
       // Food Dialog Logic
       const foodDialog = document.getElementById("food-dialog");
       const foodDialogName = document.getElementById("food-dialog-name");
-      const foodStepDate = document.getElementById("food-step-date");
-      const foodStepPersons = document.getElementById("food-step-persons");
-      const quickDateInput = document.getElementById("quick-date");
 
       document.querySelectorAll("[data-food-button]").forEach((button) => {
         button.addEventListener("click", () => {
           priceRuleInput.value = button.dataset.ruleId;
           foodDialogName.textContent = button.dataset.ruleName || "";
-          quickDateInput.value = "";
-
-          if (button.dataset.mealType === "breakfast") {
-            foodStepDate.style.display = "block";
-            foodStepPersons.style.display = "none";
-          } else {
-            // Snack skips date selection
-            foodStepDate.style.display = "none";
-            foodStepPersons.style.display = "block";
-          }
           foodDialog.showModal();
-        });
-      });
-
-      document.querySelectorAll("[data-food-date]").forEach((button) => {
-        button.addEventListener("click", () => {
-          quickDateInput.value = button.dataset.foodDate;
-          foodStepDate.style.display = "none";
-          foodStepPersons.style.display = "block";
         });
       });
 
@@ -841,42 +866,72 @@
         }
       });
 
+      const selectedMealDates = () => mealDateCheckboxes.filter((checkbox) => checkbox.checked);
+
+      const updateMealDateSelection = () => {
+        const selected = selectedMealDates();
+        mealContinueButton.disabled = selected.length === 0;
+        document.querySelectorAll("[data-meal-date-select]").forEach((day) => {
+          const checkbox = day.querySelector("[data-meal-date-checkbox]");
+          day.classList.toggle("meal-booking-day--selected", Boolean(checkbox?.checked));
+        });
+        return selected;
+      };
+
+      const showMealDateStep = () => {
+        mealDialogTitle.textContent = "Abendessen buchen";
+        mealDialogMeta.textContent = "Wähle einen oder mehrere Lagertage aus.";
+        mealStepDate.style.display = "block";
+        mealStepPersons.style.display = "none";
+        updateMealDateSelection();
+      };
+
+      const showMealPersonStep = () => {
+        const selected = updateMealDateSelection();
+        if (!selected.length) {
+          showMealDateStep();
+          return;
+        }
+        const labels = selected.map((checkbox) => checkbox.dataset.mealDateLabel || "Lagertag");
+        mealDialogMeta.textContent = selected.length === 1 ? labels[0] : `${selected.length} Tage ausgewählt`;
+        mealSelectedDate.textContent =
+          selected.length === 1 ? `Abendessen am ${labels[0]}` : `${selected.length} Tage ausgewählt: ${labels.join(", ")}`;
+        mealStepDate.style.display = "none";
+        mealStepPersons.style.display = "block";
+      };
+
+      mealDateCheckboxes.forEach((checkbox) => checkbox.addEventListener("change", updateMealDateSelection));
+      mealContinueButton.addEventListener("click", showMealPersonStep);
+      mealBackButton.addEventListener("click", showMealDateStep);
+
       document.querySelectorAll("[data-open-meal-dialog-new]").forEach((button) => {
         button.addEventListener("click", () => {
           mealInput.value = button.dataset.meal || "dinner";
-          mealDateInput.value = "";
-          mealDialogTitle.textContent = "Abendessen buchen";
-          mealDialogMeta.textContent = "Wähle zuerst einen Lagertag aus.";
-          mealStepDate.style.display = "block";
-          mealStepPersons.style.display = "none";
+          mealDateCheckboxes.forEach((checkbox) => {
+            checkbox.checked = false;
+          });
+          showMealDateStep();
           mealDialog.showModal();
-        });
-      });
-
-      document.querySelectorAll("[data-meal-date-select]").forEach((button) => {
-        button.addEventListener("click", () => {
-          mealDateInput.value = button.dataset.mealDateSelect;
-          mealInput.value = "dinner";
-          mealDialogTitle.textContent = "Abendessen buchen";
-          mealDialogMeta.textContent = button.dataset.mealDateLabel || "Tag ausgewählt";
-          mealSelectedDate.textContent = `Abendessen am ${button.dataset.mealDateLabel || "ausgewählten Tag"}`;
-          mealStepDate.style.display = "none";
-          mealStepPersons.style.display = "block";
         });
       });
 
       document.querySelectorAll("[data-open-meal-dialog]").forEach((button) => {
         button.addEventListener("click", () => {
-          mealDateInput.value = button.dataset.mealDate || "";
           mealInput.value = button.dataset.meal || "";
           mealDialogTitle.textContent = `${button.dataset.mealLabel || "Mahlzeit"} buchen`;
-          mealDialogMeta.textContent = button.dataset.mealDateLabel || "Tag ausgewählt";
-          mealSelectedDate.textContent = `${button.dataset.mealLabel || "Mahlzeit"} am ${button.dataset.mealDateLabel || "ausgewählten Tag"}`;
-          mealStepDate.style.display = "none";
-          mealStepPersons.style.display = "block";
+          mealDateCheckboxes.forEach((checkbox) => {
+            checkbox.checked = checkbox.value === (button.dataset.mealDate || "");
+          });
+          showMealPersonStep();
           mealDialog.showModal();
         });
       });
+      updateMealDateSelection();
+      {% if meal_dialog_open %}
+        mealInput.value = mealInput.value || "dinner";
+        {% if meal_dialog_step == "persons" %}showMealPersonStep();{% else %}showMealDateStep();{% endif %}
+        mealDialog.showModal();
+      {% endif %}
       document.querySelectorAll("[data-open-meal-day-detail]").forEach((button) => {
         button.addEventListener("click", () => {
           document.getElementById(button.dataset.openMealDayDetail)?.showModal();
@@ -885,6 +940,18 @@
       document.querySelector("[data-open-family-dialog]")?.addEventListener("click", () => familyDialog.showModal());
       document.querySelector("[data-open-checkin-dialog]")?.addEventListener("click", () => checkinDialog.showModal());
       document.querySelector("[data-open-contact-dialog]")?.addEventListener("click", () => contactDialog.showModal());
+
+      document.querySelectorAll("[data-open-quick-cancel-dialog]").forEach((button) => {
+        button.addEventListener("click", () => {
+          quickCancelChargeId.value = button.dataset.chargeId || "";
+          quickCancelDescription.textContent = button.dataset.chargeDescription || "Schnellbuchung";
+          quickCancelTotal.textContent = `Betrag: ${button.dataset.chargeTotal || ""}`;
+          quickCancelDialog.showModal();
+        });
+      });
+      document
+        .querySelector("[data-close-quick-cancel-dialog]")
+        ?.addEventListener("click", () => quickCancelDialog.close());
 
       const summaryDialog = document.getElementById("summary-dialog");
       document.querySelector("[data-open-summary-dialog]")?.addEventListener("click", () => summaryDialog.showModal());

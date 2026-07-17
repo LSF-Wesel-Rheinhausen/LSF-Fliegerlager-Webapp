@@ -1106,6 +1106,73 @@ textarea {
   white-space: normal;
 }
 
+.quick-booking-list {
+  display: grid;
+  gap: 8px;
+}
+
+.quick-booking-row {
+  display: grid;
+  grid-template-areas: "main meta action";
+  grid-template-columns: minmax(0, 1.2fr) minmax(270px, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-soft);
+}
+
+.quick-booking-row__main {
+  grid-area: main;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.quick-booking-row__main strong,
+.quick-booking-row__main time {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.quick-booking-row__main time {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.quick-booking-row__meta {
+  grid-area: meta;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.quick-booking-row__meta div {
+  display: grid;
+  gap: 2px;
+}
+
+.quick-booking-row__meta dt {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.quick-booking-row__meta dd {
+  margin: 0;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.quick-booking-row__action {
+  grid-area: action;
+  min-width: 132px;
+  text-align: right;
+}
+
 .kiosk-status-text {
   display: inline-flex;
   align-items: center;
@@ -1471,7 +1538,7 @@ textarea {
 
 .meal-booking-day {
   display: grid;
-  grid-template-columns: minmax(96px, 0.7fr) minmax(0, 1.3fr) auto;
+  grid-template-columns: auto minmax(96px, 0.7fr) minmax(0, 1.3fr) auto;
   gap: 12px;
   align-items: center;
   min-height: 76px;
@@ -1480,18 +1547,31 @@ textarea {
   border-radius: var(--radius-sm);
   background: #ffffff;
   color: var(--text);
+  cursor: pointer;
   text-align: left;
 }
 
-.meal-booking-day:not(:disabled):hover {
+.meal-booking-day:not([aria-disabled="true"]):hover {
   border-color: rgba(0, 92, 169, 0.34);
   background: #f5faff;
   transform: translateY(-1px);
 }
 
-.meal-booking-day:disabled {
+.meal-booking-day[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.7;
+}
+
+.meal-booking-day--selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.meal-booking-day > input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  margin: 0;
 }
 
 .meal-booking-day__date,
@@ -1514,6 +1594,30 @@ textarea {
   font-size: 13px;
   font-weight: 700;
   overflow-wrap: anywhere;
+}
+
+.meal-booking-day__menu-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.meal-booking-day__menu strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.meal-booking-day__lock {
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.meal-booking-day__booked {
+  color: var(--ok);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .meal-booking-day__price {
@@ -1965,6 +2069,20 @@ textarea {
     width: 100%;
   }
 
+  .quick-booking-row {
+    grid-template-areas:
+      "main"
+      "action"
+      "meta";
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .quick-booking-row__action {
+    min-width: 0;
+    text-align: left;
+  }
+
 
   .target-row {
     grid-template-columns: 1fr;
@@ -1981,7 +2099,18 @@ textarea {
 
   .meal-signup-compact__row,
   .meal-booking-day {
-    grid-template-columns: 1fr;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .meal-booking-day > input[type="checkbox"] {
+    grid-row: 1 / span 3;
+    align-self: start;
+  }
+
+  .meal-booking-day__date,
+  .meal-booking-day__menu,
+  .meal-booking-day__price {
+    grid-column: 2;
   }
 
   .meal-booking-day__price {
@@ -2159,6 +2288,10 @@ dialog::backdrop {
   color: var(--text);
 }
 
+:root[data-theme="dark"] .quick-booking-row {
+  background: var(--panel-soft);
+}
+
 :root[data-theme="dark"] .button-secondary:hover {
   border-color: var(--accent);
   background: var(--accent-soft);
@@ -2183,8 +2316,13 @@ dialog::backdrop {
 
 :root[data-theme="dark"] tbody tr:hover,
 :root[data-theme="dark"] .meal-status-day:hover,
-:root[data-theme="dark"] .meal-booking-day:not(:disabled):hover,
+:root[data-theme="dark"] .meal-booking-day:not([aria-disabled="true"]):hover,
 :root[data-theme="dark"] .drink-card:hover {
+  background: var(--accent-soft);
+}
+
+:root[data-theme="dark"] .meal-booking-day--selected {
+  border-color: var(--accent);
   background: var(--accent-soft);
 }
 

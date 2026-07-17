@@ -646,6 +646,7 @@ def test_kiosk_meal_calendar_renders_all_camp_days_with_menu_and_participant_pri
     assert 'data-meal-date="2026-07-02"' in content
     assert 'data-meal-date="2026-07-03"' in content
     assert "Pasta mit Salat" in content
+    assert "Menü" in content
     assert "7,00 €" in content
 
 
@@ -675,6 +676,8 @@ def test_kiosk_meal_calendar_shows_closed_days_without_booking_action(client, mo
     assert response.status_code == 200
     content = response.content.decode()
     assert "Geschlossen" in content
+    assert "Nicht auswählbar" in content
+    assert "Buchungen und Rücknahmen für 01.07.2026 sind geschlossen." in content
     assert 'data-meal-date="2026-07-01"' not in content
     assert 'data-meal-date="2026-07-03"' in content
 
@@ -734,6 +737,8 @@ def test_kiosk_meal_status_calendar_shows_day_states_and_detail_dialog(client, m
     assert "meal-status-day meal-status-day--retracted" in content
     assert 'id="meal-day-detail-2026-07-02"' in content
     assert f'name="meal_signup_id" value="{active_signup.pk}"' in content
+    assert "Gebucht für" in content
+    assert "Ada Lovelace" in content
     assert "Essensanmeldungen</h2>" not in content
 
 
@@ -1059,6 +1064,9 @@ def test_kiosk_home_shows_quick_booking_cancel_action(client):
     assert "Letzte Schnellbuchungen" in content
     assert "quick_cancel" in content
     assert "Stornieren" in content
+    assert 'class="quick-booking-list"' in content
+    assert "data-open-quick-cancel-dialog" in content
+    assert 'id="quick-cancel-dialog"' in content
 
 
 @pytest.mark.django_db
@@ -1089,7 +1097,7 @@ def test_kiosk_home_filters_quick_booking_list_to_kiosk_created_charges(client):
 
     assert response.status_code == 200
     content = response.content.decode("utf-8")
-    assert f'name="charge_id" value="{quick_charge.pk}"' in content
+    assert f'data-charge-id="{quick_charge.pk}"' in content
     assert content.count('name="action" value="quick_cancel"') == 1
 
 
@@ -1115,7 +1123,7 @@ def test_kiosk_meal_signup_updates_existing_signup_and_creates_charge(client, mo
 
     payload = {
         "action": "meal",
-        "meal-meal_date": date(2026, 7, 1).isoformat(),
+        "meal-meal_dates": date(2026, 7, 1).isoformat(),
         "meal-meal": MealSignup.Meal.DINNER,
         "meal-variant": MealSignup.Variant.NORMAL,
     }
@@ -1165,7 +1173,7 @@ def test_kiosk_meal_signup_uses_date_specific_price_only_for_matching_date(clien
         reverse("kiosk-home"),
         {
             "action": "meal",
-            "meal-meal_date": date(2026, 7, 1).isoformat(),
+            "meal-meal_dates": date(2026, 7, 1).isoformat(),
             "meal-meal": MealSignup.Meal.DINNER,
             "meal-variant": MealSignup.Variant.NORMAL,
         },
@@ -1180,7 +1188,7 @@ def test_kiosk_meal_signup_uses_date_specific_price_only_for_matching_date(clien
         reverse("kiosk-home"),
         {
             "action": "meal",
-            "meal-meal_date": date(2026, 7, 2).isoformat(),
+            "meal-meal_dates": date(2026, 7, 2).isoformat(),
             "meal-meal": MealSignup.Meal.DINNER,
             "meal-variant": MealSignup.Variant.NORMAL,
         },
@@ -1190,6 +1198,279 @@ def test_kiosk_meal_signup_uses_date_specific_price_only_for_matching_date(clien
     special_charge = Charge.objects.get(participant=participant, occurred_on=date(2026, 7, 2))
     assert special_charge.description == "Grillabend Abendessen"
     assert special_charge.unit_price == Decimal("9.00")
+
+
+@pytest.mark.django_db
+def test_kiosk_books_multiple_meal_dates_and_targets_atomically(client, monkeypatch):
+    _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
+    first_date = date(2026, 7, 1)
+    second_date = date(2026, 7, 2)
+    camp = CampFactory(starts_on=first_date, ends_on=second_date)
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    selected = ParticipantFactory(camp=camp, first_name="Grace", last_name="Hopper")
+    unselected = ParticipantFactory(camp=camp, first_name="Katherine", last_name="Johnson")
+    for linked in (selected, unselected):
+        ParticipantBookingLink.objects.create(
+            inviter=participant,
+            invitee=linked,
+            status=ParticipantBookingLink.Status.ACCEPTED,
+        )
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        is_default=True,
+        applies_to_children=False,
+        applies_to_adults=True,
+        name="Standard Abendessen",
+        unit_price=Decimal("7.00"),
+    )
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        meal_date=second_date,
+        applies_to_children=False,
+        applies_to_adults=True,
+        name="Grillabend",
+        unit_price=Decimal("9.00"),
+    )
+    existing_charge = Charge.objects.create(
+        participant=selected,
+        kind=Charge.Kind.FOOD,
+        description="Alte Buchung",
+        quantity=1,
+        unit_price=Decimal("6.00"),
+        occurred_on=first_date,
+    )
+    existing_signup = MealSignup.objects.create(
+        participant=selected,
+        meal_date=first_date,
+        meal=MealSignup.Meal.DINNER,
+        variant=MealSignup.Variant.NORMAL,
+        charge=existing_charge,
+    )
+    untouched_signup = MealSignup.objects.create(
+        participant=unselected,
+        meal_date=second_date,
+        meal=MealSignup.Meal.DINNER,
+        variant=MealSignup.Variant.NORMAL,
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-meal_dates": [first_date.isoformat(), second_date.isoformat()],
+            "meal-meal": MealSignup.Meal.DINNER,
+            "meal-variant": MealSignup.Variant.NORMAL,
+            "meal-target": [f"participant-{participant.pk}", f"participant-{selected.pk}"],
+            f"meal-variant-participant-{participant.pk}": MealSignup.Variant.VEGAN,
+            f"meal-variant-participant-{selected.pk}": MealSignup.Variant.VEGAN,
+        },
+    )
+
+    assert response.status_code == 302
+    assert response["Location"] == f"{reverse('kiosk-home')}#meal-calendar"
+    assert (
+        MealSignup.objects.filter(
+            participant__in=[participant, selected],
+            meal_date__in=[first_date, second_date],
+            status=MealSignup.Status.ACTIVE,
+        ).count()
+        == 4
+    )
+    existing_signup.refresh_from_db()
+    existing_charge.refresh_from_db()
+    untouched_signup.refresh_from_db()
+    assert existing_signup.variant == MealSignup.Variant.VEGAN
+    assert existing_charge.description == "Standard Abendessen Abendessen"
+    assert existing_charge.unit_price == Decimal("7.00")
+    assert untouched_signup.variant == MealSignup.Variant.NORMAL
+    assert Charge.objects.get(participant=participant, occurred_on=second_date).unit_price == Decimal("9.00")
+    assert Charge.objects.get(participant=selected, occurred_on=second_date).unit_price == Decimal("9.00")
+
+
+@pytest.mark.django_db
+def test_kiosk_rejects_entire_meal_batch_when_one_date_has_no_price(client, monkeypatch):
+    _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
+    first_date = date(2026, 7, 1)
+    second_date = date(2026, 7, 2)
+    camp = CampFactory(starts_on=first_date, ends_on=second_date)
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        meal_date=first_date,
+        applies_to_children=False,
+        applies_to_adults=True,
+        name="Abendessen erster Tag",
+        unit_price=Decimal("7.00"),
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-meal_dates": [first_date.isoformat(), second_date.isoformat()],
+            "meal-meal": MealSignup.Meal.DINNER,
+            "meal-variant": MealSignup.Variant.NORMAL,
+        },
+    )
+
+    assert response.status_code == 200
+    assert b"02.07.2026" in response.content
+    assert response.context["meal_dialog_open"] is True
+    assert {day["date"] for day in response.context["meal_calendar_days"] if day["selected"]} == {
+        first_date,
+        second_date,
+    }
+    assert not MealSignup.objects.filter(participant=participant).exists()
+    assert not Charge.objects.filter(participant=participant, kind=Charge.Kind.FOOD).exists()
+
+
+@pytest.mark.django_db
+def test_kiosk_rejects_entire_meal_batch_when_one_date_is_locked(client, monkeypatch):
+    fixed_now = timezone.make_aware(datetime(2026, 7, 1, 10, 0))
+    _freeze_meal_lock_time(monkeypatch, fixed_now)
+    first_date = fixed_now.date()
+    second_date = first_date + timedelta(days=1)
+    camp = CampFactory(starts_on=first_date, ends_on=second_date)
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        is_default=True,
+        applies_to_children=False,
+        applies_to_adults=True,
+        name="Abendessen",
+        unit_price=Decimal("7.00"),
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-meal_dates": [first_date.isoformat(), second_date.isoformat()],
+            "meal-meal": MealSignup.Meal.DINNER,
+            "meal-variant": MealSignup.Variant.NORMAL,
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Buchungen und Rücknahmen".encode() in response.content
+    assert not MealSignup.objects.filter(participant=participant).exists()
+    assert not Charge.objects.filter(participant=participant, kind=Charge.Kind.FOOD).exists()
+
+
+@pytest.mark.django_db
+def test_kiosk_normalizes_duplicate_meal_dates(client, monkeypatch):
+    _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
+    meal_date = date(2026, 7, 1)
+    camp = CampFactory(starts_on=meal_date, ends_on=meal_date)
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        is_default=True,
+        applies_to_children=False,
+        applies_to_adults=True,
+        name="Abendessen",
+        unit_price=Decimal("7.00"),
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-meal_dates": [meal_date.isoformat(), meal_date.isoformat()],
+            "meal-meal": MealSignup.Meal.DINNER,
+            "meal-variant": MealSignup.Variant.NORMAL,
+        },
+    )
+
+    assert response.status_code == 302
+    assert MealSignup.objects.filter(participant=participant, meal_date=meal_date).count() == 1
+    assert Charge.objects.filter(participant=participant, occurred_on=meal_date, kind=Charge.Kind.FOOD).count() == 1
+
+
+@pytest.mark.django_db
+def test_kiosk_rejects_meal_date_outside_configured_camp(client, monkeypatch):
+    _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 2))
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-meal_dates": date(2026, 7, 3).isoformat(),
+            "meal-meal": MealSignup.Meal.DINNER,
+            "meal-variant": MealSignup.Variant.NORMAL,
+        },
+    )
+
+    assert response.status_code == 200
+    assert "meal_dates" in response.context["meal_form"].errors
+    assert not MealSignup.objects.filter(participant=participant).exists()
+
+
+@pytest.mark.django_db
+def test_kiosk_rejects_unknown_meal_target_without_partial_booking(client, monkeypatch):
+    _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
+    meal_date = date(2026, 7, 1)
+    camp = CampFactory(starts_on=meal_date, ends_on=meal_date)
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        is_default=True,
+        applies_to_children=False,
+        applies_to_adults=True,
+        name="Abendessen",
+        unit_price=Decimal("7.00"),
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-meal_dates": meal_date.isoformat(),
+            "meal-meal": MealSignup.Meal.DINNER,
+            "meal-variant": MealSignup.Variant.NORMAL,
+            "meal-target": [f"participant-{participant.pk}", "participant-999999"],
+        },
+    )
+
+    assert response.status_code == 200
+    assert "nicht verfügbar".encode() in response.content
+    participant_target = next(
+        target for target in response.context["meal_targets"] if target["token"] == f"participant-{participant.pk}"
+    )
+    assert participant_target["meal_selected"] is True
+    assert not MealSignup.objects.filter(participant=participant).exists()
 
 
 @pytest.mark.django_db
@@ -1216,7 +1497,7 @@ def test_kiosk_meal_signup_for_tomorrow_closes_after_camp_cutoff(client, monkeyp
         reverse("kiosk-home"),
         {
             "action": "meal",
-            "meal-meal_date": date(2026, 7, 2).isoformat(),
+            "meal-meal_dates": date(2026, 7, 2).isoformat(),
             "meal-meal": MealSignup.Meal.DINNER,
             "meal-variant": MealSignup.Variant.NORMAL,
         },
@@ -1252,7 +1533,7 @@ def test_kiosk_meal_signup_for_tomorrow_stays_open_before_camp_cutoff(client, mo
         reverse("kiosk-home"),
         {
             "action": "meal",
-            "meal-meal_date": date(2026, 7, 2).isoformat(),
+            "meal-meal_dates": date(2026, 7, 2).isoformat(),
             "meal-meal": MealSignup.Meal.DINNER,
             "meal-variant": MealSignup.Variant.NORMAL,
         },
@@ -1287,7 +1568,7 @@ def test_kiosk_meal_signup_for_past_date_is_locked(client, monkeypatch):
         reverse("kiosk-home"),
         {
             "action": "meal",
-            "meal-meal_date": date(2026, 7, 1).isoformat(),
+            "meal-meal_dates": date(2026, 7, 1).isoformat(),
             "meal-meal": MealSignup.Meal.DINNER,
             "meal-variant": MealSignup.Variant.NORMAL,
         },
@@ -1324,7 +1605,7 @@ def test_kiosk_meal_signup_for_today_is_locked(client, monkeypatch):
         reverse("kiosk-home"),
         {
             "action": "meal",
-            "meal-meal_date": date(2026, 7, 2).isoformat(),
+            "meal-meal_dates": date(2026, 7, 2).isoformat(),
             "meal-meal": MealSignup.Meal.DINNER,
             "meal-variant": MealSignup.Variant.NORMAL,
         },
@@ -1465,7 +1746,7 @@ def test_kiosk_meal_signup_requires_person_when_dialog_selection_is_empty(client
         {
             "action": "meal",
             "meal-targets-submitted": "1",
-            "meal-meal_date": date(2026, 7, 1).isoformat(),
+            "meal-meal_dates": date(2026, 7, 1).isoformat(),
             "meal-meal": MealSignup.Meal.DINNER,
             "meal-variant": MealSignup.Variant.NORMAL,
         },
@@ -1513,7 +1794,7 @@ def test_kiosk_creates_family_member_and_books_meal_on_guardian(client, monkeypa
         reverse("kiosk-home"),
         {
             "action": "meal",
-            "meal-meal_date": date(2026, 7, 1).isoformat(),
+            "meal-meal_dates": date(2026, 7, 1).isoformat(),
             "meal-meal": MealSignup.Meal.DINNER,
             "meal-variant": MealSignup.Variant.NORMAL,
             "meal-target": [f"family-{family_member.pk}"],
@@ -1608,7 +1889,7 @@ def test_kiosk_books_meal_for_linked_participant_on_linked_account(client, monke
         reverse("kiosk-home"),
         {
             "action": "meal",
-            "meal-meal_date": date(2026, 7, 1).isoformat(),
+            "meal-meal_dates": date(2026, 7, 1).isoformat(),
             "meal-meal": MealSignup.Meal.DINNER,
             "meal-variant": MealSignup.Variant.NORMAL,
             "meal-target": [f"participant-{invitee.pk}"],
@@ -1754,10 +2035,14 @@ def test_kiosk_quick_food_tiles_hide_date_specific_meal_rules(client):
     assert response.status_code == 200
     assert "Standard Frühstück".encode() in response.content
     assert "Spezial Frühstück".encode() not in response.content
+    assert b'id="food-step-date"' not in response.content
+    assert b"data-food-date" not in response.content
 
 
 @pytest.mark.django_db
-def test_kiosk_quick_food_booking_applies_date_specific_breakfast_price(client):
+def test_kiosk_quick_food_booking_applies_todays_date_specific_breakfast_price(client, monkeypatch):
+    booking_date = date(2026, 7, 2)
+    monkeypatch.setattr("billing.views.timezone.localdate", lambda value=None, timezone=None: booking_date)
     camp = CampFactory()
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     standard_rule = PriceRuleFactory(
@@ -1774,7 +2059,7 @@ def test_kiosk_quick_food_booking_applies_date_specific_breakfast_price(client):
         camp=camp,
         kind=PriceRule.Kind.MEAL,
         meal_type=PriceRule.MealType.BREAKFAST,
-        meal_date=date(2026, 7, 2),
+        meal_date=booking_date,
         applies_to_children=False,
         applies_to_adults=True,
         name="Spezial Frühstück",
@@ -1790,7 +2075,7 @@ def test_kiosk_quick_food_booking_applies_date_specific_breakfast_price(client):
             "action": "quick",
             "quick-price_rule": standard_rule.pk,
             "quick-quantity": 1,
-            "quick-quick_date": date(2026, 7, 2).isoformat(),
+            "quick-quick_date": date(2030, 1, 1).isoformat(),
         },
     )
 
@@ -1798,7 +2083,7 @@ def test_kiosk_quick_food_booking_applies_date_specific_breakfast_price(client):
     charge = Charge.objects.get(participant=participant, kind=Charge.Kind.FOOD)
     assert charge.description == "Spezial Frühstück (Kiosk)"
     assert charge.unit_price == Decimal("6.00")
-    assert charge.occurred_on == date(2026, 7, 2)
+    assert charge.occurred_on == booking_date
 
 
 @pytest.mark.django_db
@@ -1841,7 +2126,7 @@ def test_kiosk_meal_signup_child_breakfast_override(client, monkeypatch):
         reverse("kiosk-home"),
         {
             "action": "meal",
-            "meal-meal_date": date(2026, 7, 1).isoformat(),
+            "meal-meal_dates": date(2026, 7, 1).isoformat(),
             "meal-meal": MealSignup.Meal.BREAKFAST,
             "meal-variant": MealSignup.Variant.NORMAL_CHILD,
         },
@@ -1852,7 +2137,7 @@ def test_kiosk_meal_signup_child_breakfast_override(client, monkeypatch):
         reverse("kiosk-home"),
         {
             "action": "meal",
-            "meal-meal_date": date(2026, 7, 2).isoformat(),
+            "meal-meal_dates": date(2026, 7, 2).isoformat(),
             "meal-meal": MealSignup.Meal.BREAKFAST,
             "meal-variant": MealSignup.Variant.NORMAL_CHILD,
         },
@@ -1899,7 +2184,7 @@ def test_kiosk_meal_signup_without_price_rule_shows_error(client):
         reverse("kiosk-home"),
         {
             "action": "meal",
-            "meal-meal_date": date(2026, 7, 1).isoformat(),
+            "meal-meal_dates": date(2026, 7, 1).isoformat(),
             "meal-meal": MealSignup.Meal.DINNER,
             "meal-variant": MealSignup.Variant.NORMAL,
         },
