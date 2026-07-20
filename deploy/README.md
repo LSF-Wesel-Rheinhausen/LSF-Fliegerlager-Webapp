@@ -30,6 +30,7 @@ Optionale Variablen mit Defaults:
 - `UPDATER_IMAGE`: Updater-Container-Image; Default ist das veröffentlichte GHCR-Updater-Image.
 - `UPDATE_HEALTH_TIMEOUT`: maximale Wartezeit auf `APP_HEALTH_URL` in Sekunden; Default `180`.
 - `DAILY_SETTLEMENT_BACKUP_INTERVAL_SECONDS`: Prüfintervall des Scheduler-Containers; Default `300`.
+- `WEB_PUSH_WORKER_INTERVAL_SECONDS`: Prüfintervall des Push-Workers; Default `60`.
 - `APP_HEALTH_URL`: Healthcheck-URL der App; Default `http://app:8000/healthz/`.
 - `TARGET_SERVICE`: Compose-Service des App-Containers für Rollback-Digest-Ermittlung; Default `app`.
 - `BACKUP_DIR`: Host-Verzeichnis für Backups; Default `./backups`.
@@ -93,6 +94,24 @@ entsprechen. Außerhalb von `localhost` ist HTTPS Pflicht.
 Ein späterer Wechsel der RP-ID macht bereits registrierte Credentials unbrauchbar. Deshalb muss vor Domainwechseln
 der Passwort- oder Authelia-Fallback geprüft werden. Weitere Sicherheits- und Recovery-Hinweise stehen in
 [`../docs/passkeys.md`](../docs/passkeys.md).
+
+## PWA und Web Push
+
+Die PWA funktioniert ohne zusätzliche Konfiguration. Für Push-Benachrichtigungen einmalig VAPID-Schlüssel erzeugen
+und anschließend den Stack mit aktiviertem Worker neu bereitstellen:
+
+```bash
+docker compose run --rm app python manage.py generate_webpush_keys
+```
+
+Die ausgegebenen Werte werden als `WEB_PUSH_VAPID_PUBLIC_KEY` und `WEB_PUSH_VAPID_PRIVATE_KEY` in `.env` hinterlegt.
+Zusätzlich `WEB_PUSH_VAPID_SUBJECT` auf eine betreute `mailto:`-Adresse setzen und `WEB_PUSH_ENABLED=1` aktivieren.
+Der private Schlüssel darf nicht in Git, Logs oder Screenshots gelangen. Eine Rotation macht bestehende
+Browser-Subscriptions unbrauchbar; betroffene Geräte müssen Push danach erneut aktivieren.
+
+Der Service `push-worker` erzeugt terminierte Erinnerungen und verarbeitet die Datenbank-Outbox. Zentrale Tablets
+verwenden `/central/kiosk/` und bieten keine Push-Aktivierung an. Weitere Betriebsdetails stehen in
+[`../docs/pwa-push.md`](../docs/pwa-push.md).
 
 ## Updates
 

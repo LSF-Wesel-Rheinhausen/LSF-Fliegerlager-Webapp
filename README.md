@@ -23,7 +23,9 @@ Web-App zur Verwaltung und Abrechnung eines Vereins-Fliegerlagers. Die Anwendung
 - Unveränderliche, versionierte Lager-Abrechnungsläufe mit Verlauf und historischen CSV-, Excel- und PDF-Exporten
 - Übersichtliche Preisverwaltung mit Lagerpauschalen für 1/2 Wochen und Teilnehmer/Begleitpersonen, Getränke, Standardpreise für Mahlzeiten und abweichende Tagespreise
 - Native Dialoge für Preisregelanlage und -bearbeitung, damit Admins im Kontext der Preisübersicht bleiben
-- Teilnehmer-Kiosk: PIN-Login, PIN-Ersteinrichtung, sichtbarer Auto-Logout-Timer, große Schnellbuchungen für Getränke, Frühstück und Snacks, 15-Minuten-Storno sowie Essensanmeldungen mit Tablet-/Mobilbedienung
+- Installierbare PWA für Verwaltung, private Teilnehmergeräte und zentrale Kiosk-Tablets mit explizitem Offline-Hinweis ohne Caching sensibler Anwendungsdaten
+- Teilnehmer-Kiosk: privater PIN-Login unter `/kiosk/`, zentraler 120-Sekunden-Kiosk unter `/central/kiosk/`, große Schnellbuchungen für Getränke, Frühstück und Snacks, 15-Minuten-Storno sowie Essensanmeldungen mit Tablet-/Mobilbedienung
+- Optionale Push-Benachrichtigungen für private Teilnehmer- und Verwaltungsgeräte zu Diensten, Buchungen, Essensfristen, Auslagen und offenen Verwaltungsaufgaben
 - Dienstpläne: Anlage täglicher Vorlagen durch Admins, selbstständige Übernahme und Tausch von Diensten durch Teilnehmer im Kiosk sowie Tracking von Pflichtdiensten per Fortschrittsbalken
 - Admin-Bearbeitung, Löschung und Wiederherstellung von Buchungen mit Änderungsprotokoll der abrechnungsrelevanten Felder
 - CSV-/Excel-Import mit Vorschau und Validierung
@@ -182,8 +184,6 @@ Beitrags- und Agentenregeln stehen in [`CONTRIBUTING.md`](CONTRIBUTING.md) und [
 
 ## Roadmap
 
-- Installierbare Webapp/PWA: Web App Manifest, App-Icons, Theme-/Hintergrundfarben, Service Worker für Shell-/Asset-Caching und Installationshinweise für iOS, Android und Desktop.
-- Teilnehmer-Kiosk: PWA-Ausbau, Offline-Hinweise und weitere Tablet-Optimierungen.
 - Getränke-/Essens-Workflow: optionale Schnellerfassung und weitere Auswertungen auf Basis der vorhandenen Tages-, Bestell- und Storno-Flüsse.
 - Mehr Tests: zusätzliche Regressionstests für komplexe Settlement-, Dienstplan-, Import- und Export-Randfälle.
 - UI-Ausbau: weitere Bearbeiten-/Löschen-Flows, Druckansichten und zusätzliche Dashboard-Auswertungen.

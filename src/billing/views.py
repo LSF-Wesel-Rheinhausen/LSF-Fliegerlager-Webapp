@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 from datetime import timedelta
+from functools import partial
 from typing import Any
 
 from django.conf import settings
@@ -79,7 +80,9 @@ from .models import (
     Settlement,
     SettlementRun,
     Shift,
+    ShiftAssignment,
 )
+from .notifications import notify_booking_link, notify_expense_submitted, notify_linked_booking, notify_shift_exchange
 from .permissions import (
     ADMIN_GROUP,
     EDITOR_GROUP,
@@ -90,6 +93,7 @@ from .permissions import (
     meal_manager_required,
     superuser_required,
 )
+from .pwa_views import pwa_template_context
 from .roles import (
     ROLE_ADMIN,
     ROLE_EDITOR,
@@ -125,7 +129,76 @@ KIOSK_PARTICIPANT_SESSION_KEY = "kiosk_participant_id"
 KIOSK_FAMILY_MEMBER_SESSION_KEY = "kiosk_family_member_id"
 KIOSK_PIN_SETUP_SESSION_KEY = "kiosk_pin_setup_participant_id"
 KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY = "kiosk_pin_setup_family_member_id"
+KIOSK_MODE_SESSION_KEY = "kiosk_mode"
 KIOSK_QUICK_BOOKING_CANCEL_WINDOW = timedelta(minutes=15)
+
+
+def kiosk_root(_request: HttpRequest) -> HttpResponse:
+    """Redirect the public root to the private-device kiosk."""
+    return redirect("kiosk-home")
+
+
+def _kiosk_route(kiosk_mode: str, page: str) -> str:
+    """Return the named route for a kiosk page in the active device mode."""
+    prefix = "central-kiosk" if kiosk_mode == "central" else "kiosk"
+    return f"{prefix}-{page}"
+
+
+def _clear_kiosk_session(request: HttpRequest) -> None:
+    """Remove every participant identity and setup value from a kiosk session."""
+    for key in (
+        KIOSK_PARTICIPANT_SESSION_KEY,
+        KIOSK_FAMILY_MEMBER_SESSION_KEY,
+        KIOSK_PIN_SETUP_SESSION_KEY,
+        KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY,
+    ):
+        request.session.pop(key, None)
+
+
+def _activate_kiosk_mode(request: HttpRequest, kiosk_mode: str) -> None:
+    """Bind the session to a route-enforced kiosk mode and isolate identities."""
+    previous_mode = request.session.get(KIOSK_MODE_SESSION_KEY)
+    if previous_mode and previous_mode != kiosk_mode:
+        _clear_kiosk_session(request)
+    request.session[KIOSK_MODE_SESSION_KEY] = kiosk_mode
+    if kiosk_mode == "central":
+        request.session.set_expiry(120)
+
+
+def _kiosk_context(kiosk_mode: str) -> dict[str, Any]:
+    """Return shared routing, session, and PWA context for kiosk templates."""
+    central = kiosk_mode == "central"
+    return {
+        "kiosk_mode": kiosk_mode,
+        "kiosk_autologout": central,
+        "kiosk_urls": {
+            "home": reverse(_kiosk_route(kiosk_mode, "home")),
+            "login": reverse(_kiosk_route(kiosk_mode, "login")),
+            "logout": reverse(_kiosk_route(kiosk_mode, "logout")),
+            "pin_setup": reverse(_kiosk_route(kiosk_mode, "pin-setup")),
+            "shifts": reverse(_kiosk_route(kiosk_mode, "shifts")),
+            "shared_expense_request": reverse(_kiosk_route(kiosk_mode, "shared-expense-request")),
+        },
+        **pwa_template_context("central" if central else "kiosk"),
+    }
+
+
+def _notify_shift_exchange_by_id(
+    assignment_id: int,
+    event: str,
+    actor_id: int,
+    previous_participant_id: int | None = None,
+) -> None:
+    """Load committed shift records and enqueue an exchange notification."""
+    previous_participant = (
+        Participant.objects.get(pk=previous_participant_id) if previous_participant_id is not None else None
+    )
+    notify_shift_exchange(
+        ShiftAssignment.objects.select_related("shift", "shift__camp").get(pk=assignment_id),
+        event=event,
+        actor=Participant.objects.get(pk=actor_id),
+        previous_participant=previous_participant,
+    )
 
 
 @superuser_required
@@ -1098,10 +1171,12 @@ def _kiosk_family_member_from_session(request, participant):
     return family_member
 
 
-def kiosk_login(request):
+def kiosk_login(request, kiosk_mode="private"):
+    """Authenticate a participant in a private or central kiosk session."""
+    _activate_kiosk_mode(request, kiosk_mode)
     if request.session.get(KIOSK_PARTICIPANT_SESSION_KEY):
         if _kiosk_participant(request) is not None:
-            return redirect("kiosk-home")
+            return redirect(_kiosk_route(kiosk_mode, "home"))
         else:
             request.session.pop(KIOSK_PARTICIPANT_SESSION_KEY, None)
             request.session.pop(KIOSK_FAMILY_MEMBER_SESSION_KEY, None)
@@ -1114,8 +1189,10 @@ def kiosk_login(request):
             request.session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = family_member.pk
         else:
             request.session.pop(KIOSK_FAMILY_MEMBER_SESSION_KEY, None)
+        if kiosk_mode == "private":
+            request.session.set_expiry(0)
         messages.success(request, "Du bist im Kiosk angemeldet.")
-        return redirect("kiosk-home")
+        return redirect(_kiosk_route(kiosk_mode, "home"))
     if request.method == "POST" and getattr(form, "missing_pin_family_member", None) is not None:
         request.session[KIOSK_PIN_SETUP_SESSION_KEY] = form.missing_pin_participant.pk
         request.session[KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY] = form.missing_pin_family_member.pk
@@ -1123,7 +1200,7 @@ def kiosk_login(request):
             request,
             "Für diesen Begleiter ist noch kein PIN gesetzt. Bitte lege jetzt einen neuen PIN fest.",
         )
-        return redirect("kiosk-pin-setup")
+        return redirect(_kiosk_route(kiosk_mode, "pin-setup"))
     if request.method == "POST" and getattr(form, "missing_pin_participant", None) is not None:
         request.session[KIOSK_PIN_SETUP_SESSION_KEY] = form.missing_pin_participant.pk
         request.session.pop(KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY, None)
@@ -1131,18 +1208,17 @@ def kiosk_login(request):
             request,
             "Für diesen Teilnehmer ist noch kein PIN gesetzt. Bitte lege jetzt einen neuen PIN fest.",
         )
-        return redirect("kiosk-pin-setup")
+        return redirect(_kiosk_route(kiosk_mode, "pin-setup"))
 
-    return render(request, "billing/kiosk_login.html", {"form": form})
+    return render(request, "billing/kiosk_login.html", {"form": form, **_kiosk_context(kiosk_mode)})
 
 
-def kiosk_logout(request):
-    request.session.pop(KIOSK_PARTICIPANT_SESSION_KEY, None)
-    request.session.pop(KIOSK_FAMILY_MEMBER_SESSION_KEY, None)
-    request.session.pop(KIOSK_PIN_SETUP_SESSION_KEY, None)
-    request.session.pop(KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY, None)
+def kiosk_logout(request, kiosk_mode="private"):
+    """Clear the active kiosk identity while preserving the selected device mode."""
+    _activate_kiosk_mode(request, kiosk_mode)
+    _clear_kiosk_session(request)
     messages.success(request, "Du wurdest vom Kiosk abgemeldet.")
-    return redirect("kiosk-login")
+    return redirect(_kiosk_route(kiosk_mode, "login"))
 
 
 def _kiosk_participant(request):
@@ -1339,7 +1415,7 @@ def _target_token_for_signup(signup):
     return f"participant-{signup.participant_id}"
 
 
-def _book_meal_for_target(target, meal_date, meal, variant, price_rule):
+def _book_meal_for_target(target, meal_date, meal, variant, price_rule, booked_by):
     meal_display = dict(MealSignup.Meal.choices).get(meal, meal)
     target_object = target["object"]
     participant = target_object if target["kind"] == "participant" else target_object.guardian
@@ -1370,12 +1446,19 @@ def _book_meal_for_target(target, meal_date, meal, variant, price_rule):
     charge.quantity = 1
     charge.unit_price = price_rule.unit_price
     charge.foerdersatz = price_rule.foerdersatz
+    charge.kiosk_booked_by = booked_by
     charge.deleted_at = None
     charge.deleted_by = None
     charge.save()
     if signup.charge_id != charge.pk:
         signup.charge = charge
         signup.save(update_fields=["charge", "updated_at"])
+    transaction.on_commit(
+        lambda charge_id=charge.pk: notify_linked_booking(
+            Charge.objects.select_related("participant", "kiosk_booked_by").get(pk=charge_id),
+            cancelled=False,
+        )
+    )
 
 
 def _retract_meal_signup(signup):
@@ -1387,6 +1470,12 @@ def _retract_meal_signup(signup):
     signup.charge.deleted_at = timezone.now()
     signup.charge.deleted_by = None
     signup.charge.save(update_fields=["deleted_at", "deleted_by"])
+    transaction.on_commit(
+        lambda charge_id=signup.charge_id: notify_linked_booking(
+            Charge.objects.select_related("participant", "kiosk_booked_by").get(pk=charge_id),
+            cancelled=True,
+        )
+    )
 
 
 def _is_kiosk_quick_charge_cancelable(charge: Charge, participant: Participant, now=None) -> bool:
@@ -1588,10 +1677,12 @@ def meal_order_mark_sent(request, camp_id):
     return redirect("camp-meal-overview", camp_id=camp.pk)
 
 
-def kiosk_pin_setup(request):
+def kiosk_pin_setup(request, kiosk_mode="private"):
+    """Create the initial PIN while retaining the kiosk device mode."""
+    _activate_kiosk_mode(request, kiosk_mode)
     participant = _kiosk_participant_from_session(request, KIOSK_PIN_SETUP_SESSION_KEY)
     if participant is None:
-        return redirect("kiosk-login")
+        return redirect(_kiosk_route(kiosk_mode, "login"))
     family_member_id = request.session.get(KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY)
     family_member = None
     if family_member_id:
@@ -1607,7 +1698,7 @@ def kiosk_pin_setup(request):
         )
         if family_member is None:
             request.session.pop(KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY, None)
-            return redirect("kiosk-login")
+            return redirect(_kiosk_route(kiosk_mode, "login"))
 
     if family_member is not None:
         pin_holder = family_member
@@ -1616,7 +1707,7 @@ def kiosk_pin_setup(request):
         pin_holder = participant
         pin_record, _created = ParticipantPin.objects.get_or_create(participant=participant)
     if not pin_record.must_set_pin and pin_record.pin_hash:
-        return redirect("kiosk-home")
+        return redirect(_kiosk_route(kiosk_mode, "home"))
 
     form = KioskPinSetupForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
@@ -1630,20 +1721,24 @@ def kiosk_pin_setup(request):
                 request.session.pop(KIOSK_FAMILY_MEMBER_SESSION_KEY, None)
             request.session.pop(KIOSK_PIN_SETUP_SESSION_KEY, None)
             request.session.pop(KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY, None)
+            if kiosk_mode == "private":
+                request.session.set_expiry(0)
         messages.success(request, "PIN wurde gesetzt. Du bist jetzt im Kiosk angemeldet.")
-        return redirect("kiosk-home")
+        return redirect(_kiosk_route(kiosk_mode, "home"))
 
     return render(
         request,
         "billing/kiosk_pin_setup.html",
-        {"form": form, "participant": pin_holder, "kiosk_autologout": True},
+        {"form": form, "participant": pin_holder, **_kiosk_context(kiosk_mode)},
     )
 
 
-def kiosk_home(request):
+def kiosk_home(request, kiosk_mode="private"):
+    """Render and process participant kiosk workflows for the selected device mode."""
+    _activate_kiosk_mode(request, kiosk_mode)
     participant = _kiosk_participant(request)
     if participant is None:
-        return redirect("kiosk-login")
+        return redirect(_kiosk_route(kiosk_mode, "login"))
 
     active_family_member = _kiosk_family_member(request, participant)
     default_booking_target = active_family_member or participant
@@ -1711,9 +1806,15 @@ def kiosk_home(request):
                             kiosk_booked_by=participant,
                         )
                         charge.save()
+                        transaction.on_commit(
+                            lambda charge_id=charge.pk: notify_linked_booking(
+                                Charge.objects.select_related("participant", "kiosk_booked_by").get(pk=charge_id),
+                                cancelled=False,
+                            )
+                        )
                 if not quick_form.errors:
                     messages.success(request, f"{rule.name} gebucht.")
-                    return redirect("kiosk-home")
+                    return redirect(_kiosk_route(kiosk_mode, "home"))
         elif request.POST.get("action") == "quick_cancel":
             try:
                 charge_id = int(request.POST.get("charge_id", ""))
@@ -1736,8 +1837,14 @@ def kiosk_home(request):
                     charge.deleted_at = timezone.now()
                     charge.deleted_by = None
                     charge.save(update_fields=["deleted_at", "deleted_by"])
+                    transaction.on_commit(
+                        lambda charge_id=charge.pk: notify_linked_booking(
+                            Charge.objects.select_related("participant", "kiosk_booked_by").get(pk=charge_id),
+                            cancelled=True,
+                        )
+                    )
                     messages.success(request, "Buchung wurde storniert.")
-                    return redirect("kiosk-home")
+                    return redirect(_kiosk_route(kiosk_mode, "home"))
         elif request.POST.get("action") == "meal":
             meal_form = MealBookingForm(request.POST, participant=participant, prefix="meal")
             if meal_form.is_valid():
@@ -1786,7 +1893,7 @@ def kiosk_home(request):
                 if not meal_form.errors:
                     with transaction.atomic():
                         for target, meal_date, variant, price_rule in bookings:
-                            _book_meal_for_target(target, meal_date, meal, variant, price_rule)
+                            _book_meal_for_target(target, meal_date, meal, variant, price_rule, participant)
                     day_label = "Tag" if len(meal_dates) == 1 else "Tage"
                     person_label = "Person" if len(selected_targets) == 1 else "Personen"
                     messages.success(
@@ -1794,7 +1901,7 @@ def kiosk_home(request):
                         f"Essensanmeldung wurde für {len(meal_dates)} {day_label} und "
                         f"{len(selected_targets)} {person_label} gespeichert.",
                     )
-                    return redirect(f"{reverse('kiosk-home')}#meal-calendar")
+                    return redirect(f"{reverse(_kiosk_route(kiosk_mode, 'home'))}#meal-calendar")
         elif request.POST.get("action") == "meal_retract":
             signup_id = request.POST.get("meal_signup_id")
             targets_by_token = _target_lookup(meal_targets)
@@ -1811,7 +1918,7 @@ def kiosk_home(request):
                 with transaction.atomic():
                     _retract_meal_signup(signup)
                 messages.success(request, "Essensanmeldung wurde zurückgenommen.")
-                return redirect("kiosk-home")
+                return redirect(_kiosk_route(kiosk_mode, "home"))
         elif request.POST.get("action") == "family_member_create":
             family_member_form = KioskFamilyMemberForm(request.POST, prefix="family")
             if family_member_form.is_valid():
@@ -1820,7 +1927,7 @@ def kiosk_home(request):
                     family_member.guardian = participant
                     family_member.save()
                 messages.success(request, "Familienmitglied wurde angelegt.")
-                return redirect("kiosk-home")
+                return redirect(_kiosk_route(kiosk_mode, "home"))
         elif request.POST.get("action") == "family_member_deactivate":
             member_id = request.POST.get("family_member_id")
             family_member = participant.family_members.filter(pk=member_id, is_active=True).first()
@@ -1828,18 +1935,25 @@ def kiosk_home(request):
                 family_member.is_active = False
                 family_member.save(update_fields=["is_active", "updated_at"])
                 messages.success(request, "Familienmitglied wurde entfernt.")
-                return redirect("kiosk-home")
+                return redirect(_kiosk_route(kiosk_mode, "home"))
             messages.error(request, "Familienmitglied wurde nicht gefunden.")
         elif request.POST.get("action") == "booking_link_invite":
             booking_link_form = KioskBookingLinkInviteForm(request.POST, inviter=participant, prefix="link")
             if booking_link_form.is_valid():
                 with transaction.atomic():
-                    ParticipantBookingLink.objects.create(
+                    booking_link = ParticipantBookingLink.objects.create(
                         inviter=participant,
                         invitee=booking_link_form.cleaned_data["participant"],
                     )
+                    transaction.on_commit(
+                        lambda link_id=booking_link.pk, actor_id=participant.pk: notify_booking_link(
+                            ParticipantBookingLink.objects.select_related("inviter", "invitee").get(pk=link_id),
+                            event="invited",
+                            actor=Participant.objects.get(pk=actor_id),
+                        )
+                    )
                 messages.success(request, "Einladung wurde gesendet.")
-                return redirect("kiosk-home")
+                return redirect(_kiosk_route(kiosk_mode, "home"))
         elif request.POST.get("action") in ["booking_link_accept", "booking_link_decline", "booking_link_revoke"]:
             link_id = request.POST.get("booking_link_id")
             if request.POST.get("action") == "booking_link_accept":
@@ -1867,12 +1981,24 @@ def kiosk_home(request):
             if booking_link is not None:
                 booking_link.status = new_status
                 booking_link.save(update_fields=["status", "updated_at"])
+                event = {
+                    ParticipantBookingLink.Status.ACCEPTED: "accepted",
+                    ParticipantBookingLink.Status.DECLINED: "declined",
+                    ParticipantBookingLink.Status.REVOKED: "revoked",
+                }[new_status]
+                transaction.on_commit(
+                    lambda link_id=booking_link.pk, actor_id=participant.pk, event_name=event: notify_booking_link(
+                        ParticipantBookingLink.objects.select_related("inviter", "invitee").get(pk=link_id),
+                        event=event_name,
+                        actor=Participant.objects.get(pk=actor_id),
+                    )
+                )
                 messages.success(request, success_message)
-                return redirect("kiosk-home")
+                return redirect(_kiosk_route(kiosk_mode, "home"))
             messages.error(request, "Verknüpfung wurde nicht gefunden.")
         elif request.POST.get("action") == "checkin":
             if _update_kiosk_checkin_dates(request, participant, checkin_participants):
-                return redirect("kiosk-home")
+                return redirect(_kiosk_route(kiosk_mode, "home"))
 
     recent_quick_charges = list(
         Charge.objects.select_related("participant", "kiosk_booked_by")
@@ -1956,7 +2082,7 @@ def kiosk_home(request):
         "pending_invites": pending_invites,
         "sent_invites": sent_invites,
         "accepted_links": accepted_links,
-        "kiosk_autologout": True,
+        **_kiosk_context(kiosk_mode),
         "kiosk_contacts": admin_interface_contacts(User),
         "next_order_date": next_order_date,
         "next_meal_order": next_meal_order,
@@ -1968,10 +2094,12 @@ def kiosk_home(request):
     return render(request, "billing/kiosk_home.html", context)
 
 
-def kiosk_shared_expense_request(request):
+def kiosk_shared_expense_request(request, kiosk_mode="private"):
+    """Create a shared-expense request from the selected kiosk mode."""
+    _activate_kiosk_mode(request, kiosk_mode)
     participant = _kiosk_participant(request)
     if not participant:
-        return redirect("kiosk-login")
+        return redirect(_kiosk_route(kiosk_mode, "login"))
 
     form = SharedExpenseRequestForm(request.POST or None, request.FILES or None)
     if request.method == "POST" and form.is_valid():
@@ -1981,8 +2109,13 @@ def kiosk_shared_expense_request(request):
             expense.participant = participant
             expense.reimbursable = True
             expense.save()
+            transaction.on_commit(
+                lambda expense_id=expense.pk: notify_expense_submitted(
+                    Expense.objects.select_related("participant").get(pk=expense_id)
+                )
+            )
         messages.success(request, "Antrag auf Gemeinschaftsausgabe eingereicht.")
-        return redirect("kiosk-home")
+        return redirect(_kiosk_route(kiosk_mode, "home"))
 
     return render(
         request,
@@ -1991,20 +2124,20 @@ def kiosk_shared_expense_request(request):
             "form": form,
             "title": "Gemeinschaftsausgabe beantragen",
             "camp": participant.camp,
-            "kiosk_autologout": True,
-            "cancel_url": reverse("kiosk-home"),
+            "cancel_url": reverse(_kiosk_route(kiosk_mode, "home")),
+            **_kiosk_context(kiosk_mode),
         },
     )
 
 
-def kiosk_shifts(request):
+def kiosk_shifts(request, kiosk_mode="private"):
+    """Render and process the shift exchange flow in the selected kiosk mode."""
+    _activate_kiosk_mode(request, kiosk_mode)
     participant = _kiosk_participant(request)
     if not participant:
-        return redirect("kiosk-login")
+        return redirect(_kiosk_route(kiosk_mode, "login"))
 
     today = timezone.localdate()
-    from .models import Shift, ShiftAssignment
-
     if request.method == "POST":
         action = request.POST.get("action")
         shift_id = request.POST.get("shift_id")
@@ -2025,6 +2158,15 @@ def kiosk_shifts(request):
                     offered_assignment.participant = participant
                     offered_assignment.offered_for_exchange = False
                     offered_assignment.save(update_fields=["participant", "offered_for_exchange"])
+                    transaction.on_commit(
+                        partial(
+                            _notify_shift_exchange_by_id,
+                            offered_assignment.pk,
+                            "taken",
+                            participant.pk,
+                            old_participant.pk,
+                        )
+                    )
                     messages.success(request, f"Du hast den Dienst von {old_participant.full_name} übernommen.")
                 else:
                     messages.error(
@@ -2044,6 +2186,10 @@ def kiosk_shifts(request):
                     offered_for_exchange=True
                 )
                 if updated:
+                    assignment = ShiftAssignment.objects.get(shift=shift, participant=participant)
+                    transaction.on_commit(
+                        partial(_notify_shift_exchange_by_id, assignment.pk, "offered", participant.pk)
+                    )
                     messages.success(request, f"Dein Dienst '{shift.name}' wird nun zum Tausch angeboten.")
         elif action == "revoke_offer":
             updated = ShiftAssignment.objects.filter(shift=shift, participant=participant).update(
@@ -2052,7 +2198,7 @@ def kiosk_shifts(request):
             if updated:
                 messages.success(request, f"Du hast das Tauschangebot für '{shift.name}' zurückgezogen.")
 
-        return redirect("kiosk-shifts")
+        return redirect(_kiosk_route(kiosk_mode, "shifts"))
 
     shifts = (
         participant.camp.shifts.filter(date__gte=today)
@@ -2088,7 +2234,7 @@ def kiosk_shifts(request):
             "offered_shifts": offered_shifts,
             "my_shifts": my_shifts,
             "today": today,
-            "kiosk_autologout": True,
+            **_kiosk_context(kiosk_mode),
         },
     )
 

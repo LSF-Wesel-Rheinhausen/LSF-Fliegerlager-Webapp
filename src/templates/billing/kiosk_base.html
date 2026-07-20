@@ -1,18 +1,21 @@
 {% load static %}
 <!doctype html>
-<html lang="de">
+<html lang="de" data-pwa-worker="{{ pwa_worker_url }}" data-pwa-scope="{{ pwa_worker_scope }}">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Kiosk{% endblock %}</title>
     <link rel="icon" type="image/jpeg" href="{% static 'billing/logo.jpg' %}">
+    <link rel="manifest" href="{{ pwa_manifest_url }}">
+    <meta name="theme-color" content="#1f5d42">
     <script src="{% static 'billing/theme.js' %}?v=1"></script>
+    <script src="{% static 'billing/pwa.js' %}?v=1" defer></script>
     <link rel="stylesheet" href="{% static 'billing/app.css' %}?v=5">
   </head>
   <body class="kiosk-shell">
     <header class="topbar kiosk-topbar">
       <div class="kiosk-topbar__brand">
-        <a class="brand kiosk-brand" href="{% url 'kiosk-login' %}">
+        <a class="brand kiosk-brand" href="{{ kiosk_urls.login }}">
           <img src="{% static 'billing/logo.jpg' %}" alt="Luftsportfreunde Wesel-Rheinhausen e.V.">
           <span class="kiosk-brand__copy">
             <span class="kiosk-brand__label">Kiosk</span>
@@ -32,6 +35,7 @@
       </div>
       <div class="kiosk-header-actions">
         {% include "includes/theme_toggle.html" %}
+        <button class="button button-secondary" type="button" data-pwa-install hidden>Installieren</button>
         {% if kiosk_autologout %}
           <div
             class="kiosk-timer"
@@ -58,7 +62,7 @@
     {% if kiosk_autologout %}
       <script nonce="{{ request.csp_nonce }}">
         (() => {
-          const logoutUrl = "{% url 'kiosk-logout' %}";
+          const logoutUrl = "{{ kiosk_urls.logout|escapejs }}";
           const timerRoot = document.querySelector("[data-kiosk-countdown-root]");
           const timerValue = document.querySelector("[data-kiosk-countdown]");
           const timeoutMs = Number(timerRoot?.dataset.timeoutMs || "120000");

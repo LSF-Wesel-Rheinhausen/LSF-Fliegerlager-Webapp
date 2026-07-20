@@ -1,0 +1,9 @@
+{% extends "billing/kiosk_base.html" %}
+{% block title %}Benachrichtigungen | Kiosk{% endblock %}
+{% block kiosk_nav %}
+  <a class="button button-secondary" href="{{ kiosk_urls.home }}">Zurück</a>
+  <a class="button button-secondary" href="{{ kiosk_urls.logout }}">Abmelden</a>
+{% endblock %}
+{% block content %}
+  {% include "billing/includes/notification_settings_content.html" %}
+{% endblock %}

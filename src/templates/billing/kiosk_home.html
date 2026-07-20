@@ -4,7 +4,10 @@
 {% block kiosk_nav %}
   <a class="button button-secondary" href="{% url 'user-guide' %}">Hilfe</a>
   <button type="button" class="button button-secondary" data-open-contact-dialog>Kontakt Lagerleitung</button>
-  <a class="button button-secondary" href="{% url 'kiosk-logout' %}">Abmelden</a>
+  {% if kiosk_mode == "private" and web_push_enabled %}
+    <a class="button button-secondary" href="{% url 'kiosk-notification-settings' %}">Benachrichtigungen</a>
+  {% endif %}
+  <a class="button button-secondary" href="{{ kiosk_urls.logout }}">Abmelden</a>
 {% endblock %}
 {% block content %}
   <section class="kiosk-hero">
@@ -147,7 +150,7 @@
             <h2>Dienste</h2>
             <p>Du hast <strong>{{ participant.completed_shifts }} von {{ participant.target_shifts }}</strong> Pflichtdiensten erledigt.</p>
           </div>
-          <a class="button kiosk-card__action" href="{% url 'kiosk-shifts' %}">Zum Dienstplan</a>
+          <a class="button kiosk-card__action" href="{{ kiosk_urls.shifts }}">Zum Dienstplan</a>
         </div>
       </section>
 
@@ -276,7 +279,7 @@
             </h2>
             <p>Geld für die Gemeinschaft vorgestreckt?</p>
           </div>
-          <a class="button button-secondary kiosk-card__action" href="{% url 'kiosk-shared-expense-request' %}">Antrag einreichen</a>
+          <a class="button button-secondary kiosk-card__action" href="{{ kiosk_urls.shared_expense_request }}">Antrag einreichen</a>
         </div>
 
         {% if participant_expenses %}

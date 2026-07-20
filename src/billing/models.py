@@ -914,3 +914,78 @@ class ShiftAssignment(TimeStampedModel):
 
     def __str__(self):
         return f"{self.participant} -> {self.shift}"
+
+
+class PushSubscription(TimeStampedModel):
+    """Store one browser push capability for an admin or participant device."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="push_subscriptions",
+        null=True,
+        blank=True,
+    )
+    participant = models.ForeignKey(
+        Participant,
+        on_delete=models.CASCADE,
+        related_name="push_subscriptions",
+        null=True,
+        blank=True,
+    )
+    endpoint = models.URLField(max_length=2048, unique=True)  # noqa: DJ001
+    p256dh = models.CharField(max_length=512)
+    auth = models.CharField(max_length=512)
+    device_name = models.CharField(max_length=80, default="Dieses Gerät")
+    categories = models.JSONField(default=list)
+    is_active = models.BooleanField(default=True)
+    last_success_at = models.DateTimeField(null=True, blank=True)
+    failure_count = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["device_name", "created_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(user__isnull=False, participant__isnull=True)
+                    | models.Q(user__isnull=True, participant__isnull=False)
+                ),
+                name="push_subscription_exactly_one_owner",
+            )
+        ]
+
+    def __str__(self) -> str:
+        owner = self.user_id or self.participant_id
+        return f"Push-Gerät {self.device_name} ({owner})"
+
+
+class PushMessage(TimeStampedModel):
+    """Store a reliable, idempotent push-delivery attempt in the database outbox."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Ausstehend"
+        SENT = "sent", "Gesendet"
+        FAILED = "failed", "Fehlgeschlagen"
+
+    subscription = models.ForeignKey(PushSubscription, on_delete=models.CASCADE, related_name="messages")
+    category = models.CharField(max_length=40)
+    title = models.CharField(max_length=120)
+    body = models.CharField(max_length=300)
+    target_url = models.CharField(max_length=500)
+    dedupe_key = models.CharField(max_length=180)
+    scheduled_for = models.DateTimeField(default=timezone.now)
+    next_attempt_at = models.DateTimeField(default=timezone.now)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    last_error_code = models.CharField(max_length=40, blank=True)
+
+    class Meta:
+        ordering = ["scheduled_for", "pk"]
+        constraints = [
+            models.UniqueConstraint(fields=["subscription", "dedupe_key"], name="unique_push_message_dedupe"),
+        ]
+        indexes = [models.Index(fields=["status", "next_attempt_at"], name="push_due_idx")]
+
+    def __str__(self) -> str:
+        return f"{self.category}: {self.title}"

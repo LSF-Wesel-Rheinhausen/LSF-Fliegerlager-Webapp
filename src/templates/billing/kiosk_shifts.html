@@ -3,7 +3,7 @@
 {% block title %}Dienstplan{% endblock %}
 {% block kiosk_nav %}
   <a class="button button-secondary" href="{% url 'user-guide' %}">Hilfe</a>
-  <a class="button button-secondary" href="{% url 'kiosk-home' %}">Zurück</a>
+  <a class="button button-secondary" href="{{ kiosk_urls.home }}">Zurück</a>
 {% endblock %}
 {% block content %}
   <section class="shift-layout">

@@ -1,0 +1,130 @@
+import json
+
+import pytest
+from django.urls import reverse
+
+from billing.views import KIOSK_PARTICIPANT_SESSION_KEY
+from tests.factories import CampFactory, ParticipantFactory
+
+
+@pytest.mark.django_db
+def test_root_redirects_to_private_kiosk(client):
+    response = client.get("/")
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("kiosk-home")
+
+
+@pytest.mark.django_db
+def test_central_kiosk_keeps_central_route_prefix(client):
+    response = client.get(reverse("central-kiosk-home"))
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("central-kiosk-login")
+
+
+@pytest.mark.django_db
+def test_private_kiosk_login_uses_browser_session_without_autologout(client):
+    participant = ParticipantFactory(camp=CampFactory(is_active=True))
+    participant.pin.set_pin("1234")
+    participant.pin.save()
+
+    response = client.post(
+        reverse("kiosk-login"),
+        {"participant": f"participant-{participant.pk}", "pin": "1234"},
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    assert response.context["kiosk_mode"] == "private"
+    assert response.context["kiosk_autologout"] is False
+    assert client.session.get_expire_at_browser_close() is True
+    assert client.session[KIOSK_PARTICIPANT_SESSION_KEY] == participant.pk
+
+
+@pytest.mark.django_db
+def test_central_kiosk_login_enforces_short_autologout(client):
+    participant = ParticipantFactory(camp=CampFactory(is_active=True))
+    participant.pin.set_pin("1234")
+    participant.pin.save()
+
+    response = client.post(
+        reverse("central-kiosk-login"),
+        {"participant": f"participant-{participant.pk}", "pin": "1234"},
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    assert response.context["kiosk_mode"] == "central"
+    assert response.context["kiosk_autologout"] is True
+    assert reverse("central-kiosk-logout").encode() in response.content
+
+
+@pytest.mark.django_db
+def test_switching_kiosk_modes_clears_participant_session(client):
+    participant = ParticipantFactory(camp=CampFactory(is_active=True))
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session["kiosk_mode"] = "private"
+    session.save()
+
+    response = client.get(reverse("central-kiosk-home"))
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("central-kiosk-login")
+    assert KIOSK_PARTICIPANT_SESSION_KEY not in client.session
+
+
+@pytest.mark.parametrize(
+    ("route_name", "expected_scope", "expected_start"),
+    [
+        ("pwa-manifest-admin", "/", "/camps/"),
+        ("pwa-manifest-kiosk", "/kiosk/", "/kiosk/"),
+        ("pwa-manifest-central", "/central/kiosk/", "/central/kiosk/"),
+    ],
+)
+def test_pwa_manifests_are_surface_specific(client, route_name, expected_scope, expected_start):
+    response = client.get(reverse(route_name))
+
+    assert response.status_code == 200
+    assert response["Content-Type"].startswith("application/manifest+json")
+    manifest = json.loads(response.content)
+    assert manifest["scope"] == expected_scope
+    assert manifest["start_url"] == expected_start
+    assert {icon["sizes"] for icon in manifest["icons"]} >= {"192x192", "512x512"}
+
+
+@pytest.mark.parametrize(
+    ("route_name", "expected_scope"),
+    [
+        ("pwa-worker-admin", "/"),
+        ("pwa-worker-kiosk", "/kiosk/"),
+        ("pwa-worker-central", "/central/kiosk/"),
+    ],
+)
+def test_service_workers_have_explicit_scopes(client, route_name, expected_scope):
+    response = client.get(reverse(route_name))
+
+    assert response.status_code == 200
+    assert response["Content-Type"].startswith("application/javascript")
+    assert response["Service-Worker-Allowed"] == expected_scope
+    assert response["Cache-Control"] == "no-cache"
+    assert b"offline" in response.content
+    assert b'request.method !== "GET"' in response.content
+
+
+def test_offline_page_contains_no_business_data(client):
+    response = client.get(reverse("pwa-offline"))
+
+    assert response.status_code == 200
+    assert b"Du bist offline" in response.content
+    assert b"participant" not in response.content.lower()
+
+
+@pytest.mark.django_db
+def test_security_policy_allows_same_origin_manifests_and_workers(client):
+    response = client.get(reverse("kiosk-login"))
+
+    policy = response["Content-Security-Policy"]
+    assert "manifest-src 'self'" in policy
+    assert "worker-src 'self'" in policy

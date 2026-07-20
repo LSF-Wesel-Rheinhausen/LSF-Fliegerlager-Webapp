@@ -1,0 +1,19 @@
+{% load static %}
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#1f5d42">
+    <title>Offline | Fliegerlager</title>
+    <link rel="stylesheet" href="{% static 'billing/app.css' %}">
+  </head>
+  <body>
+    <main class="container offline-page">
+      <img src="{% static 'billing/logo.jpg' %}" alt="LSF Wesel-Rheinhausen" width="160" height="150">
+      <h1>Du bist offline</h1>
+      <p>Diese Ansicht benötigt eine Netzwerkverbindung. Versuche es erneut, sobald du wieder online bist.</p>
+      <button type="button" class="button" onclick="window.location.reload()">Erneut versuchen</button>
+    </main>
+  </body>
+</html>
