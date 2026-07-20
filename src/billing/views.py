@@ -1415,6 +1415,12 @@ def _target_token_for_signup(signup):
     return f"participant-{signup.participant_id}"
 
 
+def _notify_linked_booking_by_id(charge_id: int, actor_id: int, *, cancelled: bool) -> None:
+    charge = Charge.objects.select_related("participant", "kiosk_booked_by").get(pk=charge_id)
+    actor = Participant.objects.get(pk=actor_id)
+    notify_linked_booking(charge, actor=actor, cancelled=cancelled)
+
+
 def _book_meal_for_target(target, meal_date, meal, variant, price_rule, booked_by):
     meal_display = dict(MealSignup.Meal.choices).get(meal, meal)
     target_object = target["object"]
@@ -1453,29 +1459,20 @@ def _book_meal_for_target(target, meal_date, meal, variant, price_rule, booked_b
     if signup.charge_id != charge.pk:
         signup.charge = charge
         signup.save(update_fields=["charge", "updated_at"])
-    transaction.on_commit(
-        lambda charge_id=charge.pk: notify_linked_booking(
-            Charge.objects.select_related("participant", "kiosk_booked_by").get(pk=charge_id),
-            cancelled=False,
-        )
-    )
+    transaction.on_commit(partial(_notify_linked_booking_by_id, charge.pk, booked_by.pk, cancelled=False))
 
 
-def _retract_meal_signup(signup):
+def _retract_meal_signup(signup: MealSignup, actor: Participant) -> None:
     signup.status = MealSignup.Status.RETRACTED
     signup.retracted_at = timezone.now()
     signup.save(update_fields=["status", "retracted_at", "updated_at"])
-    if signup.charge_id is None:
+    charge = signup.charge
+    if charge is None:
         return
-    signup.charge.deleted_at = timezone.now()
-    signup.charge.deleted_by = None
-    signup.charge.save(update_fields=["deleted_at", "deleted_by"])
-    transaction.on_commit(
-        lambda charge_id=signup.charge_id: notify_linked_booking(
-            Charge.objects.select_related("participant", "kiosk_booked_by").get(pk=charge_id),
-            cancelled=True,
-        )
-    )
+    charge.deleted_at = timezone.now()
+    charge.deleted_by = None
+    charge.save(update_fields=["deleted_at", "deleted_by"])
+    transaction.on_commit(partial(_notify_linked_booking_by_id, charge.pk, actor.pk, cancelled=True))
 
 
 def _is_kiosk_quick_charge_cancelable(charge: Charge, participant: Participant, now=None) -> bool:
@@ -1807,10 +1804,7 @@ def kiosk_home(request, kiosk_mode="private"):
                         )
                         charge.save()
                         transaction.on_commit(
-                            lambda charge_id=charge.pk: notify_linked_booking(
-                                Charge.objects.select_related("participant", "kiosk_booked_by").get(pk=charge_id),
-                                cancelled=False,
-                            )
+                            partial(_notify_linked_booking_by_id, charge.pk, participant.pk, cancelled=False)
                         )
                 if not quick_form.errors:
                     messages.success(request, f"{rule.name} gebucht.")
@@ -1838,10 +1832,7 @@ def kiosk_home(request, kiosk_mode="private"):
                     charge.deleted_by = None
                     charge.save(update_fields=["deleted_at", "deleted_by"])
                     transaction.on_commit(
-                        lambda charge_id=charge.pk: notify_linked_booking(
-                            Charge.objects.select_related("participant", "kiosk_booked_by").get(pk=charge_id),
-                            cancelled=True,
-                        )
+                        partial(_notify_linked_booking_by_id, charge.pk, participant.pk, cancelled=True)
                     )
                     messages.success(request, "Buchung wurde storniert.")
                     return redirect(_kiosk_route(kiosk_mode, "home"))
@@ -1916,7 +1907,7 @@ def kiosk_home(request, kiosk_mode="private"):
                 messages.error(request, meal_change_lock_message(participant.camp, signup.meal_date))
             else:
                 with transaction.atomic():
-                    _retract_meal_signup(signup)
+                    _retract_meal_signup(signup, participant)
                 messages.success(request, "Essensanmeldung wurde zurückgenommen.")
                 return redirect(_kiosk_route(kiosk_mode, "home"))
         elif request.POST.get("action") == "family_member_create":

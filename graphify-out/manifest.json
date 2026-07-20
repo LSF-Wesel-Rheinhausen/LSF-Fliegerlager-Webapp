@@ -150,8 +150,8 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/views.py": {
-    "mtime": 1784551244.3034937,
-    "ast_hash": "8399a567ce4d3716f99fa712623761ba",
+    "mtime": 1784553437.3637388,
+    "ast_hash": "d65e895dc3d4a2dd8d37e3c1943e8b93",
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/config/__init__.py": {
@@ -270,8 +270,8 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/docker-compose.yml": {
-    "mtime": 1784550958.791775,
-    "ast_hash": "c3a2c6ea1355de3ad762125b7a90c948",
+    "mtime": 1784553352.8733778,
+    "ast_hash": "675b893dbf9c1778d3f0ae6cd7721a91",
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/docs/README.md": {
@@ -985,8 +985,8 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/deploy/docker-compose.example.yml": {
-    "mtime": 1784551144.3849773,
-    "ast_hash": "544bfed06d4bc18ee671f510dc8b3561",
+    "mtime": 1784553353.0044613,
+    "ast_hash": "e60a45174909346197c4bf1c9f4c361a",
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/docs/user_guide.html": {
@@ -1340,8 +1340,8 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/notifications.py": {
-    "mtime": 1784551519.9344764,
-    "ast_hash": "10f8d3bbaa2c1b71a9833b9dd1dc6048",
+    "mtime": 1784553340.5581062,
+    "ast_hash": "40b8c62d5193211de81820bfe0bfc3d8",
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/pwa_views.py": {
@@ -1370,8 +1370,8 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_notifications.py": {
-    "mtime": 1784551555.013487,
-    "ast_hash": "ede3641ac08dd350cd2cadb41cda9502",
+    "mtime": 1784553280.845186,
+    "ast_hash": "444f0da0232758d1faa4629bd6ab20d0",
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_push_commands.py": {
@@ -1425,8 +1425,8 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-162-pwa-push.md": {
-    "mtime": 1784552141.1107926,
-    "ast_hash": "6ebc910e57031c238296806cfcb8d518",
+    "mtime": 1784553397.109376,
+    "ast_hash": "3b314fe55393b3813499600c0d48be44",
     "semantic_hash": ""
   }
 }

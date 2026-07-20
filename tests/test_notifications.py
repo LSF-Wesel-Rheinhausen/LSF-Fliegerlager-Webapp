@@ -30,7 +30,7 @@ from billing.notifications import (
 )
 from billing.services import approve_shared_expense
 from billing.views import KIOSK_MODE_SESSION_KEY, KIOSK_PARTICIPANT_SESSION_KEY
-from tests.factories import ParticipantFactory, UserFactory
+from tests.factories import CampFactory, ParticipantFactory, UserFactory
 
 
 @pytest.fixture(autouse=True)
@@ -448,10 +448,133 @@ def test_booking_link_and_linked_booking_events_notify_the_other_participant():
         quantity=1,
         unit_price=Decimal("1.50"),
     )
-    notify_linked_booking(charge, cancelled=False)
+    notify_linked_booking(charge, actor=inviter, cancelled=False)
 
     assert PushMessage.objects.filter(category="booking_links").count() == 2
     assert PushMessage.objects.filter(body__contains="Wasser").exists()
+
+
+@pytest.mark.django_db
+def test_linked_booking_cancellation_notifies_original_booker_with_actual_actor():
+    booker = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    cancelling_participant = ParticipantFactory(
+        camp=booker.camp,
+        first_name="Grace",
+        last_name="Hopper",
+    )
+    subscription = PushSubscription.objects.create(
+        participant=booker,
+        endpoint="https://push.example.test/booker",
+        p256dh="key",
+        auth="secret",
+        categories=["booking_links"],
+    )
+    charge = Charge.objects.create(
+        participant=cancelling_participant,
+        kiosk_booked_by=booker,
+        kind=Charge.Kind.DRINK,
+        description="Wasser",
+        quantity=1,
+        unit_price=Decimal("1.50"),
+    )
+
+    notify_linked_booking(charge, actor=cancelling_participant, cancelled=True)
+
+    message = PushMessage.objects.get()
+    assert message.subscription == subscription
+    assert message.body == "Grace Hopper hat Wasser für dich storniert."
+
+
+@pytest.mark.django_db
+def test_linked_participant_quick_cancellation_passes_current_actor(
+    client,
+    django_capture_on_commit_callbacks,
+):
+    camp = CampFactory()
+    booker = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    cancelling_participant = ParticipantFactory(
+        camp=camp,
+        first_name="Grace",
+        last_name="Hopper",
+    )
+    PushSubscription.objects.create(
+        participant=booker,
+        endpoint="https://push.example.test/quick-cancel-booker",
+        p256dh="key",
+        auth="secret",
+        categories=["booking_links"],
+    )
+    charge = Charge.objects.create(
+        participant=cancelling_participant,
+        kiosk_booked_by=booker,
+        kind=Charge.Kind.DRINK,
+        description="Wasser",
+        quantity=1,
+        unit_price=Decimal("1.50"),
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = cancelling_participant.pk
+    session.save()
+
+    with django_capture_on_commit_callbacks(execute=True):
+        response = client.post(reverse("kiosk-home"), {"action": "quick_cancel", "charge_id": charge.pk})
+
+    assert response.status_code == 302
+    message = PushMessage.objects.get()
+    assert message.subscription.participant == booker
+    assert message.body == "Grace Hopper hat Wasser für dich storniert."
+
+
+@pytest.mark.django_db
+def test_linked_participant_meal_retraction_passes_current_actor(
+    client,
+    django_capture_on_commit_callbacks,
+):
+    camp = CampFactory()
+    booker = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    cancelling_participant = ParticipantFactory(
+        camp=camp,
+        first_name="Grace",
+        last_name="Hopper",
+    )
+    PushSubscription.objects.create(
+        participant=booker,
+        endpoint="https://push.example.test/meal-cancel-booker",
+        p256dh="key",
+        auth="secret",
+        categories=["booking_links"],
+    )
+    meal_date = timezone.localdate() + timedelta(days=2)
+    charge = Charge.objects.create(
+        participant=cancelling_participant,
+        kiosk_booked_by=booker,
+        kind=Charge.Kind.FOOD,
+        description="Abendessen",
+        quantity=1,
+        unit_price=Decimal("8.00"),
+        occurred_on=meal_date,
+    )
+    signup = MealSignup.objects.create(
+        participant=cancelling_participant,
+        meal_date=meal_date,
+        meal=MealSignup.Meal.DINNER,
+        variant=MealSignup.Variant.NORMAL,
+        charge=charge,
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = cancelling_participant.pk
+    session.save()
+
+    with django_capture_on_commit_callbacks(execute=True):
+        response = client.post(
+            reverse("kiosk-home"),
+            {"action": "meal_retract", "meal_signup_id": signup.pk},
+        )
+
+    assert response.status_code == 302
+    message = PushMessage.objects.get()
+    assert message.subscription.participant == booker
+    assert message.body == "Grace Hopper hat Abendessen für dich storniert."
 
 
 @pytest.mark.django_db

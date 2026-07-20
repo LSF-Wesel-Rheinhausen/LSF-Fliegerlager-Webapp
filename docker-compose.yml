@@ -113,6 +113,7 @@ services:
       db:
         condition: service_healthy
     networks:
+      - frontend
       - backend
 
 volumes:

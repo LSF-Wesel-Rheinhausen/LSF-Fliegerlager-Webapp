@@ -210,17 +210,29 @@ def notify_booking_link(link: ParticipantBookingLink, *, event: str, actor: Part
     )
 
 
-def notify_linked_booking(charge: Charge, *, cancelled: bool) -> None:
-    """Notify a participant when another linked participant changes their booking."""
-    booking_actor = charge.kiosk_booked_by
-    if booking_actor is None or booking_actor.pk == charge.participant_id:
+def notify_linked_booking(charge: Charge, *, actor: Participant, cancelled: bool) -> None:
+    """Notify the other participant affected by a linked kiosk booking.
+
+    Args:
+        charge: Charge created for one participant by a linked participant.
+        actor: Participant who performed the current booking or cancellation.
+        cancelled: Whether the current action cancelled rather than created the charge.
+    """
+    original_booker = charge.kiosk_booked_by
+    if original_booker is None or original_booker.pk == charge.participant_id:
+        return
+    if actor.pk == charge.participant_id:
+        recipient = original_booker
+    elif actor.pk == original_booker.pk:
+        recipient = charge.participant
+    else:
         return
     action = "storniert" if cancelled else "gebucht"
     queue_participant_notification(
-        charge.participant,
+        recipient,
         category="booking_links",
         title=f"Buchung {action}",
-        body=f"{booking_actor.full_name} hat {charge.description} für dich {action}.",
+        body=f"{actor.full_name} hat {charge.description} für dich {action}.",
         target_url="/kiosk/",
         dedupe_key=f"linked-booking:{charge.pk}:{'cancelled' if cancelled else 'created'}",
     )
