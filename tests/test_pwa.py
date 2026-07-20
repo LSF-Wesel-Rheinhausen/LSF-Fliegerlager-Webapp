@@ -24,6 +24,26 @@ def test_central_kiosk_keeps_central_route_prefix(client):
 
 
 @pytest.mark.django_db
+def test_private_kiosk_exposes_install_guide_and_apple_touch_icon(client):
+    response = client.get(reverse("kiosk-login"))
+
+    assert response.status_code == 200
+    assert b"data-pwa-install" in response.content
+    assert b"data-pwa-install-dialog" in response.content
+    assert b'rel="apple-touch-icon"' in response.content
+    assert b"/static/billing/icons/icon-192.png" in response.content
+
+
+@pytest.mark.django_db
+def test_central_kiosk_hides_install_guide(client):
+    response = client.get(reverse("central-kiosk-login"))
+
+    assert response.status_code == 200
+    assert b"data-pwa-install" not in response.content
+    assert b"data-pwa-install-dialog" not in response.content
+
+
+@pytest.mark.django_db
 def test_private_kiosk_login_uses_browser_session_without_autologout(client):
     participant = ParticipantFactory(camp=CampFactory(is_active=True))
     participant.pin.set_pin("1234")
@@ -92,23 +112,26 @@ def test_pwa_manifests_are_surface_specific(client, route_name, expected_scope, 
     assert manifest["scope"] == expected_scope
     assert manifest["start_url"] == expected_start
     assert {icon["sizes"] for icon in manifest["icons"]} >= {"192x192", "512x512"}
+    assert next(icon for icon in manifest["icons"] if icon["sizes"] == "192x192")["purpose"] == "any"
 
 
 @pytest.mark.parametrize(
-    ("route_name", "expected_scope"),
+    ("route_name", "expected_scope", "expected_cache_name"),
     [
-        ("pwa-worker-admin", "/"),
-        ("pwa-worker-kiosk", "/kiosk/"),
-        ("pwa-worker-central", "/central/kiosk/"),
+        ("pwa-worker-admin", "/", "fliegerlager-admin-v2"),
+        ("pwa-worker-kiosk", "/kiosk/", "fliegerlager-kiosk-v2"),
+        ("pwa-worker-central", "/central/kiosk/", "fliegerlager-central-v2"),
     ],
 )
-def test_service_workers_have_explicit_scopes(client, route_name, expected_scope):
+def test_service_workers_have_explicit_scopes(client, route_name, expected_scope, expected_cache_name):
     response = client.get(reverse(route_name))
 
     assert response.status_code == 200
     assert response["Content-Type"].startswith("application/javascript")
     assert response["Service-Worker-Allowed"] == expected_scope
     assert response["Cache-Control"] == "no-cache"
+    javascript = response.content.decode().replace("\\u002D", "-")
+    assert expected_cache_name in javascript
     assert b"offline" in response.content
     assert b'request.method !== "GET"' in response.content
 

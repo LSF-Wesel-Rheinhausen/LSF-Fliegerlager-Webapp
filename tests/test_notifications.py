@@ -1,3 +1,4 @@
+import hashlib
 import json
 from datetime import date, time, timedelta
 from decimal import Decimal
@@ -89,6 +90,12 @@ def test_admin_can_create_and_update_own_push_subscription(client):
     assert subscription.participant_id is None
     assert subscription.device_name == "Privates Telefon"
     assert subscription.categories == ["expenses_admin"]
+    assert response.json()["device"] == {
+        "id": subscription.pk,
+        "device_name": "Privates Telefon",
+        "last_success_at": None,
+        "endpoint_fingerprint": hashlib.sha256(payload["endpoint"].encode()).hexdigest(),
+    }
 
     payload = subscription_payload()
     payload["device_name"] = "Laptop"
@@ -102,6 +109,7 @@ def test_admin_can_create_and_update_own_push_subscription(client):
     subscription.refresh_from_db()
     assert subscription.device_name == "Laptop"
     assert subscription.categories == ["meal_orders_admin"]
+    assert response.json()["device"]["device_name"] == "Laptop"
 
 
 @pytest.mark.django_db
@@ -309,6 +317,8 @@ def test_notification_settings_show_only_current_owners_devices(client):
     assert response.status_code == 200
     assert b"Mein Laptop" in response.content
     assert b"Fremdes Ger\xc3\xa4t" not in response.content
+    assert hashlib.sha256(b"https://push.example.test/mine").hexdigest().encode() in response.content
+    assert b"https://push.example.test/mine" not in response.content
 
 
 @pytest.mark.django_db

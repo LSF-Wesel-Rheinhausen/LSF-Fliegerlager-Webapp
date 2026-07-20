@@ -1,3 +1,4 @@
+import hashlib
 import json
 from typing import Any
 from urllib.parse import urlsplit
@@ -43,8 +44,26 @@ def _owner_filter(owner: Any, participant_owner: bool) -> dict[str, Any]:
     )
 
 
+def _endpoint_fingerprint(endpoint: str) -> str:
+    """Return a stable, non-sensitive identifier for a push endpoint."""
+    return hashlib.sha256(endpoint.encode()).hexdigest()
+
+
+def _device_payload(subscription: PushSubscription) -> dict[str, Any]:
+    """Serialize device state without exposing its private push endpoint."""
+    return {
+        "id": subscription.pk,
+        "device_name": subscription.device_name,
+        "last_success_at": subscription.last_success_at,
+        "endpoint_fingerprint": _endpoint_fingerprint(subscription.endpoint),
+    }
+
+
 def _settings_response(request: HttpRequest, owner: Any, *, participant_owner: bool) -> HttpResponse:
-    subscriptions = PushSubscription.objects.filter(**_owner_filter(owner, participant_owner))
+    subscriptions = [
+        _device_payload(subscription)
+        for subscription in PushSubscription.objects.filter(**_owner_filter(owner, participant_owner))
+    ]
     context = {
         "subscriptions": subscriptions,
         "notification_categories": allowed_categories(participant_owner=participant_owner),
@@ -122,7 +141,7 @@ def _subscribe(request: HttpRequest, owner: Any, *, participant_owner: bool) -> 
             "failure_count": 0,
         },
     )
-    return JsonResponse({"id": subscription.pk}, status=201 if created else 200)
+    return JsonResponse({"device": _device_payload(subscription)}, status=201 if created else 200)
 
 
 @login_required

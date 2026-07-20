@@ -30,8 +30,18 @@ def manifest(_request: HttpRequest, surface: str) -> JsonResponse:
     """Return a surface-specific web app manifest."""
     config = PWA_SURFACES[surface]
     icons = [
-        {"src": static("billing/icons/icon-192.png"), "sizes": "192x192", "type": "image/png"},
-        {"src": static("billing/icons/icon-512.png"), "sizes": "512x512", "type": "image/png"},
+        {
+            "src": static("billing/icons/icon-192.png"),
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any",
+        },
+        {
+            "src": static("billing/icons/icon-512.png"),
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any",
+        },
         {
             "src": static("billing/icons/icon-maskable-512.png"),
             "sizes": "512x512",
@@ -60,7 +70,7 @@ def service_worker(request: HttpRequest, surface: str) -> HttpResponse:
         request,
         "billing/service_worker.js",
         {
-            "cache_name": f"fliegerlager-{surface}-v1",
+            "cache_name": f"fliegerlager-{surface}-v2",
             "cache_prefix": f"fliegerlager-{surface}-",
             "offline_url": "/offline/",
             "static_assets": [
