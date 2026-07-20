@@ -1,0 +1,56 @@
+{% load static %}
+<section
+  class="notification-settings"
+  data-notification-settings
+  data-public-key="{{ web_push_public_key }}"
+  data-subscribe-url="{{ notification_subscribe_url }}"
+  data-revoke-base-url="{{ notification_revoke_base_url }}"
+>
+  <div class="section-heading">
+    <div>
+      <h1>Benachrichtigungen</h1>
+      <p class="hint">Verwalte Push-Benachrichtigungen getrennt für jedes private Gerät.</p>
+    </div>
+    <span class="status-badge" data-notification-status>Wird geprüft</span>
+  </div>
+
+  {% if web_push_enabled and web_push_public_key %}
+    <form class="form-grid notification-subscribe-form" data-notification-subscribe-form>
+      {% csrf_token %}
+      <label for="notification-device-name">Gerätename</label>
+      <input id="notification-device-name" name="device_name" maxlength="80" value="Dieses Gerät" required>
+      <fieldset>
+        <legend>Kategorien</legend>
+        {% for value, label in notification_categories.items %}
+          <label class="checkbox-row">
+            <input type="checkbox" name="category" value="{{ value }}" checked>
+            <span>{{ label }}</span>
+          </label>
+        {% endfor %}
+      </fieldset>
+      <button class="button" type="submit">Benachrichtigungen aktivieren</button>
+    </form>
+  {% else %}
+    <p class="message warning">Push-Benachrichtigungen sind auf diesem System noch nicht konfiguriert.</p>
+  {% endif %}
+
+  <h2>Registrierte Geräte</h2>
+  <ul class="device-list">
+    {% for subscription in subscriptions %}
+      <li>
+        <div>
+          <strong>{{ subscription.device_name }}</strong>
+          <span class="hint">{% if subscription.last_success_at %}Zuletzt erreicht: {{ subscription.last_success_at|date:"d.m.Y H:i" }}{% else %}Noch nicht erreicht{% endif %}</span>
+        </div>
+        <div class="actions">
+          <button class="button button-secondary" type="button" data-test-subscription="{{ subscription.pk }}">Testen</button>
+          <button class="button button-danger" type="button" data-revoke-subscription="{{ subscription.pk }}">Entfernen</button>
+        </div>
+      </li>
+    {% empty %}
+      <li class="hint">Noch kein Gerät registriert.</li>
+    {% endfor %}
+  </ul>
+  <p class="message error" data-notification-error hidden></p>
+</section>
+<script src="{% static 'billing/notifications.js' %}?v=1" defer></script>

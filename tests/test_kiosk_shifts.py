@@ -42,10 +42,10 @@ def test_kiosk_can_signup_for_shift(kiosk_client, active_camp):
 
 
 @pytest.mark.django_db
-def test_kiosk_shifts_context_has_autologout(kiosk_client, active_camp):
+def test_private_kiosk_shifts_context_disables_autologout(kiosk_client, active_camp):
     response = kiosk_client.get(reverse("kiosk-shifts"))
     assert response.status_code == 200
-    assert response.context["kiosk_autologout"] is True
+    assert response.context["kiosk_autologout"] is False
 
 
 @pytest.mark.django_db

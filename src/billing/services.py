@@ -2,6 +2,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from functools import partial
 from typing import Any
 
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
@@ -712,6 +713,7 @@ def approve_shared_expense(expense: Expense, approved_by: Any, participant_ids: 
         expense.status = locked_expense.status
         expense.approved_by = locked_expense.approved_by
         expense.approved_at = locked_expense.approved_at
+        transaction.on_commit(partial(_notify_expense_status_by_id, locked_expense.pk))
         return
 
     participants = []
@@ -745,6 +747,7 @@ def approve_shared_expense(expense: Expense, approved_by: Any, participant_ids: 
     expense.status = locked_expense.status
     expense.approved_by = locked_expense.approved_by
     expense.approved_at = locked_expense.approved_at
+    transaction.on_commit(partial(_notify_expense_status_by_id, locked_expense.pk))
 
 
 @transaction.atomic
@@ -756,6 +759,14 @@ def reject_shared_expense(expense: Expense, rejected_by: Any, rejection_reason: 
     expense.approved_at = timezone.now()
     expense.rejection_reason = rejection_reason
     expense.save(update_fields=["status", "approved_by", "approved_at", "rejection_reason"])
+    transaction.on_commit(partial(_notify_expense_status_by_id, expense.pk))
+
+
+def _notify_expense_status_by_id(expense_id: int) -> None:
+    """Load a committed expense and enqueue its participant status notification."""
+    from .notifications import notify_expense_status
+
+    notify_expense_status(Expense.objects.select_related("participant").get(pk=expense_id))
 
 
 def get_cost_center_evaluation(camp):

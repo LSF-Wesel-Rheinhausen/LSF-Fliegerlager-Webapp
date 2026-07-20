@@ -213,7 +213,7 @@ def test_kiosk_home_hides_normal_admin_header_and_renders_drink_dialog_controls(
     assert b'class="drink-card"' in response.content
     assert b'data-rule-id="' in response.content
     assert b'id="quick-dialog"' in response.content
-    assert b'data-timeout-ms="120000"' in response.content
+    assert b'data-timeout-ms="120000"' not in response.content
     assert reverse("kiosk-logout").encode() in response.content
     assert "Förderung anwenden".encode() not in response.content
     assert b"Abrechnung ansehen" not in response.content
@@ -809,7 +809,7 @@ def test_kiosk_meal_booking_dialog_keeps_child_only_price_day_selectable(client,
 
 
 @pytest.mark.django_db
-def test_kiosk_pin_setup_uses_inactivity_logout_timer(client):
+def test_private_kiosk_pin_setup_does_not_use_inactivity_logout_timer(client):
     participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
     session = client.session
     session[KIOSK_PIN_SETUP_SESSION_KEY] = participant.pk
@@ -818,7 +818,7 @@ def test_kiosk_pin_setup_uses_inactivity_logout_timer(client):
     response = client.get(reverse("kiosk-pin-setup"))
 
     assert response.status_code == 200
-    assert b'data-timeout-ms="120000"' in response.content
+    assert b'data-timeout-ms="120000"' not in response.content
     assert reverse("kiosk-logout").encode() in response.content
 
 

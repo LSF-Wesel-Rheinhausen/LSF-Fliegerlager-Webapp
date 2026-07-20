@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import passkey_views, views
+from . import notification_views, passkey_views, pwa_views, views
 
 urlpatterns = [
     path("passkeys/", passkey_views.passkey_management, name="passkey-manage"),
@@ -30,6 +30,18 @@ urlpatterns = [
         name="passkey-delete",
     ),
     path("setup/", views.setup_first_admin, name="setup"),
+    path("notifications/", notification_views.notification_settings, name="notification-settings"),
+    path("notifications/subscriptions/", notification_views.notification_subscribe, name="notification-subscribe"),
+    path(
+        "notifications/subscriptions/<int:subscription_id>/revoke/",
+        notification_views.notification_revoke,
+        name="notification-revoke",
+    ),
+    path(
+        "notifications/subscriptions/<int:subscription_id>/test/",
+        notification_views.notification_test,
+        name="notification-test",
+    ),
     path("users/", views.user_list, name="user-list"),
     path("users/new/", views.user_create, name="user-create"),
     path("users/<int:user_id>/edit/", views.user_edit, name="user-edit"),
@@ -44,7 +56,10 @@ urlpatterns = [
     ),
     path("help/", views.user_guide, name="user-guide"),
     path("help/admin/", views.admin_guide, name="admin-guide"),
-    path("", views.kiosk_home, name="kiosk-root"),
+    path("", views.kiosk_root, name="kiosk-root"),
+    path("offline/", pwa_views.offline, name="pwa-offline"),
+    path("manifest.webmanifest", pwa_views.manifest, {"surface": "admin"}, name="pwa-manifest-admin"),
+    path("service-worker.js", pwa_views.service_worker, {"surface": "admin"}, name="pwa-worker-admin"),
     path("camps/", views.camp_list, name="camp-list"),
     path("camps/new/", views.camp_create, name="camp-create"),
     path("camps/<int:camp_id>/", views.camp_detail, name="camp-detail"),
@@ -110,10 +125,48 @@ urlpatterns = [
         views.export_participant_pdf,
         name="export-participant-pdf",
     ),
-    path("kiosk/", views.kiosk_home, name="kiosk-home"),
-    path("kiosk/login/", views.kiosk_login, name="kiosk-login"),
-    path("kiosk/shifts/", views.kiosk_shifts, name="kiosk-shifts"),
-    path("kiosk/shared-expenses/request/", views.kiosk_shared_expense_request, name="kiosk-shared-expense-request"),
-    path("kiosk/pin/", views.kiosk_pin_setup, name="kiosk-pin-setup"),
-    path("kiosk/logout/", views.kiosk_logout, name="kiosk-logout"),
+    path("kiosk/manifest.webmanifest", pwa_views.manifest, {"surface": "kiosk"}, name="pwa-manifest-kiosk"),
+    path("kiosk/service-worker.js", pwa_views.service_worker, {"surface": "kiosk"}, name="pwa-worker-kiosk"),
+    path("kiosk/notifications/", notification_views.kiosk_notification_settings, name="kiosk-notification-settings"),
+    path(
+        "kiosk/notifications/subscriptions/",
+        notification_views.kiosk_notification_subscribe,
+        name="kiosk-notification-subscribe",
+    ),
+    path(
+        "kiosk/notifications/subscriptions/<int:subscription_id>/revoke/",
+        notification_views.kiosk_notification_revoke,
+        name="kiosk-notification-revoke",
+    ),
+    path(
+        "kiosk/notifications/subscriptions/<int:subscription_id>/test/",
+        notification_views.kiosk_notification_test,
+        name="kiosk-notification-test",
+    ),
+    path("kiosk/", views.kiosk_home, {"kiosk_mode": "private"}, name="kiosk-home"),
+    path("kiosk/login/", views.kiosk_login, {"kiosk_mode": "private"}, name="kiosk-login"),
+    path("kiosk/shifts/", views.kiosk_shifts, {"kiosk_mode": "private"}, name="kiosk-shifts"),
+    path(
+        "kiosk/shared-expenses/request/",
+        views.kiosk_shared_expense_request,
+        {"kiosk_mode": "private"},
+        name="kiosk-shared-expense-request",
+    ),
+    path("kiosk/pin/", views.kiosk_pin_setup, {"kiosk_mode": "private"}, name="kiosk-pin-setup"),
+    path("kiosk/logout/", views.kiosk_logout, {"kiosk_mode": "private"}, name="kiosk-logout"),
+    path("central/kiosk/manifest.webmanifest", pwa_views.manifest, {"surface": "central"}, name="pwa-manifest-central"),
+    path(
+        "central/kiosk/service-worker.js", pwa_views.service_worker, {"surface": "central"}, name="pwa-worker-central"
+    ),
+    path("central/kiosk/", views.kiosk_home, {"kiosk_mode": "central"}, name="central-kiosk-home"),
+    path("central/kiosk/login/", views.kiosk_login, {"kiosk_mode": "central"}, name="central-kiosk-login"),
+    path("central/kiosk/shifts/", views.kiosk_shifts, {"kiosk_mode": "central"}, name="central-kiosk-shifts"),
+    path(
+        "central/kiosk/shared-expenses/request/",
+        views.kiosk_shared_expense_request,
+        {"kiosk_mode": "central"},
+        name="central-kiosk-shared-expense-request",
+    ),
+    path("central/kiosk/pin/", views.kiosk_pin_setup, {"kiosk_mode": "central"}, name="central-kiosk-pin-setup"),
+    path("central/kiosk/logout/", views.kiosk_logout, {"kiosk_mode": "central"}, name="central-kiosk-logout"),
 ]

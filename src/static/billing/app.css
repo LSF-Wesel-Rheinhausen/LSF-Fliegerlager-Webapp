@@ -2191,6 +2191,57 @@ textarea {
   }
 }
 
+.offline-page {
+  display: grid;
+  min-height: 100vh;
+  place-content: center;
+  justify-items: center;
+  gap: 16px;
+  max-width: 620px;
+  text-align: center;
+}
+
+.offline-page img {
+  object-fit: contain;
+}
+
+.notification-settings {
+  display: grid;
+  gap: 20px;
+  max-width: 760px;
+}
+
+.notification-subscribe-form fieldset {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.device-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.device-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.device-list li > div {
+  display: grid;
+  gap: 4px;
+}
+
 @media (max-width: 520px) {
   .page {
     width: min(100vw - 24px, 1180px);

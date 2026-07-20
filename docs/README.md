@@ -23,7 +23,8 @@ Der typische Ablauf:
 - Anmeldung: Verwaltungsnutzer können neben Passwort und optionalem Authelia-SSO eigene Passkeys registrieren und benutzernamenlos verwenden.
 - Preisverwaltung: eigene Admin-Route für Lagerpauschalen, Getränke, Standard-Mahlzeitenpreise, abweichende Tagespreise und sonstige Preisregeln.
 - Förderlogik: Jugendgruppenmitglieder erhalten je Position Förderung über `Element-Fördersatz * Hilfssatz * Berufssatz`.
-- Kiosk: separater PIN-Login mit temporärer Sperre nach wiederholten Fehlversuchen, PIN-Ersteinrichtung, Tablet-/Mobiloberfläche, automatische Abmeldung nach Inaktivität, Schnellbuchungen für Getränke, Frühstück und Snacks mit 15-Minuten-Storno, Essensanmeldung und Dienstwahl.
+- Kiosk: privater PIN-Login mit Browser-Session unter `/kiosk/` und zentraler Gemeinschaftsmodus mit automatischer Abmeldung unter `/central/kiosk/`.
+- PWA und Push: getrennte Installationen für Verwaltung, private Geräte und zentrale Kiosks; Push ist nur auf privaten Geräten verfügbar und wird über eine Datenbank-Outbox zugestellt.
 - Dienstplanung: tägliche Vorlagen, automatische Generierung über den Lagerzeitraum, manuelle Dienste, Soll-Dienste anhand gebuchter Nächte, Fortschrittsanzeige, Besetzungsauswertung und Tauschangebote.
 - Buchungsbearbeitung: Admins können Kostenpositionen stornieren, wiederherstellen und korrigieren; abrechnungsrelevante Änderungen werden im Audit-Protokoll gespeichert.
 - Teilnehmerverwaltung: Bearbeiten, verlustfreies Archivieren und Wiederherstellen; archivierte Teilnehmer bleiben historisch nachvollziehbar, sind aber nicht im Kiosk oder in neuen Abrechnungsläufen sichtbar.
@@ -42,6 +43,7 @@ Der typische Ablauf:
 - [`../tests/README.md`](../tests/README.md): Teststruktur und Testbefehle.
 - [`../tests/e2e/README.md`](../tests/e2e/README.md): Playwright-End-to-End-Tests.
 - [`passkeys.md`](passkeys.md): Passkey-Betrieb, Sicherheitsgrenzen und Recovery.
+- [`pwa-push.md`](pwa-push.md): PWA-Gerätemodi, Offline-Grenzen, VAPID-Konfiguration und Push-Worker.
 
 ## Zentrale Codebereiche
 

@@ -1,12 +1,15 @@
 {% load billing_format static %}
 <!doctype html>
-<html lang="de">
+<html lang="de" data-pwa-worker="{{ pwa_worker_url }}" data-pwa-scope="{{ pwa_worker_scope }}">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Fliegerlager-Abrechnung{% endblock %}</title>
     <link rel="icon" type="image/jpeg" href="{% static 'billing/logo.jpg' %}">
+    <link rel="manifest" href="{{ pwa_manifest_url }}">
+    <meta name="theme-color" content="#1f5d42">
     <script src="{% static 'billing/theme.js' %}?v=1"></script>
+    <script src="{% static 'billing/pwa.js' %}?v=1" defer></script>
     <link rel="stylesheet" href="{% static 'billing/app.css' %}?v=5">
   </head>
   <body>
@@ -24,10 +27,14 @@
       </div>
       <nav aria-label="Kopfzeile">
         {% include "includes/theme_toggle.html" %}
+        <button class="button button-secondary nav-link" type="button" data-pwa-install hidden>Installieren</button>
         {% if user.is_authenticated %}
           <a class="button button-secondary nav-link" href="{% url 'admin-guide' %}">Hilfe</a>
           {% if passkey_enabled %}
             <a class="button button-secondary nav-link" href="{% url 'passkey-manage' %}">Passkeys</a>
+          {% endif %}
+          {% if web_push_enabled %}
+            <a class="button button-secondary nav-link" href="{% url 'notification-settings' %}">Benachrichtigungen</a>
           {% endif %}
           {% if user|can_manage_users %}
             <a class="button button-secondary nav-link" href="{% url 'user-list' %}">Nutzer</a>

@@ -1,7 +1,7 @@
 {% extends "billing/kiosk_base.html" %}
 {% block title %}Kiosk-PIN setzen{% endblock %}
 {% block kiosk_nav %}
-  <a class="button button-secondary" href="{% url 'kiosk-logout' %}">Abmelden</a>
+  <a class="button button-secondary" href="{{ kiosk_urls.logout }}">Abmelden</a>
 {% endblock %}
 {% block content %}
   <section class="kiosk-login-shell">
