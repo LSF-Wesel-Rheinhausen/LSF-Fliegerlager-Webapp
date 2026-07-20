@@ -109,6 +109,8 @@ services:
       BACKUP_DIR: /backups
       WEB_PUSH_KEY_DIR: /run/secrets/webpush
     command: ["python", "manage.py", "run_daily_settlement_backup", "--loop"]
+    healthcheck:
+      disable: true
     depends_on:
       db:
         condition: service_healthy
@@ -130,6 +132,8 @@ services:
     environment:
       WEB_PUSH_KEY_DIR: /run/secrets/webpush
     command: ["python", "manage.py", "run_push_worker", "--loop"]
+    healthcheck:
+      disable: true
     depends_on:
       db:
         condition: service_healthy
