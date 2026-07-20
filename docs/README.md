@@ -20,6 +20,7 @@ Der typische Ablauf:
 
 - Rollen: `Admin` und `Bearbeiter` über Django-Gruppen.
 - Ersteinrichtung: Beim ersten Start kann der erste Admin im Browser angelegt werden; danach verwalten Admins Nutzer, Rollen und Passwörter in der Anwendung.
+- Anmeldung: Verwaltungsnutzer können neben Passwort und optionalem Authelia-SSO eigene Passkeys registrieren und benutzernamenlos verwenden.
 - Preisverwaltung: eigene Admin-Route für Lagerpauschalen, Getränke, Standard-Mahlzeitenpreise, abweichende Tagespreise und sonstige Preisregeln.
 - Förderlogik: Jugendgruppenmitglieder erhalten je Position Förderung über `Element-Fördersatz * Hilfssatz * Berufssatz`.
 - Kiosk: separater PIN-Login mit temporärer Sperre nach wiederholten Fehlversuchen, PIN-Ersteinrichtung, Tablet-/Mobiloberfläche, automatische Abmeldung nach Inaktivität, Schnellbuchungen für Getränke, Frühstück und Snacks mit 15-Minuten-Storno, Essensanmeldung und Dienstwahl.
@@ -40,6 +41,7 @@ Der typische Ablauf:
 - [`../scripts/README.md`](../scripts/README.md): lokale Hilfsskripte.
 - [`../tests/README.md`](../tests/README.md): Teststruktur und Testbefehle.
 - [`../tests/e2e/README.md`](../tests/e2e/README.md): Playwright-End-to-End-Tests.
+- [`passkeys.md`](passkeys.md): Passkey-Betrieb, Sicherheitsgrenzen und Recovery.
 
 ## Zentrale Codebereiche
 

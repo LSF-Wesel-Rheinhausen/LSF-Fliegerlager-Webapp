@@ -49,15 +49,19 @@ const test = base.extend({
   djangoServer: [async ({}, use, workerInfo) => {
     const port = 3101 + workerInfo.workerIndex;
     const dbPath = `/tmp/e2e_${workerInfo.workerIndex}.sqlite3`;
-    const baseURL = `http://127.0.0.1:${port}`;
+    const baseURL = `http://localhost:${port}`;
 
     const env = {
       ...process.env,
       PLAYWRIGHT_PORT: String(port),
       DATABASE_URL: `sqlite://${dbPath}`,
-      DJANGO_ALLOWED_HOSTS: '127.0.0.1,localhost',
+      DJANGO_ALLOWED_HOSTS: 'localhost',
       DJANGO_DEBUG: '1',
       DJANGO_SECRET_KEY: 'test_sk_playwright_local_only',
+      PASSKEY_ENABLED: '1',
+      PASSKEY_RP_ID: 'localhost',
+      PASSKEY_RP_NAME: 'Fliegerlager E2E',
+      PASSKEY_ORIGIN: baseURL,
     };
 
     const serverProcess = spawn('bash', ['scripts/start-e2e.sh'], { env, cwd: process.cwd() });

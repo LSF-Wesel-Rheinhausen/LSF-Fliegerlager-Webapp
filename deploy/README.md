@@ -76,6 +76,24 @@ Django legt keine Benutzer an und veraendert weder Gruppen noch `is_staff`/`is_s
 Anwendungsrollen bleiben allein fuer die Autorisierung massgeblich. Fehlt der konfigurierte Header, bleibt der
 Passwort-Login als Fallback verfuegbar.
 
+## Passkey-/WebAuthn-Anmeldung
+
+Passkeys werden erst nach vollständiger Konfiguration aktiviert:
+
+```dotenv
+PASSKEY_ENABLED=1
+PASSKEY_RP_ID=app.example.org
+PASSKEY_RP_NAME=Fliegerlager-Abrechnung
+PASSKEY_ORIGIN=https://app.example.org
+```
+
+`PASSKEY_RP_ID` enthält ausschließlich den öffentlichen Domainnamen; IP-Adressen sind nicht zulässig.
+`PASSKEY_ORIGIN` muss dem im Browser sichtbaren Origin einschließlich Schema und gegebenenfalls Port exakt
+entsprechen. Außerhalb von `localhost` ist HTTPS Pflicht.
+Ein späterer Wechsel der RP-ID macht bereits registrierte Credentials unbrauchbar. Deshalb muss vor Domainwechseln
+der Passwort- oder Authelia-Fallback geprüft werden. Weitere Sicherheits- und Recovery-Hinweise stehen in
+[`../docs/passkeys.md`](../docs/passkeys.md).
+
 ## Updates
 
 Ein Django-Superuser öffnet **Updates**, prüft das bereitgestellte `latest`-Image und bestätigt die Installation. Der

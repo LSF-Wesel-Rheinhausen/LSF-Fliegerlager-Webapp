@@ -42,6 +42,12 @@ AUTHELIA_SSO_EMAIL_HEADER = (
     else _authelia_sso_email_header.strip()
 )
 
+PASSKEY_ENABLED = os.getenv("PASSKEY_ENABLED", "0") == "1"
+PASSKEY_RP_ID = os.getenv("PASSKEY_RP_ID", "").strip()
+PASSKEY_RP_NAME = os.getenv("PASSKEY_RP_NAME", "Fliegerlager-Abrechnung").strip()
+PASSKEY_ORIGIN = os.getenv("PASSKEY_ORIGIN", "").strip()
+PASSKEY_CHALLENGE_TTL_SECONDS = 300
+
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 
@@ -81,6 +87,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "config.context_processors.optional_authentication_features",
             ],
         },
     },

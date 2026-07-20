@@ -97,7 +97,7 @@ async function loginAsAdmin(page) {
   await expect(page.getByRole("heading", { name: "Anmelden" })).toBeVisible();
   await page.locator("#id_username").fill("admin@example.test");
   await page.locator("#id_password").fill("strong-test-pass-123");
-  await page.getByRole("button", { name: "Anmelden" }).click();
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Lager" })).toBeVisible();
 }
 
@@ -143,6 +143,38 @@ test("Admin completes setup, login, camp workflow and logout", async ({ page }) 
   await logout(page);
   await expect(page).toHaveURL(/\/login\/?$/);
   await loginAsAdmin(page);
+});
+
+test("Admin registers and signs in with a passkey", async ({ context, page }) => {
+  const browserErrors = [];
+  const failedRequests = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") browserErrors.push(message.text());
+  });
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  page.on("requestfailed", (request) => failedRequests.push(`${request.method()} ${request.url()}`));
+  await context.credentials.install();
+  await setupFirstAdmin(page);
+
+  await page.getByRole("link", { name: "Passkeys" }).click();
+  await expect(page.getByRole("heading", { name: "Passkeys" })).toBeVisible();
+  await page.getByLabel("Bezeichnung").fill("Playwright Passkey");
+  await page.getByRole("button", { name: "Passkey hinzufügen" }).click();
+  await expect(page.getByText("Playwright Passkey", { exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await assertNoUnexpectedOverflow(page);
+  await page.getByRole("switch", { name: "Dunkles Farbschema" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await assertNoUnexpectedOverflow(page);
+
+  await logout(page);
+  await expect(page).toHaveURL(/\/login\/?$/);
+  await page.getByRole("button", { name: "Mit Passkey anmelden" }).click();
+
+  await expect(page).toHaveURL(/\/camps\/?$/);
+  await expect(page.getByRole("heading", { name: "Lager" })).toBeVisible();
+  expect(browserErrors).toEqual([]);
+  expect(failedRequests).toEqual([]);
 });
 
 test("Admin edits a booking and sees the change log", async ({ page }) => {
@@ -263,7 +295,7 @@ test("Kiosk flow: login, pin setup, drink and meal booking", async ({ page }) =>
   await page.goto("/kiosk/login/");
   await page.getByLabel("Teilnehmer").selectOption({ label: "Marie Curie" });
   await page.getByLabel("PIN").fill("0000");
-  await page.getByRole("button", { name: "Anmelden" }).click();
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
 
   // Should redirect to PIN setup
   await expect(page).toHaveURL(/.*\/kiosk\/pin\//);
@@ -449,7 +481,7 @@ test("Role flow: editor cannot see admin functions", async ({ page }) => {
   await page.goto("/login/");
   await page.locator("#id_username").fill("editor@example.test");
   await page.locator("#id_password").fill("editor-pass-123");
-  await page.getByRole("button", { name: "Anmelden" }).click();
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
 
   await expect(page.getByRole("link", { name: "Lager anlegen" })).toBeHidden();
   await expect(page.getByRole("link", { name: "Nutzer" })).toBeHidden();
@@ -482,7 +514,7 @@ test("Daily shift template and kiosk shift flow", async ({ page }) => {
   await page.goto("/kiosk/login/");
   await page.getByLabel("Teilnehmer").selectOption({ label: "Albert Einstein" });
   await page.getByLabel("PIN").fill("0000");
-  await page.getByRole("button", { name: "Anmelden" }).click();
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
 
   // Set PIN
   await page.getByLabel("Neuer PIN").fill("1234");
@@ -547,7 +579,7 @@ for (const viewport of [
     await page.goto("/kiosk/login/");
     await page.getByLabel("Teilnehmer").selectOption({ label: "Mobile ExtremLangerUngetrennterTeilnehmername" });
     await page.getByLabel("PIN").fill("0000");
-    await page.getByRole("button", { name: "Anmelden" }).click();
+    await page.getByRole("button", { name: "Anmelden", exact: true }).click();
     await page.getByLabel("Neuer PIN").fill("1234");
     await page.getByLabel("PIN wiederholen").fill("1234");
     await page.getByRole("button", { name: "Speichern" }).click();

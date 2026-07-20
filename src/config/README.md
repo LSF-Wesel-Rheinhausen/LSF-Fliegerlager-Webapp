@@ -19,6 +19,10 @@ Unterstuetzte Umgebungsvariablen:
 - `DJANGO_TRUST_PROXY_SSL_HEADER`: nur auf `1` setzen, wenn ein kontrollierter Reverse Proxy `X-Forwarded-Proto` bereinigt und setzt.
 - `AUTHELIA_SSO_ENABLED`: `1` aktiviert Trusted-Header-SSO fuer bereits bestehende aktive Django-Konten; Default `0`.
 - `AUTHELIA_SSO_EMAIL_HEADER`: vom kontrollierten Proxy gesetzter E-Mail-Header; Default `Remote-Email`.
+- `PASSKEY_ENABLED`: `1` aktiviert WebAuthn-Registrierung und Passkey-Login; Default `0`.
+- `PASSKEY_RP_ID`: öffentlicher Domainname ohne Schema oder Port; IP-Adressen sind nicht zulässig.
+- `PASSKEY_RP_NAME`: Anzeigename der WebAuthn Relying Party.
+- `PASSKEY_ORIGIN`: exakter öffentlicher Origin; HTTP ist ausschließlich für localhost zulässig.
 - `DJANGO_HSTS_SECONDS`: HSTS-Dauer; erst nach erfolgreichem HTTPS-Betrieb schrittweise von `0` erhoehen.
 - `DJANGO_HSTS_INCLUDE_SUBDOMAINS` und `DJANGO_HSTS_PRELOAD`: nur nach separater Pruefung aktivieren.
 - `CSRF_TRUSTED_ORIGINS`: kommaseparierte Origins inklusive Schema.
@@ -30,6 +34,11 @@ Unterstuetzte Umgebungsvariablen:
 
 WhiteNoise liefert die durch `collectstatic` erzeugten Dateien direkt über Gunicorn aus. Der Update-Agent bleibt ein
 separater Container; der Django-Prozess erhält keinen Zugriff auf Portainer-Zugangsdaten.
+
+Passkeys verwenden discoverable Credentials mit verpflichtender User Verification. Registrierung und Anmeldung
+speichern getrennte, fünf Minuten gültige Einmal-Challenges in der Django-Session. RP-ID und Origin werden bei jeder
+Zeremonie exakt gegen die Deployment-Konfiguration geprüft. Passwort und optionales Authelia-SSO bleiben als
+Recovery-Wege erhalten; Details stehen in `docs/passkeys.md`.
 
 Trusted-Header-SSO vertraut einem unsignierten internen Header. Bei Aktivierung darf die App deshalb nicht direkt
 erreichbar sein. Der Reverse Proxy muss eingehende Identitaetsheader entfernen und `Remote-Email` ausschliesslich aus

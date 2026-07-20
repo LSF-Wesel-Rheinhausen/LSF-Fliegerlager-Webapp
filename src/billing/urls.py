@@ -1,8 +1,34 @@
 from django.urls import path
 
-from . import views
+from . import passkey_views, views
 
 urlpatterns = [
+    path("passkeys/", passkey_views.passkey_management, name="passkey-manage"),
+    path(
+        "passkeys/registration/options/",
+        passkey_views.passkey_registration_options,
+        name="passkey-registration-options",
+    ),
+    path(
+        "passkeys/registration/verify/",
+        passkey_views.passkey_registration_verify,
+        name="passkey-registration-verify",
+    ),
+    path(
+        "passkeys/authentication/options/",
+        passkey_views.passkey_authentication_options,
+        name="passkey-authentication-options",
+    ),
+    path(
+        "passkeys/authentication/verify/",
+        passkey_views.passkey_authentication_verify,
+        name="passkey-authentication-verify",
+    ),
+    path(
+        "passkeys/<int:credential_id>/delete/",
+        passkey_views.passkey_delete,
+        name="passkey-delete",
+    ),
     path("setup/", views.setup_first_admin, name="setup"),
     path("users/", views.user_list, name="user-list"),
     path("users/new/", views.user_create, name="user-create"),

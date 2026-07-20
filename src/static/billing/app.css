@@ -417,6 +417,59 @@ pre {
   gap: 14px;
 }
 
+.auth-separator {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  margin: 22px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.auth-separator::before,
+.auth-separator::after {
+  content: "";
+  border-top: 1px solid var(--line);
+}
+
+.passkey-management > form {
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.passkey-list {
+  display: grid;
+  gap: 0;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.passkey-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.passkey-list li:last-child {
+  border-bottom: 0;
+}
+
+.passkey-list li > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.passkey-list .hint {
+  margin: 0;
+}
+
 .compact-toolbar {
   margin-bottom: 0;
 }
@@ -2150,6 +2203,16 @@ textarea {
 
   .panel {
     padding: 18px;
+  }
+
+  .passkey-list li {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .passkey-list form,
+  .passkey-list button {
+    width: 100%;
   }
 
   .kiosk-login-shell {

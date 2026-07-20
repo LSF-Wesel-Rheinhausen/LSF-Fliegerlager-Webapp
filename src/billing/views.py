@@ -215,6 +215,12 @@ class FirstLaunchLoginView(LoginView):
             return redirect("setup")
         return super().dispatch(request, *args, **kwargs)
 
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        """Expose whether the optional passkey login is enabled."""
+        context = super().get_context_data(**kwargs)
+        context["passkey_enabled"] = settings.PASSKEY_ENABLED
+        return context
+
 
 def setup_first_admin(request):
     if User.objects.exists():
