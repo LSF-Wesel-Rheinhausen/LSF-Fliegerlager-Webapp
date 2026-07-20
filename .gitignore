@@ -30,6 +30,7 @@ playwright-report/
 test-results/
 .test-local-logs/
 backups/
+data/
 docker-config/
 tmp/
 .agents/
