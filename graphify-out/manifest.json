@@ -1384,11 +1384,6 @@
     "ast_hash": "638a734b3d987d63c0968e08e4675733",
     "semantic_hash": ""
   },
-  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-TBD-pwa-push.md": {
-    "mtime": 1784551145.022146,
-    "ast_hash": "6ebc910e57031c238296806cfcb8d518",
-    "semantic_hash": ""
-  },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/docs/pwa-push.md": {
     "mtime": 1784551144.894631,
     "ast_hash": "a0ee4425523602399475ba2b3ea03c6c",
@@ -1427,6 +1422,11 @@
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/static/billing/icons/icon-maskable-512.png": {
     "mtime": 1784550238.4802637,
     "ast_hash": "3912b6713072e5b690ec72580501be93",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-162-pwa-push.md": {
+    "mtime": 1784552141.1107926,
+    "ast_hash": "6ebc910e57031c238296806cfcb8d518",
     "semantic_hash": ""
   }
 }
