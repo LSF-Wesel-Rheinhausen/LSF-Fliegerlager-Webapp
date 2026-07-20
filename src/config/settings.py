@@ -5,6 +5,7 @@ import dj_database_url
 from django.core.exceptions import ImproperlyConfigured
 
 from config.sso import validate_authelia_email_header
+from config.webpush_keys import WebPushKeyError, load_webpush_keys
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 ROOT_DIR = BASE_DIR.parent
@@ -49,8 +50,13 @@ PASSKEY_ORIGIN = os.getenv("PASSKEY_ORIGIN", "").strip()
 PASSKEY_CHALLENGE_TTL_SECONDS = 300
 
 WEB_PUSH_ENABLED = os.getenv("WEB_PUSH_ENABLED", "0") == "1"
-WEB_PUSH_VAPID_PUBLIC_KEY = os.getenv("WEB_PUSH_VAPID_PUBLIC_KEY", "").strip()
-WEB_PUSH_VAPID_PRIVATE_KEY = os.getenv("WEB_PUSH_VAPID_PRIVATE_KEY", "").strip()
+WEB_PUSH_KEY_DIR = Path(os.getenv("WEB_PUSH_KEY_DIR", "/run/secrets/webpush"))
+try:
+    _web_push_keys = load_webpush_keys(os.environ, WEB_PUSH_KEY_DIR) if WEB_PUSH_ENABLED else None
+except WebPushKeyError as error:
+    raise ImproperlyConfigured(str(error)) from error
+WEB_PUSH_VAPID_PUBLIC_KEY = _web_push_keys.public_key if _web_push_keys else ""
+WEB_PUSH_VAPID_PRIVATE_KEY = _web_push_keys.private_key if _web_push_keys else ""
 WEB_PUSH_VAPID_SUBJECT = os.getenv("WEB_PUSH_VAPID_SUBJECT", "mailto:admin@example.invalid").strip()
 WEB_PUSH_WORKER_INTERVAL_SECONDS = int(os.getenv("WEB_PUSH_WORKER_INTERVAL_SECONDS", "60"))
 if WEB_PUSH_ENABLED and not (WEB_PUSH_VAPID_PUBLIC_KEY and WEB_PUSH_VAPID_PRIVATE_KEY and WEB_PUSH_VAPID_SUBJECT):

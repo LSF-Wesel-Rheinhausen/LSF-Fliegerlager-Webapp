@@ -71,13 +71,13 @@ const fs = require('fs');
     await new Promise(r => setTimeout(r, 1000));
     await actionFn();
     await new Promise(r => setTimeout(r, 2000));
-    
+
     recording = false;
     clearInterval(interval);
   }
 
   await page.goto('http://localhost:8000/');
-  
+
   // 1. kiosk_login
   await recordAction('kiosk_login', async () => {
     await page.waitForTimeout(500);
@@ -95,7 +95,7 @@ const fs = require('fs');
     const submitBtn = page.locator('button[type="submit"]:has-text("Anmelden")');
     await smoothMove(submitBtn);
     await submitBtn.click();
-    
+
     // Redirects to PIN setup
     await page.waitForSelector('text=PIN festlegen', { timeout: 10000 });
     await page.waitForTimeout(500);
@@ -126,12 +126,12 @@ const fs = require('fs');
     if (await drinkBtn.isVisible()) {
       await smoothMove(drinkBtn);
       await drinkBtn.click();
-      await page.waitForTimeout(1000); 
-      
+      await page.waitForTimeout(1000);
+
       const qtyBtn = page.locator('button[data-drink-quantity="1"]');
       await smoothMove(qtyBtn);
       await qtyBtn.click();
-      
+
       await page.waitForSelector('.success, .error, h1', { timeout: 10000 });
       await page.waitForTimeout(500);
       await page.mouse.wheel(0, 500);
@@ -147,16 +147,16 @@ const fs = require('fs');
         await smoothMove(mealDay);
         await mealDay.click();
         await page.waitForTimeout(1000);
-        
+
         const checkbox = page.locator('#meal-dialog input[type="checkbox"]').first();
         await smoothMove(checkbox);
         await checkbox.click();
         await page.waitForTimeout(500);
-        
+
         const saveBtn = page.locator('#meal-dialog button[type="submit"]');
         await smoothMove(saveBtn);
         await saveBtn.click();
-        
+
         await page.waitForSelector('.success, .error, h1', { timeout: 10000 });
         await page.waitForTimeout(500);
         await page.mouse.wheel(0, 600);
@@ -175,7 +175,7 @@ const fs = require('fs');
         await smoothMove(addBtn);
         await addBtn.click();
         await page.waitForTimeout(1000);
-        
+
         const fName = page.locator('#family-dialog input[name="family-first_name"]');
         await smoothMove(fName);
         await fName.click();
@@ -192,11 +192,11 @@ const fs = require('fs');
         await smoothMove(roleSel);
         await roleSel.selectOption({ value: 'child' });
         await page.waitForTimeout(500);
-        
+
         const saveBtn = page.locator('#family-dialog button[type="submit"]');
         await smoothMove(saveBtn);
         await saveBtn.click();
-        
+
         await page.waitForSelector('.success, .error, h1', { timeout: 10000 });
     }
   });
@@ -209,12 +209,12 @@ const fs = require('fs');
         await shiftsLink.click();
         await page.waitForSelector('h1', { timeout: 10000 });
         await page.waitForTimeout(1000);
-        
+
         const shiftBtn = page.locator('button:has-text("Übernehmen")').first();
         if (await shiftBtn.isVisible()) {
             await smoothMove(shiftBtn);
             await shiftBtn.click();
-            
+
             await page.waitForTimeout(1000);
             const confirmBtn = page.locator('button[name="action"][value="claim_shift"]');
             await smoothMove(confirmBtn);

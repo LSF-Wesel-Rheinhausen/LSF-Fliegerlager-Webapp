@@ -5,6 +5,8 @@ Django-Projektkonfiguration.
 Die aktuell unterstützte Laufzeit ist Python 3.13 mit Django 5.2. Authentifizierung akzeptiert E-Mail-Adresse oder Benutzername; anwendungsspezifische Nutzerdaten liegen im separaten `UserProfile` der Billing-App.
 
 - `settings.py`: Apps, Middleware, Datenbank, Auth-Backends, Static-/Media-Dateien und Login-Redirects.
+- `persistence_migration.py`: einmalige, versionierte Übernahme der bisherigen Docker-Volumes.
+- `webpush_keys.py`: Erzeugung, Prüfung und Laden persistenter VAPID-Schlüssel.
 - `urls.py`: Projektweites Routing fuer Healthcheck, Admin, Login, Logout und die Billing-App.
 - `asgi.py` und `wsgi.py`: Deployment-Einstiege fuer ASGI/WSGI-Server.
 
@@ -29,6 +31,7 @@ Unterstuetzte Umgebungsvariablen:
 - `DATABASE_URL`: Datenbank-URL via `dj-database-url`; ohne Wert wird `src/db.sqlite3` genutzt.
 - `UPDATE_AGENT_URL` und `UPDATE_AGENT_TOKEN`: interne, nur für Superuser-Aktionen verwendete Update-Agent-Verbindung.
 - `BACKUP_DIR`: gemeinsames Backup-Verzeichnis im Container; Compose setzt für App, Scheduler und Updater `/backups`.
+- `WEB_PUSH_KEY_DIR`: Verzeichnis des persistenten VAPID-Schlüsselpaars; Compose setzt `/run/secrets/webpush`.
 - `DAILY_SETTLEMENT_BACKUP_INTERVAL_SECONDS`: Prüfintervall des Scheduler-Containers; Default `300`.
 - `APP_VERSION`, `APP_REVISION`, `APP_BUILD_DATE` und `APP_CHANGE`: vom Container-Build gesetzte Versionsmetadaten.
 

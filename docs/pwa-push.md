@@ -27,11 +27,16 @@ Konfiguration:
 
 ```dotenv
 WEB_PUSH_ENABLED=1
-WEB_PUSH_VAPID_PUBLIC_KEY=<generate_webpush_keys-Ausgabe>
-WEB_PUSH_VAPID_PRIVATE_KEY=<generate_webpush_keys-Ausgabe>
+WEB_PUSH_VAPID_PUBLIC_KEY=
+WEB_PUSH_VAPID_PRIVATE_KEY=
 WEB_PUSH_VAPID_SUBJECT=mailto:admin@example.org
 WEB_PUSH_WORKER_INTERVAL_SECONDS=60
 ```
+
+Bei leerem Schlüsselpaar erzeugt der App-Container einmalig VAPID-Schlüssel in
+`PERSISTENCE_DIR/secrets/webpush/`. Der Push-Worker liest dieselben Dateien schreibgeschützt. Vorhandene explizite
+Umgebungswerte haben Vorrang; ist nur ein Wert gesetzt oder nur eine Schlüsseldatei vorhanden, bricht der Start ab,
+statt unbemerkt neue Subscriptions ungültig zu machen.
 
 Außerhalb von `localhost` setzen PWA und Push einen vertrauenswürdigen HTTPS-Origin voraus. Der Compose-Service
 `push-worker` führt `python manage.py run_push_worker --loop` aus. Temporäre Versandfehler werden höchstens fünfmal

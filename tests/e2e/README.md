@@ -25,6 +25,6 @@ npx playwright install
 npm run test:e2e
 ```
 
-Playwright startet standardmaessig einen isolierten Django-Testserver ueber `scripts/start-e2e.sh` und nutzt `tmp/e2e.sqlite3`. Die Suite laeuft voll parallel in Chromium, Firefox und WebKit; in CI werden zwei Worker und ein Retry verwendet. Das Startskript entfernt veraltete Server-/Datenbankreste, damit keine Zombie-Prozesse Folgelaeufe blockieren. Mit `PLAYWRIGHT_USE_EXTERNAL_SERVER=1` kann stattdessen ein bereits laufender Server gegen `PLAYWRIGHT_BASE_URL` verwendet werden.
+Playwright startet standardmaessig einen isolierten Django-Testserver ueber `scripts/start-e2e.sh` und nutzt `tmp/e2e.sqlite3`. Die Suite laeuft lokal mit zwei Workern in Chromium, Firefox und WebKit. In CI wird sie wegen der begrenzten Browser-Ressourcen seriell mit einem Worker und einem Retry ausgefuehrt. Das Startskript entfernt veraltete Server-/Datenbankreste, damit keine Zombie-Prozesse Folgelaeufe blockieren. Mit `PLAYWRIGHT_USE_EXTERNAL_SERVER=1` kann stattdessen ein bereits laufender Server gegen `PLAYWRIGHT_BASE_URL` verwendet werden.
 
 In GitHub Actions werden die Browser-Binaries in `~/.cache/ms-playwright` mit einem Cache-Key aus `package-lock.json` wiederverwendet. Bei Cache-Hit installiert CI nur die Systemabhaengigkeiten; bei Cache-Miss laedt Playwright die Browser neu.

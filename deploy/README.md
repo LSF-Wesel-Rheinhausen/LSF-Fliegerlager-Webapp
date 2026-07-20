@@ -6,7 +6,7 @@ muss nicht geklont werden; die beiden Beispieldateien können in einen Portainer
 ```bash
 cp docker-compose.example.yml docker-compose.yml
 cp .env.example .env
-mkdir -p backups
+mkdir -p /srv/fliegerlager
 ```
 
 In `.env` müssen mindestens `DJANGO_SECRET_KEY`, `UPDATE_AGENT_TOKEN`, `UPDATE_AGENT_URL`, `POSTGRES_PASSWORD`,
@@ -33,13 +33,42 @@ Optionale Variablen mit Defaults:
 - `WEB_PUSH_WORKER_INTERVAL_SECONDS`: Prüfintervall des Push-Workers; Default `60`.
 - `APP_HEALTH_URL`: Healthcheck-URL der App; Default `http://app:8000/healthz/`.
 - `TARGET_SERVICE`: Compose-Service des App-Containers für Rollback-Digest-Ermittlung; Default `app`.
-- `BACKUP_DIR`: Host-Verzeichnis für Backups; Default `./backups`.
+- `PERSISTENCE_DIR`: absoluter Host-Pfad für alle persistenten Daten; für Portainer wird `/srv/fliegerlager` empfohlen.
+- `BACKUP_DIR`: bisheriger Host-Pfad der Backups; dient nur als Quelle bei der einmaligen Speichermigration.
 - `PORTAINER_VERIFY_SSL`: Portainer-Zertifikatsprüfung; Default `true`. Für interne Portainer-Instanzen mit Self-Signed-Zertifikat `false` setzen.
 - `GHCR_TOKEN`: nur für private GHCR-Images setzen; bei öffentlichen Images leer lassen.
 - `TZ`: Zeitzone des Updaters; Default `Europe/Berlin`.
 
-Der Compose-Service `backup-permissions` legt das Backup-Verzeichnis beim Start an und setzt es auf die App-UID/GID
-`10001:10001`, damit der nicht-root Scheduler Export-Staging-Dateien schreiben kann.
+Der Compose-Service `storage-migrate` legt die Zielstruktur an und setzt die schreibbaren App-Verzeichnisse auf
+UID/GID `10001:10001`. Danach verwenden alle Container denselben Host-Ordner:
+
+```text
+/srv/fliegerlager/
+  postgres/
+  media/
+  backups/
+  updater-state/
+  secrets/webpush/
+  migration/
+```
+
+## Einmalige Migration bestehender Installationen
+
+Die erste Bereitstellung dieser Compose-Version benötigt ein Wartungsfenster. PostgreSQL-Dateien dürfen nicht kopiert
+werden, während die bisherige Datenbank läuft.
+
+1. Vorhandenen Stack in Portainer stoppen, aber weder Stack noch Volumes löschen.
+2. Im Stack `PERSISTENCE_DIR=/srv/fliegerlager` setzen. `BACKUP_DIR` muss weiterhin auf den bisherigen Backup-Pfad zeigen.
+3. Die Compose-Datei dieser Version in den Stack übernehmen und den Stack neu bereitstellen.
+4. In den Logs von `storage-migrate` auf `Persistence migration completed` prüfen. Erst danach starten Datenbank und App.
+5. App-Healthcheck, Medien und vorhandene Abrechnungen prüfen.
+
+Die Migration liest die drei bisherigen Named Volumes und `BACKUP_DIR`, kopiert deren Inhalt in die neue Struktur und
+schreibt anschließend `migration/v1.json`. Wiederholte Starts erkennen diese Markierung und kopieren nichts erneut.
+Ein `postmaster.pid`, eine inkompatible PostgreSQL-Version oder bereits vorhandene unbekannte Zieldaten führen zum
+Abbruch. `PERSISTENCE_DIR` und `BACKUP_DIR` müssen verschiedene Host-Pfade sein. Die alten Volumes werden nie verändert
+oder gelöscht und bleiben als Rückfalloption erhalten. Ein Rückfall
+auf die alte Compose-Datei enthält allerdings keine Datenänderungen, die erst nach der Migration entstanden sind.
 
 ```bash
 docker compose pull
@@ -97,17 +126,15 @@ der Passwort- oder Authelia-Fallback geprüft werden. Weitere Sicherheits- und R
 
 ## PWA und Web Push
 
-Die PWA funktioniert ohne zusätzliche Konfiguration. Für Push-Benachrichtigungen einmalig VAPID-Schlüssel erzeugen
-und anschließend den Stack mit aktiviertem Worker neu bereitstellen:
+Die PWA funktioniert ohne zusätzliche Konfiguration. Für Push-Benachrichtigungen
+`WEB_PUSH_VAPID_PUBLIC_KEY` und `WEB_PUSH_VAPID_PRIVATE_KEY` leer lassen, `WEB_PUSH_VAPID_SUBJECT` auf eine betreute
+`mailto:`-Adresse setzen und `WEB_PUSH_ENABLED=1` aktivieren. Beim ersten App-Start wird ein Schlüsselpaar unter
+`PERSISTENCE_DIR/secrets/webpush/` erzeugt und bei weiteren Starts wiederverwendet. Bereits explizit konfigurierte
+Schlüssel haben weiterhin Vorrang.
 
-```bash
-docker compose run --rm app python manage.py generate_webpush_keys
-```
-
-Die ausgegebenen Werte werden als `WEB_PUSH_VAPID_PUBLIC_KEY` und `WEB_PUSH_VAPID_PRIVATE_KEY` in `.env` hinterlegt.
-Zusätzlich `WEB_PUSH_VAPID_SUBJECT` auf eine betreute `mailto:`-Adresse setzen und `WEB_PUSH_ENABLED=1` aktivieren.
-Der private Schlüssel darf nicht in Git, Logs oder Screenshots gelangen. Eine Rotation macht bestehende
-Browser-Subscriptions unbrauchbar; betroffene Geräte müssen Push danach erneut aktivieren.
+Der private Schlüssel darf nicht in Git, Logs oder Screenshots gelangen. Der gesamte persistente Ordner muss in die
+Host-Backupstrategie aufgenommen werden. Eine Schlüsselrotation macht bestehende Browser-Subscriptions unbrauchbar;
+betroffene Geräte müssen Push danach erneut aktivieren.
 
 Der Service `push-worker` erzeugt terminierte Erinnerungen und verarbeitet die Datenbank-Outbox. Zentrale Tablets
 verwenden `/central/kiosk/` und bieten keine Push-Aktivierung an. Weitere Betriebsdetails stehen in
