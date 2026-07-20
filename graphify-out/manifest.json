@@ -245,7 +245,7 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/AGENTS.md": {
-    "mtime": 1784293536.6050758,
+    "mtime": 1784557645.5473144,
     "ast_hash": "a98bb684df4046f53fa59957879d1f5b",
     "semantic_hash": ""
   },
@@ -270,8 +270,8 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/docker-compose.yml": {
-    "mtime": 1784555998.6779544,
-    "ast_hash": "aef8288e9863ec92bd77f8f321ab6ccf",
+    "mtime": 1784565172.4683945,
+    "ast_hash": "490a054301eac9fdf1be30af6cde1239",
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/docs/README.md": {
@@ -985,8 +985,8 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/deploy/docker-compose.example.yml": {
-    "mtime": 1784555998.8003738,
-    "ast_hash": "f67e5a7581aa23efd98aa7d09523bfd1",
+    "mtime": 1784565172.6013286,
+    "ast_hash": "48dd777a52cb03bd9782dff11c42e8d9",
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/docs/user_guide.html": {
@@ -1450,8 +1450,18 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-164-unified-persistence.md": {
-    "mtime": 1784556905.38105,
+    "mtime": 1784565654.3111007,
     "ast_hash": "55c71b644674ae6652fbf905138665f6",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_compose_configuration.py": {
+    "mtime": 1784565408.2903,
+    "ast_hash": "11431c7624f88ae2f9a082fe4ac3a3d6",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-165-worker-healthchecks.md": {
+    "mtime": 1784565654.440508,
+    "ast_hash": "00fe27448d7d454840743fc7b40462d4",
     "semantic_hash": ""
   }
 }
