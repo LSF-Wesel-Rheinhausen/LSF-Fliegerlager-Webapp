@@ -1,6 +1,5 @@
 import json
 import logging
-from json import JSONDecodeError
 from typing import Any, cast
 
 from django.conf import settings
@@ -38,7 +37,7 @@ def _json_request_body(request: HttpRequest) -> dict[str, Any]:
         raise PasskeyCeremonyError("Invalid request body.")
     try:
         payload = json.loads(request.body)
-    except (JSONDecodeError, UnicodeDecodeError) as exc:
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise PasskeyCeremonyError("Invalid request body.") from exc
     if not isinstance(payload, dict):
         raise PasskeyCeremonyError("Invalid request body.")

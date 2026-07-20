@@ -20,7 +20,7 @@ Unterstuetzte Umgebungsvariablen:
 - `AUTHELIA_SSO_ENABLED`: `1` aktiviert Trusted-Header-SSO fuer bereits bestehende aktive Django-Konten; Default `0`.
 - `AUTHELIA_SSO_EMAIL_HEADER`: vom kontrollierten Proxy gesetzter E-Mail-Header; Default `Remote-Email`.
 - `PASSKEY_ENABLED`: `1` aktiviert WebAuthn-Registrierung und Passkey-Login; Default `0`.
-- `PASSKEY_RP_ID`: öffentlicher Hostname ohne Schema oder Port.
+- `PASSKEY_RP_ID`: öffentlicher Domainname ohne Schema oder Port; IP-Adressen sind nicht zulässig.
 - `PASSKEY_RP_NAME`: Anzeigename der WebAuthn Relying Party.
 - `PASSKEY_ORIGIN`: exakter öffentlicher Origin; HTTP ist ausschließlich für localhost zulässig.
 - `DJANGO_HSTS_SECONDS`: HSTS-Dauer; erst nach erfolgreichem HTTPS-Betrieb schrittweise von `0` erhoehen.

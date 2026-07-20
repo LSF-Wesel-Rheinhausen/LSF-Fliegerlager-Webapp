@@ -1,5 +1,6 @@
 import time
 from collections.abc import MutableMapping
+from ipaddress import ip_address
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -42,6 +43,12 @@ def _require_passkey_settings() -> tuple[str, str, str]:
         raise ImproperlyConfigured("PASSKEY_RP_ID, PASSKEY_RP_NAME and PASSKEY_ORIGIN are required.")
     rp_id = settings.PASSKEY_RP_ID
     origin = settings.PASSKEY_ORIGIN
+    try:
+        ip_address(rp_id)
+    except ValueError:
+        pass
+    else:
+        raise ImproperlyConfigured("PASSKEY_RP_ID must be a domain name, not an IP address.")
     rp_parts = urlsplit(f"//{rp_id}")
     if rp_parts.hostname != rp_id.lower() or rp_parts.port is not None:
         raise ImproperlyConfigured("PASSKEY_RP_ID must be a hostname without scheme, port or path.")
@@ -58,8 +65,7 @@ def _require_passkey_settings() -> tuple[str, str, str]:
         raise ImproperlyConfigured("PASSKEY_ORIGIN contains an invalid port.")
     if origin_parts.hostname != rp_id and not origin_parts.hostname.endswith(f".{rp_id}"):
         raise ImproperlyConfigured("PASSKEY_ORIGIN must use PASSKEY_RP_ID or one of its subdomains.")
-    local_hosts = {"localhost", "127.0.0.1", "::1"}
-    if origin_parts.scheme != "https" and not (origin_parts.scheme == "http" and origin_parts.hostname in local_hosts):
+    if origin_parts.scheme != "https" and not (origin_parts.scheme == "http" and origin_parts.hostname == "localhost"):
         raise ImproperlyConfigured("PASSKEY_ORIGIN must use HTTPS except on localhost.")
     return rp_id, settings.PASSKEY_RP_NAME, origin
 

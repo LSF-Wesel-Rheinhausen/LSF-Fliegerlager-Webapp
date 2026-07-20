@@ -12,9 +12,9 @@ PASSKEY_RP_NAME=Fliegerlager-Abrechnung
 PASSKEY_ORIGIN=https://app.example.org
 ```
 
-`PASSKEY_RP_ID` ist der öffentliche Hostname ohne Schema oder Port. `PASSKEY_ORIGIN` ist der exakte öffentliche
-Origin. HTTP wird ausschließlich für localhost akzeptiert. Änderungen an RP-ID oder Domain trennen bestehende
-Credentials technisch von der Anwendung.
+`PASSKEY_RP_ID` ist der öffentliche Domainname ohne Schema oder Port; IP-Adressen sind nicht zulässig.
+`PASSKEY_ORIGIN` ist der exakte öffentliche Origin. HTTP wird ausschließlich für `localhost` akzeptiert. Änderungen
+an RP-ID oder Domain trennen bestehende Credentials technisch von der Anwendung.
 
 ## Sicherheitsmodell
 

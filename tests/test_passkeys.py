@@ -376,6 +376,26 @@ def test_passkey_configuration_rejects_insecure_non_local_origin():
         passkeys.begin_passkey_authentication({})
 
 
+@pytest.mark.parametrize(
+    ("rp_id", "origin"),
+    [
+        ("127.0.0.1", "http://127.0.0.1:8000"),
+        ("::1", "http://[::1]:8000"),
+    ],
+)
+def test_passkey_configuration_rejects_ip_address_rp_ids(rp_id: str, origin: str) -> None:
+    passkeys = importlib.import_module("billing.passkeys")
+
+    with override_settings(
+        PASSKEY_ENABLED=True,
+        PASSKEY_RP_ID=rp_id,
+        PASSKEY_RP_NAME="Fliegerlager Test",
+        PASSKEY_ORIGIN=origin,
+    ):
+        with pytest.raises(ImproperlyConfigured, match="domain name"):
+            passkeys.begin_passkey_authentication({})
+
+
 @override_settings(
     PASSKEY_ENABLED=True,
     PASSKEY_RP_ID="example.test",

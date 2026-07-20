@@ -87,8 +87,9 @@ PASSKEY_RP_NAME=Fliegerlager-Abrechnung
 PASSKEY_ORIGIN=https://app.example.org
 ```
 
-`PASSKEY_RP_ID` enthält ausschließlich den öffentlichen Hostnamen. `PASSKEY_ORIGIN` muss dem im Browser sichtbaren
-Origin einschließlich Schema und gegebenenfalls Port exakt entsprechen. Außerhalb von localhost ist HTTPS Pflicht.
+`PASSKEY_RP_ID` enthält ausschließlich den öffentlichen Domainnamen; IP-Adressen sind nicht zulässig.
+`PASSKEY_ORIGIN` muss dem im Browser sichtbaren Origin einschließlich Schema und gegebenenfalls Port exakt
+entsprechen. Außerhalb von `localhost` ist HTTPS Pflicht.
 Ein späterer Wechsel der RP-ID macht bereits registrierte Credentials unbrauchbar. Deshalb muss vor Domainwechseln
 der Passwort- oder Authelia-Fallback geprüft werden. Weitere Sicherheits- und Recovery-Hinweise stehen in
 [`../docs/passkeys.md`](../docs/passkeys.md).
