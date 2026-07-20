@@ -9,48 +9,73 @@
   <div class="section-heading">
     <div>
       <h1>Benachrichtigungen</h1>
-      <p class="hint">Verwalte Push-Benachrichtigungen getrennt für jedes private Gerät.</p>
+      <p class="hint">Richte Push-Benachrichtigungen für dieses Gerät ein.</p>
     </div>
-    <span class="status-badge" data-notification-status>Wird geprüft</span>
+    <span class="status-badge" data-notification-status aria-live="polite">Wird geprüft</span>
   </div>
 
   {% if web_push_enabled and web_push_public_key %}
-    <form class="form-grid notification-subscribe-form" data-notification-subscribe-form>
-      {% csrf_token %}
-      <label for="notification-device-name">Gerätename</label>
-      <input id="notification-device-name" name="device_name" maxlength="80" value="Dieses Gerät" required>
-      <fieldset>
-        <legend>Kategorien</legend>
-        {% for value, label in notification_categories.items %}
-          <label class="checkbox-row">
-            <input type="checkbox" name="category" value="{{ value }}" checked>
-            <span>{{ label }}</span>
-          </label>
-        {% endfor %}
-      </fieldset>
-      <button class="button" type="submit">Benachrichtigungen aktivieren</button>
-    </form>
+    <div class="notification-setup">
+      <section class="notification-step">
+        <div class="notification-step__heading">
+          <span class="notification-step__number" aria-hidden="true">1</span>
+          <div>
+            <h2>App installieren</h2>
+            <p class="hint" data-pwa-install-state>Installationsstatus wird geprüft.</p>
+          </div>
+        </div>
+        <button class="button button-secondary" type="button" data-pwa-install hidden>Installationsanleitung</button>
+      </section>
+
+      <section class="notification-step">
+        <div class="notification-step__heading">
+          <span class="notification-step__number" aria-hidden="true">2</span>
+          <div>
+            <h2>Benachrichtigungen aktivieren</h2>
+            <p class="hint">Erlaube Benachrichtigungen und wähle aus, welche Meldungen dieses Gerät erhält.</p>
+          </div>
+        </div>
+        <form class="form-grid notification-subscribe-form" data-notification-subscribe-form>
+          {% csrf_token %}
+          <label for="notification-device-name">Gerätename</label>
+          <input id="notification-device-name" name="device_name" maxlength="80" value="Dieses Gerät" required>
+          <fieldset>
+            <legend>Kategorien</legend>
+            {% for value, label in notification_categories.items %}
+              <label class="checkbox-row">
+                <input type="checkbox" name="category" value="{{ value }}" checked>
+                <span>{{ label }}</span>
+              </label>
+            {% endfor %}
+          </fieldset>
+          <button class="button" type="submit" data-notification-submit>Benachrichtigungen aktivieren</button>
+        </form>
+      </section>
+    </div>
   {% else %}
     <p class="message warning">Push-Benachrichtigungen sind auf diesem System noch nicht konfiguriert.</p>
   {% endif %}
 
   <h2>Registrierte Geräte</h2>
-  <ul class="device-list">
+  <ul class="device-list" data-notification-device-list>
     {% for subscription in subscriptions %}
-      <li>
+      <li data-notification-device="{{ subscription.id }}" data-endpoint-fingerprint="{{ subscription.endpoint_fingerprint }}">
         <div>
-          <strong>{{ subscription.device_name }}</strong>
+          <span class="device-list__name">
+            <strong>{{ subscription.device_name }}</strong>
+            <span class="status-badge status-badge--ok" data-notification-current hidden>Dieses Gerät</span>
+          </span>
           <span class="hint">{% if subscription.last_success_at %}Zuletzt erreicht: {{ subscription.last_success_at|date:"d.m.Y H:i" }}{% else %}Noch nicht erreicht{% endif %}</span>
         </div>
         <div class="actions">
-          <button class="button button-secondary" type="button" data-test-subscription="{{ subscription.pk }}">Testen</button>
-          <button class="button button-danger" type="button" data-revoke-subscription="{{ subscription.pk }}">Entfernen</button>
+          <button class="button button-secondary" type="button" data-test-subscription="{{ subscription.id }}">Testen</button>
+          <button class="button button-danger" type="button" data-revoke-subscription="{{ subscription.id }}">Entfernen</button>
         </div>
       </li>
     {% empty %}
-      <li class="hint">Noch kein Gerät registriert.</li>
+      <li class="hint" data-notification-empty>Noch kein Gerät registriert.</li>
     {% endfor %}
   </ul>
-  <p class="message error" data-notification-error hidden></p>
+  <p class="message error" data-notification-error role="alert" hidden></p>
 </section>
-<script src="{% static 'billing/notifications.js' %}?v=1" defer></script>
+<script src="{% static 'billing/notifications.js' %}?v=2" defer></script>

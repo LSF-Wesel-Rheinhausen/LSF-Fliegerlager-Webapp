@@ -1,0 +1,41 @@
+<dialog class="pwa-install-dialog" data-pwa-install-dialog aria-labelledby="pwa-install-title">
+  <form method="dialog" class="dialog-heading">
+    <h2 id="pwa-install-title">App installieren</h2>
+    <button class="button button-secondary" type="submit">Schließen</button>
+  </form>
+  <div class="pwa-install-dialog__content">
+    <p class="hint" data-pwa-install-status aria-live="polite">
+      Folge der Anleitung für dein Gerät.
+    </p>
+    <button class="button" type="button" data-pwa-native-install hidden>App installieren</button>
+
+    <section data-pwa-install-platform="ios" hidden>
+      <h3>iPhone oder iPad</h3>
+      <ol class="pwa-install-steps">
+        <li>Öffne diese Seite in Safari.</li>
+        <li>Tippe in Safari auf <strong>Teilen</strong>.</li>
+        <li>Wähle <strong>Zum Home-Bildschirm</strong>.</li>
+        <li>Bestätige mit <strong>Hinzufügen</strong>.</li>
+      </ol>
+      <p class="hint">Öffne die App anschließend über das neue Symbol auf dem Home-Bildschirm.</p>
+    </section>
+
+    <section data-pwa-install-platform="android" hidden>
+      <h3>Android</h3>
+      <ol class="pwa-install-steps">
+        <li>Öffne das Browsermenü.</li>
+        <li>Wähle <strong>App installieren</strong> oder <strong>Zum Startbildschirm</strong>.</li>
+        <li>Bestätige die Installation.</li>
+      </ol>
+    </section>
+
+    <section data-pwa-install-platform="desktop" hidden>
+      <h3>Computer</h3>
+      <ol class="pwa-install-steps">
+        <li>Öffne das Browsermenü oder das Installationssymbol in der Adressleiste.</li>
+        <li>Wähle <strong>App installieren</strong>.</li>
+        <li>Bestätige die Installation.</li>
+      </ol>
+    </section>
+  </div>
+</dialog>
