@@ -18,6 +18,8 @@ Automatisierte Tests.
 - `test_price_rules.py`: Admin-Preisverwaltung und Lagerpauschalen-Matrix.
 - `test_booking_audit.py`: Admin-Bearbeitung, Löschung und Wiederherstellung von Buchungen im Änderungsprotokoll.
 - `test_setup_flow.py`: First-Launch-Websetup und Static-Finder.
+- `test_persistence_migration.py`: sichere und idempotente Übernahme bisheriger Docker-Volumes.
+- `test_webpush_keys.py`: Erzeugung, Wiederverwendung und Validierung persistenter VAPID-Schlüssel.
 - `factories.py`: Wiederverwendbare Testdaten mit `factory_boy`.
 - `e2e/fliegerlager.spec.js`: Playwright-Browsertests fuer Setup, Login, Lageranlage, Buchungs-Audit, Preisregel-Dialoge, Kiosk, Dienstplanung, Exporte und responsive Overflow-Pruefungen.
 

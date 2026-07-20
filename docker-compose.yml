@@ -1,22 +1,42 @@
 name: ${COMPOSE_PROJECT_NAME:-fliegerlager}
 
 services:
+  storage-migrate:
+    image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}
+    user: "0:0"
+    restart: "no"
+    entrypoint: ["python", "-m", "config.persistence_migration"]
+    command: []
+    environment:
+      PERSISTENCE_ROOT: /data
+      POSTGRES_MAJOR: "16"
+    volumes:
+      - ${PERSISTENCE_DIR:-./data}:/data
+      - postgres_data:/legacy/postgres:ro
+      - media_data:/legacy/media:ro
+      - updater_state:/legacy/updater-state:ro
+      - ${BACKUP_DIR:-./backups}:/legacy/backups:ro
+
   app:
     image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}
     env_file: .env
     restart: unless-stopped
     environment:
       BACKUP_DIR: /backups
+      WEB_PUSH_KEY_DIR: /run/secrets/webpush
     ports:
       - "${APP_BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-8000}:8000"
     depends_on:
+      storage-migrate:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
     labels:
       io.lsf-fliegerlager.update-target: "true"
     volumes:
-      - media_data:/app/src/media
-      - ${BACKUP_DIR:-./backups}:/backups
+      - ${PERSISTENCE_DIR:-./data}/media:/app/src/media
+      - ${PERSISTENCE_DIR:-./data}/backups:/backups
+      - ${PERSISTENCE_DIR:-./data}/secrets/webpush:/run/secrets/webpush
     networks:
       - frontend
       - backend
@@ -28,9 +48,12 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-fliegerlager}
       POSTGRES_USER: ${POSTGRES_USER:-fliegerlager}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+    depends_on:
+      storage-migrate:
+        condition: service_completed_successfully
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ${BACKUP_DIR:-./backups}:/backups
+      - ${PERSISTENCE_DIR:-./data}/postgres:/var/lib/postgresql/data
+      - ${PERSISTENCE_DIR:-./data}/backups:/backups
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
@@ -58,10 +81,12 @@ services:
       BACKUP_DIR: /backups
       TZ: ${TZ:-Europe/Berlin}
       PORTAINER_VERIFY_SSL: ${PORTAINER_VERIFY_SSL:-true}
-
+    depends_on:
+      storage-migrate:
+        condition: service_completed_successfully
     volumes:
-      - ${BACKUP_DIR:-./backups}:/backups
-      - updater_state:/state
+      - ${PERSISTENCE_DIR:-./data}/backups:/backups
+      - ${PERSISTENCE_DIR:-./data}/updater-state:/state
     healthcheck:
       test:
         - CMD
@@ -76,31 +101,25 @@ services:
       - frontend
       - backend
 
-  backup-permissions:
-    image: busybox:1.37
-    restart: "no"
-    user: "0:0"
-    command: ["sh", "-c", "mkdir -p /backups/staging && chown -R 10001:10001 /backups"]
-    volumes:
-      - ${BACKUP_DIR:-./backups}:/backups
-
   daily-settlement-backup:
     image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}
     env_file: .env
     restart: unless-stopped
     environment:
       BACKUP_DIR: /backups
+      WEB_PUSH_KEY_DIR: /run/secrets/webpush
     command: ["python", "manage.py", "run_daily_settlement_backup", "--loop"]
     depends_on:
       db:
         condition: service_healthy
+      app:
+        condition: service_healthy
       updater:
         condition: service_healthy
-      backup-permissions:
-        condition: service_completed_successfully
     volumes:
-      - media_data:/app/src/media
-      - ${BACKUP_DIR:-./backups}:/backups
+      - ${PERSISTENCE_DIR:-./data}/media:/app/src/media
+      - ${PERSISTENCE_DIR:-./data}/backups:/backups
+      - ${PERSISTENCE_DIR:-./data}/secrets/webpush:/run/secrets/webpush:ro
     networks:
       - backend
 
@@ -108,10 +127,16 @@ services:
     image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}
     env_file: .env
     restart: unless-stopped
+    environment:
+      WEB_PUSH_KEY_DIR: /run/secrets/webpush
     command: ["python", "manage.py", "run_push_worker", "--loop"]
     depends_on:
       db:
         condition: service_healthy
+      app:
+        condition: service_healthy
+    volumes:
+      - ${PERSISTENCE_DIR:-./data}/secrets/webpush:/run/secrets/webpush:ro
     networks:
       - frontend
       - backend
