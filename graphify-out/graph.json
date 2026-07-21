@@ -3019,7 +3019,7 @@
       "source_file": "src/billing/daily_settlement_backups.py",
       "source_location": "L1",
       "id": "billing_daily_settlement_backups",
-      "community": 141,
+      "community": 185,
       "norm_label": "daily_settlement_backups.py"
     },
     {
@@ -3028,7 +3028,7 @@
       "source_file": "src/billing/daily_settlement_backups.py",
       "source_location": "L22",
       "id": "billing_daily_settlement_backups_update_daily_backup_settings",
-      "community": 268,
+      "community": 185,
       "norm_label": "update_daily_backup_settings()"
     },
     {
@@ -3046,7 +3046,7 @@
       "source_file": "src/billing/daily_settlement_backups.py",
       "source_location": "L22",
       "id": "src_billing_daily_settlement_backups_py_any",
-      "community": 264,
+      "community": 185,
       "norm_label": "any"
     },
     {
@@ -3064,7 +3064,7 @@
       "source_file": "src/billing/daily_settlement_backups.py",
       "source_location": "L31",
       "id": "billing_daily_settlement_backups_build_settlement_backup_staging",
-      "community": 141,
+      "community": 185,
       "norm_label": "build_settlement_backup_staging()"
     },
     {
@@ -3091,7 +3091,7 @@
       "source_file": "src/billing/daily_settlement_backups.py",
       "source_location": "L65",
       "id": "billing_daily_settlement_backups_relative_to_backup_root",
-      "community": 141,
+      "community": 185,
       "norm_label": "_relative_to_backup_root()"
     },
     {
@@ -3109,7 +3109,7 @@
       "source_file": "src/billing/daily_settlement_backups.py",
       "source_location": "L70",
       "id": "billing_daily_settlement_backups_claim_daily_backup_log",
-      "community": 264,
+      "community": 185,
       "norm_label": "_claim_daily_backup_log()"
     },
     {
@@ -3127,7 +3127,7 @@
       "source_file": "src/billing/daily_settlement_backups.py",
       "source_location": "L70",
       "id": "dailysettlementbackuplog",
-      "community": 264,
+      "community": 185,
       "norm_label": "dailysettlementbackuplog"
     },
     {
@@ -3136,7 +3136,7 @@
       "source_file": "src/billing/daily_settlement_backups.py",
       "source_location": "L93",
       "id": "billing_daily_settlement_backups_run_due_daily_settlement_backup",
-      "community": 138,
+      "community": 185,
       "norm_label": "run_due_daily_settlement_backup()"
     },
     {
@@ -3145,7 +3145,7 @@
       "source_file": "src/billing/daily_settlement_backups.py",
       "source_location": "L23",
       "id": "billing_daily_settlement_backups_rationale_23",
-      "community": 268,
+      "community": 185,
       "norm_label": "persist the singleton configuration for automated daily settlement backups."
     },
     {
@@ -3154,7 +3154,7 @@
       "source_file": "src/billing/daily_settlement_backups.py",
       "source_location": "L32",
       "id": "billing_daily_settlement_backups_rationale_32",
-      "community": 141,
+      "community": 185,
       "norm_label": "create export files for a settlement run under the shared backup volume."
     },
     {
@@ -3163,7 +3163,7 @@
       "source_file": "src/billing/daily_settlement_backups.py",
       "source_location": "L94",
       "id": "billing_daily_settlement_backups_rationale_94",
-      "community": 138,
+      "community": 185,
       "norm_label": "run the configured daily settlement backup when the scheduled time is due."
     },
     {
@@ -3703,7 +3703,7 @@
       "source_file": "src/billing/forms.py",
       "source_location": "L82",
       "id": "billing_forms_emailorusernameauthenticationform",
-      "community": 61,
+      "community": 264,
       "norm_label": "emailorusernameauthenticationform"
     },
     {
@@ -3712,7 +3712,7 @@
       "source_file": "",
       "source_location": "",
       "id": "authenticationform",
-      "community": 61,
+      "community": 264,
       "norm_label": "authenticationform"
     },
     {
@@ -3829,7 +3829,7 @@
       "source_file": "src/billing/forms.py",
       "source_location": "L206",
       "id": "billing_forms_usereditform_save",
-      "community": 146,
+      "community": 252,
       "norm_label": ".save()"
     },
     {
@@ -3982,7 +3982,7 @@
       "source_file": "src/billing/forms.py",
       "source_location": "L478",
       "id": "billing_forms_campflatratesettingsform_save",
-      "community": 146,
+      "community": 61,
       "norm_label": ".save()"
     },
     {
@@ -4324,7 +4324,7 @@
       "source_file": "src/billing/forms.py",
       "source_location": "L1041",
       "id": "billing_forms_mealstandardpricesform_save",
-      "community": 146,
+      "community": 61,
       "norm_label": ".save()"
     },
     {
@@ -4414,7 +4414,7 @@
       "source_file": "src/billing/forms.py",
       "source_location": "L207",
       "id": "billing_forms_rationale_207",
-      "community": 146,
+      "community": 252,
       "norm_label": "persist editable user metadata and the attached profile."
     },
     {
@@ -4738,7 +4738,7 @@
       "source_file": "",
       "source_location": "",
       "id": "basecommand",
-      "community": 239,
+      "community": 173,
       "norm_label": "basecommand"
     },
     {
@@ -4792,7 +4792,7 @@
       "source_file": "src/billing/management/commands/run_daily_settlement_backup.py",
       "source_location": "L1",
       "id": "commands_run_daily_settlement_backup",
-      "community": 239,
+      "community": 185,
       "norm_label": "run_daily_settlement_backup.py"
     },
     {
@@ -4801,7 +4801,7 @@
       "source_file": "src/billing/management/commands/run_daily_settlement_backup.py",
       "source_location": "L10",
       "id": "commands_run_daily_settlement_backup_command",
-      "community": 239,
+      "community": 185,
       "norm_label": "command"
     },
     {
@@ -4810,7 +4810,7 @@
       "source_file": "src/billing/management/commands/run_daily_settlement_backup.py",
       "source_location": "L15",
       "id": "commands_run_daily_settlement_backup_command_add_arguments",
-      "community": 239,
+      "community": 185,
       "norm_label": ".add_arguments()"
     },
     {
@@ -4819,7 +4819,7 @@
       "source_file": "src/billing/management/commands/run_daily_settlement_backup.py",
       "source_location": "L15",
       "id": "src_billing_management_commands_run_daily_settlement_backup_py_any",
-      "community": 239,
+      "community": 185,
       "norm_label": "any"
     },
     {
@@ -4828,7 +4828,7 @@
       "source_file": "src/billing/management/commands/run_daily_settlement_backup.py",
       "source_location": "L25",
       "id": "commands_run_daily_settlement_backup_command_handle",
-      "community": 239,
+      "community": 185,
       "norm_label": ".handle()"
     },
     {
@@ -4837,7 +4837,7 @@
       "source_file": "src/billing/management/commands/run_daily_settlement_backup.py",
       "source_location": "L11",
       "id": "commands_run_daily_settlement_backup_rationale_11",
-      "community": 239,
+      "community": 185,
       "norm_label": "run or schedule the daily settlement backup check."
     },
     {
@@ -4846,7 +4846,7 @@
       "source_file": "src/billing/management/commands/run_daily_settlement_backup.py",
       "source_location": "L16",
       "id": "commands_run_daily_settlement_backup_rationale_16",
-      "community": 239,
+      "community": 185,
       "norm_label": "register command line options."
     },
     {
@@ -4855,7 +4855,7 @@
       "source_file": "src/billing/management/commands/run_daily_settlement_backup.py",
       "source_location": "L26",
       "id": "commands_run_daily_settlement_backup_rationale_26",
-      "community": 239,
+      "community": 185,
       "norm_label": "execute the backup check once or continuously."
     },
     {
@@ -4864,7 +4864,7 @@
       "source_file": "src/billing/management/commands/run_push_worker.py",
       "source_location": "L1",
       "id": "commands_run_push_worker",
-      "community": 239,
+      "community": 173,
       "norm_label": "run_push_worker.py"
     },
     {
@@ -4873,7 +4873,7 @@
       "source_file": "src/billing/management/commands/run_push_worker.py",
       "source_location": "L9",
       "id": "commands_run_push_worker_command",
-      "community": 239,
+      "community": 173,
       "norm_label": "command"
     },
     {
@@ -4882,7 +4882,7 @@
       "source_file": "src/billing/management/commands/run_push_worker.py",
       "source_location": "L14",
       "id": "commands_run_push_worker_command_add_arguments",
-      "community": 239,
+      "community": 173,
       "norm_label": ".add_arguments()"
     },
     {
@@ -4900,7 +4900,7 @@
       "source_file": "src/billing/management/commands/run_push_worker.py",
       "source_location": "L10",
       "id": "commands_run_push_worker_rationale_10",
-      "community": 239,
+      "community": 173,
       "norm_label": "generate scheduled push messages and deliver the database outbox."
     },
     {
@@ -4909,7 +4909,7 @@
       "source_file": "src/billing/migrations/0001_initial.py",
       "source_location": "L1",
       "id": "migrations_0001_initial",
-      "community": 104,
+      "community": 124,
       "norm_label": "0001_initial.py"
     },
     {
@@ -4918,7 +4918,7 @@
       "source_file": "src/billing/migrations/0001_initial.py",
       "source_location": "L11",
       "id": "migrations_0001_initial_migration",
-      "community": 104,
+      "community": 124,
       "norm_label": "migration"
     },
     {
@@ -4927,7 +4927,7 @@
       "source_file": "src/billing/migrations/0002_camp_foerdersatz_charge_foerderfaehig_and_more.py",
       "source_location": "L1",
       "id": "migrations_0002_camp_foerdersatz_charge_foerderfaehig_and_more",
-      "community": 104,
+      "community": 124,
       "norm_label": "0002_camp_foerdersatz_charge_foerderfaehig_and_more.py"
     },
     {
@@ -4936,7 +4936,7 @@
       "source_file": "src/billing/migrations/0002_camp_foerdersatz_charge_foerderfaehig_and_more.py",
       "source_location": "L8",
       "id": "migrations_0002_camp_foerdersatz_charge_foerderfaehig_and_more_migration",
-      "community": 104,
+      "community": 124,
       "norm_label": "migration"
     },
     {
@@ -5107,7 +5107,7 @@
       "source_file": "src/billing/migrations/0011_camp_meal_booking_cutoff_time_mealsignup_charge_and_more.py",
       "source_location": "L1",
       "id": "migrations_0011_camp_meal_booking_cutoff_time_mealsignup_charge_and_more",
-      "community": 230,
+      "community": 124,
       "norm_label": "0011_camp_meal_booking_cutoff_time_mealsignup_charge_and_more.py"
     },
     {
@@ -5116,7 +5116,7 @@
       "source_file": "src/billing/migrations/0011_camp_meal_booking_cutoff_time_mealsignup_charge_and_more.py",
       "source_location": "L9",
       "id": "migrations_0011_camp_meal_booking_cutoff_time_mealsignup_charge_and_more_link_existing_meal_charges",
-      "community": 230,
+      "community": 124,
       "norm_label": "link_existing_meal_charges()"
     },
     {
@@ -5125,7 +5125,7 @@
       "source_file": "src/billing/migrations/0011_camp_meal_booking_cutoff_time_mealsignup_charge_and_more.py",
       "source_location": "L32",
       "id": "migrations_0011_camp_meal_booking_cutoff_time_mealsignup_charge_and_more_migration",
-      "community": 230,
+      "community": 124,
       "norm_label": "migration"
     },
     {
@@ -5224,7 +5224,7 @@
       "source_file": "src/billing/migrations/0014_subsidy_rate_per_price_element.py",
       "source_location": "L1",
       "id": "migrations_0014_subsidy_rate_per_price_element",
-      "community": 104,
+      "community": 124,
       "norm_label": "0014_subsidy_rate_per_price_element.py"
     },
     {
@@ -5233,7 +5233,7 @@
       "source_file": "src/billing/migrations/0014_subsidy_rate_per_price_element.py",
       "source_location": "L9",
       "id": "migrations_0014_subsidy_rate_per_price_element_migrate_subsidy_rates",
-      "community": 104,
+      "community": 124,
       "norm_label": "migrate_subsidy_rates()"
     },
     {
@@ -5242,7 +5242,7 @@
       "source_file": "src/billing/migrations/0014_subsidy_rate_per_price_element.py",
       "source_location": "L51",
       "id": "migrations_0014_subsidy_rate_per_price_element_restore_subsidy_flags",
-      "community": 104,
+      "community": 124,
       "norm_label": "restore_subsidy_flags()"
     },
     {
@@ -5251,7 +5251,7 @@
       "source_file": "src/billing/migrations/0014_subsidy_rate_per_price_element.py",
       "source_location": "L82",
       "id": "migrations_0014_subsidy_rate_per_price_element_migration",
-      "community": 104,
+      "community": 124,
       "norm_label": "migration"
     },
     {
@@ -5296,7 +5296,7 @@
       "source_file": "src/billing/migrations/0016_camp_shift_ratio_per_night_shift_shiftassignment.py",
       "source_location": "L1",
       "id": "migrations_0016_camp_shift_ratio_per_night_shift_shiftassignment",
-      "community": 104,
+      "community": 124,
       "norm_label": "0016_camp_shift_ratio_per_night_shift_shiftassignment.py"
     },
     {
@@ -5305,7 +5305,7 @@
       "source_file": "src/billing/migrations/0016_camp_shift_ratio_per_night_shift_shiftassignment.py",
       "source_location": "L9",
       "id": "migrations_0016_camp_shift_ratio_per_night_shift_shiftassignment_migration",
-      "community": 104,
+      "community": 124,
       "norm_label": "migration"
     },
     {
@@ -5395,7 +5395,7 @@
       "source_file": "src/billing/migrations/0021_settlementrun_versioned_snapshots.py",
       "source_location": "L1",
       "id": "migrations_0021_settlementrun_versioned_snapshots",
-      "community": 104,
+      "community": 286,
       "norm_label": "0021_settlementrun_versioned_snapshots.py"
     },
     {
@@ -5404,7 +5404,7 @@
       "source_file": "src/billing/migrations/0021_settlementrun_versioned_snapshots.py",
       "source_location": "L8",
       "id": "migrations_0021_settlementrun_versioned_snapshots_migration",
-      "community": 104,
+      "community": 286,
       "norm_label": "migration"
     },
     {
@@ -5629,7 +5629,7 @@
       "source_file": "src/billing/migrations/0034_daily_settlement_backups.py",
       "source_location": "L1",
       "id": "migrations_0034_daily_settlement_backups",
-      "community": 300,
+      "community": 124,
       "norm_label": "0034_daily_settlement_backups.py"
     },
     {
@@ -5638,7 +5638,7 @@
       "source_file": "src/billing/migrations/0034_daily_settlement_backups.py",
       "source_location": "L8",
       "id": "migrations_0034_daily_settlement_backups_migration",
-      "community": 300,
+      "community": 124,
       "norm_label": "migration"
     },
     {
@@ -5899,7 +5899,7 @@
       "source_file": "src/billing/models.py",
       "source_location": "L181",
       "id": "billing_models_participant_target_shifts",
-      "community": 104,
+      "community": 124,
       "norm_label": ".target_shifts()"
     },
     {
@@ -5908,7 +5908,7 @@
       "source_file": "src/billing/models.py",
       "source_location": "L181",
       "id": "src_billing_models_py_int",
-      "community": 104,
+      "community": 124,
       "norm_label": "int"
     },
     {
@@ -5917,7 +5917,7 @@
       "source_file": "src/billing/models.py",
       "source_location": "L185",
       "id": "billing_models_participant_completed_shifts",
-      "community": 104,
+      "community": 124,
       "norm_label": ".completed_shifts()"
     },
     {
@@ -6106,7 +6106,7 @@
       "source_file": "src/billing/models.py",
       "source_location": "L339",
       "id": "billing_models_participantbookinglink",
-      "community": 0,
+      "community": 148,
       "norm_label": "participantbookinglink"
     },
     {
@@ -6115,7 +6115,7 @@
       "source_file": "src/billing/models.py",
       "source_location": "L361",
       "id": "billing_models_participantbookinglink_str",
-      "community": 0,
+      "community": 148,
       "norm_label": ".__str__()"
     },
     {
@@ -6313,7 +6313,7 @@
       "source_file": "src/billing/models.py",
       "source_location": "L584",
       "id": "billing_models_mealsignup",
-      "community": 111,
+      "community": 148,
       "norm_label": "mealsignup"
     },
     {
@@ -6340,7 +6340,7 @@
       "source_file": "src/billing/models.py",
       "source_location": "L643",
       "id": "billing_models_mealsignup_str",
-      "community": 111,
+      "community": 148,
       "norm_label": ".__str__()"
     },
     {
@@ -6403,7 +6403,7 @@
       "source_file": "src/billing/models.py",
       "source_location": "L712",
       "id": "billing_models_drinkentry_total",
-      "community": 104,
+      "community": 124,
       "norm_label": ".total()"
     },
     {
@@ -6484,7 +6484,7 @@
       "source_file": "src/billing/models.py",
       "source_location": "L775",
       "id": "billing_models_dailysettlementbackuplog",
-      "community": 264,
+      "community": 111,
       "norm_label": "dailysettlementbackuplog"
     },
     {
@@ -6493,7 +6493,7 @@
       "source_file": "src/billing/models.py",
       "source_location": "L814",
       "id": "billing_models_dailysettlementbackuplog_str",
-      "community": 264,
+      "community": 111,
       "norm_label": ".__str__()"
     },
     {
@@ -6619,7 +6619,7 @@
       "source_file": "src/billing/models.py",
       "source_location": "L962",
       "id": "billing_models_pushmessage",
-      "community": 111,
+      "community": 148,
       "norm_label": "pushmessage"
     },
     {
@@ -6745,7 +6745,7 @@
       "source_file": "src/billing/models.py",
       "source_location": "L340",
       "id": "billing_models_rationale_340",
-      "community": 0,
+      "community": 148,
       "norm_label": "track participant-to-participant kiosk booking invitations."
     },
     {
@@ -6763,7 +6763,7 @@
       "source_file": "src/billing/models.py",
       "source_location": "L585",
       "id": "billing_models_rationale_585",
-      "community": 111,
+      "community": 148,
       "norm_label": "store one kiosk meal booking or retraction for a person and meal slot."
     },
     {
@@ -6799,7 +6799,7 @@
       "source_file": "src/billing/models.py",
       "source_location": "L776",
       "id": "billing_models_rationale_776",
-      "community": 264,
+      "community": 111,
       "norm_label": "record one attempted automated settlement backup for a camp and date."
     },
     {
@@ -6817,7 +6817,7 @@
       "source_file": "src/billing/models.py",
       "source_location": "L963",
       "id": "billing_models_rationale_963",
-      "community": 111,
+      "community": 148,
       "norm_label": "store a reliable, idempotent push-delivery attempt in the database outbox."
     },
     {
@@ -6826,7 +6826,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L1",
       "id": "billing_notification_views",
-      "community": 245,
+      "community": 265,
       "norm_label": "notification_views.py"
     },
     {
@@ -6862,7 +6862,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L18",
       "id": "src_billing_notification_views_py_any",
-      "community": 234,
+      "community": 265,
       "norm_label": "any"
     },
     {
@@ -6880,7 +6880,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L26",
       "id": "src_billing_notification_views_py_participant",
-      "community": 265,
+      "community": 245,
       "norm_label": "participant"
     },
     {
@@ -6889,7 +6889,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L39",
       "id": "billing_notification_views_owner_filter",
-      "community": 234,
+      "community": 265,
       "norm_label": "_owner_filter()"
     },
     {
@@ -6898,7 +6898,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L39",
       "id": "src_billing_notification_views_py_bool",
-      "community": 234,
+      "community": 265,
       "norm_label": "bool"
     },
     {
@@ -6934,7 +6934,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L62",
       "id": "billing_notification_views_settings_response",
-      "community": 245,
+      "community": 265,
       "norm_label": "_settings_response()"
     },
     {
@@ -6943,7 +6943,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L62",
       "id": "src_billing_notification_views_py_httpresponse",
-      "community": 245,
+      "community": 265,
       "norm_label": "httpresponse"
     },
     {
@@ -6952,7 +6952,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L88",
       "id": "billing_notification_views_notification_settings",
-      "community": 245,
+      "community": 265,
       "norm_label": "notification_settings()"
     },
     {
@@ -7006,7 +7006,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L163",
       "id": "billing_notification_views_revoke",
-      "community": 234,
+      "community": 265,
       "norm_label": "_revoke()"
     },
     {
@@ -7024,7 +7024,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L171",
       "id": "billing_notification_views_notification_revoke",
-      "community": 234,
+      "community": 245,
       "norm_label": "notification_revoke()"
     },
     {
@@ -7060,7 +7060,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L211",
       "id": "billing_notification_views_kiosk_notification_test",
-      "community": 245,
+      "community": 234,
       "norm_label": "kiosk_notification_test()"
     },
     {
@@ -7087,7 +7087,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L89",
       "id": "billing_notification_views_rationale_89",
-      "community": 245,
+      "community": 265,
       "norm_label": "render push-device settings for the current administrative user."
     },
     {
@@ -7123,7 +7123,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L172",
       "id": "billing_notification_views_rationale_172",
-      "community": 234,
+      "community": 245,
       "norm_label": "revoke one push device owned by the current user."
     },
     {
@@ -7159,7 +7159,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L212",
       "id": "billing_notification_views_rationale_212",
-      "community": 245,
+      "community": 234,
       "norm_label": "queue a test message for one push device owned by the private participant."
     },
     {
@@ -7177,7 +7177,7 @@
       "source_file": "src/billing/notifications.py",
       "source_location": "L47",
       "id": "billing_notifications_pushdeliveryresult",
-      "community": 111,
+      "community": 148,
       "norm_label": "pushdeliveryresult"
     },
     {
@@ -7186,7 +7186,7 @@
       "source_file": "src/billing/notifications.py",
       "source_location": "L56",
       "id": "billing_notifications_allowed_categories",
-      "community": 245,
+      "community": 265,
       "norm_label": "allowed_categories()"
     },
     {
@@ -7195,7 +7195,7 @@
       "source_file": "src/billing/notifications.py",
       "source_location": "L56",
       "id": "src_billing_notifications_py_bool",
-      "community": 111,
+      "community": 148,
       "norm_label": "bool"
     },
     {
@@ -7204,7 +7204,7 @@
       "source_file": "src/billing/notifications.py",
       "source_location": "L56",
       "id": "src_billing_notifications_py_str",
-      "community": 111,
+      "community": 42,
       "norm_label": "str"
     },
     {
@@ -7222,7 +7222,7 @@
       "source_file": "src/billing/notifications.py",
       "source_location": "L61",
       "id": "src_billing_notifications_py_participant",
-      "community": 111,
+      "community": 148,
       "norm_label": "participant"
     },
     {
@@ -7285,7 +7285,7 @@
       "source_file": "src/billing/notifications.py",
       "source_location": "L157",
       "id": "src_billing_notifications_py_expense",
-      "community": 111,
+      "community": 148,
       "norm_label": "expense"
     },
     {
@@ -7303,7 +7303,7 @@
       "source_file": "src/billing/notifications.py",
       "source_location": "L190",
       "id": "billing_notifications_notify_booking_link",
-      "community": 2,
+      "community": 42,
       "norm_label": "notify_booking_link()"
     },
     {
@@ -7312,7 +7312,7 @@
       "source_file": "src/billing/notifications.py",
       "source_location": "L190",
       "id": "participantbookinglink",
-      "community": 111,
+      "community": 148,
       "norm_label": "participantbookinglink"
     },
     {
@@ -7330,7 +7330,7 @@
       "source_file": "src/billing/notifications.py",
       "source_location": "L213",
       "id": "src_billing_notifications_py_charge",
-      "community": 111,
+      "community": 148,
       "norm_label": "charge"
     },
     {
@@ -7339,7 +7339,7 @@
       "source_file": "src/billing/notifications.py",
       "source_location": "L241",
       "id": "billing_notifications_notify_shift_exchange",
-      "community": 268,
+      "community": 42,
       "norm_label": "notify_shift_exchange()"
     },
     {
@@ -7348,7 +7348,7 @@
       "source_file": "src/billing/notifications.py",
       "source_location": "L241",
       "id": "shiftassignment",
-      "community": 111,
+      "community": 148,
       "norm_label": "shiftassignment"
     },
     {
@@ -7375,7 +7375,7 @@
       "source_file": "src/billing/notifications.py",
       "source_location": "L359",
       "id": "billing_notifications_send_due_push_messages",
-      "community": 42,
+      "community": 174,
       "norm_label": "send_due_push_messages()"
     },
     {
@@ -7393,7 +7393,7 @@
       "source_file": "src/billing/notifications.py",
       "source_location": "L48",
       "id": "billing_notifications_rationale_48",
-      "community": 111,
+      "community": 148,
       "norm_label": "summarize one bounded worker delivery batch."
     },
     {
@@ -7402,7 +7402,7 @@
       "source_file": "src/billing/notifications.py",
       "source_location": "L57",
       "id": "billing_notifications_rationale_57",
-      "community": 245,
+      "community": 265,
       "norm_label": "return the category menu for a participant or administrative owner."
     },
     {
@@ -7447,7 +7447,7 @@
       "source_file": "src/billing/notifications.py",
       "source_location": "L191",
       "id": "billing_notifications_rationale_191",
-      "community": 2,
+      "community": 42,
       "norm_label": "notify the participant affected by a booking-link state change."
     },
     {
@@ -7465,7 +7465,7 @@
       "source_file": "src/billing/notifications.py",
       "source_location": "L248",
       "id": "billing_notifications_rationale_248",
-      "community": 268,
+      "community": 42,
       "norm_label": "notify eligible participants about an offered or completed shift exchange."
     },
     {
@@ -7483,7 +7483,7 @@
       "source_file": "src/billing/notifications.py",
       "source_location": "L360",
       "id": "billing_notifications_rationale_360",
-      "community": 42,
+      "community": 174,
       "norm_label": "deliver one bounded outbox batch without exposing push capabilities in logs."
     },
     {
@@ -7726,7 +7726,7 @@
       "source_file": "",
       "source_location": "",
       "id": "valueerror",
-      "community": 268,
+      "community": 42,
       "norm_label": "valueerror"
     },
     {
@@ -8383,7 +8383,7 @@
       "source_file": "src/billing/services.py",
       "source_location": "L155",
       "id": "billing_services_next_catering_order_date",
-      "community": 293,
+      "community": 2,
       "norm_label": "next_catering_order_date()"
     },
     {
@@ -8770,7 +8770,7 @@
       "source_file": "src/billing/services.py",
       "source_location": "L156",
       "id": "billing_services_rationale_156",
-      "community": 293,
+      "community": 2,
       "norm_label": "return the date that should be ordered from the caterer today."
     },
     {
@@ -9130,7 +9130,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L168",
       "id": "billing_views_kiosk_context",
-      "community": 253,
+      "community": 265,
       "norm_label": "_kiosk_context()"
     },
     {
@@ -9175,7 +9175,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L241",
       "id": "billing_views_deployment_update_check",
-      "community": 266,
+      "community": 120,
       "norm_label": "deployment_update_check()"
     },
     {
@@ -9184,7 +9184,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L257",
       "id": "billing_views_deployment_update_install",
-      "community": 185,
+      "community": 102,
       "norm_label": "deployment_update_install()"
     },
     {
@@ -9391,7 +9391,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L579",
       "id": "billing_views_settlement_run_create",
-      "community": 2,
+      "community": 138,
       "norm_label": "settlement_run_create()"
     },
     {
@@ -10075,7 +10075,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L169",
       "id": "billing_views_rationale_169",
-      "community": 266,
+      "community": 120,
       "norm_label": "return shared routing, session, and pwa context for kiosk templates."
     },
     {
@@ -10102,7 +10102,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L242",
       "id": "billing_views_rationale_242",
-      "community": 266,
+      "community": 120,
       "norm_label": "pull the configured latest image and compare it with the running image."
     },
     {
@@ -10111,7 +10111,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L258",
       "id": "billing_views_rationale_258",
-      "community": 185,
+      "community": 102,
       "norm_label": "ask the isolated agent to install the latest image asynchronously."
     },
     {
@@ -10390,7 +10390,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L1",
       "id": "config_middleware",
-      "community": 148,
+      "community": 239,
       "norm_label": "middleware.py"
     },
     {
@@ -10399,7 +10399,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L11",
       "id": "config_middleware_autheliassomiddleware",
-      "community": 148,
+      "community": 239,
       "norm_label": "autheliassomiddleware"
     },
     {
@@ -10408,7 +10408,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L16",
       "id": "config_middleware_autheliassomiddleware_init",
-      "community": 148,
+      "community": 239,
       "norm_label": ".__init__()"
     },
     {
@@ -10417,7 +10417,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L16",
       "id": "src_config_middleware_py_httprequest",
-      "community": 148,
+      "community": 239,
       "norm_label": "httprequest"
     },
     {
@@ -10426,7 +10426,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L16",
       "id": "src_config_middleware_py_httpresponse",
-      "community": 148,
+      "community": 239,
       "norm_label": "httpresponse"
     },
     {
@@ -10435,7 +10435,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L19",
       "id": "config_middleware_autheliassomiddleware_call",
-      "community": 148,
+      "community": 239,
       "norm_label": ".__call__()"
     },
     {
@@ -10444,7 +10444,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L37",
       "id": "config_middleware_securityheadersmiddleware",
-      "community": 148,
+      "community": 239,
       "norm_label": "securityheadersmiddleware"
     },
     {
@@ -10453,7 +10453,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L42",
       "id": "config_middleware_securityheadersmiddleware_init",
-      "community": 148,
+      "community": 239,
       "norm_label": ".__init__()"
     },
     {
@@ -10462,7 +10462,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L45",
       "id": "config_middleware_securityheadersmiddleware_call",
-      "community": 148,
+      "community": 239,
       "norm_label": ".__call__()"
     },
     {
@@ -10471,7 +10471,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L55",
       "id": "config_middleware_securityheadersmiddleware_content_security_policy",
-      "community": 148,
+      "community": 239,
       "norm_label": ".content_security_policy()"
     },
     {
@@ -10480,7 +10480,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L55",
       "id": "src_config_middleware_py_str",
-      "community": 148,
+      "community": 239,
       "norm_label": "str"
     },
     {
@@ -10489,7 +10489,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L12",
       "id": "config_middleware_rationale_12",
-      "community": 148,
+      "community": 239,
       "norm_label": "create a django session from a trusted authelia email header when enabled."
     },
     {
@@ -10498,7 +10498,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L38",
       "id": "config_middleware_rationale_38",
-      "community": 148,
+      "community": 239,
       "norm_label": "attach application-wide browser security headers to dynamic and static responses"
     },
     {
@@ -10507,7 +10507,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L56",
       "id": "config_middleware_rationale_56",
-      "community": 148,
+      "community": 239,
       "norm_label": "return the csp value for a request-scoped nonce."
     },
     {
@@ -10750,7 +10750,7 @@
       "source_file": "src/config/settings.py",
       "source_location": "L1",
       "id": "config_settings",
-      "community": 148,
+      "community": 239,
       "norm_label": "settings.py"
     },
     {
@@ -10759,7 +10759,7 @@
       "source_file": "src/config/sso.py",
       "source_location": "L1",
       "id": "config_sso",
-      "community": 148,
+      "community": 239,
       "norm_label": "sso.py"
     },
     {
@@ -10768,7 +10768,7 @@
       "source_file": "src/config/sso.py",
       "source_location": "L8",
       "id": "config_sso_validate_authelia_email_header",
-      "community": 148,
+      "community": 239,
       "norm_label": "validate_authelia_email_header()"
     },
     {
@@ -10777,7 +10777,7 @@
       "source_file": "src/config/sso.py",
       "source_location": "L8",
       "id": "src_config_sso_py_str",
-      "community": 148,
+      "community": 239,
       "norm_label": "str"
     },
     {
@@ -10786,7 +10786,7 @@
       "source_file": "src/config/sso.py",
       "source_location": "L9",
       "id": "config_sso_rationale_9",
-      "community": 148,
+      "community": 239,
       "norm_label": "return a trusted-header name after validating http field-name syntax."
     },
     {
@@ -11452,7 +11452,7 @@
       "source_file": "tests/factories.py",
       "source_location": "L31",
       "id": "tests_factories_groupfactory",
-      "community": 108,
+      "community": 138,
       "norm_label": "groupfactory"
     },
     {
@@ -11857,7 +11857,7 @@
       "source_file": "tests/test_daily_settlement_backups.py",
       "source_location": "L77",
       "id": "tests_test_daily_settlement_backups_test_daily_backup_logs_missing_active_camp",
-      "community": 138,
+      "community": 185,
       "norm_label": "test_daily_backup_logs_missing_active_camp()"
     },
     {
@@ -12082,7 +12082,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L1",
       "id": "tests_test_deployment_updates",
-      "community": 261,
+      "community": 102,
       "norm_label": "test_deployment_updates.py"
     },
     {
@@ -12091,7 +12091,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L17",
       "id": "tests_test_deployment_updates_superuser",
-      "community": 261,
+      "community": 102,
       "norm_label": "superuser()"
     },
     {
@@ -12100,7 +12100,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L22",
       "id": "tests_test_deployment_updates_app_admin",
-      "community": 261,
+      "community": 102,
       "norm_label": "app_admin()"
     },
     {
@@ -12109,7 +12109,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L29",
       "id": "tests_test_deployment_updates_test_deployment_page_is_limited_to_superusers",
-      "community": 261,
+      "community": 102,
       "norm_label": "test_deployment_page_is_limited_to_superusers()"
     },
     {
@@ -12118,7 +12118,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L45",
       "id": "tests_test_deployment_updates_test_update_check_requires_post_and_reports_available_image",
-      "community": 261,
+      "community": 102,
       "norm_label": "test_update_check_requires_post_and_reports_available_image()"
     },
     {
@@ -12127,7 +12127,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L58",
       "id": "tests_test_deployment_updates_test_update_install_handles_agent_failure",
-      "community": 261,
+      "community": 102,
       "norm_label": "test_update_install_handles_agent_failure()"
     },
     {
@@ -12136,7 +12136,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L68",
       "id": "tests_test_deployment_updates_test_update_install_starts_agent",
-      "community": 261,
+      "community": 102,
       "norm_label": "test_update_install_starts_agent()"
     },
     {
@@ -12145,7 +12145,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L82",
       "id": "tests_test_deployment_updates_test_superuser_can_update_daily_backup_settings",
-      "community": 261,
+      "community": 102,
       "norm_label": "test_superuser_can_update_daily_backup_settings()"
     },
     {
@@ -12154,7 +12154,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L98",
       "id": "tests_test_deployment_updates_test_non_superuser_cannot_update_daily_backup_settings",
-      "community": 261,
+      "community": 102,
       "norm_label": "test_non_superuser_cannot_update_daily_backup_settings()"
     },
     {
@@ -12181,7 +12181,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L151",
       "id": "tests_test_deployment_updates_test_deployment_page_renders_update_changelog",
-      "community": 261,
+      "community": 102,
       "norm_label": "test_deployment_page_renders_update_changelog()"
     },
     {
@@ -12190,7 +12190,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L175",
       "id": "tests_test_deployment_updates_test_deployment_page_renders_update_dialog_script_as_external_asset",
-      "community": 261,
+      "community": 102,
       "norm_label": "test_deployment_page_renders_update_dialog_script_as_external_asset()"
     },
     {
@@ -12199,7 +12199,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L198",
       "id": "tests_test_deployment_updates_test_create_backup_archive_sends_staging_payload",
-      "community": 261,
+      "community": 102,
       "norm_label": "test_create_backup_archive_sends_staging_payload()"
     },
     {
@@ -12217,7 +12217,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L218",
       "id": "tests_test_deployment_updates_test_whitenoise_is_configured_for_production_static_files",
-      "community": 261,
+      "community": 102,
       "norm_label": "test_whitenoise_is_configured_for_production_static_files()"
     },
     {
@@ -12226,7 +12226,7 @@
       "source_file": "tests/test_error_pages.py",
       "source_location": "L1",
       "id": "tests_test_error_pages",
-      "community": 299,
+      "community": 174,
       "norm_label": "test_error_pages.py"
     },
     {
@@ -12235,7 +12235,7 @@
       "source_file": "tests/test_error_pages.py",
       "source_location": "L10",
       "id": "tests_test_error_pages_test_healthcheck_reports_ready",
-      "community": 299,
+      "community": 174,
       "norm_label": "test_healthcheck_reports_ready()"
     },
     {
@@ -12244,7 +12244,7 @@
       "source_file": "tests/test_error_pages.py",
       "source_location": "L17",
       "id": "tests_test_error_pages_test_healthcheck_reports_database_failure_without_details",
-      "community": 299,
+      "community": 174,
       "norm_label": "test_healthcheck_reports_database_failure_without_details()"
     },
     {
@@ -12253,7 +12253,7 @@
       "source_file": "tests/test_error_pages.py",
       "source_location": "L27",
       "id": "tests_test_error_pages_test_unknown_url_renders_custom_not_found_page",
-      "community": 299,
+      "community": 174,
       "norm_label": "test_unknown_url_renders_custom_not_found_page()"
     },
     {
@@ -12262,7 +12262,7 @@
       "source_file": "tests/test_error_pages.py",
       "source_location": "L40",
       "id": "tests_test_error_pages_test_unknown_url_renders_custom_not_found_page_in_debug_mode",
-      "community": 299,
+      "community": 174,
       "norm_label": "test_unknown_url_renders_custom_not_found_page_in_debug_mode()"
     },
     {
@@ -12271,7 +12271,7 @@
       "source_file": "tests/test_error_pages.py",
       "source_location": "L49",
       "id": "tests_test_error_pages_test_unknown_url_links_authenticated_users_to_overview",
-      "community": 299,
+      "community": 174,
       "norm_label": "test_unknown_url_links_authenticated_users_to_overview()"
     },
     {
@@ -12316,7 +12316,7 @@
       "source_file": "tests/test_exporters.py",
       "source_location": "L97",
       "id": "tests_test_exporters_test_export_routes_allow_editor_and_admin_access",
-      "community": 108,
+      "community": 138,
       "norm_label": "test_export_routes_allow_editor_and_admin_access()"
     },
     {
@@ -12379,7 +12379,7 @@
       "source_file": "tests/test_exporters.py",
       "source_location": "L243",
       "id": "tests_test_exporters_test_workbook_export_compares_cost_center_income_and_expenses",
-      "community": 104,
+      "community": 138,
       "norm_label": "test_workbook_export_compares_cost_center_income_and_expenses()"
     },
     {
@@ -12649,7 +12649,7 @@
       "source_file": "tests/test_importers.py",
       "source_location": "L136",
       "id": "tests_test_importers_test_import_confirm_rejects_invalid_signature",
-      "community": 138,
+      "community": 5,
       "norm_label": "test_import_confirm_rejects_invalid_signature()"
     },
     {
@@ -12701,7 +12701,7 @@
       "label": "test_kiosk_login_redirects_companion_to_pin_setup_when_pin_is_missing()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L80",
+      "source_location": "L82",
       "id": "tests_test_kiosk_test_kiosk_login_redirects_companion_to_pin_setup_when_pin_is_missing",
       "community": 124,
       "norm_label": "test_kiosk_login_redirects_companion_to_pin_setup_when_pin_is_missing()"
@@ -12710,7 +12710,7 @@
       "label": "test_kiosk_pin_setup_sets_companion_pin_and_logs_guardian_in()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L99",
+      "source_location": "L101",
       "id": "tests_test_kiosk_test_kiosk_pin_setup_sets_companion_pin_and_logs_guardian_in",
       "community": 124,
       "norm_label": "test_kiosk_pin_setup_sets_companion_pin_and_logs_guardian_in()"
@@ -12719,7 +12719,7 @@
       "label": "test_kiosk_login_accepts_companion_pin_and_uses_guardian_session()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L128",
+      "source_location": "L130",
       "id": "tests_test_kiosk_test_kiosk_login_accepts_companion_pin_and_uses_guardian_session",
       "community": 124,
       "norm_label": "test_kiosk_login_accepts_companion_pin_and_uses_guardian_session()"
@@ -12728,7 +12728,7 @@
       "label": "test_kiosk_login_rejects_invalid_pin_for_existing_pin()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L148",
+      "source_location": "L150",
       "id": "tests_test_kiosk_test_kiosk_login_rejects_invalid_pin_for_existing_pin",
       "community": 124,
       "norm_label": "test_kiosk_login_rejects_invalid_pin_for_existing_pin()"
@@ -12737,7 +12737,7 @@
       "label": "test_kiosk_login_locks_pin_after_repeated_failures()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L162",
+      "source_location": "L164",
       "id": "tests_test_kiosk_test_kiosk_login_locks_pin_after_repeated_failures",
       "community": 124,
       "norm_label": "test_kiosk_login_locks_pin_after_repeated_failures()"
@@ -12746,7 +12746,7 @@
       "label": "test_kiosk_login_links_to_admin_interface()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L180",
+      "source_location": "L182",
       "id": "tests_test_kiosk_test_kiosk_login_links_to_admin_interface",
       "community": 124,
       "norm_label": "test_kiosk_login_links_to_admin_interface()"
@@ -12755,7 +12755,7 @@
       "label": "test_kiosk_home_hides_normal_admin_header_and_renders_drink_dialog_controls()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L191",
+      "source_location": "L193",
       "id": "tests_test_kiosk_test_kiosk_home_hides_normal_admin_header_and_renders_drink_dialog_controls",
       "community": 124,
       "norm_label": "test_kiosk_home_hides_normal_admin_header_and_renders_drink_dialog_controls()"
@@ -12764,7 +12764,7 @@
       "label": "test_kiosk_checkin_updates_own_and_linked_participant_dates()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L228",
+      "source_location": "L230",
       "id": "tests_test_kiosk_test_kiosk_checkin_updates_own_and_linked_participant_dates",
       "community": 124,
       "norm_label": "test_kiosk_checkin_updates_own_and_linked_participant_dates()"
@@ -12773,7 +12773,7 @@
       "label": "test_kiosk_checkin_rejects_unlinked_participant()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L265",
+      "source_location": "L267",
       "id": "tests_test_kiosk_test_kiosk_checkin_rejects_unlinked_participant",
       "community": 124,
       "norm_label": "test_kiosk_checkin_rejects_unlinked_participant()"
@@ -12782,7 +12782,7 @@
       "label": "test_kiosk_checkin_rejects_departure_before_arrival()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L291",
+      "source_location": "L293",
       "id": "tests_test_kiosk_test_kiosk_checkin_rejects_departure_before_arrival",
       "community": 124,
       "norm_label": "test_kiosk_checkin_rejects_departure_before_arrival()"
@@ -12791,7 +12791,7 @@
       "label": "test_kiosk_checkin_updates_companion_and_rejects_child_target()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L316",
+      "source_location": "L318",
       "id": "tests_test_kiosk_test_kiosk_checkin_updates_companion_and_rejects_child_target",
       "community": 124,
       "norm_label": "test_kiosk_checkin_updates_companion_and_rejects_child_target()"
@@ -12800,7 +12800,7 @@
       "label": "test_kiosk_home_checkin_dialog_lists_companion_but_not_child()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L373",
+      "source_location": "L375",
       "id": "tests_test_kiosk_test_kiosk_home_checkin_dialog_lists_companion_but_not_child",
       "community": 124,
       "norm_label": "test_kiosk_home_checkin_dialog_lists_companion_but_not_child()"
@@ -12809,7 +12809,7 @@
       "label": "test_kiosk_home_shows_leadership_contact_button()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L401",
+      "source_location": "L403",
       "id": "tests_test_kiosk_test_kiosk_home_shows_leadership_contact_button",
       "community": 124,
       "norm_label": "test_kiosk_home_shows_leadership_contact_button()"
@@ -12818,7 +12818,7 @@
       "label": "test_kiosk_home_renders_balance_with_correct_signs()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L423",
+      "source_location": "L425",
       "id": "tests_test_kiosk_test_kiosk_home_renders_balance_with_correct_signs",
       "community": 124,
       "norm_label": "test_kiosk_home_renders_balance_with_correct_signs()"
@@ -12827,7 +12827,7 @@
       "label": "test_kiosk_shared_expense_upload_shows_receipt_link_and_serves_file()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L438",
+      "source_location": "L440",
       "id": "tests_test_kiosk_test_kiosk_shared_expense_upload_shows_receipt_link_and_serves_file",
       "community": 124,
       "norm_label": "test_kiosk_shared_expense_upload_shows_receipt_link_and_serves_file()"
@@ -12836,7 +12836,7 @@
       "label": "test_kiosk_shared_expense_upload_rejects_unsupported_receipt_type()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L478",
+      "source_location": "L480",
       "id": "tests_test_kiosk_test_kiosk_shared_expense_upload_rejects_unsupported_receipt_type",
       "community": 124,
       "norm_label": "test_kiosk_shared_expense_upload_rejects_unsupported_receipt_type()"
@@ -12845,7 +12845,7 @@
       "label": "test_kiosk_shared_expense_upload_rejects_oversized_receipt()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L503",
+      "source_location": "L505",
       "id": "tests_test_kiosk_test_kiosk_shared_expense_upload_rejects_oversized_receipt",
       "community": 124,
       "norm_label": "test_kiosk_shared_expense_upload_rejects_oversized_receipt()"
@@ -12854,7 +12854,7 @@
       "label": "test_kiosk_expense_receipt_rejects_other_participants()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L528",
+      "source_location": "L530",
       "id": "tests_test_kiosk_test_kiosk_expense_receipt_rejects_other_participants",
       "community": 124,
       "norm_label": "test_kiosk_expense_receipt_rejects_other_participants()"
@@ -12863,7 +12863,7 @@
       "label": "test_kiosk_home_marks_rejected_shared_expenses_and_uses_single_contact_entrypoint()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L551",
+      "source_location": "L553",
       "id": "tests_test_kiosk_test_kiosk_home_marks_rejected_shared_expenses_and_uses_single_contact_entrypoint",
       "community": 124,
       "norm_label": "test_kiosk_home_marks_rejected_shared_expenses_and_uses_single_contact_entrypoint()"
@@ -12872,7 +12872,7 @@
       "label": "test_kiosk_home_shows_order_sent_for_next_day()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L580",
+      "source_location": "L582",
       "id": "tests_test_kiosk_test_kiosk_home_shows_order_sent_for_next_day",
       "community": 124,
       "norm_label": "test_kiosk_home_shows_order_sent_for_next_day()"
@@ -12881,7 +12881,7 @@
       "label": "test_kiosk_home_shows_meal_booking_cutoff_time_before_order_sent()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L598",
+      "source_location": "L600",
       "id": "tests_test_kiosk_test_kiosk_home_shows_meal_booking_cutoff_time_before_order_sent",
       "community": 124,
       "norm_label": "test_kiosk_home_shows_meal_booking_cutoff_time_before_order_sent()"
@@ -12890,7 +12890,7 @@
       "label": "test_kiosk_meal_calendar_renders_all_camp_days_with_menu_and_participant_price()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L615",
+      "source_location": "L617",
       "id": "tests_test_kiosk_test_kiosk_meal_calendar_renders_all_camp_days_with_menu_and_participant_price",
       "community": 124,
       "norm_label": "test_kiosk_meal_calendar_renders_all_camp_days_with_menu_and_participant_price()"
@@ -12899,7 +12899,7 @@
       "label": "test_kiosk_meal_calendar_shows_closed_days_without_booking_action()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L654",
+      "source_location": "L656",
       "id": "tests_test_kiosk_test_kiosk_meal_calendar_shows_closed_days_without_booking_action",
       "community": 124,
       "norm_label": "test_kiosk_meal_calendar_shows_closed_days_without_booking_action()"
@@ -12908,7 +12908,7 @@
       "label": "test_kiosk_home_shows_contact_hint_after_cutoff_before_order_sent()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L686",
+      "source_location": "L688",
       "id": "tests_test_kiosk_test_kiosk_home_shows_contact_hint_after_cutoff_before_order_sent",
       "community": 124,
       "norm_label": "test_kiosk_home_shows_contact_hint_after_cutoff_before_order_sent()"
@@ -12917,7 +12917,7 @@
       "label": "test_kiosk_meal_status_calendar_shows_day_states_and_detail_dialog()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L708",
+      "source_location": "L710",
       "id": "tests_test_kiosk_test_kiosk_meal_status_calendar_shows_day_states_and_detail_dialog",
       "community": 124,
       "norm_label": "test_kiosk_meal_status_calendar_shows_day_states_and_detail_dialog()"
@@ -12926,7 +12926,7 @@
       "label": "test_kiosk_meal_booking_dialog_shows_all_camp_days_with_prices()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L746",
+      "source_location": "L748",
       "id": "tests_test_kiosk_test_kiosk_meal_booking_dialog_shows_all_camp_days_with_prices",
       "community": 124,
       "norm_label": "test_kiosk_meal_booking_dialog_shows_all_camp_days_with_prices()"
@@ -12935,7 +12935,7 @@
       "label": "test_kiosk_meal_booking_dialog_keeps_child_only_price_day_selectable()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L778",
+      "source_location": "L780",
       "id": "tests_test_kiosk_test_kiosk_meal_booking_dialog_keeps_child_only_price_day_selectable",
       "community": 124,
       "norm_label": "test_kiosk_meal_booking_dialog_keeps_child_only_price_day_selectable()"
@@ -12944,7 +12944,7 @@
       "label": "test_private_kiosk_pin_setup_does_not_use_inactivity_logout_timer()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L812",
+      "source_location": "L814",
       "id": "tests_test_kiosk_test_private_kiosk_pin_setup_does_not_use_inactivity_logout_timer",
       "community": 124,
       "norm_label": "test_private_kiosk_pin_setup_does_not_use_inactivity_logout_timer()"
@@ -12953,7 +12953,7 @@
       "label": "test_kiosk_books_drink_with_camp_drink_price_and_subsidy_flag()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L826",
+      "source_location": "L828",
       "id": "tests_test_kiosk_test_kiosk_books_drink_with_camp_drink_price_and_subsidy_flag",
       "community": 124,
       "norm_label": "test_kiosk_books_drink_with_camp_drink_price_and_subsidy_flag()"
@@ -12962,7 +12962,7 @@
       "label": "test_kiosk_can_cancel_own_quick_booking_within_cancel_window()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L866",
+      "source_location": "L868",
       "id": "tests_test_kiosk_test_kiosk_can_cancel_own_quick_booking_within_cancel_window",
       "community": 124,
       "norm_label": "test_kiosk_can_cancel_own_quick_booking_within_cancel_window()"
@@ -12971,7 +12971,7 @@
       "label": "test_kiosk_rejects_quick_booking_cancel_after_cancel_window()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L890",
+      "source_location": "L892",
       "id": "tests_test_kiosk_test_kiosk_rejects_quick_booking_cancel_after_cancel_window",
       "community": 124,
       "norm_label": "test_kiosk_rejects_quick_booking_cancel_after_cancel_window()"
@@ -12980,7 +12980,7 @@
       "label": "test_kiosk_rejects_quick_booking_cancel_after_settlement_run_covers_charge()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L914",
+      "source_location": "L916",
       "id": "tests_test_kiosk_test_kiosk_rejects_quick_booking_cancel_after_settlement_run_covers_charge",
       "community": 124,
       "norm_label": "test_kiosk_rejects_quick_booking_cancel_after_settlement_run_covers_charge()"
@@ -12989,7 +12989,7 @@
       "label": "test_kiosk_allows_future_quick_booking_cancel_after_earlier_settlement_run()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L939",
+      "source_location": "L941",
       "id": "tests_test_kiosk_test_kiosk_allows_future_quick_booking_cancel_after_earlier_settlement_run",
       "community": 124,
       "norm_label": "test_kiosk_allows_future_quick_booking_cancel_after_earlier_settlement_run()"
@@ -12998,7 +12998,7 @@
       "label": "test_kiosk_rejects_quick_booking_cancel_for_unrelated_participant()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L964",
+      "source_location": "L966",
       "id": "tests_test_kiosk_test_kiosk_rejects_quick_booking_cancel_for_unrelated_participant",
       "community": 124,
       "norm_label": "test_kiosk_rejects_quick_booking_cancel_for_unrelated_participant()"
@@ -13007,7 +13007,7 @@
       "label": "test_kiosk_linked_quick_booking_can_be_cancelled_by_booking_participant()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L988",
+      "source_location": "L990",
       "id": "tests_test_kiosk_test_kiosk_linked_quick_booking_can_be_cancelled_by_booking_participant",
       "community": 124,
       "norm_label": "test_kiosk_linked_quick_booking_can_be_cancelled_by_booking_participant()"
@@ -13016,7 +13016,7 @@
       "label": "test_kiosk_billed_linked_participant_can_cancel_own_quick_booking()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L1021",
+      "source_location": "L1023",
       "id": "tests_test_kiosk_test_kiosk_billed_linked_participant_can_cancel_own_quick_booking",
       "community": 124,
       "norm_label": "test_kiosk_billed_linked_participant_can_cancel_own_quick_booking()"
@@ -13025,7 +13025,7 @@
       "label": "test_kiosk_home_shows_quick_booking_cancel_action()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L1045",
+      "source_location": "L1047",
       "id": "tests_test_kiosk_test_kiosk_home_shows_quick_booking_cancel_action",
       "community": 124,
       "norm_label": "test_kiosk_home_shows_quick_booking_cancel_action()"
@@ -13034,7 +13034,7 @@
       "label": "test_kiosk_home_filters_quick_booking_list_to_kiosk_created_charges()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L1073",
+      "source_location": "L1075",
       "id": "tests_test_kiosk_test_kiosk_home_filters_quick_booking_list_to_kiosk_created_charges",
       "community": 124,
       "norm_label": "test_kiosk_home_filters_quick_booking_list_to_kiosk_created_charges()"
@@ -13043,7 +13043,7 @@
       "label": "test_kiosk_meal_signup_updates_existing_signup_and_creates_charge()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L1105",
+      "source_location": "L1107",
       "id": "tests_test_kiosk_test_kiosk_meal_signup_updates_existing_signup_and_creates_charge",
       "community": 124,
       "norm_label": "test_kiosk_meal_signup_updates_existing_signup_and_creates_charge()"
@@ -13052,7 +13052,7 @@
       "label": "test_kiosk_meal_signup_uses_date_specific_price_only_for_matching_date()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L1144",
+      "source_location": "L1146",
       "id": "tests_test_kiosk_test_kiosk_meal_signup_uses_date_specific_price_only_for_matching_date",
       "community": 124,
       "norm_label": "test_kiosk_meal_signup_uses_date_specific_price_only_for_matching_date()"
@@ -13061,7 +13061,7 @@
       "label": "test_kiosk_books_multiple_meal_dates_and_targets_atomically()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L1204",
+      "source_location": "L1206",
       "id": "tests_test_kiosk_test_kiosk_books_multiple_meal_dates_and_targets_atomically",
       "community": 124,
       "norm_label": "test_kiosk_books_multiple_meal_dates_and_targets_atomically()"
@@ -13070,7 +13070,7 @@
       "label": "test_kiosk_rejects_entire_meal_batch_when_one_date_has_no_price()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L1298",
+      "source_location": "L1300",
       "id": "tests_test_kiosk_test_kiosk_rejects_entire_meal_batch_when_one_date_has_no_price",
       "community": 124,
       "norm_label": "test_kiosk_rejects_entire_meal_batch_when_one_date_has_no_price()"
@@ -13079,7 +13079,7 @@
       "label": "test_kiosk_rejects_entire_meal_batch_when_one_date_is_locked()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L1340",
+      "source_location": "L1342",
       "id": "tests_test_kiosk_test_kiosk_rejects_entire_meal_batch_when_one_date_is_locked",
       "community": 124,
       "norm_label": "test_kiosk_rejects_entire_meal_batch_when_one_date_is_locked()"
@@ -13088,7 +13088,7 @@
       "label": "test_kiosk_normalizes_duplicate_meal_dates()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L1378",
+      "source_location": "L1380",
       "id": "tests_test_kiosk_test_kiosk_normalizes_duplicate_meal_dates",
       "community": 124,
       "norm_label": "test_kiosk_normalizes_duplicate_meal_dates()"
@@ -13097,7 +13097,7 @@
       "label": "test_kiosk_rejects_meal_date_outside_configured_camp()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L1413",
+      "source_location": "L1415",
       "id": "tests_test_kiosk_test_kiosk_rejects_meal_date_outside_configured_camp",
       "community": 124,
       "norm_label": "test_kiosk_rejects_meal_date_outside_configured_camp()"
@@ -13106,7 +13106,7 @@
       "label": "test_kiosk_rejects_unknown_meal_target_without_partial_booking()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L1437",
+      "source_location": "L1439",
       "id": "tests_test_kiosk_test_kiosk_rejects_unknown_meal_target_without_partial_booking",
       "community": 124,
       "norm_label": "test_kiosk_rejects_unknown_meal_target_without_partial_booking()"
@@ -13115,7 +13115,7 @@
       "label": "test_kiosk_meal_signup_for_tomorrow_closes_after_camp_cutoff()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L1477",
+      "source_location": "L1479",
       "id": "tests_test_kiosk_test_kiosk_meal_signup_for_tomorrow_closes_after_camp_cutoff",
       "community": 124,
       "norm_label": "test_kiosk_meal_signup_for_tomorrow_closes_after_camp_cutoff()"
@@ -13124,7 +13124,7 @@
       "label": "test_kiosk_meal_signup_for_tomorrow_stays_open_before_camp_cutoff()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L1513",
+      "source_location": "L1515",
       "id": "tests_test_kiosk_test_kiosk_meal_signup_for_tomorrow_stays_open_before_camp_cutoff",
       "community": 124,
       "norm_label": "test_kiosk_meal_signup_for_tomorrow_stays_open_before_camp_cutoff()"
@@ -13133,7 +13133,7 @@
       "label": "test_kiosk_meal_signup_for_past_date_is_locked()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L1547",
+      "source_location": "L1549",
       "id": "tests_test_kiosk_test_kiosk_meal_signup_for_past_date_is_locked",
       "community": 124,
       "norm_label": "test_kiosk_meal_signup_for_past_date_is_locked()"
@@ -13142,7 +13142,7 @@
       "label": "test_kiosk_meal_signup_for_today_is_locked()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L1584",
+      "source_location": "L1586",
       "id": "tests_test_kiosk_test_kiosk_meal_signup_for_today_is_locked",
       "community": 124,
       "norm_label": "test_kiosk_meal_signup_for_today_is_locked()"
@@ -13151,7 +13151,7 @@
       "label": "test_kiosk_retracts_meal_signup_and_soft_deletes_food_charge()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L1620",
+      "source_location": "L1622",
       "id": "tests_test_kiosk_test_kiosk_retracts_meal_signup_and_soft_deletes_food_charge",
       "community": 124,
       "norm_label": "test_kiosk_retracts_meal_signup_and_soft_deletes_food_charge()"
@@ -13160,7 +13160,7 @@
       "label": "test_kiosk_rejects_retraction_for_past_meal_signup()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L1654",
+      "source_location": "L1656",
       "id": "tests_test_kiosk_test_kiosk_rejects_retraction_for_past_meal_signup",
       "community": 124,
       "norm_label": "test_kiosk_rejects_retraction_for_past_meal_signup()"
@@ -13169,7 +13169,7 @@
       "label": "test_kiosk_rejects_retraction_for_today_meal_signup()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L1691",
+      "source_location": "L1693",
       "id": "tests_test_kiosk_test_kiosk_rejects_retraction_for_today_meal_signup",
       "community": 124,
       "norm_label": "test_kiosk_rejects_retraction_for_today_meal_signup()"
@@ -13178,7 +13178,7 @@
       "label": "test_kiosk_meal_signup_requires_person_when_dialog_selection_is_empty()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L1727",
+      "source_location": "L1729",
       "id": "tests_test_kiosk_test_kiosk_meal_signup_requires_person_when_dialog_selection_is_empty",
       "community": 124,
       "norm_label": "test_kiosk_meal_signup_requires_person_when_dialog_selection_is_empty()"
@@ -13187,7 +13187,7 @@
       "label": "test_kiosk_creates_family_member_and_books_meal_on_guardian()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L1762",
+      "source_location": "L1764",
       "id": "tests_test_kiosk_test_kiosk_creates_family_member_and_books_meal_on_guardian",
       "community": 124,
       "norm_label": "test_kiosk_creates_family_member_and_books_meal_on_guardian()"
@@ -13196,7 +13196,7 @@
       "label": "test_kiosk_booking_link_invite_accept_revoke_flow()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L1814",
+      "source_location": "L1816",
       "id": "tests_test_kiosk_test_kiosk_booking_link_invite_accept_revoke_flow",
       "community": 124,
       "norm_label": "test_kiosk_booking_link_invite_accept_revoke_flow()"
@@ -13205,7 +13205,7 @@
       "label": "test_kiosk_books_meal_for_linked_participant_on_linked_account()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L1864",
+      "source_location": "L1866",
       "id": "tests_test_kiosk_test_kiosk_books_meal_for_linked_participant_on_linked_account",
       "community": 124,
       "norm_label": "test_kiosk_books_meal_for_linked_participant_on_linked_account()"
@@ -13214,7 +13214,7 @@
       "label": "test_kiosk_hides_linked_participant_family_member_meal_signups()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L1910",
+      "source_location": "L1912",
       "id": "tests_test_kiosk_test_kiosk_hides_linked_participant_family_member_meal_signups",
       "community": 124,
       "norm_label": "test_kiosk_hides_linked_participant_family_member_meal_signups()"
@@ -13223,7 +13223,7 @@
       "label": "test_kiosk_drink_form_filters_by_participant_type()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L1950",
+      "source_location": "L1952",
       "id": "tests_test_kiosk_test_kiosk_drink_form_filters_by_participant_type",
       "community": 124,
       "norm_label": "test_kiosk_drink_form_filters_by_participant_type()"
@@ -13232,7 +13232,7 @@
       "label": "test_kiosk_quick_food_tiles_hide_date_specific_meal_rules()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L2006",
+      "source_location": "L2008",
       "id": "tests_test_kiosk_test_kiosk_quick_food_tiles_hide_date_specific_meal_rules",
       "community": 124,
       "norm_label": "test_kiosk_quick_food_tiles_hide_date_specific_meal_rules()"
@@ -13241,7 +13241,7 @@
       "label": "test_kiosk_quick_food_booking_applies_todays_date_specific_breakfast_price()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L2043",
+      "source_location": "L2045",
       "id": "tests_test_kiosk_test_kiosk_quick_food_booking_applies_todays_date_specific_breakfast_price",
       "community": 124,
       "norm_label": "test_kiosk_quick_food_booking_applies_todays_date_specific_breakfast_price()"
@@ -13250,7 +13250,7 @@
       "label": "test_kiosk_meal_signup_child_breakfast_override()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L2090",
+      "source_location": "L2092",
       "id": "tests_test_kiosk_test_kiosk_meal_signup_child_breakfast_override",
       "community": 124,
       "norm_label": "test_kiosk_meal_signup_child_breakfast_override()"
@@ -13259,7 +13259,7 @@
       "label": "test_kiosk_pin_setup_rejects_mismatched_pins()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L2155",
+      "source_location": "L2157",
       "id": "tests_test_kiosk_test_kiosk_pin_setup_rejects_mismatched_pins",
       "community": 124,
       "norm_label": "test_kiosk_pin_setup_rejects_mismatched_pins()"
@@ -13268,7 +13268,7 @@
       "label": "test_kiosk_meal_signup_without_price_rule_shows_error()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L2174",
+      "source_location": "L2176",
       "id": "tests_test_kiosk_test_kiosk_meal_signup_without_price_rule_shows_error",
       "community": 124,
       "norm_label": "test_kiosk_meal_signup_without_price_rule_shows_error()"
@@ -13277,7 +13277,7 @@
       "label": "test_kiosk_books_snack_successfully()",
       "file_type": "code",
       "source_file": "tests/test_kiosk.py",
-      "source_location": "L2203",
+      "source_location": "L2205",
       "id": "tests_test_kiosk_test_kiosk_books_snack_successfully",
       "community": 124,
       "norm_label": "test_kiosk_books_snack_successfully()"
@@ -13288,7 +13288,7 @@
       "source_file": "tests/test_kiosk_shifts.py",
       "source_location": "L1",
       "id": "tests_test_kiosk_shifts",
-      "community": 130,
+      "community": 230,
       "norm_label": "test_kiosk_shifts.py"
     },
     {
@@ -13297,7 +13297,7 @@
       "source_file": "tests/test_kiosk_shifts.py",
       "source_location": "L11",
       "id": "tests_test_kiosk_shifts_active_camp",
-      "community": 130,
+      "community": 230,
       "norm_label": "active_camp()"
     },
     {
@@ -13306,7 +13306,7 @@
       "source_file": "tests/test_kiosk_shifts.py",
       "source_location": "L22",
       "id": "tests_test_kiosk_shifts_kiosk_client",
-      "community": 130,
+      "community": 230,
       "norm_label": "kiosk_client()"
     },
     {
@@ -13315,7 +13315,7 @@
       "source_file": "tests/test_kiosk_shifts.py",
       "source_location": "L32",
       "id": "tests_test_kiosk_shifts_test_kiosk_can_signup_for_shift",
-      "community": 130,
+      "community": 230,
       "norm_label": "test_kiosk_can_signup_for_shift()"
     },
     {
@@ -13324,7 +13324,7 @@
       "source_file": "tests/test_kiosk_shifts.py",
       "source_location": "L45",
       "id": "tests_test_kiosk_shifts_test_private_kiosk_shifts_context_disables_autologout",
-      "community": 130,
+      "community": 230,
       "norm_label": "test_private_kiosk_shifts_context_disables_autologout()"
     },
     {
@@ -13333,7 +13333,7 @@
       "source_file": "tests/test_kiosk_shifts.py",
       "source_location": "L52",
       "id": "tests_test_kiosk_shifts_test_kiosk_cannot_signup_for_full_shift",
-      "community": 130,
+      "community": 230,
       "norm_label": "test_kiosk_cannot_signup_for_full_shift()"
     },
     {
@@ -13342,7 +13342,7 @@
       "source_file": "tests/test_kiosk_shifts.py",
       "source_location": "L68",
       "id": "tests_test_kiosk_shifts_test_kiosk_cannot_retract",
-      "community": 130,
+      "community": 230,
       "norm_label": "test_kiosk_cannot_retract()"
     },
     {
@@ -13351,7 +13351,7 @@
       "source_file": "tests/test_kiosk_shifts.py",
       "source_location": "L82",
       "id": "tests_test_kiosk_shifts_test_kiosk_can_offer_and_revoke_shift",
-      "community": 130,
+      "community": 230,
       "norm_label": "test_kiosk_can_offer_and_revoke_shift()"
     },
     {
@@ -13360,7 +13360,7 @@
       "source_file": "tests/test_kiosk_shifts.py",
       "source_location": "L103",
       "id": "tests_test_kiosk_shifts_test_kiosk_can_takeover_offered_shift",
-      "community": 130,
+      "community": 230,
       "norm_label": "test_kiosk_can_takeover_offered_shift()"
     },
     {
@@ -13369,7 +13369,7 @@
       "source_file": "tests/test_meal_overview.py",
       "source_location": "L1",
       "id": "tests_test_meal_overview",
-      "community": 108,
+      "community": 138,
       "norm_label": "test_meal_overview.py"
     },
     {
@@ -13378,7 +13378,7 @@
       "source_file": "tests/test_meal_overview.py",
       "source_location": "L14",
       "id": "tests_test_meal_overview_test_calculate_meal_overview_counts_active_variants_and_retractions",
-      "community": 108,
+      "community": 124,
       "norm_label": "test_calculate_meal_overview_counts_active_variants_and_retractions()"
     },
     {
@@ -13387,7 +13387,7 @@
       "source_file": "tests/test_meal_overview.py",
       "source_location": "L72",
       "id": "tests_test_meal_overview_test_camp_meal_overview_renders_counts_for_admin",
-      "community": 108,
+      "community": 138,
       "norm_label": "test_camp_meal_overview_renders_counts_for_admin()"
     },
     {
@@ -13396,7 +13396,7 @@
       "source_file": "tests/test_meal_overview.py",
       "source_location": "L94",
       "id": "tests_test_meal_overview_test_camp_meal_overview_renders_and_saves_menu_for_huebers",
-      "community": 108,
+      "community": 138,
       "norm_label": "test_camp_meal_overview_renders_and_saves_menu_for_huebers()"
     },
     {
@@ -13405,7 +13405,7 @@
       "source_file": "tests/test_meal_overview.py",
       "source_location": "L121",
       "id": "tests_test_meal_overview_test_meal_overview_marks_next_day_order_as_sent",
-      "community": 108,
+      "community": 138,
       "norm_label": "test_meal_overview_marks_next_day_order_as_sent()"
     },
     {
@@ -13414,7 +13414,7 @@
       "source_file": "tests/test_migrations.py",
       "source_location": "L1",
       "id": "tests_test_migrations",
-      "community": 104,
+      "community": 261,
       "norm_label": "test_migrations.py"
     },
     {
@@ -13423,7 +13423,7 @@
       "source_file": "tests/test_migrations.py",
       "source_location": "L15",
       "id": "tests_test_migrations_charge_columns",
-      "community": 104,
+      "community": 261,
       "norm_label": "charge_columns()"
     },
     {
@@ -13432,7 +13432,7 @@
       "source_file": "tests/test_migrations.py",
       "source_location": "L15",
       "id": "tests_test_migrations_py_str",
-      "community": 104,
+      "community": 261,
       "norm_label": "str"
     },
     {
@@ -13441,7 +13441,7 @@
       "source_file": "tests/test_migrations.py",
       "source_location": "L22",
       "id": "tests_test_migrations_test_legacy_charge_cancellation_columns_are_migrated_and_removed",
-      "community": 104,
+      "community": 261,
       "norm_label": "test_legacy_charge_cancellation_columns_are_migrated_and_removed()"
     },
     {
@@ -13450,7 +13450,7 @@
       "source_file": "tests/test_migrations.py",
       "source_location": "L66",
       "id": "tests_test_migrations_test_legacy_charge_cleanup_is_a_noop_for_current_schema",
-      "community": 104,
+      "community": 261,
       "norm_label": "test_legacy_charge_cleanup_is_a_noop_for_current_schema()"
     },
     {
@@ -13459,7 +13459,7 @@
       "source_file": "tests/test_migrations.py",
       "source_location": "L76",
       "id": "tests_test_migrations_test_legacy_charge_cleanup_removes_a_partial_legacy_schema",
-      "community": 104,
+      "community": 261,
       "norm_label": "test_legacy_charge_cleanup_removes_a_partial_legacy_schema()"
     },
     {
@@ -13468,7 +13468,7 @@
       "source_file": "tests/test_migrations.py",
       "source_location": "L88",
       "id": "tests_test_migrations_test_price_element_subsidy_migration_preserves_existing_camp_rate",
-      "community": 104,
+      "community": 261,
       "norm_label": "test_price_element_subsidy_migration_preserves_existing_camp_rate()"
     },
     {
@@ -13477,7 +13477,7 @@
       "source_file": "tests/test_notifications.py",
       "source_location": "L1",
       "id": "tests_test_notifications",
-      "community": 252,
+      "community": 174,
       "norm_label": "test_notifications.py"
     },
     {
@@ -13486,7 +13486,7 @@
       "source_file": "tests/test_notifications.py",
       "source_location": "L38",
       "id": "tests_test_notifications_enable_web_push",
-      "community": 252,
+      "community": 174,
       "norm_label": "enable_web_push()"
     },
     {
@@ -13495,7 +13495,7 @@
       "source_file": "tests/test_notifications.py",
       "source_location": "L45",
       "id": "tests_test_notifications_subscription_payload",
-      "community": 252,
+      "community": 174,
       "norm_label": "subscription_payload()"
     },
     {
@@ -13504,7 +13504,7 @@
       "source_file": "tests/test_notifications.py",
       "source_location": "L45",
       "id": "tests_test_notifications_py_str",
-      "community": 111,
+      "community": 148,
       "norm_label": "str"
     },
     {
@@ -13513,7 +13513,7 @@
       "source_file": "tests/test_notifications.py",
       "source_location": "L55",
       "id": "tests_test_notifications_test_push_subscription_requires_exactly_one_owner",
-      "community": 252,
+      "community": 174,
       "norm_label": "test_push_subscription_requires_exactly_one_owner()"
     },
     {
@@ -13522,7 +13522,7 @@
       "source_file": "tests/test_notifications.py",
       "source_location": "L76",
       "id": "tests_test_notifications_test_admin_can_create_and_update_own_push_subscription",
-      "community": 252,
+      "community": 174,
       "norm_label": "test_admin_can_create_and_update_own_push_subscription()"
     },
     {
@@ -13531,7 +13531,7 @@
       "source_file": "tests/test_notifications.py",
       "source_location": "L116",
       "id": "tests_test_notifications_test_private_participant_can_subscribe_but_central_endpoint_does_not_exist",
-      "community": 252,
+      "community": 174,
       "norm_label": "test_private_participant_can_subscribe_but_central_endpoint_does_not_exist()"
     },
     {
@@ -13540,7 +13540,7 @@
       "source_file": "tests/test_notifications.py",
       "source_location": "L135",
       "id": "tests_test_notifications_test_subscription_rejects_invalid_endpoint_and_category",
-      "community": 252,
+      "community": 174,
       "norm_label": "test_subscription_rejects_invalid_endpoint_and_category()"
     },
     {
@@ -13549,7 +13549,7 @@
       "source_file": "tests/test_notifications.py",
       "source_location": "L152",
       "id": "tests_test_notifications_test_disabled_web_push_rejects_new_subscriptions",
-      "community": 252,
+      "community": 174,
       "norm_label": "test_disabled_web_push_rejects_new_subscriptions()"
     },
     {
@@ -13558,7 +13558,7 @@
       "source_file": "tests/test_notifications.py",
       "source_location": "L168",
       "id": "tests_test_notifications_test_endpoint_cannot_silently_move_to_another_owner",
-      "community": 252,
+      "community": 174,
       "norm_label": "test_endpoint_cannot_silently_move_to_another_owner()"
     },
     {
@@ -13567,7 +13567,7 @@
       "source_file": "tests/test_notifications.py",
       "source_location": "L193",
       "id": "tests_test_notifications_test_queue_notification_honors_category_and_deduplicates",
-      "community": 252,
+      "community": 174,
       "norm_label": "test_queue_notification_honors_category_and_deduplicates()"
     },
     {
@@ -13576,7 +13576,7 @@
       "source_file": "tests/test_notifications.py",
       "source_location": "L234",
       "id": "tests_test_notifications_test_worker_sends_due_message_and_records_success",
-      "community": 42,
+      "community": 174,
       "norm_label": "test_worker_sends_due_message_and_records_success()"
     },
     {
@@ -13585,7 +13585,7 @@
       "source_file": "tests/test_notifications.py",
       "source_location": "L265",
       "id": "tests_test_notifications_test_worker_deletes_gone_subscription",
-      "community": 42,
+      "community": 174,
       "norm_label": "test_worker_deletes_gone_subscription()"
     },
     {
@@ -13594,7 +13594,7 @@
       "source_file": "tests/test_notifications.py",
       "source_location": "L294",
       "id": "tests_test_notifications_test_notification_settings_show_only_current_owners_devices",
-      "community": 252,
+      "community": 174,
       "norm_label": "test_notification_settings_show_only_current_owners_devices()"
     },
     {
@@ -13603,7 +13603,7 @@
       "source_file": "tests/test_notifications.py",
       "source_location": "L325",
       "id": "tests_test_notifications_test_owner_can_queue_test_message_for_one_device",
-      "community": 252,
+      "community": 174,
       "norm_label": "test_owner_can_queue_test_message_for_one_device()"
     },
     {
@@ -13621,7 +13621,7 @@
       "source_file": "tests/test_notifications.py",
       "source_location": "L380",
       "id": "tests_test_notifications_test_scheduled_shift_reminder_uses_one_hour_lead_and_deduplicates",
-      "community": 252,
+      "community": 174,
       "norm_label": "test_scheduled_shift_reminder_uses_one_hour_lead_and_deduplicates()"
     },
     {
@@ -13630,7 +13630,7 @@
       "source_file": "tests/test_notifications.py",
       "source_location": "L408",
       "id": "tests_test_notifications_test_scheduled_meal_deadline_skips_existing_signup",
-      "community": 252,
+      "community": 174,
       "norm_label": "test_scheduled_meal_deadline_skips_existing_signup()"
     },
     {
@@ -13684,7 +13684,7 @@
       "source_file": "tests/test_notifications.py",
       "source_location": "L618",
       "id": "tests_test_notifications_test_booking_invitation_view_queues_after_commit",
-      "community": 252,
+      "community": 174,
       "norm_label": "test_booking_invitation_view_queues_after_commit()"
     },
     {
@@ -13693,7 +13693,7 @@
       "source_file": "tests/test_participant_archiving.py",
       "source_location": "L1",
       "id": "tests_test_participant_archiving",
-      "community": 138,
+      "community": 174,
       "norm_label": "test_participant_archiving.py"
     },
     {
@@ -13702,7 +13702,7 @@
       "source_file": "tests/test_participant_archiving.py",
       "source_location": "L11",
       "id": "tests_test_participant_archiving_test_editor_can_edit_participant",
-      "community": 138,
+      "community": 174,
       "norm_label": "test_editor_can_edit_participant()"
     },
     {
@@ -13711,7 +13711,7 @@
       "source_file": "tests/test_participant_archiving.py",
       "source_location": "L36",
       "id": "tests_test_participant_archiving_test_admin_archives_and_restores_participant_without_deleting_financial_data",
-      "community": 138,
+      "community": 174,
       "norm_label": "test_admin_archives_and_restores_participant_without_deleting_financial_data()"
     },
     {
@@ -13720,7 +13720,7 @@
       "source_file": "tests/test_participant_archiving.py",
       "source_location": "L60",
       "id": "tests_test_participant_archiving_test_editor_cannot_archive_participant",
-      "community": 138,
+      "community": 174,
       "norm_label": "test_editor_cannot_archive_participant()"
     },
     {
@@ -13729,7 +13729,7 @@
       "source_file": "tests/test_participant_archiving.py",
       "source_location": "L74",
       "id": "tests_test_participant_archiving_test_archived_participant_is_removed_from_live_camp_settlement",
-      "community": 138,
+      "community": 174,
       "norm_label": "test_archived_participant_is_removed_from_live_camp_settlement()"
     },
     {
@@ -13972,7 +13972,7 @@
       "source_file": "tests/test_permissions.py",
       "source_location": "L1",
       "id": "tests_test_permissions",
-      "community": 178,
+      "community": 174,
       "norm_label": "test_permissions.py"
     },
     {
@@ -13981,7 +13981,7 @@
       "source_file": "tests/test_permissions.py",
       "source_location": "L8",
       "id": "tests_test_permissions_test_admin_group_has_admin_and_editor_access",
-      "community": 178,
+      "community": 174,
       "norm_label": "test_admin_group_has_admin_and_editor_access()"
     },
     {
@@ -13990,7 +13990,7 @@
       "source_file": "tests/test_permissions.py",
       "source_location": "L18",
       "id": "tests_test_permissions_test_editor_group_has_no_admin_access",
-      "community": 178,
+      "community": 174,
       "norm_label": "test_editor_group_has_no_admin_access()"
     },
     {
@@ -14098,7 +14098,7 @@
       "source_file": "tests/test_price_rules.py",
       "source_location": "L1",
       "id": "tests_test_price_rules",
-      "community": 138,
+      "community": 130,
       "norm_label": "test_price_rules.py"
     },
     {
@@ -14107,7 +14107,7 @@
       "source_file": "tests/test_price_rules.py",
       "source_location": "L11",
       "id": "tests_test_price_rules_test_admin_can_manage_camp_flat_rates_without_dropdowns",
-      "community": 138,
+      "community": 130,
       "norm_label": "test_admin_can_manage_camp_flat_rates_without_dropdowns()"
     },
     {
@@ -14116,7 +14116,7 @@
       "source_file": "tests/test_price_rules.py",
       "source_location": "L44",
       "id": "tests_test_price_rules_test_price_rule_manage_page_shows_camp_flat_matrix",
-      "community": 138,
+      "community": 130,
       "norm_label": "test_price_rule_manage_page_shows_camp_flat_matrix()"
     },
     {
@@ -14125,7 +14125,7 @@
       "source_file": "tests/test_price_rules.py",
       "source_location": "L59",
       "id": "tests_test_price_rules_test_price_rule_create_redirects_to_manage_page",
-      "community": 138,
+      "community": 130,
       "norm_label": "test_price_rule_create_redirects_to_manage_page()"
     },
     {
@@ -14134,7 +14134,7 @@
       "source_file": "tests/test_price_rules.py",
       "source_location": "L82",
       "id": "tests_test_price_rules_test_price_rule_edit_redirects_to_manage_page",
-      "community": 138,
+      "community": 124,
       "norm_label": "test_price_rule_edit_redirects_to_manage_page()"
     },
     {
@@ -14143,7 +14143,7 @@
       "source_file": "tests/test_price_rules.py",
       "source_location": "L109",
       "id": "tests_test_price_rules_test_price_rule_form_validates_camp_flat_fields",
-      "community": 138,
+      "community": 130,
       "norm_label": "test_price_rule_form_validates_camp_flat_fields()"
     },
     {
@@ -14228,19 +14228,19 @@
       "norm_label": "test_platform_icon_fallbacks_redirect_to_app_icon()"
     },
     {
-      "label": "test_private_kiosk_login_uses_browser_session_without_autologout()",
+      "label": "test_private_kiosk_login_uses_persistent_session_without_autologout()",
       "file_type": "code",
       "source_file": "tests/test_pwa.py",
       "source_location": "L56",
-      "id": "tests_test_pwa_test_private_kiosk_login_uses_browser_session_without_autologout",
+      "id": "tests_test_pwa_test_private_kiosk_login_uses_persistent_session_without_autologout",
       "community": 124,
-      "norm_label": "test_private_kiosk_login_uses_browser_session_without_autologout()"
+      "norm_label": "test_private_kiosk_login_uses_persistent_session_without_autologout()"
     },
     {
       "label": "test_central_kiosk_login_enforces_short_autologout()",
       "file_type": "code",
       "source_file": "tests/test_pwa.py",
-      "source_location": "L75",
+      "source_location": "L80",
       "id": "tests_test_pwa_test_central_kiosk_login_enforces_short_autologout",
       "community": 124,
       "norm_label": "test_central_kiosk_login_enforces_short_autologout()"
@@ -14249,7 +14249,7 @@
       "label": "test_switching_kiosk_modes_clears_participant_session()",
       "file_type": "code",
       "source_file": "tests/test_pwa.py",
-      "source_location": "L93",
+      "source_location": "L99",
       "id": "tests_test_pwa_test_switching_kiosk_modes_clears_participant_session",
       "community": 124,
       "norm_label": "test_switching_kiosk_modes_clears_participant_session()"
@@ -14258,7 +14258,7 @@
       "label": "test_pwa_manifests_are_surface_specific()",
       "file_type": "code",
       "source_file": "tests/test_pwa.py",
-      "source_location": "L115",
+      "source_location": "L121",
       "id": "tests_test_pwa_test_pwa_manifests_are_surface_specific",
       "community": 297,
       "norm_label": "test_pwa_manifests_are_surface_specific()"
@@ -14267,7 +14267,7 @@
       "label": "test_service_workers_have_explicit_scopes()",
       "file_type": "code",
       "source_file": "tests/test_pwa.py",
-      "source_location": "L135",
+      "source_location": "L141",
       "id": "tests_test_pwa_test_service_workers_have_explicit_scopes",
       "community": 297,
       "norm_label": "test_service_workers_have_explicit_scopes()"
@@ -14276,7 +14276,7 @@
       "label": "test_offline_page_contains_no_business_data()",
       "file_type": "code",
       "source_file": "tests/test_pwa.py",
-      "source_location": "L148",
+      "source_location": "L154",
       "id": "tests_test_pwa_test_offline_page_contains_no_business_data",
       "community": 297,
       "norm_label": "test_offline_page_contains_no_business_data()"
@@ -14285,7 +14285,7 @@
       "label": "test_security_policy_allows_same_origin_manifests_and_workers()",
       "file_type": "code",
       "source_file": "tests/test_pwa.py",
-      "source_location": "L157",
+      "source_location": "L163",
       "id": "tests_test_pwa_test_security_policy_allows_same_origin_manifests_and_workers",
       "community": 297,
       "norm_label": "test_security_policy_allows_same_origin_manifests_and_workers()"
@@ -14296,7 +14296,7 @@
       "source_file": "tests/test_security_headers.py",
       "source_location": "L1",
       "id": "tests_test_security_headers",
-      "community": 148,
+      "community": 239,
       "norm_label": "test_security_headers.py"
     },
     {
@@ -14305,7 +14305,7 @@
       "source_file": "tests/test_security_headers.py",
       "source_location": "L15",
       "id": "tests_test_security_headers_test_common_security_headers_are_set",
-      "community": 148,
+      "community": 239,
       "norm_label": "test_common_security_headers_are_set()"
     },
     {
@@ -14314,7 +14314,7 @@
       "source_file": "tests/test_security_headers.py",
       "source_location": "L35",
       "id": "tests_test_security_headers_test_base_template_inline_script_uses_the_response_csp_nonce",
-      "community": 148,
+      "community": 239,
       "norm_label": "test_base_template_inline_script_uses_the_response_csp_nonce()"
     },
     {
@@ -14323,7 +14323,7 @@
       "source_file": "tests/test_security_headers.py",
       "source_location": "L45",
       "id": "tests_test_security_headers_test_security_headers_middleware_wraps_static_file_middleware",
-      "community": 148,
+      "community": 239,
       "norm_label": "test_security_headers_middleware_wraps_static_file_middleware()"
     },
     {
@@ -14332,7 +14332,7 @@
       "source_file": "tests/test_security_headers.py",
       "source_location": "L52",
       "id": "tests_test_security_headers_test_whitenoise_does_not_add_wildcard_cors_header",
-      "community": 148,
+      "community": 239,
       "norm_label": "test_whitenoise_does_not_add_wildcard_cors_header()"
     },
     {
@@ -14341,7 +14341,7 @@
       "source_file": "tests/test_security_headers.py",
       "source_location": "L58",
       "id": "tests_test_security_headers_test_static_responses_keep_same_origin_protection",
-      "community": 148,
+      "community": 239,
       "norm_label": "test_static_responses_keep_same_origin_protection()"
     },
     {
@@ -14458,7 +14458,7 @@
       "source_file": "tests/test_settlements.py",
       "source_location": "L93",
       "id": "tests_test_settlements_test_settlement_applies_price_element_subsidy_rates_for_youth_group_members",
-      "community": 104,
+      "community": 124,
       "norm_label": "test_settlement_applies_price_element_subsidy_rates_for_youth_group_members()"
     },
     {
@@ -14467,7 +14467,7 @@
       "source_file": "tests/test_settlements.py",
       "source_location": "L127",
       "id": "tests_test_settlements_test_settlement_selects_matching_camp_flat_rate_for_companion_and_duration",
-      "community": 104,
+      "community": 124,
       "norm_label": "test_settlement_selects_matching_camp_flat_rate_for_companion_and_duration()"
     },
     {
@@ -14512,7 +14512,7 @@
       "source_file": "tests/test_setup_flow.py",
       "source_location": "L1",
       "id": "tests_test_setup_flow",
-      "community": 286,
+      "community": 174,
       "norm_label": "test_setup_flow.py"
     },
     {
@@ -14521,7 +14521,7 @@
       "source_file": "tests/test_setup_flow.py",
       "source_location": "L11",
       "id": "tests_test_setup_flow_test_login_redirects_to_setup_before_first_user",
-      "community": 286,
+      "community": 174,
       "norm_label": "test_login_redirects_to_setup_before_first_user()"
     },
     {
@@ -14530,7 +14530,7 @@
       "source_file": "tests/test_setup_flow.py",
       "source_location": "L19",
       "id": "tests_test_setup_flow_test_setup_creates_first_admin_and_logs_in",
-      "community": 286,
+      "community": 174,
       "norm_label": "test_setup_creates_first_admin_and_logs_in()"
     },
     {
@@ -14539,7 +14539,7 @@
       "source_file": "tests/test_setup_flow.py",
       "source_location": "L45",
       "id": "tests_test_setup_flow_test_setup_form_escapes_rejected_user_input",
-      "community": 286,
+      "community": 174,
       "norm_label": "test_setup_form_escapes_rejected_user_input()"
     },
     {
@@ -14548,7 +14548,7 @@
       "source_file": "tests/test_setup_flow.py",
       "source_location": "L63",
       "id": "tests_test_setup_flow_test_root_opens_private_kiosk",
-      "community": 286,
+      "community": 174,
       "norm_label": "test_root_opens_private_kiosk()"
     },
     {
@@ -14557,7 +14557,7 @@
       "source_file": "tests/test_setup_flow.py",
       "source_location": "L71",
       "id": "tests_test_setup_flow_test_setup_is_disabled_after_user_exists",
-      "community": 286,
+      "community": 174,
       "norm_label": "test_setup_is_disabled_after_user_exists()"
     },
     {
@@ -14566,7 +14566,7 @@
       "source_file": "tests/test_setup_flow.py",
       "source_location": "L80",
       "id": "tests_test_setup_flow_test_app_stylesheet_is_discoverable_by_staticfiles",
-      "community": 286,
+      "community": 174,
       "norm_label": "test_app_stylesheet_is_discoverable_by_staticfiles()"
     },
     {
@@ -14845,7 +14845,7 @@
       "source_file": "tests/test_view_permissions.py",
       "source_location": "L42",
       "id": "tests_test_view_permissions_permission_dataset",
-      "community": 108,
+      "community": 124,
       "norm_label": "permission_dataset()"
     },
     {
@@ -15684,6 +15684,24 @@
       "id": "changelog_feature_user_profile_phone",
       "community": 151,
       "norm_label": "feature-user-profile-phone.md"
+    },
+    {
+      "label": "fix-169-private-kiosk-session.md",
+      "file_type": "document",
+      "source_file": "changelog/fix-169-private-kiosk-session.md",
+      "source_location": "L1",
+      "id": "changelog_fix_169_private_kiosk_session",
+      "community": 266,
+      "norm_label": "fix-169-private-kiosk-session.md"
+    },
+    {
+      "label": "Privater PWA-Kiosk bleibt angemeldet",
+      "file_type": "document",
+      "source_file": "changelog/fix-169-private-kiosk-session.md",
+      "source_location": "L1",
+      "id": "changelog_fix_169_private_kiosk_session_privater_pwa_kiosk_bleibt_angemeldet",
+      "community": 266,
+      "norm_label": "privater pwa-kiosk bleibt angemeldet"
     },
     {
       "label": "fix-catering-overview-dinner-only.md",
@@ -17783,6 +17801,15 @@
       "norm_label": "`tests/e2e`"
     },
     {
+      "label": "test_private_kiosk_login_uses_browser_session_without_autologout()",
+      "file_type": "code",
+      "source_file": "tests/test_pwa.py",
+      "source_location": "L56",
+      "community": 124,
+      "norm_label": "test_private_kiosk_login_uses_browser_session_without_autologout()",
+      "id": "tests_test_pwa_test_private_kiosk_login_uses_browser_session_without_autologout"
+    },
+    {
       "label": "fix-camp-detail-system-runs-icons.md",
       "file_type": "document",
       "source_file": "changelog/fix-camp-detail-system-runs-icons.md",
@@ -17823,7 +17850,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L70",
-      "community": 245,
+      "community": 265,
       "norm_label": "render push-device settings for the current administrative user.",
       "id": "billing_notification_views_rationale_70"
     },
@@ -17859,7 +17886,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L153",
-      "community": 234,
+      "community": 245,
       "norm_label": "revoke one push device owned by the current user.",
       "id": "billing_notification_views_rationale_153"
     },
@@ -17886,7 +17913,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L193",
-      "community": 245,
+      "community": 234,
       "norm_label": "queue a test message for one push device owned by the private participant.",
       "id": "billing_notification_views_rationale_193"
     },
@@ -18048,7 +18075,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/notifications.py",
       "source_location": "L236",
-      "community": 268,
+      "community": 42,
       "norm_label": "notify eligible participants about an offered or completed shift exchange.",
       "id": "billing_notifications_rationale_236"
     },
@@ -18066,7 +18093,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/notifications.py",
       "source_location": "L348",
-      "community": 42,
+      "community": 174,
       "norm_label": "deliver one bounded outbox batch without exposing push capabilities in logs.",
       "id": "billing_notifications_rationale_348"
     },
@@ -18264,7 +18291,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/services.py",
       "source_location": "L155",
-      "community": 293,
+      "community": 2,
       "norm_label": "return the date that should be ordered from the caterer today.",
       "id": "billing_services_rationale_155"
     },
@@ -18381,7 +18408,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L185",
-      "community": 185,
+      "community": 102,
       "norm_label": "ask the isolated agent to install the latest image asynchronously.",
       "id": "billing_views_rationale_185"
     },
@@ -18552,7 +18579,7 @@
       "file_type": "code",
       "source_file": "tests/test_kiosk_shifts.py",
       "source_location": "L45",
-      "community": 130,
+      "community": 230,
       "norm_label": "test_kiosk_shifts_context_has_autologout()",
       "id": "tests_test_kiosk_shifts_test_kiosk_shifts_context_has_autologout"
     },
@@ -18561,7 +18588,7 @@
       "file_type": "code",
       "source_file": "tests/test_setup_flow.py",
       "source_location": "L63",
-      "community": 286,
+      "community": 174,
       "norm_label": "test_root_opens_kiosk_login()",
       "id": "tests_test_setup_flow_test_root_opens_kiosk_login"
     },
@@ -18813,7 +18840,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L311",
-      "community": 0,
+      "community": 148,
       "norm_label": "track participant-to-participant kiosk booking invitations.",
       "id": "billing_models_rationale_311"
     },
@@ -18831,7 +18858,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L556",
-      "community": 111,
+      "community": 148,
       "norm_label": "store one kiosk meal booking or retraction for a person and meal slot.",
       "id": "billing_models_rationale_556"
     },
@@ -18867,7 +18894,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L747",
-      "community": 264,
+      "community": 111,
       "norm_label": "record one attempted automated settlement backup for a camp and date.",
       "id": "billing_models_rationale_747"
     },
@@ -18894,7 +18921,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L293",
-      "community": 106,
+      "community": 247,
       "norm_label": "edit account status and billing role for an existing user.",
       "id": "billing_views_rationale_293"
     },
@@ -19479,7 +19506,7 @@
       "file_type": "rationale",
       "source_file": "src/config/middleware.py",
       "source_location": "L8",
-      "community": 148,
+      "community": 239,
       "norm_label": "attach application-wide browser security headers to dynamic and static responses",
       "id": "config_middleware_rationale_8"
     },
@@ -19488,7 +19515,7 @@
       "file_type": "rationale",
       "source_file": "src/config/middleware.py",
       "source_location": "L26",
-      "community": 148,
+      "community": 239,
       "norm_label": "return the csp value for a request-scoped nonce.",
       "id": "config_middleware_rationale_26"
     },
@@ -19812,7 +19839,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/forms.py",
       "source_location": "L206",
-      "community": 146,
+      "community": 252,
       "norm_label": "persist editable user metadata and the attached profile.",
       "id": "billing_forms_rationale_206"
     },
@@ -19974,7 +20001,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L501",
-      "community": 111,
+      "community": 148,
       "norm_label": "store one kiosk meal booking or retraction for a person and meal slot.",
       "id": "billing_models_rationale_501"
     },
@@ -20010,7 +20037,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L692",
-      "community": 264,
+      "community": 111,
       "norm_label": "record one attempted automated settlement backup for a camp and date.",
       "id": "billing_models_rationale_692"
     },
@@ -20028,7 +20055,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L164",
-      "community": 266,
+      "community": 120,
       "norm_label": "pull the configured latest image and compare it with the running image.",
       "id": "billing_views_rationale_164"
     },
@@ -20037,7 +20064,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L180",
-      "community": 185,
+      "community": 102,
       "norm_label": "ask the isolated agent to install the latest image asynchronously.",
       "id": "billing_views_rationale_180"
     },
@@ -20262,7 +20289,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L163",
-      "community": 266,
+      "community": 120,
       "norm_label": "pull the configured latest image and compare it with the running image.",
       "id": "billing_views_rationale_163"
     },
@@ -20271,7 +20298,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L179",
-      "community": 185,
+      "community": 102,
       "norm_label": "ask the isolated agent to install the latest image asynchronously.",
       "id": "billing_views_rationale_179"
     },
@@ -20289,7 +20316,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L274",
-      "community": 120,
+      "community": 145,
       "norm_label": "create a new application user and assign the selected billing role.",
       "id": "billing_views_rationale_274"
     },
@@ -20298,7 +20325,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L287",
-      "community": 247,
+      "community": 106,
       "norm_label": "edit account status and billing role for an existing user.",
       "id": "billing_views_rationale_287"
     },
@@ -20568,7 +20595,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L73",
-      "community": 241,
+      "community": 226,
       "norm_label": "return a required environment value or raise a clear configuration error.",
       "id": "deployment_agent_rationale_73"
     },
@@ -20991,7 +21018,7 @@
       "file_type": "rationale",
       "source_file": "src/config/middleware.py",
       "source_location": "L7",
-      "community": 148,
+      "community": 239,
       "norm_label": "attach application-wide browser security headers to dynamic and static responses",
       "id": "config_middleware_rationale_7"
     },
@@ -21054,7 +21081,7 @@
       "file_type": "code",
       "source_file": "src/billing/daily_settlement_backups.py",
       "source_location": "L70",
-      "community": 264,
+      "community": 185,
       "norm_label": "_create_claim_log()",
       "id": "billing_daily_settlement_backups_create_claim_log"
     },
@@ -21063,7 +21090,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/daily_settlement_backups.py",
       "source_location": "L79",
-      "community": 138,
+      "community": 185,
       "norm_label": "run the configured daily settlement backup when the scheduled time is due.",
       "id": "billing_daily_settlement_backups_rationale_79"
     },
@@ -21846,7 +21873,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/forms.py",
       "source_location": "L192",
-      "community": 146,
+      "community": 252,
       "norm_label": "persist editable user metadata and the attached profile.",
       "id": "billing_forms_rationale_192"
     },
@@ -21945,7 +21972,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L146",
-      "community": 266,
+      "community": 120,
       "norm_label": "pull the configured latest image and compare it with the running image.",
       "id": "billing_views_rationale_146"
     },
@@ -21954,7 +21981,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L162",
-      "community": 185,
+      "community": 102,
       "norm_label": "ask the isolated agent to install the latest image asynchronously.",
       "id": "billing_views_rationale_162"
     },
@@ -22161,7 +22188,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L493",
-      "community": 111,
+      "community": 148,
       "norm_label": "store one kiosk meal booking or retraction for a person and meal slot.",
       "id": "billing_models_rationale_493"
     },
@@ -22188,7 +22215,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L145",
-      "community": 266,
+      "community": 120,
       "norm_label": "pull the configured latest image and compare it with the running image.",
       "id": "billing_views_rationale_145"
     },
@@ -22197,7 +22224,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L161",
-      "community": 185,
+      "community": 102,
       "norm_label": "ask the isolated agent to install the latest image asynchronously.",
       "id": "billing_views_rationale_161"
     },
@@ -22620,7 +22647,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/forms.py",
       "source_location": "L191",
-      "community": 146,
+      "community": 252,
       "norm_label": "persist editable user metadata and the attached profile.",
       "id": "billing_forms_rationale_191"
     },
@@ -22764,7 +22791,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L492",
-      "community": 111,
+      "community": 148,
       "norm_label": "store one kiosk meal booking or retraction for a person and meal slot.",
       "id": "billing_models_rationale_492"
     },
@@ -22854,7 +22881,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/services.py",
       "source_location": "L153",
-      "community": 293,
+      "community": 2,
       "norm_label": "return the date that should be ordered from the caterer today.",
       "id": "billing_services_rationale_153"
     },
@@ -22962,7 +22989,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L158",
-      "community": 185,
+      "community": 102,
       "norm_label": "ask the isolated agent to install the latest image asynchronously.",
       "id": "billing_views_rationale_158"
     },
@@ -23763,7 +23790,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/forms.py",
       "source_location": "L137",
-      "community": 146,
+      "community": 252,
       "norm_label": "edit non-password user account metadata and billing role.",
       "id": "billing_forms_rationale_137"
     },
@@ -23772,7 +23799,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/forms.py",
       "source_location": "L168",
-      "community": 146,
+      "community": 252,
       "norm_label": "persist editable user metadata and the attached profile.",
       "id": "billing_forms_rationale_168"
     },
@@ -23844,7 +23871,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L140",
-      "community": 266,
+      "community": 120,
       "norm_label": "pull the configured latest image and compare it with the running image.",
       "id": "billing_views_rationale_140"
     },
@@ -23853,7 +23880,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L156",
-      "community": 185,
+      "community": 102,
       "norm_label": "ask the isolated agent to install the latest image asynchronously.",
       "id": "billing_views_rationale_156"
     },
@@ -24024,7 +24051,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L490",
-      "community": 111,
+      "community": 148,
       "norm_label": "store one kiosk meal booking or retraction for a person and meal slot.",
       "id": "billing_models_rationale_490"
     },
@@ -24051,7 +24078,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L139",
-      "community": 266,
+      "community": 120,
       "norm_label": "pull the configured latest image and compare it with the running image.",
       "id": "billing_views_rationale_139"
     },
@@ -24060,7 +24087,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L155",
-      "community": 185,
+      "community": 102,
       "norm_label": "ask the isolated agent to install the latest image asynchronously.",
       "id": "billing_views_rationale_155"
     },
@@ -24177,7 +24204,7 @@
       "file_type": "code",
       "source_file": "src/billing/forms.py",
       "source_location": "L32",
-      "community": 104,
+      "community": 124,
       "norm_label": "decimal",
       "id": "decimal"
     },
@@ -24276,7 +24303,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L204",
-      "community": 0,
+      "community": 148,
       "norm_label": "track participant-to-participant kiosk booking invitations.",
       "id": "billing_models_rationale_204"
     },
@@ -24294,7 +24321,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L392",
-      "community": 111,
+      "community": 148,
       "norm_label": "store one kiosk meal booking or retraction for a person and meal slot.",
       "id": "billing_models_rationale_392"
     },
@@ -24375,7 +24402,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/services.py",
       "source_location": "L139",
-      "community": 293,
+      "community": 2,
       "norm_label": "return the date that should be ordered from the caterer today.",
       "id": "billing_services_rationale_139"
     },
@@ -25338,7 +25365,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L169",
-      "community": 0,
+      "community": 148,
       "norm_label": "track participant-to-participant kiosk booking invitations.",
       "id": "billing_models_rationale_169"
     },
@@ -25356,7 +25383,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L347",
-      "community": 111,
+      "community": 148,
       "norm_label": "store one kiosk meal booking or retraction for a person and meal slot.",
       "id": "billing_models_rationale_347"
     },
@@ -25599,7 +25626,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L158",
-      "community": 0,
+      "community": 148,
       "norm_label": "track participant-to-participant kiosk booking invitations.",
       "id": "billing_models_rationale_158"
     },
@@ -25608,7 +25635,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L336",
-      "community": 111,
+      "community": 148,
       "norm_label": "store one kiosk meal booking or retraction for a person and meal slot.",
       "id": "billing_models_rationale_336"
     },
@@ -25779,7 +25806,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/services.py",
       "source_location": "L128",
-      "community": 293,
+      "community": 2,
       "norm_label": "return the date that should be ordered from the caterer today.",
       "id": "billing_services_rationale_128"
     },
@@ -93074,6 +93101,17 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_pwa.py",
+      "source_location": "L57",
+      "weight": 1.0,
+      "source": "tests_test_pwa_test_private_kiosk_login_uses_persistent_session_without_autologout",
+      "target": "tests_factories_campfactory"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tests/test_pwa.py",
       "source_location": "L65",
       "weight": 1.0,
       "source": "tests_test_pwa_test_switching_kiosk_modes_clears_participant_session",
@@ -94517,6 +94555,17 @@
       "source_location": "L28",
       "weight": 1.0,
       "source": "tests_test_pwa_test_private_kiosk_login_uses_browser_session_without_autologout",
+      "target": "tests_factories_participantfactory"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tests/test_pwa.py",
+      "source_location": "L57",
+      "weight": 1.0,
+      "source": "tests_test_pwa_test_private_kiosk_login_uses_persistent_session_without_autologout",
       "target": "tests_factories_participantfactory"
     },
     {
@@ -99870,6 +99919,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_pwa.py",
+      "source_location": "L56",
+      "weight": 1.0,
+      "source": "tests_test_pwa",
+      "target": "tests_test_pwa_test_private_kiosk_login_uses_persistent_session_without_autologout",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_pwa.py",
       "source_location": "L86",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -101844,6 +101903,16 @@
       "confidence_score": 1.0,
       "source": "changelog_feature_auditable_booking_edit_pr_zusammenfassung_feature_auditable_booking_edit",
       "target": "changelog_feature_auditable_booking_edit_zusammenfassung"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "changelog/fix-169-private-kiosk-session.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "changelog_fix_169_private_kiosk_session",
+      "target": "changelog_fix_169_private_kiosk_session_privater_pwa_kiosk_bleibt_angemeldet",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -108867,5 +108936,5 @@
       "source_file": "tests/e2e/fliegerlager.spec.js"
     }
   ],
-  "built_at_commit": "2db0abc7e2115b3a33ea787775ceee26c18eed95"
+  "built_at_commit": "179490629c065285af4580c00bc7ff2da073fc39"
 }

@@ -306,6 +306,9 @@ test("Kiosk flow: login, pin setup, drink and meal booking", async ({ page }) =>
   // Now in Kiosk Home
   await expect(page).toHaveURL(/.*\/kiosk\//);
   await expect(page.getByText("PIN wurde gesetzt.")).toBeVisible();
+  const sessionCookie = (await page.context().cookies()).find((cookie) => cookie.name === "sessionid");
+  expect(sessionCookie).toBeDefined();
+  expect(sessionCookie.expires).toBeGreaterThan(Date.now() / 1000);
 
   // Check-in can be entered from the kiosk.
   const checkinArrival = dateInputValue(addDays(new Date(), 2));

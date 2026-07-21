@@ -57,7 +57,7 @@ def test_kiosk_login_redirects_to_pin_setup_when_pin_is_missing(client):
 
 
 @pytest.mark.django_db
-def test_kiosk_pin_setup_sets_pin_and_logs_participant_in(client):
+def test_kiosk_pin_setup_sets_pin_and_logs_participant_in(client, settings):
     participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
     session = client.session
     session[KIOSK_PIN_SETUP_SESSION_KEY] = participant.pk
@@ -74,6 +74,8 @@ def test_kiosk_pin_setup_sets_pin_and_logs_participant_in(client):
     assert participant.pin.check_pin("2468") is True
     assert client.session[KIOSK_PARTICIPANT_SESSION_KEY] == participant.pk
     assert KIOSK_PIN_SETUP_SESSION_KEY not in client.session
+    assert client.session.get_expire_at_browser_close() is False
+    assert client.session.get_expiry_age() == settings.SESSION_COOKIE_AGE
 
 
 @pytest.mark.django_db
