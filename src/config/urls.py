@@ -6,12 +6,15 @@ from django.urls import include, path, re_path
 
 from billing.forms import EmailOrUsernameAuthenticationForm
 from billing.views import FirstLaunchLoginView
-from config.views import healthcheck, page_not_found
+from config.views import healthcheck, page_not_found, platform_icon
 
 handler404 = "config.views.page_not_found"
 
 urlpatterns = [
     path("healthz/", healthcheck, name="healthcheck"),
+    path("apple-touch-icon.png", platform_icon, name="apple-touch-icon"),
+    path("apple-touch-icon-precomposed.png", platform_icon, name="apple-touch-icon-precomposed"),
+    path("favicon.ico", platform_icon, name="favicon"),
     path("admin/", admin.site.urls),
     path(
         "login/",

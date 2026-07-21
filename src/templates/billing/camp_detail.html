@@ -57,7 +57,13 @@
             <td><a href="{% url 'settlement-run-detail' run.pk %}">V{{ run.version }}</a></td>
             <td>{{ run.get_run_type_display }}</td>
             <td>{{ run.created_at }}</td>
-            <td>{{ run.calculated_by.email|default:run.calculated_by.username|default:"System" }}</td>
+            <td>
+              {% if run.calculated_by %}
+                {{ run.calculated_by.email|default:run.calculated_by.username }}
+              {% else %}
+                System
+              {% endif %}
+            </td>
             <td>{{ run.participant_count }}</td>
             <td>{{ run.balance|money_eur }}</td>
           </tr>

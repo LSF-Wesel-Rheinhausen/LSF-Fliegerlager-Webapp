@@ -66,6 +66,19 @@ def test_admin_can_create_and_view_settlement_run(client):
 
 
 @pytest.mark.django_db
+def test_camp_detail_labels_automatic_settlement_run_as_system(client):
+    user = SuperUserFactory()
+    participant = ParticipantFactory()
+    create_settlement_run(participant.camp, None, run_type=SettlementRun.RunType.DAILY_BACKUP)
+    client.force_login(user)
+
+    response = client.get(reverse("camp-detail", args=[participant.camp_id]))
+
+    assert response.status_code == 200
+    assert b"System" in response.content
+
+
+@pytest.mark.django_db
 def test_editor_can_view_but_not_create_settlement_run(client):
     admin = SuperUserFactory()
     participant = ParticipantFactory()
