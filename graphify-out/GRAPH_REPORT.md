@@ -1,7 +1,7 @@
 # Graph Report - LSF-Fliegerlager-Webapp  (2026-07-21)
 
 ## Corpus Check
-- 229 files · ~246,762 words
+- 229 files · ~246,789 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `17a93a7f`
+- Built from commit: `2db0abc7`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -324,11 +324,11 @@
 - 1-file cycle: `src/billing/exporters.py -> src/billing/exporters.py`
 - 1-file cycle: `src/billing/forms.py -> src/billing/forms.py`
 - 1-file cycle: `src/billing/templatetags/billing_format.py -> src/billing/templatetags/billing_format.py`
-- 2-file cycle: `src/billing/models.py -> src/billing/services.py -> src/billing/models.py`
-- 2-file cycle: `src/billing/forms.py -> src/billing/services.py -> src/billing/forms.py`
 - 2-file cycle: `src/billing/forms.py -> src/billing/models.py -> src/billing/forms.py`
-- 3-file cycle: `src/billing/forms.py -> src/billing/services.py -> src/billing/models.py -> src/billing/forms.py`
+- 2-file cycle: `src/billing/forms.py -> src/billing/services.py -> src/billing/forms.py`
+- 2-file cycle: `src/billing/models.py -> src/billing/services.py -> src/billing/models.py`
 - 3-file cycle: `src/billing/forms.py -> src/billing/models.py -> src/billing/services.py -> src/billing/forms.py`
+- 3-file cycle: `src/billing/forms.py -> src/billing/services.py -> src/billing/models.py -> src/billing/forms.py`
 
 ## Hyperedges (group relationships)
 - **Initial Billing Financial Schema** — 0001_initial_participant_model, 0001_initial_charge_model, 0001_initial_payment_model, 0001_initial_expense_model, 0001_initial_settlement_model [EXTRACTED 1.00]
