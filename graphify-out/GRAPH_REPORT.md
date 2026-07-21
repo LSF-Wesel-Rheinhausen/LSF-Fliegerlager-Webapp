@@ -5,12 +5,12 @@
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 3172 nodes · 7593 edges · 311 communities (193 shown, 118 thin omitted)
+- 3174 nodes · 7594 edges · 314 communities (194 shown, 120 thin omitted)
 - Extraction: 67% EXTRACTED · 33% INFERRED · 0% AMBIGUOUS · INFERRED: 2471 edges (avg confidence: 0.52)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `363e87f1`
+- Built from commit: `17a93a7f`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -250,8 +250,10 @@
 - [[_COMMUNITY_Community 258|Community 258]]
 - [[_COMMUNITY_Community 259|Community 259]]
 - [[_COMMUNITY_Community 260|Community 260]]
+- [[_COMMUNITY_Community 261|Community 261]]
 - [[_COMMUNITY_Community 262|Community 262]]
 - [[_COMMUNITY_Community 263|Community 263]]
+- [[_COMMUNITY_Community 264|Community 264]]
 - [[_COMMUNITY_Community 265|Community 265]]
 - [[_COMMUNITY_Community 266|Community 266]]
 - [[_COMMUNITY_Community 267|Community 267]]
@@ -276,9 +278,12 @@
 - [[_COMMUNITY_Community 290|Community 290]]
 - [[_COMMUNITY_Community 291|Community 291]]
 - [[_COMMUNITY_Community 292|Community 292]]
+- [[_COMMUNITY_Community 293|Community 293]]
 - [[_COMMUNITY_Community 294|Community 294]]
 - [[_COMMUNITY_Community 295|Community 295]]
+- [[_COMMUNITY_Community 298|Community 298]]
 - [[_COMMUNITY_Community 299|Community 299]]
+- [[_COMMUNITY_Community 300|Community 300]]
 - [[_COMMUNITY_Community 302|Community 302]]
 - [[_COMMUNITY_Community 303|Community 303]]
 - [[_COMMUNITY_Community 305|Community 305]]
@@ -356,19 +361,19 @@
 - **Role Permission Matrix** — test_view_permissions_admin_only_get, test_view_permissions_editor_views, test_view_permissions_editor_post, test_view_permissions_admin_post, test_view_permissions_pin_admin_post, permissions_editor_group, permissions_admin_boundary [EXTRACTED 1.00]
 - **Playwright Admin UI Workflows** — e2e_admin_setup_camp_workflow, e2e_admin_booking_audit_workflow, e2e_price_rule_dialog_workflow, e2e_responsive_layout_workflow, e2e_setup_first_admin, e2e_create_camp [EXTRACTED 1.00]
 
-## Communities (311 total, 118 thin omitted)
+## Communities (314 total, 120 thin omitted)
 
 ### Community 0 - "Django Admin Integration"
-Cohesion: 0.11
-Nodes (99): Raised when the isolated deployment agent cannot complete a request., UpdateAgentError, CampFlatRateSettingsForm, CampForm, ChargeForm, DailySettlementBackupSettingsForm, DailyShiftTemplateForm, DrinkBookingForm (+91 more)
+Cohesion: 0.10
+Nodes (100): CampFlatRateSettingsForm, CampForm, ChargeForm, DailySettlementBackupSettingsForm, DailyShiftTemplateForm, DrinkBookingForm, ExpenseForm, FirstAdminSetupForm (+92 more)
 
 ### Community 1 - "Camp Settlement Exporters"
 Cohesion: 0.15
 Nodes (36): bool, _chown_tree(), _copy_source(), _directory_has_content(), LegacyPersistence, main(), migrate_persistence(), MigrationResult (+28 more)
 
 ### Community 2 - "Authentication and Permissions"
-Cohesion: 0.05
-Nodes (49): notify_booking_link(), notify_linked_booking(), Notify the participant affected by a booking-link state change., Notify the other participant affected by a linked kiosk booking.      Args:, next_catering_order_date(), Return the date that should be ordered from the caterer today., Return the date that should be ordered from the caterer today., Return the date that should be ordered from the caterer today. (+41 more)
+Cohesion: 0.04
+Nodes (58): notify_booking_link(), notify_linked_booking(), Notify the participant affected by a booking-link state change., Notify the other participant affected by a linked kiosk booking.      Args:, is_meal_change_locked(), Return whether kiosk meal changes are closed for the requested meal date.      A, Return whether kiosk meal changes are closed for the requested meal date.      A, Return whether kiosk meal changes are closed for the requested meal date.      A (+50 more)
 
 ### Community 3 - "Django Database Models"
 Cohesion: 0.17
@@ -499,8 +504,8 @@ Cohesion: 0.67
 Nodes (3): Standard Login Page, First Admin Setup Page, First Launch Setup Tests
 
 ### Community 42 - "Kiosk Participant Utility Views"
-Cohesion: 0.10
-Nodes (42): AuthenticationForm, EmailOrUsernameAuthenticationForm, Camp, Expense, MealSignup, ParticipantBookingLink, PushMessage, Track participant-to-participant kiosk booking invitations. (+34 more)
+Cohesion: 0.13
+Nodes (27): _administrative_users(), cleanup_push_messages(), generate_scheduled_notifications(), notify_expense_status(), notify_expense_submitted(), _queue_for_subscriptions(), queue_participant_notification(), queue_user_notification() (+19 more)
 
 ### Community 45 - "Community 45"
 Cohesion: 0.08
@@ -511,8 +516,8 @@ Cohesion: 0.09
 Nodes (24): charge_audit_snapshot(), create_booking_audit_log(), Return the auditable business fields for a booking charge.      Args:         ch, Persist an audit entry when editable booking fields changed.      Args:, Return the auditable business fields for a booking charge.      Args:         ch, Persist an audit entry when editable booking fields changed.      Args:, Persist an audit entry when editable booking fields changed.      Args:, Return the auditable business fields for a booking charge.      Args:         ch (+16 more)
 
 ### Community 61 - "Community 61"
-Cohesion: 0.06
-Nodes (25): Validate that the departure date is after the arrival date., Validate that the departure date is after the arrival date., Expose a normalized subsidy rate as a percentage in forms., Expose a normalized subsidy rate as a percentage in forms., Expose a normalized subsidy rate as a percentage in forms., Expose a normalized subsidy rate as a percentage in forms., Limit selectable dates to the participant's configured camp days., Return unique selected camp dates in chronological order. (+17 more)
+Cohesion: 0.07
+Nodes (23): AuthenticationForm, EmailOrUsernameAuthenticationForm, Meta, Validate that the departure date is after the arrival date., Validate that the departure date is after the arrival date., Expose a normalized subsidy rate as a percentage in forms., Expose a normalized subsidy rate as a percentage in forms., Expose a normalized subsidy rate as a percentage in forms. (+15 more)
 
 ### Community 71 - "Community 71"
 Cohesion: 0.50
@@ -575,16 +580,16 @@ Cohesion: 0.08
 Nodes (24): create_booking_delete_audit_log(), meal_change_lock_message(), meal_order_for_date(), Return the user-facing message for a closed kiosk meal slot., Return the user-facing message for a closed kiosk meal slot., Return the user-facing message for a closed kiosk meal slot., Persist an audit entry before a booking charge is deleted.      Args:         ch, Return the user-facing message for a closed kiosk meal slot. (+16 more)
 
 ### Community 102 - "Community 102"
-Cohesion: 0.05
-Nodes (39): BaseCommand, build_settlement_backup_staging(), _claim_daily_backup_log(), _create_claim_log(), Persist the singleton configuration for automated daily settlement backups., Create export files for a settlement run under the shared backup volume., Run the configured daily settlement backup when the scheduled time is due., Run the configured daily settlement backup when the scheduled time is due. (+31 more)
+Cohesion: 0.21
+Nodes (16): agent_request(), check_for_update(), create_backup_archive(), deployment_status(), install_update(), Call the isolated deployment agent and return its JSON response., Return the deployment agent status for the update page., Ask the agent to compare latest OCI metadata with this Django build. (+8 more)
 
 ### Community 103 - "Community 103"
 Cohesion: 0.40
 Nodes (4): Buchungsnummern, Geänderte Dateien, Tests, Zusammenfassung
 
 ### Community 104 - "Community 104"
-Cohesion: 0.07
-Nodes (35): Decimal, Migration, Migration, Migration, restore_subsidy_flags(), Migration, Migration, int (+27 more)
+Cohesion: 0.09
+Nodes (27): Decimal, Migration, Migration, Migration, restore_subsidy_flags(), Migration, Migration, int (+19 more)
 
 ### Community 105 - "Community 105"
 Cohesion: 0.15
@@ -592,23 +597,23 @@ Nodes (12): Return the human-readable booking identifier., Return the human-read
 
 ### Community 106 - "Community 106"
 Cohesion: 0.11
-Nodes (18): charge_delete(), Delete a booking charge and keep an audit snapshot for later review., Delete a booking charge and keep an audit snapshot for later review., Delete a booking charge and keep an audit snapshot for later review., Edit account status and billing role for an existing user., Mark a booking charge as deleted and keep an audit snapshot for later review., Mark a booking charge as deleted and keep an audit snapshot for later review., Mark a booking charge as deleted and keep an audit snapshot for later review. (+10 more)
+Nodes (18): charge_delete(), Delete a booking charge and keep an audit snapshot for later review., Delete a booking charge and keep an audit snapshot for later review., Delete a booking charge and keep an audit snapshot for later review., Mark a booking charge as deleted and keep an audit snapshot for later review., Edit account status and billing role for an existing user., Mark a booking charge as deleted and keep an audit snapshot for later review., Mark a booking charge as deleted and keep an audit snapshot for later review. (+10 more)
 
 ### Community 107 - "Community 107"
 Cohesion: 0.09
 Nodes (32): BaseException, compose_up(), ComposeUpError, create_backup_archive(), database_dump_bytes(), get_env_file(), bytes, Path (+24 more)
 
 ### Community 108 - "Community 108"
-Cohesion: 0.10
-Nodes (17): GroupFactory, test_export_routes_allow_editor_and_admin_access(), test_calculate_meal_overview_counts_active_variants_and_retractions(), test_camp_meal_overview_renders_and_saves_menu_for_huebers(), test_camp_meal_overview_renders_counts_for_admin(), test_meal_overview_marks_next_day_order_as_sent(), admin_user(), editor_user() (+9 more)
+Cohesion: 0.09
+Nodes (18): GroupFactory, test_export_routes_allow_editor_and_admin_access(), test_calculate_meal_overview_counts_active_variants_and_retractions(), test_camp_meal_overview_renders_and_saves_menu_for_huebers(), test_camp_meal_overview_renders_counts_for_admin(), test_meal_overview_marks_next_day_order_as_sent(), admin_user(), editor_user() (+10 more)
 
 ### Community 110 - "Community 110"
 Cohesion: 0.40
 Nodes (4): Buchungsnummern, Geänderte Dateien, Tests, Zusammenfassung
 
 ### Community 111 - "Community 111"
-Cohesion: 0.08
-Nodes (93): BookingAuditLogAdmin, CampAdmin, ChargeAdmin, DailySettlementBackupLogAdmin, DailyShiftExceptionInline, DailyShiftTemplateAdmin, MealOrderAdmin, MealPlanEntryAdmin (+85 more)
+Cohesion: 0.07
+Nodes (113): BookingAuditLogAdmin, CampAdmin, ChargeAdmin, DailySettlementBackupLogAdmin, DailyShiftExceptionInline, DailyShiftTemplateAdmin, MealOrderAdmin, MealPlanEntryAdmin (+105 more)
 
 ### Community 112 - "Community 112"
 Cohesion: 0.33
@@ -623,16 +628,16 @@ Cohesion: 0.33
 Nodes (5): Geänderte Dateien, Kiosk-Familienbuchungen, Offene Punkte, Tests, Zusammenfassung
 
 ### Community 120 - "Community 120"
-Cohesion: 0.09
-Nodes (24): deployment_update_check(), Create a new application user and assign the selected billing role., Create a new application user and assign the selected billing role., Create a new application user and assign the selected billing role., Pull the configured latest image and compare it with the running image., Pull the configured latest image and compare it with the running image., Pull the configured latest image and compare it with the running image., Pull the configured latest image and compare it with the running image. (+16 more)
+Cohesion: 0.12
+Nodes (16): Create a new application user and assign the selected billing role., Create a new application user and assign the selected billing role., Create a new application user and assign the selected billing role., Create a new application user and assign the selected billing role., Create a new application user and assign the selected billing role., Create a new application user and assign the selected billing role., Create a new application user and assign the selected billing role., Create a new application user and assign the selected billing role. (+8 more)
 
 ### Community 121 - "Community 121"
-Cohesion: 0.06
-Nodes (34): calculate_meal_overview(), Aggregate active and retracted meal signups for a camp by day and meal., Aggregate dinner signups for a camp by day for catering orders., Aggregate dinner signups for a camp by day for catering orders., Aggregate dinner signups for a camp by day for catering orders., Aggregate dinner signups for a camp by day for catering orders., Aggregate dinner signups for a camp by day for catering orders., Aggregate dinner signups for a camp by day for catering orders. (+26 more)
+Cohesion: 0.08
+Nodes (25): camp_meal_overview(), Render the per-day meal counts used for caterer ordering., Render the per-day meal counts used for caterer ordering., Render the per-day meal counts used for caterer ordering., Render the per-day meal counts used for caterer ordering., Render the per-day meal counts used for caterer ordering., Render the per-day meal counts used for caterer ordering., Render the per-day meal counts used for caterer ordering. (+17 more)
 
 ### Community 124 - "Community 124"
 Cohesion: 0.08
-Nodes (86): date, datetime, Migration, CampFactory, ParticipantFactory, PriceRuleFactory, test_kiosk_login_form_lists_companions_but_not_children(), test_kiosk_login_form_only_lists_non_archived_participants_from_active_camp() (+78 more)
+Nodes (86): date, datetime, CampFactory, ParticipantFactory, PriceRuleFactory, test_kiosk_login_form_lists_companions_but_not_children(), test_kiosk_login_form_only_lists_non_archived_participants_from_active_camp(), test_kiosk_login_form_starts_empty_and_sorts_targets_by_last_name() (+78 more)
 
 ### Community 125 - "Community 125"
 Cohesion: 0.18
@@ -655,7 +660,7 @@ Cohesion: 0.18
 Nodes (13): Aktuelle Findings (7. Juli 2026), Behobene Findings, Behobene Findings (Historisch), Executive Summary, Prüfungen, SEC-001: Unsichere Produktions-Fallbacks, SEC-002: Beweglicher und zeitweise kompromittierter Trivy-Action-Pin, SEC-003: Unbegrenzte Import- und PIN-Versuche (+5 more)
 
 ### Community 130 - "Community 130"
-Cohesion: 0.07
+Cohesion: 0.05
 Nodes (15): Action, AllocationMethod, CampFlatDuration, CampFlatRole, CostCenter, Drink, Kind, Meal (+7 more)
 
 ### Community 131 - "Community 131"
@@ -675,12 +680,12 @@ Cohesion: 0.33
 Nodes (5): Geänderte Dateien, Kiosk-Buchungen mit Legacy-Datenbanken reparieren, Offene Punkte, Tests, Zusammenfassung
 
 ### Community 138 - "Community 138"
-Cohesion: 0.13
-Nodes (27): create_settlement_run(), SuperUserFactory, test_admin_cannot_restore_deleted_booking_without_participant(), test_backup_staging_contains_exports_and_manifest(), csv_rows(), test_csv_exports_escape_formula_like_text_values(), test_csv_exports_leave_regular_text_values_unchanged(), test_drinks_csv_exports_legacy_entries_and_kiosk_drink_charges() (+19 more)
+Cohesion: 0.07
+Nodes (52): Run the configured daily settlement backup when the scheduled time is due., Run the configured daily settlement backup when the scheduled time is due., run_due_daily_settlement_backup(), create_settlement_run(), ChargeFactory, SuperUserFactory, test_admin_can_delete_booking_and_keeps_audit_log(), test_admin_can_edit_booking_and_creates_audit_log() (+44 more)
 
 ### Community 141 - "Community 141"
-Cohesion: 0.10
-Nodes (32): camp_settlement_csv(), camp_workbook_response(), csv_response(), drink_entries_csv(), _format_money_cells(), participant_import_template_response(), Return a CSV cell value that spreadsheet apps cannot interpret as a formula., Return a CSV cell value that spreadsheet apps cannot interpret as a formula. (+24 more)
+Cohesion: 0.07
+Nodes (50): build_settlement_backup_staging(), Create export files for a settlement run under the shared backup volume., _relative_to_backup_root(), camp_settlement_csv(), camp_workbook_response(), csv_response(), _decimal_text(), _draw_page_framework() (+42 more)
 
 ### Community 142 - "Community 142"
 Cohesion: 0.47
@@ -692,7 +697,7 @@ Nodes (42): computedHash, skillPath, source, sourceType, computedHash, skillPath
 
 ### Community 145 - "Community 145"
 Cohesion: 0.12
-Nodes (17): Set a new password for an existing application user., Create a new application user and assign the selected billing role., Set a new password for an existing application user., Set a new password for an existing application user., Set a new password for an existing application user., Set a new password for an existing application user., Set a new password for an existing application user., Set a new password for an existing application user. (+9 more)
+Nodes (16): Set a new password for an existing application user., Set a new password for an existing application user., Set a new password for an existing application user., Set a new password for an existing application user., Set a new password for an existing application user., Set a new password for an existing application user., Set a new password for an existing application user., Set a new password for an existing application user. (+8 more)
 
 ### Community 146 - "Community 146"
 Cohesion: 0.11
@@ -703,8 +708,8 @@ Cohesion: 0.11
 Nodes (18): Render the application user management overview., Render the application user management overview., Render the application user management overview., Render the application user management overview., Render the application user management overview., Render the application user management overview., Render the application user management overview., Render the application user management overview. (+10 more)
 
 ### Community 148 - "Community 148"
-Cohesion: 0.14
-Nodes (9): test_authelia_backend_rejects_inactive_user_directly(), test_authelia_header_switches_existing_session_user(), test_authelia_sso_logs_in_unique_active_user_case_insensitively(), test_authelia_sso_uses_only_configured_header(), test_disabled_authelia_sso_ignores_identity_header(), test_duplicate_authelia_email_is_rejected(), test_inactive_authelia_user_is_rejected(), test_missing_authelia_header_does_not_authenticate() (+1 more)
+Cohesion: 0.10
+Nodes (16): AutheliaSSOMiddleware, Create a Django session from a trusted Authelia email header when enabled., Return the CSP value for a request-scoped nonce., Attach application-wide browser security headers to dynamic and static responses, Return the CSP value for a request-scoped nonce., Attach application-wide browser security headers to dynamic and static responses, Attach application-wide browser security headers to dynamic and static responses, SecurityHeadersMiddleware (+8 more)
 
 ### Community 149 - "Community 149"
 Cohesion: 0.40
@@ -751,8 +756,8 @@ Cohesion: 0.13
 Nodes (16): active_admin_count(), bootstrap_default_roles(), Assign the application role groups and staff flag for a user.      Args:, Assign the application role groups and staff flag for a user.      Args:, Return the effective editable application role for a user., Return the effective editable application role for a user., Count active users that still satisfy the application admin contract., Count active users that still satisfy the application admin contract. (+8 more)
 
 ### Community 174 - "Community 174"
-Cohesion: 0.12
-Nodes (20): UserFactory, str, test_authenticated_navigation_links_to_passkey_management_only_when_enabled(), test_authentication_rejects_a_challenge_timestamp_from_the_future(), test_authentication_verifies_the_credential_and_updates_its_counter(), test_authentication_verify_endpoint_creates_a_django_session(), test_inactive_user_cannot_authenticate_with_a_stored_passkey(), test_login_page_offers_passkey_login_only_when_enabled() (+12 more)
+Cohesion: 0.07
+Nodes (30): UserFactory, test_user_can_authenticate_with_email(), test_authelia_backend_rejects_inactive_user_directly(), test_authelia_header_switches_existing_session_user(), test_authelia_sso_logs_in_unique_active_user_case_insensitively(), test_authelia_sso_uses_only_configured_header(), test_disabled_authelia_sso_ignores_identity_header(), test_duplicate_authelia_email_is_rejected() (+22 more)
 
 ### Community 176 - "Community 176"
 Cohesion: 0.18
@@ -803,16 +808,16 @@ Cohesion: 0.11
 Nodes (18): _is_charge_covered_by_settlement_run(), _is_kiosk_quick_charge_cancelable(), Return whether a kiosk participant may cancel a quick charge., Return whether a settlement run freezes this charge for kiosk cancellation., Return whether a kiosk participant may cancel a quick charge., Return whether a settlement run freezes this charge for kiosk cancellation., Return whether a kiosk participant may cancel a quick charge., Return whether a settlement run freezes this charge for kiosk cancellation. (+10 more)
 
 ### Community 190 - "Community 190"
-Cohesion: 0.11
-Nodes (20): camp_meal_dates(), is_meal_change_locked(), Return whether kiosk meal changes are closed for the requested meal date.      A, Return whether kiosk meal changes are closed for the requested meal date.      A, Return whether kiosk meal changes are closed for the requested meal date.      A, Return the ordered meal dates that should appear in meal overviews., Return the ordered meal dates that should appear in meal overviews., Return the ordered meal dates that should appear in meal overviews. (+12 more)
+Cohesion: 0.12
+Nodes (16): calculate_meal_overview(), camp_meal_dates(), Return the ordered meal dates that should appear in meal overviews., Return the ordered meal dates that should appear in meal overviews., Aggregate active and retracted meal signups for a camp by day and meal., Aggregate dinner signups for a camp by day for catering orders., Return the ordered meal dates that should appear in meal overviews., Return the ordered meal dates that should appear in meal overviews. (+8 more)
 
 ### Community 192 - "Community 192"
 Cohesion: 0.67
 Nodes (3): Dienstplanung im Teilnehmer-Kiosk, Einblicke in das Tool, Lagerübersicht für Admins und Bearbeiter
 
 ### Community 200 - "Community 200"
-Cohesion: 0.19
-Nodes (21): approve_shared_expense(), build_settlement_line(), calculate_participant_settlement(), _cost_center_snapshot_data(), default_charge_lines(), default_drink_price(), drink_charge_lines(), get_cost_center_evaluation() (+13 more)
+Cohesion: 0.21
+Nodes (19): approve_shared_expense(), build_settlement_line(), calculate_participant_settlement(), _cost_center_snapshot_data(), default_charge_lines(), default_drink_price(), drink_charge_lines(), manual_charge_lines() (+11 more)
 
 ### Community 202 - "Community 202"
 Cohesion: 0.40
@@ -835,8 +840,8 @@ Cohesion: 0.50
 Nodes (3): Dokumentation, Portainer SSL-Verifikation konfigurierbar (PR TBD), Update-Agent
 
 ### Community 224 - "Community 224"
-Cohesion: 0.15
-Nodes (13): generate_scheduled_notifications(), notify_expense_status(), queue_participant_notification(), Notify the requesting participant about an approved or rejected expense., Create all currently due shift and meal reminders idempotently., Create all currently due shift and meal reminders idempotently., Queue one idempotent message for each eligible participant device., _notify_expense_status_by_id() (+5 more)
+Cohesion: 0.11
+Nodes (22): manifest(), offline(), pwa_template_context(), Return manifest and service-worker URLs for a PWA surface., Return a surface-specific web app manifest., Serve the service worker at a URL matching its allowed scope., Serve the service worker at a URL matching its allowed scope., Render a generic offline fallback without application data. (+14 more)
 
 ### Community 226 - "Community 226"
 Cohesion: 0.08
@@ -855,8 +860,8 @@ Cohesion: 0.07
 Nodes (30): bytes, fetch_image_metadata(), fetch_registry_token(), Return a GHCR Basic auth header when a token is configured., Fetch a registry resource and resolve public GHCR bearer auth challenges., Fetch a registry resource and resolve public GHCR bearer auth challenges., Fetch a bearer token from a registry WWW-Authenticate challenge., Fetch a bearer token from a registry WWW-Authenticate challenge. (+22 more)
 
 ### Community 234 - "Community 234"
-Cohesion: 0.16
-Nodes (16): DrinkEntryFactory, ExpenseFactory, PaymentFactory, test_workbook_export_compares_cost_center_income_and_expenses(), test_admin_archives_and_restores_participant_without_deleting_financial_data(), test_archived_participant_is_removed_from_live_camp_settlement(), test_editor_can_edit_participant(), test_editor_cannot_archive_participant() (+8 more)
+Cohesion: 0.26
+Nodes (13): notification_revoke(), notification_test(), _owner_filter(), queue_test_notification(), Revoke one push device owned by the current user., Queue a harmless test message for one owner-controlled device., Revoke one push device owned by the current user., Queue a harmless test message for one owner-controlled device. (+5 more)
 
 ### Community 236 - "Community 236"
 Cohesion: 0.25
@@ -867,8 +872,8 @@ Cohesion: 0.16
 Nodes (19): Any, bool, Decimal, str, abs_value(), can_manage_meals(), can_manage_users(), is_huebers_user() (+11 more)
 
 ### Community 239 - "Community 239"
-Cohesion: 0.06
-Nodes (51): Command, Generate a VAPID key pair suitable for environment configuration., AutheliaSSOMiddleware, Create a Django session from a trusted Authelia email header when enabled., Return the CSP value for a request-scoped nonce., Attach application-wide browser security headers to dynamic and static responses, Return the CSP value for a request-scoped nonce., Attach application-wide browser security headers to dynamic and static responses (+43 more)
+Cohesion: 0.08
+Nodes (43): BaseCommand, Command, Generate a VAPID key pair suitable for environment configuration., Command, Run or schedule the daily settlement backup check., Register command line options., Execute the backup check once or continuously., Command (+35 more)
 
 ### Community 240 - "Community 240"
 Cohesion: 0.15
@@ -887,8 +892,8 @@ Cohesion: 0.40
 Nodes (4): Admin-Interface, Essenskalender & Speiseplanpflege (PR TBD), Kiosk, Tests
 
 ### Community 245 - "Community 245"
-Cohesion: 0.06
-Nodes (72): PushSubscription, Store one browser push capability for an admin or participant device., _device_payload(), _endpoint_fingerprint(), _json_payload(), kiosk_notification_revoke(), kiosk_notification_settings(), kiosk_notification_subscribe() (+64 more)
+Cohesion: 0.14
+Nodes (27): _json_payload(), kiosk_notification_revoke(), kiosk_notification_settings(), kiosk_notification_subscribe(), kiosk_notification_test(), notification_settings(), notification_subscribe(), _private_participant() (+19 more)
 
 ### Community 247 - "Community 247"
 Cohesion: 0.08
@@ -899,12 +904,12 @@ Cohesion: 0.29
 Nodes (3): Persist a hashed kiosk PIN for this companion., Persist a hashed kiosk PIN for this companion., str
 
 ### Community 252 - "Community 252"
-Cohesion: 0.24
-Nodes (10): subscription_payload(), test_admin_can_create_and_update_own_push_subscription(), test_booking_invitation_view_queues_after_commit(), test_disabled_web_push_rejects_new_subscriptions(), test_endpoint_cannot_silently_move_to_another_owner(), test_notification_settings_show_only_current_owners_devices(), test_owner_can_queue_test_message_for_one_device(), test_private_participant_can_subscribe_but_central_endpoint_does_not_exist() (+2 more)
+Cohesion: 0.18
+Nodes (13): subscription_payload(), test_admin_can_create_and_update_own_push_subscription(), test_booking_invitation_view_queues_after_commit(), test_disabled_web_push_rejects_new_subscriptions(), test_endpoint_cannot_silently_move_to_another_owner(), test_notification_settings_show_only_current_owners_devices(), test_owner_can_queue_test_message_for_one_device(), test_private_participant_can_subscribe_but_central_endpoint_does_not_exist() (+5 more)
 
 ### Community 253 - "Community 253"
-Cohesion: 0.11
-Nodes (24): _activate_kiosk_mode(), _clear_kiosk_session(), kiosk_login(), kiosk_logout(), _kiosk_participant(), _kiosk_participant_from_session(), kiosk_pin_setup(), _kiosk_route() (+16 more)
+Cohesion: 0.12
+Nodes (25): _activate_kiosk_mode(), _clear_kiosk_session(), _kiosk_context(), kiosk_login(), kiosk_logout(), _kiosk_participant(), _kiosk_participant_from_session(), kiosk_pin_setup() (+17 more)
 
 ### Community 254 - "Community 254"
 Cohesion: 0.08
@@ -919,8 +924,12 @@ Cohesion: 0.14
 Nodes (12): Return the stable dynamic field name for a meal date., Persist non-empty descriptions and remove cleared menu entries., Return the stable dynamic field name for a meal date., Persist non-empty descriptions and remove cleared menu entries., Create a kiosk-only family member for bundled participant billing., Persist non-empty descriptions and remove cleared menu entries., Return the stable dynamic field name for a meal date., Persist non-empty descriptions and remove cleared menu entries. (+4 more)
 
 ### Community 259 - "Community 259"
-Cohesion: 0.18
-Nodes (8): AutheliaEmailBackend, EmailOrUsernameBackend, Authenticate an existing active user from Authelia's trusted email header., ModelBackend, Any, HttpRequest, str, test_user_can_authenticate_with_email()
+Cohesion: 0.24
+Nodes (7): AutheliaEmailBackend, EmailOrUsernameBackend, Authenticate an existing active user from Authelia's trusted email header., ModelBackend, Any, HttpRequest, str
+
+### Community 261 - "Community 261"
+Cohesion: 0.15
+Nodes (3): app_admin(), superuser(), test_update_install_handles_agent_failure()
 
 ### Community 262 - "Community 262"
 Cohesion: 0.20
@@ -930,21 +939,25 @@ Nodes (10): expense_receipt_download(), Return an uploaded expense receipt when 
 Cohesion: 0.13
 Nodes (15): choose_manifest_descriptor(), current_metadata_from_payload(), Pick a linux/amd64 manifest from an OCI index, falling back to the first item., Pick a linux/amd64 manifest from an OCI index, falling back to the first item., Fetch a bearer token from a registry WWW-Authenticate challenge., Normalize current build metadata supplied by Django., Pick a linux/amd64 manifest from an OCI index, falling back to the first item., Pick a linux/amd64 manifest from an OCI index, falling back to the first item. (+7 more)
 
+### Community 264 - "Community 264"
+Cohesion: 0.13
+Nodes (21): _claim_daily_backup_log(), _create_claim_log(), Raised when the isolated deployment agent cannot complete a request., UpdateAgentError, Camp, DailySettlementBackupLog, DailySettlementBackupSettings, Store the singleton schedule for automated settlement backup runs. (+13 more)
+
 ### Community 265 - "Community 265"
-Cohesion: 0.29
-Nodes (7): MealCount, Aggregate meal bookings for one day and meal type., Aggregate meal bookings for one day and meal type., Aggregate meal bookings for one day and meal type., Aggregate meal bookings for one day and meal type., Aggregate meal bookings for one day and meal type., Aggregate meal bookings for one day and meal type.
+Cohesion: 0.28
+Nodes (9): PushSubscription, Store one browser push capability for an admin or participant device., _device_payload(), _endpoint_fingerprint(), Return a stable, non-sensitive identifier for a push endpoint., Serialize device state without exposing its private push endpoint., PushSubscription, Participant (+1 more)
 
 ### Community 266 - "Community 266"
 Cohesion: 0.22
-Nodes (8): cleanup_push_messages(), Deliver one bounded outbox batch without exposing push capabilities in logs., Deliver one bounded outbox batch without exposing push capabilities in logs., Delete completed outbox metadata after the documented retention period., Delete completed outbox metadata after the documented retention period., send_due_push_messages(), test_worker_deletes_gone_subscription(), test_worker_sends_due_message_and_records_success()
+Nodes (9): deployment_update_check(), Pull the configured latest image and compare it with the running image., Pull the configured latest image and compare it with the running image., Pull the configured latest image and compare it with the running image., Pull the configured latest image and compare it with the running image., Pull the configured latest image and compare it with the running image., Pull the configured latest image and compare it with the running image., Return shared routing, session, and PWA context for kiosk templates. (+1 more)
 
 ### Community 267 - "Community 267"
 Cohesion: 0.40
 Nodes (4): Admin-Interface, Essenskalender & Speiseplanpflege (PR #113), Kiosk, Tests
 
 ### Community 268 - "Community 268"
-Cohesion: 0.12
-Nodes (21): _draw_page_framework(), _draw_payment_instructions(), _draw_sum_block(), participant_pdf_response(), Render a PDF invoice from a settlement snapshot without persisting it., Render a PDF invoice from a settlement snapshot without persisting it., Render a PDF invoice from a settlement snapshot without persisting it., settlement_snapshot_pdf_bytes() (+13 more)
+Cohesion: 0.17
+Nodes (12): Persist the singleton configuration for automated daily settlement backups., update_daily_backup_settings(), notify_shift_exchange(), Notify eligible participants about an offered or completed shift exchange., Notify eligible participants about an offered or completed shift exchange., deployment_daily_backup_settings(), _notify_shift_exchange_by_id(), Load committed shift records and enqueue an exchange notification. (+4 more)
 
 ### Community 269 - "Community 269"
 Cohesion: 0.50
@@ -970,6 +983,10 @@ Nodes (3): Return whether failed PIN attempts temporarily block login., Return w
 Cohesion: 0.40
 Nodes (4): Aktivierung, Passkeys und WebAuthn, Recovery und Betrieb, Sicherheitsmodell
 
+### Community 293 - "Community 293"
+Cohesion: 0.33
+Nodes (6): next_catering_order_date(), Return the date that should be ordered from the caterer today., Return the date that should be ordered from the caterer today., Return the date that should be ordered from the caterer today., Return the date that should be ordered from the caterer today., Return the date that should be ordered from the caterer today.
+
 ### Community 302 - "Community 302"
 Cohesion: 0.40
 Nodes (4): Exclude unique_active_camp from pre-save model validation since save() deactivat, Exclude unique_active_camp from pre-save model validation since save() deactivat, Exclude unique_active_camp from pre-save model validation since save() deactivat, Collection
@@ -991,9 +1008,9 @@ Nodes (5): Frontend Conventions, Meal Standard Prices Form, Native Price Rule Di
   src/billing/views.py · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **503 isolated node(s):** `SSLContext`, `HTTPError`, `BaseException`, `HTTPStatus`, `app-entrypoint.sh script` (+498 more)
+- **504 isolated node(s):** `SSLContext`, `HTTPError`, `BaseException`, `HTTPStatus`, `app-entrypoint.sh script` (+499 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **118 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **120 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
@@ -1004,11 +1021,11 @@ _Questions this graph is uniquely positioned to answer:_
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
 - **What is the exact relationship between `User Create Form` and `First Admin Setup View`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
-- **Why does `datetime` connect `Community 124` to `Django Admin Integration`, `Community 130`, `Authentication and Permissions`, `Community 261`, `Community 230`, `Community 200`, `Community 104`, `Kiosk Participant Utility Views`, `Community 107`, `Community 234`, `Community 138`, `Community 108`, `Community 111`, `Community 242`, `Community 252`, `Community 190`?**
-  _High betweenness centrality (0.113) - this node is a cross-community bridge._
-- **Why does `UserFactory` connect `Community 174` to `Django Admin Integration`, `Community 259`, `Community 138`, `Community 266`, `Community 147`, `Community 148`, `Community 286`, `Kiosk Participant Utility Views`, `Community 299`, `Community 178`, `Community 200`, `Community 224`, `Community 102`, `Community 104`, `Community 234`, `Community 108`, `Community 111`, `Community 239`, `Community 124`, `Community 252`?**
+- **Why does `datetime` connect `Community 124` to `Django Admin Integration`, `Community 130`, `Authentication and Permissions`, `Community 230`, `Community 200`, `Community 264`, `Kiosk Participant Utility Views`, `Community 107`, `Community 300`, `Community 104`, `Community 138`, `Community 111`, `Community 108`, `Community 242`, `Community 252`?**
+  _High betweenness centrality (0.118) - this node is a cross-community bridge._
+- **Why does `UserFactory` connect `Community 174` to `Community 261`, `Community 104`, `Community 264`, `Community 138`, `Community 299`, `Community 108`, `Community 200`, `Kiosk Participant Utility Views`, `Community 111`, `Community 178`, `Community 147`, `Community 252`, `Community 148`, `Community 124`, `Community 286`?**
   _High betweenness centrality (0.042) - this node is a cross-community bridge._
-- **Why does `UpdateAgentError` connect `Django Admin Integration` to `Authentication and Permissions`, `Community 102`, `Community 104`, `Community 107`, `Community 61`?**
-  _High betweenness centrality (0.039) - this node is a cross-community bridge._
+- **Why does `UpdateAgentError` connect `Community 264` to `Django Admin Integration`, `Authentication and Permissions`, `Community 261`, `Community 102`, `Community 138`, `Community 107`, `Community 141`?**
+  _High betweenness centrality (0.041) - this node is a cross-community bridge._
 - **Are the 133 inferred relationships involving `Participant` (e.g. with `BookingAuditLogAdmin` and `CampAdmin`) actually correct?**
   _`Participant` has 133 INFERRED edges - model-reasoned connections that need verification._
