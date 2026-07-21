@@ -1,6 +1,7 @@
 import json
 
 import pytest
+from django.templatetags.static import static
 from django.urls import reverse
 
 from billing.views import KIOSK_PARTICIPANT_SESSION_KEY
@@ -41,6 +42,14 @@ def test_central_kiosk_hides_install_guide(client):
     assert response.status_code == 200
     assert b"data-pwa-install" not in response.content
     assert b"data-pwa-install-dialog" not in response.content
+
+
+@pytest.mark.parametrize("path", ["/apple-touch-icon.png", "/apple-touch-icon-precomposed.png", "/favicon.ico"])
+def test_platform_icon_fallbacks_redirect_to_app_icon(client, path):
+    response = client.get(path)
+
+    assert response.status_code == 301
+    assert response["Location"] == static("billing/icons/icon-192.png")
 
 
 @pytest.mark.django_db
