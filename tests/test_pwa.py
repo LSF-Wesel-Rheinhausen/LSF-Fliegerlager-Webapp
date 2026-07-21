@@ -53,10 +53,14 @@ def test_platform_icon_fallbacks_redirect_to_app_icon(client, path):
 
 
 @pytest.mark.django_db
-def test_private_kiosk_login_uses_browser_session_without_autologout(client):
+def test_private_kiosk_login_uses_persistent_session_without_autologout(client, settings):
     participant = ParticipantFactory(camp=CampFactory(is_active=True))
     participant.pin.set_pin("1234")
     participant.pin.save()
+    session = client.session
+    session["kiosk_mode"] = "central"
+    session.set_expiry(120)
+    session.save()
 
     response = client.post(
         reverse("kiosk-login"),
@@ -67,7 +71,8 @@ def test_private_kiosk_login_uses_browser_session_without_autologout(client):
     assert response.status_code == 200
     assert response.context["kiosk_mode"] == "private"
     assert response.context["kiosk_autologout"] is False
-    assert client.session.get_expire_at_browser_close() is True
+    assert client.session.get_expire_at_browser_close() is False
+    assert client.session.get_expiry_age() == settings.SESSION_COOKIE_AGE
     assert client.session[KIOSK_PARTICIPANT_SESSION_KEY] == participant.pk
 
 
@@ -87,6 +92,7 @@ def test_central_kiosk_login_enforces_short_autologout(client):
     assert response.context["kiosk_mode"] == "central"
     assert response.context["kiosk_autologout"] is True
     assert reverse("central-kiosk-logout").encode() in response.content
+    assert client.session.get_expiry_age() == 120
 
 
 @pytest.mark.django_db

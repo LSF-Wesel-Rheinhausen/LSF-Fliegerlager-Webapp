@@ -1190,7 +1190,7 @@ def kiosk_login(request, kiosk_mode="private"):
         else:
             request.session.pop(KIOSK_FAMILY_MEMBER_SESSION_KEY, None)
         if kiosk_mode == "private":
-            request.session.set_expiry(0)
+            request.session.set_expiry(None)
         messages.success(request, "Du bist im Kiosk angemeldet.")
         return redirect(_kiosk_route(kiosk_mode, "home"))
     if request.method == "POST" and getattr(form, "missing_pin_family_member", None) is not None:
@@ -1719,7 +1719,7 @@ def kiosk_pin_setup(request, kiosk_mode="private"):
             request.session.pop(KIOSK_PIN_SETUP_SESSION_KEY, None)
             request.session.pop(KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY, None)
             if kiosk_mode == "private":
-                request.session.set_expiry(0)
+                request.session.set_expiry(None)
         messages.success(request, "PIN wurde gesetzt. Du bist jetzt im Kiosk angemeldet.")
         return redirect(_kiosk_route(kiosk_mode, "home"))
 
