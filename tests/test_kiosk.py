@@ -833,6 +833,7 @@ def test_kiosk_meal_status_calendar_shows_day_states_and_detail_dialog(client, m
     assert "Gebucht für" in content
     assert "Ada Lovelace" in content
     assert "Essensanmeldungen</h2>" not in content
+    assert "meal-signup-compact" not in content
 
 
 @pytest.mark.django_db

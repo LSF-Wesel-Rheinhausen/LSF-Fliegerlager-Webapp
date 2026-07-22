@@ -470,6 +470,7 @@ test("Kiosk masonry and expense cards stay responsive and accessible", async ({ 
 
   const masonry = page.locator("[data-kiosk-masonry]");
   await expect(masonry).toHaveClass(/is-enhanced/);
+  await expect(page.locator(".meal-signup-compact")).toHaveCount(0);
   const desktopLayout = await page.locator("[data-kiosk-card]").evaluateAll((cards) => ({
     columns: new Set(cards.map((card) => Math.round(card.getBoundingClientRect().left))).size,
     spans: cards.map((card) => card.style.gridRowEnd),

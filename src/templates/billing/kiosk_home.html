@@ -192,18 +192,6 @@
           <div><dt class="meal-status-dot meal-status-dot--empty"></dt><dd>Offen</dd></div>
           <div><dt class="meal-status-dot meal-status-dot--closed"></dt><dd>Geschlossen</dd></div>
         </dl>
-        <div class="meal-signup-compact">
-          {% for signup in meal_signups %}
-            <div class="meal-signup-compact__row meal-signup-compact__row--{{ signup.status }}">
-              <span>{{ signup.meal_date|date:"D d.m." }}</span>
-              <strong>{% if signup.family_member %}{{ signup.family_member.full_name }}{% else %}{{ signup.participant.full_name }}{% endif %}</strong>
-              <span>{{ signup.get_variant_display }}</span>
-              <span>{{ signup.get_status_display }}</span>
-            </div>
-          {% empty %}
-            <p class="hint">Noch keine Essensanmeldungen gespeichert.</p>
-          {% endfor %}
-        </div>
       </section>
 
       <section class="panel kiosk-card kiosk-card--muted" data-kiosk-card="shifts">

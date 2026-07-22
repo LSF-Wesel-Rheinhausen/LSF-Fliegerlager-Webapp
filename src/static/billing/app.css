@@ -1810,36 +1810,12 @@ textarea {
   border-radius: 999px;
 }
 
-.meal-signup-compact {
-  display: grid;
-  gap: 8px;
-  margin-top: 14px;
-}
-
-.meal-signup-compact__row {
-  display: grid;
-  grid-template-columns: 76px minmax(0, 1.2fr) minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: #ffffff;
-  font-size: 13px;
-}
-
 .meal-plan-cell {
   min-width: 220px;
 }
 
 .meal-plan-cell textarea {
   min-height: 72px;
-}
-
-.meal-signup-compact__row strong,
-.meal-signup-compact__row span {
-  min-width: 0;
-  overflow-wrap: anywhere;
 }
 
 .meal-detail-row {
@@ -2432,7 +2408,6 @@ textarea {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .meal-signup-compact__row,
   .meal-booking-day {
     grid-template-columns: auto minmax(0, 1fr);
   }
@@ -2735,7 +2710,6 @@ dialog::backdrop {
 :root[data-theme="dark"] .metric,
 :root[data-theme="dark"] .exportbar a,
 :root[data-theme="dark"] .meal-status-day,
-:root[data-theme="dark"] .meal-signup-compact__row,
 :root[data-theme="dark"] .meal-booking-day,
 :root[data-theme="dark"] .shift-card {
   background: var(--panel);

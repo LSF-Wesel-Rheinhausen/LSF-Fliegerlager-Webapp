@@ -5,6 +5,7 @@
 - Ordnet die Kiosk-Karten in einem responsiven, progressiv verbesserten Masonry-Grid an.
 - Zeigt eigene Gemeinschaftsausgaben als mobile Karten mit priorisierter Statussortierung.
 - Stellt Ablehnungsgründe ohne Dialog über ein natives, aufklappbares Detail dar.
+- Entfernt die redundante Buchungsliste unter dem Essenskalender; Tagesdetails bleiben im Kalender erreichbar.
 
 ## Geänderte Dateien
 
@@ -18,7 +19,7 @@
 
 ## Tests
 
-- Fokussierte Pytest-Regressionstests für Sortierung, Karteninhalte, Belege, Ablehnungsgrund und Leerzustand.
+- Fokussierte Pytest-Regressionstests für Sortierung, Karteninhalte, Belege, Ablehnungsgrund, Leerzustand und die entfallene redundante Buchungsliste.
 - Playwright-Regressionstest für Desktop/Mobil, Light/Dark, Reflow, Fokusreihenfolge, Overflow und Überlappungen.
 
 ## Offene Punkte
