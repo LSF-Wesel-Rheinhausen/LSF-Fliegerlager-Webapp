@@ -6,6 +6,7 @@
 - Zeigt eigene Gemeinschaftsausgaben als mobile Karten mit priorisierter Statussortierung.
 - Stellt Ablehnungsgründe ohne Dialog über ein natives, aufklappbares Detail dar.
 - Entfernt die redundante Buchungsliste unter dem Essenskalender; Tagesdetails bleiben im Kalender erreichbar.
+- Erneuert den PWA-Cache, damit bestehende Installationen das neue Kiosk-Stylesheet laden.
 
 ## Geänderte Dateien
 
