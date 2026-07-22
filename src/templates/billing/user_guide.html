@@ -5,38 +5,6 @@
   <a class="button button-secondary" href="{% url 'kiosk-home' %}">Zurück</a>
 {% endblock %}
 {% block content %}
-<style nonce="{{ request.csp_nonce }}">
-  .guide-section {
-    margin-bottom: 3rem;
-  }
-  .guide-media {
-    margin: 1.5rem 0;
-    text-align: center;
-    background: var(--surface-2, #f6f7f9);
-    border: 1px dashed var(--border, #dce2ea);
-    border-radius: 8px;
-    padding: 1rem;
-  }
-  .guide-media img {
-    max-width: 100%;
-    height: auto;
-    border-radius: 4px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-  }
-  .guide-media p.placeholder-text {
-    color: var(--text-muted);
-    font-size: 0.9em;
-    margin: 0;
-  }
-  .guide-step-list {
-    margin-top: 1rem;
-    padding-left: 1.5rem;
-  }
-  .guide-step-list li {
-    margin-bottom: 0.5rem;
-  }
-</style>
-
 <div class="panel stack">
   <h1>Bedienungsanleitung: Teilnehmer-Kiosk</h1>
   <p class="muted">Hier erfährst du, wie du den Kiosk nutzt, um Getränke zu buchen, Essen anzumelden und Dienste zu verwalten.</p>
@@ -50,7 +18,7 @@
       <li><strong>PIN vergessen?</strong> Wende dich an die Lagerleitung (Bearbeiter oder Admin). Sie können deine PIN zurücksetzen, sodass du beim nächsten Login eine neue vergeben kannst.</li>
     </ul>
     <div class="guide-media">
-      <img src="{% static 'billing/docs/kiosk_login.gif' %}" alt="Animation: Login und PIN-Eingabe" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+      <img src="{% static 'billing/docs/kiosk_login.gif' %}" alt="Animation: Login und PIN-Eingabe" width="768" height="576" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
       <p class="placeholder-text" style="display:none;">(Hinweis für Admins: Bitte Datei <code>src/static/billing/docs/kiosk_login.gif</code> hinterlegen)</p>
     </div>
   </section>
@@ -63,7 +31,7 @@
       <li><strong>Stornieren:</strong> Wenn du dich vertippt hast, scrolle auf der Startseite zu <em>Letzte Schnellbuchungen</em>. Dort kannst du eigene Buchungen und selbst ausgelöste Buchungen für verknüpfte Personen 15 Minuten lang stornieren.</li>
     </ul>
     <div class="guide-media">
-      <img src="{% static 'billing/docs/kiosk_drinks.gif' %}" alt="Animation: Getränke buchen und stornieren" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+      <img src="{% static 'billing/docs/kiosk_drinks.gif' %}" alt="Animation: Getränke buchen und stornieren" width="768" height="576" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
       <p class="placeholder-text" style="display:none;">(Hinweis für Admins: Bitte Datei <code>src/static/billing/docs/kiosk_drinks.gif</code> hinterlegen)</p>
     </div>
   </section>
@@ -78,7 +46,7 @@
       <li>Klicke am Ende auf "Essensanmeldung speichern".</li>
     </ul>
     <div class="guide-media">
-      <img src="{% static 'billing/docs/kiosk_meals.gif' %}" alt="Animation: Essen anmelden" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+      <img src="{% static 'billing/docs/kiosk_meals.gif' %}" alt="Animation: Essen anmelden" width="768" height="576" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
       <p class="placeholder-text" style="display:none;">(Hinweis für Admins: Bitte Datei <code>src/static/billing/docs/kiosk_meals.gif</code> hinterlegen)</p>
     </div>
   </section>
@@ -91,7 +59,7 @@
       <li><strong>Mitbuchungen (Freunde):</strong> Unter "Mitbuchungen" kannst du andere Lagerteilnehmer (die einen eigenen Kiosk-Login haben) einladen. Sobald diese die Einladung bei sich annehmen, könnt ihr euch gegenseitig beim Essen auswählen. <strong>Die Abrechnung bleibt jedoch strikt getrennt!</strong> Jeder zahlt sein eigenes Essen.</li>
     </ul>
     <div class="guide-media">
-      <img src="{% static 'billing/docs/kiosk_family.gif' %}" alt="Animation: Familie und Mitbuchungen" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+      <img src="{% static 'billing/docs/kiosk_family.gif' %}" alt="Animation: Familie und Mitbuchungen" width="768" height="576" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
       <p class="placeholder-text" style="display:none;">(Hinweis für Admins: Bitte Datei <code>src/static/billing/docs/kiosk_family.gif</code> hinterlegen)</p>
     </div>
   </section>
@@ -104,13 +72,13 @@
       <li><strong>Dienst tauschen/abgeben:</strong> Unter "Meine übernommenen Dienste" siehst du deine Schichten. Falls du verhindert bist, klicke auf "Zum Tausch anbieten". Der Dienst erscheint dann bei allen anderen ganz oben grün hervorgehoben als Tauschangebot. Erst wenn jemand anderes ihn übernimmt, bist du ausgetragen!</li>
     </ul>
     <div class="guide-media">
-      <img src="{% static 'billing/docs/kiosk_shifts.gif' %}" alt="Animation: Dienste eintragen und tauschen" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+      <img src="{% static 'billing/docs/kiosk_shifts.gif' %}" alt="Animation: Dienste eintragen und tauschen" width="768" height="576" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
       <p class="placeholder-text" style="display:none;">(Hinweis für Admins: Bitte Datei <code>src/static/billing/docs/kiosk_shifts.gif</code> hinterlegen)</p>
     </div>
   </section>
 
   <section class="guide-section">
-    <div style="padding: 12px; background: #eef2f6; border-left: 4px solid var(--accent); border-radius: 0 4px 4px 0;">
+    <div class="info-callout">
       <strong>Automatischer Logout:</strong> Zu deiner Sicherheit meldet der Kiosk dich nach 2 Minuten Inaktivität automatisch ab, damit niemand Fremdes auf deine Kosten Getränke buchen kann. Ein Countdown oben rechts zeigt die verbleibende Zeit.
     </div>
   </section>
