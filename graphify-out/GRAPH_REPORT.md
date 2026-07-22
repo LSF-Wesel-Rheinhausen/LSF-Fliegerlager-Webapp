@@ -5,12 +5,12 @@
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 3181 nodes · 7601 edges · 330 communities (207 shown, 123 thin omitted)
+- 3181 nodes · 7601 edges · 329 communities (206 shown, 123 thin omitted)
 - Extraction: 67% EXTRACTED · 33% INFERRED · 0% AMBIGUOUS · INFERRED: 2471 edges (avg confidence: 0.52)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `520e38bb`
+- Built from commit: `71d5d07e`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -307,7 +307,6 @@
 - [[_COMMUNITY_Community 324|Community 324]]
 - [[_COMMUNITY_Community 327|Community 327]]
 - [[_COMMUNITY_Community 328|Community 328]]
-- [[_COMMUNITY_Community 329|Community 329]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `ParticipantFactory` - 151 edges
@@ -322,16 +321,16 @@
 10. `ParticipantBookingLink` - 98 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `Global Camp Navigation Badge` --semantically_similar_to--> `Permission-Aware Topbar Navigation`  [INFERRED] [semantically similar]
-  changelog/pr-30-layout-adjustments.md → src/templates/base.html
 - `test_price_rule_form_validates_camp_flat_fields()` --calls--> `PriceRuleForm`  [INFERRED]
   tests/test_price_rules.py → src/billing/forms.py
 - `test_target_shifts_calculation()` --calls--> `Decimal`  [INFERRED]
   tests/test_shifts.py → src/billing/forms.py
-- `Kiosk Mode` --conceptually_related_to--> `Kiosk Home Page`  [INFERRED]
-  docs/README.md → src/templates/billing/kiosk_home.html
+- `Global Camp Navigation Badge` --semantically_similar_to--> `Permission-Aware Topbar Navigation`  [INFERRED] [semantically similar]
+  changelog/pr-30-layout-adjustments.md → src/templates/base.html
 - `Kiosk Home UI And Timeout Test` --calls--> `Kiosk Home View`  [INFERRED]
   tests/test_kiosk.py → src/billing/views.py
+- `test_charge_admin_displays_booking_reference()` --calls--> `ChargeAdmin`  [EXTRACTED]
+  tests/test_booking_audit.py → src/billing/admin.py
 
 ## Import Cycles
 - 1-file cycle: `src/billing/services.py -> src/billing/services.py`
@@ -339,10 +338,10 @@
 - 1-file cycle: `src/billing/forms.py -> src/billing/forms.py`
 - 1-file cycle: `src/billing/templatetags/billing_format.py -> src/billing/templatetags/billing_format.py`
 - 2-file cycle: `src/billing/models.py -> src/billing/services.py -> src/billing/models.py`
-- 2-file cycle: `src/billing/forms.py -> src/billing/models.py -> src/billing/forms.py`
 - 2-file cycle: `src/billing/forms.py -> src/billing/services.py -> src/billing/forms.py`
-- 3-file cycle: `src/billing/forms.py -> src/billing/models.py -> src/billing/services.py -> src/billing/forms.py`
+- 2-file cycle: `src/billing/forms.py -> src/billing/models.py -> src/billing/forms.py`
 - 3-file cycle: `src/billing/forms.py -> src/billing/services.py -> src/billing/models.py -> src/billing/forms.py`
+- 3-file cycle: `src/billing/forms.py -> src/billing/models.py -> src/billing/services.py -> src/billing/forms.py`
 
 ## Hyperedges (group relationships)
 - **Initial Billing Financial Schema** — 0001_initial_participant_model, 0001_initial_charge_model, 0001_initial_payment_model, 0001_initial_expense_model, 0001_initial_settlement_model [EXTRACTED 1.00]
@@ -375,7 +374,7 @@
 - **Role Permission Matrix** — test_view_permissions_admin_only_get, test_view_permissions_editor_views, test_view_permissions_editor_post, test_view_permissions_admin_post, test_view_permissions_pin_admin_post, permissions_editor_group, permissions_admin_boundary [EXTRACTED 1.00]
 - **Playwright Admin UI Workflows** — e2e_admin_setup_camp_workflow, e2e_admin_booking_audit_workflow, e2e_price_rule_dialog_workflow, e2e_responsive_layout_workflow, e2e_setup_first_admin, e2e_create_camp [EXTRACTED 1.00]
 
-## Communities (330 total, 123 thin omitted)
+## Communities (329 total, 123 thin omitted)
 
 ### Community 0 - "Django Admin Integration"
 Cohesion: 0.10
@@ -438,24 +437,24 @@ Cohesion: 0.27
 Nodes (12): E2E Admin Booking Audit Workflow, E2E Create Participant Helper, Migration Creates Booking Audit Log, BookingAuditLog Model, Admin Only Booking Edit Permission, Charge Audit Snapshot, Create Booking Audit Log, Admin Booking Edit Creates Audit Log Test (+4 more)
 
 ### Community 15 - "Playwright Setup and E2E Workflows"
-Cohesion: 0.33
-Nodes (6): Camp Detail Overview, Camp Export Links, Participant Import and Export, Participant Detail Page, Participant PIN Actions, Server Rendered Templates Overview
+Cohesion: 0.22
+Nodes (10): Camp Detail Overview, Camp Export Links, Camp Settlement and Price Rule Tables, Participant Import and Export, On Demand Settlement Logic, Typical Admin Workflow, Booking Audit Table, Participant Detail Page (+2 more)
 
 ### Community 16 - "Brand logo and Media assets"
 Cohesion: 0.11
 Nodes (16): fs, http, path, { spawn }, test, { test: base, expect }, addDays(), createCamp() (+8 more)
 
 ### Community 17 - "E2E Playwright Environment Variables"
-Cohesion: 0.50
-Nodes (5): Kiosk Dataflow, Drink Booking Form, Kiosk Home Page, Meal Signup Form, Kiosk Summary and Booking Tables
+Cohesion: 0.25
+Nodes (9): Kiosk Dataflow, Camp Billing Workflow, Fliegerlager Django Billing Webapp, Kiosk Mode, Project Documentation Overview, Drink Booking Form, Kiosk Home Page, Meal Signup Form (+1 more)
 
 ### Community 18 - "App config initializers"
-Cohesion: 0.40
-Nodes (6): Base Layout, Permission-Aware Topbar Navigation, Admin and Bearbeiter Roles, Admin Charge Edit Link, User Role Status and Password Actions, User Management Page
+Cohesion: 0.24
+Nodes (10): Base Layout, Permission-Aware Topbar Navigation, Admin and Bearbeiter Roles, Responsive Overflow Checks, Admin Charge Edit Link, Vertically Centered Table Rows, Global Camp Navigation Badge, Layout Adjustments Changelog (+2 more)
 
 ### Community 19 - "Repository Documentation"
-Cohesion: 0.22
-Nodes (9): Playwright End-to-End Tests, Responsive Overflow Checks, Operations Test Commands, Vertically Centered Table Rows, Global Camp Navigation Badge, Layout Adjustments Changelog, Local Helper Scripts, start-e2e.sh Playwright Server Script (+1 more)
+Cohesion: 0.40
+Nodes (5): Playwright End-to-End Tests, Operations Test Commands, Local Helper Scripts, start-e2e.sh Playwright Server Script, test-local.sh Local Test Runner
 
 ### Community 20 - "Flatrate Database Migrations"
 Cohesion: 0.25
@@ -494,8 +493,8 @@ Cohesion: 0.14
 Nodes (15): healthcheck(), page_not_found(), platform_icon(), Report application readiness without exposing operational details., Report application readiness without exposing operational details., Render the custom page for unknown URLs., Redirect conventional platform icon paths to the installed app icon., Render the custom page for unknown URLs. (+7 more)
 
 ### Community 29 - "Developer Codex Server Starter"
-Cohesion: 0.29
-Nodes (7): Billing Domain Model, Performance and Integrity Rules, Billing Models, Local Quality Checks, HTML Documentation Index, Typical Admin Workflow, Booking Audit Table
+Cohesion: 0.40
+Nodes (5): Billing Domain Model, Performance and Integrity Rules, Billing Models, Local Quality Checks, HTML Documentation Index
 
 ### Community 30 - "Django App Command Initialization"
 Cohesion: 0.14
@@ -874,8 +873,8 @@ Cohesion: 0.06
 Nodes (37): bytes, choose_manifest_descriptor(), fetch_image_metadata(), fetch_registry_token(), Return a GHCR Basic auth header when a token is configured., Fetch a registry resource and resolve public GHCR bearer auth challenges., Fetch a registry resource and resolve public GHCR bearer auth challenges., Fetch a bearer token from a registry WWW-Authenticate challenge. (+29 more)
 
 ### Community 234 - "Community 234"
-Cohesion: 0.19
-Nodes (14): kiosk_notification_revoke(), kiosk_notification_test(), notification_test(), _private_participant(), queue_test_notification(), Revoke one push device owned by the private participant., Queue a harmless test message for one owner-controlled device., Revoke one push device owned by the private participant. (+6 more)
+Cohesion: 0.08
+Nodes (27): create_backup(), database_dump_bytes(), deployment_status(), parse_database_url(), bytes, Return persisted update state and the configured Portainer stack image., Return persisted update state and the configured Portainer stack image., Parse DATABASE_URL into pg_dump connection arguments without leaking passwords. (+19 more)
 
 ### Community 236 - "Community 236"
 Cohesion: 0.25
@@ -926,8 +925,8 @@ Cohesion: 0.11
 Nodes (24): _activate_kiosk_mode(), _clear_kiosk_session(), kiosk_login(), kiosk_logout(), _kiosk_participant(), _kiosk_participant_from_session(), kiosk_pin_setup(), _kiosk_route() (+16 more)
 
 ### Community 254 - "Community 254"
-Cohesion: 0.08
-Nodes (27): create_backup(), database_dump_bytes(), deployment_status(), parse_database_url(), bytes, Return persisted update state and the configured Portainer stack image., Return persisted update state and the configured Portainer stack image., Parse DATABASE_URL into pg_dump connection arguments without leaking passwords. (+19 more)
+Cohesion: 0.19
+Nodes (14): kiosk_notification_revoke(), kiosk_notification_test(), notification_test(), _private_participant(), queue_test_notification(), Revoke one push device owned by the private participant., Queue a harmless test message for one owner-controlled device., Revoke one push device owned by the private participant. (+6 more)
 
 ### Community 257 - "Community 257"
 Cohesion: 0.50
@@ -1053,10 +1052,6 @@ Nodes (6): Edit non-password user account metadata and billing role., Persist ed
 Cohesion: 0.29
 Nodes (6): optional_authentication_features(), Expose optional authentication feature flags to server-rendered templates., Expose optional authentication feature flags to server-rendered templates., Any, HttpRequest, str
 
-### Community 324 - "Community 324"
-Cohesion: 0.33
-Nodes (6): Camp Settlement and Price Rule Tables, Camp Billing Workflow, Fliegerlager Django Billing Webapp, Kiosk Mode, Project Documentation Overview, On Demand Settlement Logic
-
 ## Ambiguous Edges - Review These
 - `Vertically Centered Table Rows` → `Responsive Overflow Checks`  [AMBIGUOUS]
   tests/e2e/README.md · relation: conceptually_related_to
@@ -1079,7 +1074,7 @@ _Questions this graph is uniquely positioned to answer:_
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
 - **What is the exact relationship between `User Create Form` and `First Admin Setup View`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
-- **Why does `datetime` connect `Community 124` to `Django Admin Integration`, `Community 130`, `Authentication and Permissions`, `Community 138`, `Community 266`, `Community 148`, `Kiosk Participant Utility Views`, `Community 174`, `Community 178`, `Community 317`, `Community 325`, `Community 200`, `Community 329`, `Community 87`, `Community 230`, `Community 104`, `Community 108`, `Community 111`, `Community 242`?**
+- **Why does `datetime` connect `Community 124` to `Django Admin Integration`, `Community 130`, `Authentication and Permissions`, `Community 138`, `Community 266`, `Community 148`, `Kiosk Participant Utility Views`, `Community 174`, `Community 178`, `Community 317`, `Community 325`, `Community 200`, `Community 328`, `Community 87`, `Community 230`, `Community 104`, `Community 108`, `Community 111`, `Community 242`?**
   _High betweenness centrality (0.112) - this node is a cross-community bridge._
 - **Why does `UpdateAgentError` connect `Community 185` to `Django Admin Integration`, `Community 226`, `Authentication and Permissions`, `Community 102`, `Community 138`?**
   _High betweenness centrality (0.039) - this node is a cross-community bridge._
