@@ -162,6 +162,11 @@
     input.maxLength = 80;
     input.required = true;
     input.value = device.device_name;
+    const renameError = document.createElement("p");
+    renameError.className = "message error";
+    renameError.dataset.renameError = "";
+    renameError.setAttribute("role", "alert");
+    renameError.hidden = true;
     const dialogActions = document.createElement("div");
     dialogActions.className = "actions";
     const cancelButton = document.createElement("button");
@@ -174,7 +179,7 @@
     saveButton.type = "submit";
     saveButton.textContent = "Speichern";
     dialogActions.append(cancelButton, saveButton);
-    renameForm.append(title, label, input, dialogActions);
+    renameForm.append(title, label, input, renameError, dialogActions);
     dialog.append(renameForm);
 
     item.append(details, actions, dialog);
@@ -283,7 +288,13 @@
       return;
     }
     if (renameButton) {
-      renameButton.closest("[data-notification-device]")?.querySelector("dialog")?.showModal();
+      const dialog = renameButton.closest("[data-notification-device]")?.querySelector("dialog");
+      const dialogError = dialog?.querySelector("[data-rename-error]");
+      if (dialogError) {
+        dialogError.hidden = true;
+        dialogError.textContent = "";
+      }
+      dialog?.showModal();
       return;
     }
     if (!revokeButton && !testButton) return;
@@ -324,6 +335,9 @@
     clearError();
     const id = renameForm.dataset.renameForm;
     const saveButton = renameForm.querySelector('button[type="submit"]');
+    const renameError = renameForm.querySelector("[data-rename-error]");
+    renameError.hidden = true;
+    renameError.textContent = "";
     saveButton.disabled = true;
     try {
       const data = new FormData(renameForm);
@@ -339,7 +353,8 @@
       renameForm.querySelector('input[name="device_name"]').value = payload.device.device_name;
       renameForm.closest("dialog").close();
     } catch (exception) {
-      showError(exception.message || "Gerät konnte nicht umbenannt werden.");
+      renameError.textContent = exception.message || "Gerät konnte nicht umbenannt werden.";
+      renameError.hidden = false;
     } finally {
       saveButton.disabled = false;
     }

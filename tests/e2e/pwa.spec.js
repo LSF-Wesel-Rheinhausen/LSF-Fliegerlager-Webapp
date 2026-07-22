@@ -138,6 +138,12 @@ test("Notification enrollment updates the current page without reload", async ({
       if (url.endsWith("/revoke/")) return new Response(null, { status: 204 });
       if (url.endsWith("/rename/")) {
         const body = JSON.parse(options.body);
+        if (!body.device_name.trim()) {
+          return new Response(JSON.stringify({ error: "Ungültiger Gerätename." }), {
+            status: 400,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
         return new Response(JSON.stringify({
           device: {
             id: 42,
@@ -170,6 +176,10 @@ test("Notification enrollment updates the current page without reload", async ({
 
   await page.getByRole("button", { name: "Umbenennen" }).click();
   const renameDialog = page.getByRole("dialog", { name: "Gerät umbenennen" });
+  await renameDialog.getByLabel("Gerätename").fill("   ");
+  await renameDialog.getByRole("button", { name: "Speichern" }).click();
+  await expect(renameDialog.getByRole("alert")).toHaveText("Ungültiger Gerätename.");
+  await expect(renameDialog).toBeVisible();
   await renameDialog.getByLabel("Gerätename").fill("  Familien-Tablet  ");
   await renameDialog.getByRole("button", { name: "Speichern" }).click();
   await expect(renameDialog).not.toBeVisible();

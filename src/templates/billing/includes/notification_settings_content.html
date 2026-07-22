@@ -78,6 +78,7 @@
             <h3 id="notification-rename-title-{{ subscription.id }}">Gerät umbenennen</h3>
             <label for="notification-rename-name-{{ subscription.id }}">Gerätename</label>
             <input id="notification-rename-name-{{ subscription.id }}" name="device_name" maxlength="80" value="{{ subscription.device_name }}" required>
+            <p class="message error" data-rename-error role="alert" hidden></p>
             <div class="actions">
               <button class="button button-secondary" type="button" data-close-dialog>Abbrechen</button>
               <button class="button" type="submit">Speichern</button>
