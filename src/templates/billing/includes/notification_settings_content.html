@@ -4,7 +4,7 @@
   data-notification-settings
   data-public-key="{{ web_push_public_key }}"
   data-subscribe-url="{{ notification_subscribe_url }}"
-  data-revoke-base-url="{{ notification_revoke_base_url }}"
+  data-subscription-base-url="{{ notification_subscription_base_url }}"
 >
   <div class="section-heading">
     <div>
@@ -21,7 +21,7 @@
           <span class="notification-step__number" aria-hidden="true">1</span>
           <div>
             <h2>App installieren</h2>
-            <p class="hint" data-pwa-install-state>Installationsstatus wird geprüft.</p>
+            <p class="hint" data-notification-install-guidance>Installationsstatus wird geprüft.</p>
           </div>
         </div>
         <button class="button button-secondary" type="button" data-pwa-install hidden>Installationsanleitung</button>
@@ -62,15 +62,28 @@
       <li data-notification-device="{{ subscription.id }}" data-endpoint-fingerprint="{{ subscription.endpoint_fingerprint }}">
         <div>
           <span class="device-list__name">
-            <strong>{{ subscription.device_name }}</strong>
+            <strong data-notification-device-name>{{ subscription.device_name }}</strong>
             <span class="status-badge status-badge--ok" data-notification-current hidden>Dieses Gerät</span>
           </span>
           <span class="hint">{% if subscription.last_success_at %}Zuletzt erreicht: {{ subscription.last_success_at|date:"d.m.Y H:i" }}{% else %}Noch nicht erreicht{% endif %}</span>
         </div>
         <div class="actions">
+          <button class="button button-secondary" type="button" data-rename-subscription="{{ subscription.id }}">Umbenennen</button>
           <button class="button button-secondary" type="button" data-test-subscription="{{ subscription.id }}">Testen</button>
           <button class="button button-danger" type="button" data-revoke-subscription="{{ subscription.id }}">Entfernen</button>
         </div>
+        <dialog class="notification-rename-dialog" aria-labelledby="notification-rename-title-{{ subscription.id }}">
+          <form class="form-grid" data-rename-form="{{ subscription.id }}">
+            {% csrf_token %}
+            <h3 id="notification-rename-title-{{ subscription.id }}">Gerät umbenennen</h3>
+            <label for="notification-rename-name-{{ subscription.id }}">Gerätename</label>
+            <input id="notification-rename-name-{{ subscription.id }}" name="device_name" maxlength="80" value="{{ subscription.device_name }}" required>
+            <div class="actions">
+              <button class="button button-secondary" type="button" data-close-dialog>Abbrechen</button>
+              <button class="button" type="submit">Speichern</button>
+            </div>
+          </form>
+        </dialog>
       </li>
     {% empty %}
       <li class="hint" data-notification-empty>Noch kein Gerät registriert.</li>
@@ -78,4 +91,4 @@
   </ul>
   <p class="message error" data-notification-error role="alert" hidden></p>
 </section>
-<script src="{% static 'billing/notifications.js' %}?v=2" defer></script>
+<script src="{% static 'billing/notifications.js' %}?v=3" defer></script>

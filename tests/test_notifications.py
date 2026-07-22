@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from datetime import date, time, timedelta
 from decimal import Decimal
 from unittest.mock import patch
@@ -317,8 +318,171 @@ def test_notification_settings_show_only_current_owners_devices(client):
     assert response.status_code == 200
     assert b"Mein Laptop" in response.content
     assert b"Fremdes Ger\xc3\xa4t" not in response.content
+    assert b"Umbenennen" in response.content
     assert hashlib.sha256(b"https://push.example.test/mine").hexdigest().encode() in response.content
     assert b"https://push.example.test/mine" not in response.content
+
+
+@pytest.mark.django_db
+def test_device_rename_keeps_csrf_token_when_push_transport_is_disabled(client, settings):
+    settings.WEB_PUSH_ENABLED = False
+    user = UserFactory()
+    PushSubscription.objects.create(
+        user=user,
+        endpoint="https://push.example.test/disabled-transport-rename",
+        p256dh="key",
+        auth="secret",
+        device_name="Vorhandenes Gerät",
+        categories=["expenses_admin"],
+    )
+    client.force_login(user)
+
+    response = client.get(reverse("notification-settings"))
+
+    assert response.status_code == 200
+    assert re.search(
+        rb'data-rename-form="\d+"[^>]*>.*?name="csrfmiddlewaretoken"',
+        response.content,
+        re.DOTALL,
+    )
+
+
+@pytest.mark.django_db
+def test_admin_can_rename_own_push_subscription(client):
+    user = UserFactory()
+    subscription = PushSubscription.objects.create(
+        user=user,
+        endpoint="https://push.example.test/admin-rename",
+        p256dh="key",
+        auth="secret",
+        device_name="Altes Gerät",
+        categories=["expenses_admin"],
+    )
+    client.force_login(user)
+
+    response = client.post(
+        reverse("notification-rename", kwargs={"subscription_id": subscription.pk}),
+        data=json.dumps({"device_name": "  Neuer Laptop  "}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    subscription.refresh_from_db()
+    assert subscription.device_name == "Neuer Laptop"
+    assert response.json()["device"]["device_name"] == "Neuer Laptop"
+
+
+@pytest.mark.django_db
+def test_private_participant_can_rename_own_push_subscription(client):
+    participant = ParticipantFactory()
+    subscription = PushSubscription.objects.create(
+        participant=participant,
+        endpoint="https://push.example.test/participant-rename",
+        p256dh="key",
+        auth="secret",
+        device_name="Altes Telefon",
+        categories=["shifts"],
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_MODE_SESSION_KEY] = "private"
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-notification-rename", kwargs={"subscription_id": subscription.pk}),
+        data=json.dumps({"device_name": "  Mein iPhone  "}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    subscription.refresh_from_db()
+    assert subscription.device_name == "Mein iPhone"
+    assert response.json()["device"]["device_name"] == "Mein iPhone"
+
+
+@pytest.mark.django_db
+def test_admin_cannot_rename_foreign_or_missing_push_subscription(client):
+    user = UserFactory()
+    other = UserFactory()
+    foreign_subscription = PushSubscription.objects.create(
+        user=other,
+        endpoint="https://push.example.test/foreign-rename",
+        p256dh="key",
+        auth="secret",
+        device_name="Fremdes Gerät",
+        categories=["expenses_admin"],
+    )
+    client.force_login(user)
+
+    foreign_response = client.post(
+        reverse("notification-rename", kwargs={"subscription_id": foreign_subscription.pk}),
+        data=json.dumps({"device_name": "Manipuliert"}),
+        content_type="application/json",
+    )
+    missing_response = client.post(
+        reverse("notification-rename", kwargs={"subscription_id": foreign_subscription.pk + 1000}),
+        data=json.dumps({"device_name": "Nicht vorhanden"}),
+        content_type="application/json",
+    )
+
+    assert foreign_response.status_code == 404
+    assert missing_response.status_code == 404
+    foreign_subscription.refresh_from_db()
+    assert foreign_subscription.device_name == "Fremdes Gerät"
+
+
+@pytest.mark.django_db
+def test_private_participant_cannot_rename_foreign_push_subscription(client):
+    participant = ParticipantFactory()
+    other = ParticipantFactory(camp=participant.camp)
+    foreign_subscription = PushSubscription.objects.create(
+        participant=other,
+        endpoint="https://push.example.test/foreign-participant-rename",
+        p256dh="key",
+        auth="secret",
+        device_name="Fremdes Telefon",
+        categories=["shifts"],
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_MODE_SESSION_KEY] = "private"
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-notification-rename", kwargs={"subscription_id": foreign_subscription.pk}),
+        data=json.dumps({"device_name": "Manipuliert"}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 404
+    foreign_subscription.refresh_from_db()
+    assert foreign_subscription.device_name == "Fremdes Telefon"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("device_name", ["", "   ", "x" * 81])
+def test_rename_rejects_empty_and_overlong_device_names(client, device_name):
+    user = UserFactory()
+    subscription = PushSubscription.objects.create(
+        user=user,
+        endpoint="https://push.example.test/invalid-rename",
+        p256dh="key",
+        auth="secret",
+        device_name="Unverändert",
+        categories=["expenses_admin"],
+    )
+    client.force_login(user)
+
+    response = client.post(
+        reverse("notification-rename", kwargs={"subscription_id": subscription.pk}),
+        data=json.dumps({"device_name": device_name}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "Ungültiger Gerätename."}
+    subscription.refresh_from_db()
+    assert subscription.device_name == "Unverändert"
 
 
 @pytest.mark.django_db

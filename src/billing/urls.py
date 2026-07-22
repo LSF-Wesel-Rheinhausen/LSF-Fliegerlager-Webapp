@@ -38,6 +38,11 @@ urlpatterns = [
         name="notification-revoke",
     ),
     path(
+        "notifications/subscriptions/<int:subscription_id>/rename/",
+        notification_views.notification_rename,
+        name="notification-rename",
+    ),
+    path(
         "notifications/subscriptions/<int:subscription_id>/test/",
         notification_views.notification_test,
         name="notification-test",
@@ -137,6 +142,11 @@ urlpatterns = [
         "kiosk/notifications/subscriptions/<int:subscription_id>/revoke/",
         notification_views.kiosk_notification_revoke,
         name="kiosk-notification-revoke",
+    ),
+    path(
+        "kiosk/notifications/subscriptions/<int:subscription_id>/rename/",
+        notification_views.kiosk_notification_rename,
+        name="kiosk-notification-rename",
     ),
     path(
         "kiosk/notifications/subscriptions/<int:subscription_id>/test/",
