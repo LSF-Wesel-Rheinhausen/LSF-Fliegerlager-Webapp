@@ -1,5 +1,7 @@
 const { expect, test } = require("./fixtures");
 
+test.use({ serviceWorkers: "block" });
+
 const VIEWPORTS = [
   { name: "13 Zoll Laptop", width: 1280, height: 800 },
   { name: "Laptop", width: 1440, height: 900 },
@@ -54,6 +56,30 @@ async function assertNoUnexpectedOverflow(page) {
 
   expect(result.bodyOverflow, "Unerwarteter horizontaler Seiten-Overflow").toBeLessThanOrEqual(1);
   expect(result.failures, "Elemente laufen aus der Anzeige oder aus ihrem Container").toEqual([]);
+}
+
+async function assertKioskCardsDoNotOverlap(page) {
+  const overlaps = await page.locator("[data-kiosk-card]").evaluateAll((cards) => {
+    const rectangles = cards.map((card) => ({
+      key: card.dataset.kioskCard,
+      rect: card.getBoundingClientRect(),
+    }));
+    const failures = [];
+
+    for (let leftIndex = 0; leftIndex < rectangles.length; leftIndex += 1) {
+      for (let rightIndex = leftIndex + 1; rightIndex < rectangles.length; rightIndex += 1) {
+        const left = rectangles[leftIndex];
+        const right = rectangles[rightIndex];
+        const horizontalOverlap = left.rect.left < right.rect.right - 1 && left.rect.right > right.rect.left + 1;
+        const verticalOverlap = left.rect.top < right.rect.bottom - 1 && left.rect.bottom > right.rect.top + 1;
+        if (horizontalOverlap && verticalOverlap) failures.push(`${left.key}/${right.key}`);
+      }
+    }
+
+    return failures;
+  });
+
+  expect(overlaps, "Kiosk-Karten überlappen sich").toEqual([]);
 }
 
 async function assertReadableContrast(locator, minimumRatio = 4.5) {
@@ -390,6 +416,124 @@ test("Kiosk flow: login, pin setup, drink and meal booking", async ({ page }) =>
 
   await page.getByRole("link", { name: "Abmelden" }).click();
   await expect(page).toHaveURL(/.*\/kiosk\/login\//);
+});
+
+test("Kiosk masonry and expense cards stay responsive and accessible", async ({ page }) => {
+  const browserErrors = [];
+  const failedRequests = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") browserErrors.push(message.text());
+  });
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  page.on("requestfailed", (request) => failedRequests.push(`${request.method()} ${request.url()}`));
+
+  await setupFirstAdmin(page);
+  const campName = await createCamp(page, "Masonry-Lager");
+  await createParticipant(page, "Marie", "Curie");
+  await logout(page);
+
+  await page.goto("/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Marie Curie" });
+  await page.getByLabel("PIN").fill("0000");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await page.getByLabel("Neuer PIN").fill("1234");
+  await page.getByLabel("PIN wiederholen").fill("1234");
+  await page.getByRole("button", { name: "Speichern" }).click();
+
+  await page.getByRole("link", { name: "Antrag einreichen" }).click();
+  await page.getByLabel("Kategorie").selectOption({ label: "Verbrauchsmaterial" });
+  await page.getByLabel("Beschreibung").fill("Sehr langer Gemeinschaftseinkauf für das gesamte Fliegerlager");
+  await page.getByLabel("Betrag").fill("42.00");
+  await page.getByLabel("Zahlungsdatum").fill(dateInputValue(new Date()));
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByText("Antrag auf Gemeinschaftsausgabe eingereicht.")).toBeVisible();
+  await page.getByRole("link", { name: "Abmelden" }).click();
+
+  await loginAsAdmin(page);
+  await page.getByRole("link", { name: campName, exact: true }).click();
+  await page.getByRole("button", { name: "Ablehnen" }).click();
+  await page.getByLabel("Begründung (Pflichtfeld)").fill(
+    "Der eingereichte Nachweis ist nicht lesbar. Bitte reiche einen neuen Beleg mit vollständigem Betrag ein."
+  );
+  await page.getByRole("button", { name: "Antrag endgültig ablehnen" }).click();
+  await expect(page.getByText(/Antrag abgelehnt/)).toBeVisible();
+  await logout(page);
+
+  await page.goto("/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Marie Curie" });
+  await page.getByLabel("PIN").fill("1234");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await page.waitForLoadState("networkidle");
+  browserErrors.length = 0;
+  failedRequests.length = 0;
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  const masonry = page.locator("[data-kiosk-masonry]");
+  await expect(masonry).toHaveClass(/is-enhanced/);
+  await expect(page.locator(".meal-signup-compact")).toHaveCount(0);
+  const desktopLayout = await page.locator("[data-kiosk-card]").evaluateAll((cards) => ({
+    columns: new Set(cards.map((card) => Math.round(card.getBoundingClientRect().left))).size,
+    spans: cards.map((card) => card.style.gridRowEnd),
+  }));
+  expect(desktopLayout.columns).toBe(2);
+  expect(desktopLayout.spans.every((span) => span.startsWith("span "))).toBe(true);
+  await assertKioskCardsDoNotOverlap(page);
+  await assertNoUnexpectedOverflow(page);
+
+  const cardOrder = await page.locator("[data-kiosk-card]").evaluateAll((cards) => cards.map((card) => card.dataset.kioskCard));
+  expect(cardOrder).toEqual([
+    "drinks",
+    "food",
+    "meal-calendar",
+    "shifts",
+    "check-in",
+    "quick-bookings",
+    "shared-expenses",
+    "family",
+    "booking-links",
+  ]);
+
+  const firstCardControl = masonry.locator("button:visible, a[href]:visible").first();
+  await firstCardControl.focus();
+  const focusedCardIndexes = [];
+  for (let index = 0; index < 10; index += 1) {
+    focusedCardIndexes.push(
+      await page.evaluate(() => {
+        const card = document.activeElement?.closest("[data-kiosk-card]");
+        return card ? Array.from(document.querySelectorAll("[data-kiosk-card]")).indexOf(card) : -1;
+      })
+    );
+    await page.keyboard.press("Tab");
+  }
+  expect(focusedCardIndexes.filter((index) => index >= 0)).toEqual(
+    focusedCardIndexes.filter((index) => index >= 0).sort((left, right) => left - right)
+  );
+
+  const expenseSection = page.locator('[data-kiosk-card="shared-expenses"]');
+  const originalSpan = await expenseSection.evaluate((element) => element.style.gridRowEnd);
+  await expenseSection.getByText("Ablehnungsgrund anzeigen").click();
+  await expect(expenseSection.locator("details")).toHaveAttribute("open", "");
+  await expect.poll(() => expenseSection.evaluate((element) => element.style.gridRowEnd)).not.toBe(originalSpan);
+  await assertKioskCardsDoNotOverlap(page);
+
+  await page.locator("[data-theme-toggle]").click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(expenseSection).toBeVisible();
+  await assertKioskCardsDoNotOverlap(page);
+
+  await page.setViewportSize({ width: 780, height: 900 });
+  await expect(masonry).not.toHaveClass(/is-enhanced/);
+  const mobileLayout = await page.locator("[data-kiosk-card]").evaluateAll((cards) => ({
+    columns: new Set(cards.map((card) => Math.round(card.getBoundingClientRect().left))).size,
+    spans: cards.map((card) => card.style.gridRowEnd),
+  }));
+  expect(mobileLayout.columns).toBe(1);
+  expect(mobileLayout.spans).toEqual(Array(mobileLayout.spans.length).fill(""));
+  await assertKioskCardsDoNotOverlap(page);
+  await assertNoUnexpectedOverflow(page);
+
+  expect(browserErrors).toEqual([]);
+  expect(failedRequests).toEqual([]);
 });
 
 test("Theme switch persists across kiosk and admin layouts", async ({ page }) => {

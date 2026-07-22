@@ -4,6 +4,8 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.templatetags.static import static
 
+PWA_CACHE_VERSION = 3
+
 PWA_SURFACES: dict[str, dict[str, str]] = {
     "admin": {
         "name": "Fliegerlager Verwaltung",
@@ -70,7 +72,7 @@ def service_worker(request: HttpRequest, surface: str) -> HttpResponse:
         request,
         "billing/service_worker.js",
         {
-            "cache_name": f"fliegerlager-{surface}-v2",
+            "cache_name": f"fliegerlager-{surface}-v{PWA_CACHE_VERSION}",
             "cache_prefix": f"fliegerlager-{surface}-",
             "offline_url": "/offline/",
             "static_assets": [

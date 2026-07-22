@@ -1299,11 +1299,19 @@ textarea {
   font-weight: 700;
 }
 
-.kiosk-split {
+.kiosk-masonry {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
+  gap: 14px 24px;
   align-items: start;
+}
+
+.kiosk-masonry.is-enhanced {
+  grid-auto-rows: 1px;
+}
+
+.kiosk-masonry__contents {
+  display: contents;
 }
 
 .kiosk-table {
@@ -1341,16 +1349,84 @@ textarea {
   vertical-align: middle;
 }
 
-.kiosk-table__wrapper .data-table tbody tr.kiosk-table__row--rejected {
-  background: #fef2f2;
-}
-
-.kiosk-table__wrapper .data-table tbody tr.kiosk-table__row--rejected td {
-  border-color: rgba(180, 35, 24, 0.14);
-}
-
 .kiosk-table__wrapper td a {
   white-space: normal;
+}
+
+.shared-expense-list {
+  display: grid;
+  gap: 12px;
+}
+
+.shared-expense-list > h3 {
+  margin: 0;
+}
+
+.shared-expense-card {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-soft);
+}
+
+.shared-expense-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.shared-expense-card__header h4 {
+  min-width: 0;
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.shared-expense-card__meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.shared-expense-card__meta div {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  min-width: 0;
+}
+
+.shared-expense-card__meta dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.shared-expense-card__meta dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.shared-expense-card__rejection {
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.shared-expense-card__rejection summary {
+  color: var(--danger);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.shared-expense-card__rejection p {
+  margin: 10px 0 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .quick-booking-list {
@@ -1734,36 +1810,12 @@ textarea {
   border-radius: 999px;
 }
 
-.meal-signup-compact {
-  display: grid;
-  gap: 8px;
-  margin-top: 14px;
-}
-
-.meal-signup-compact__row {
-  display: grid;
-  grid-template-columns: 76px minmax(0, 1.2fr) minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: #ffffff;
-  font-size: 13px;
-}
-
 .meal-plan-cell {
   min-width: 220px;
 }
 
 .meal-plan-cell textarea {
   min-height: 72px;
-}
-
-.meal-signup-compact__row strong,
-.meal-signup-compact__row span {
-  min-width: 0;
-  overflow-wrap: anywhere;
 }
 
 .meal-detail-row {
@@ -2176,11 +2228,6 @@ textarea {
   }
 }
 
-.rejection-reason-text {
-  white-space: pre-wrap;
-  margin-bottom: 1rem;
-}
-
 @media (max-width: 780px) {
   .deployment-grid,
   .metadata-list div {
@@ -2246,8 +2293,18 @@ textarea {
 
   .kiosk-hero,
   .kiosk-login-card,
-  .kiosk-split {
+  .kiosk-masonry {
     grid-template-columns: 1fr;
+  }
+
+  .kiosk-masonry.is-enhanced {
+    grid-auto-rows: auto;
+  }
+
+  .kiosk-masonry > .kiosk-card,
+  .kiosk-masonry > form > .kiosk-card {
+    grid-column: auto !important;
+    grid-row: auto !important;
   }
 
   .kiosk-login-card {
@@ -2329,6 +2386,14 @@ textarea {
     text-align: left;
   }
 
+  .shared-expense-card__header {
+    display: grid;
+  }
+
+  .shared-expense-card__meta {
+    grid-template-columns: 1fr;
+  }
+
 
   .target-row {
     grid-template-columns: 1fr;
@@ -2343,7 +2408,6 @@ textarea {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .meal-signup-compact__row,
   .meal-booking-day {
     grid-template-columns: auto minmax(0, 1fr);
   }
@@ -2618,26 +2682,13 @@ dialog::backdrop {
   margin: 0;
 }
 
-.kiosk-masonry {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  margin-top: 24px;
+.button-group {
+  display: grid;
+  gap: 8px;
 }
-.kiosk-masonry-col {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-@media (min-width: 768px) {
-  .kiosk-masonry {
-    flex-direction: row;
-    align-items: flex-start;
-  }
-  .kiosk-masonry-col {
-    flex: 1;
-    min-width: 0;
-  }
+
+.button-group .button {
+  width: 100%;
 }
 
 .table-actions {
@@ -2659,14 +2710,14 @@ dialog::backdrop {
 :root[data-theme="dark"] .metric,
 :root[data-theme="dark"] .exportbar a,
 :root[data-theme="dark"] .meal-status-day,
-:root[data-theme="dark"] .meal-signup-compact__row,
 :root[data-theme="dark"] .meal-booking-day,
 :root[data-theme="dark"] .shift-card {
   background: var(--panel);
   color: var(--text);
 }
 
-:root[data-theme="dark"] .quick-booking-row {
+:root[data-theme="dark"] .quick-booking-row,
+:root[data-theme="dark"] .shared-expense-card {
   background: var(--panel-soft);
 }
 
@@ -2757,7 +2808,6 @@ dialog::backdrop {
 
 :root[data-theme="dark"] .errorlist,
 :root[data-theme="dark"] .kiosk-timer.is-critical,
-:root[data-theme="dark"] .kiosk-table__wrapper .data-table tbody tr.kiosk-table__row--rejected,
 :root[data-theme="dark"] .kiosk-status-text--danger,
 :root[data-theme="dark"] .meal-detail-row--retracted {
   background: var(--danger-soft);

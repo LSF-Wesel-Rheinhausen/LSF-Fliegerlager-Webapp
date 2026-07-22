@@ -13,7 +13,7 @@ from django.contrib.auth.views import LoginView
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.core.signing import BadSignature, Signer
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Case, IntegerField, Q, Value, When
 from django.http import FileResponse, Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -2080,7 +2080,15 @@ def kiosk_home(request, kiosk_mode="private"):
         "next_order_locked": is_meal_change_locked(participant.camp, next_order_date),
         "today": today,
         "tomorrow": tomorrow,
-        "participant_expenses": participant.expenses.all().order_by("-created_at"),
+        "participant_expenses": participant.expenses.annotate(
+            kiosk_status_order=Case(
+                When(status=Expense.Status.PENDING, then=Value(0)),
+                When(status=Expense.Status.REJECTED, then=Value(1)),
+                When(status=Expense.Status.APPROVED, then=Value(2)),
+                default=Value(3),
+                output_field=IntegerField(),
+            )
+        ).order_by("kiosk_status_order", "-created_at"),
     }
     return render(request, "billing/kiosk_home.html", context)
 

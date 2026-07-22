@@ -133,9 +133,9 @@ def test_pwa_manifests_are_surface_specific(client, route_name, expected_scope, 
 @pytest.mark.parametrize(
     ("route_name", "expected_scope", "expected_cache_name"),
     [
-        ("pwa-worker-admin", "/", "fliegerlager-admin-v2"),
-        ("pwa-worker-kiosk", "/kiosk/", "fliegerlager-kiosk-v2"),
-        ("pwa-worker-central", "/central/kiosk/", "fliegerlager-central-v2"),
+        ("pwa-worker-admin", "/", "fliegerlager-admin-v3"),
+        ("pwa-worker-kiosk", "/kiosk/", "fliegerlager-kiosk-v3"),
+        ("pwa-worker-central", "/central/kiosk/", "fliegerlager-central-v3"),
     ],
 )
 def test_service_workers_have_explicit_scopes(client, route_name, expected_scope, expected_cache_name):
