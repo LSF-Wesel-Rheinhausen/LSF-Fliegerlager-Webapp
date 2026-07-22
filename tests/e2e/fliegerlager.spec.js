@@ -43,7 +43,8 @@ async function assertNoUnexpectedOverflow(page) {
       if (rect.left < -1 || rect.right > viewportWidth + 1) {
         failures.push(`${element.tagName.toLowerCase()} ${element.textContent.trim().slice(0, 80)}`);
       }
-      if (element.scrollWidth > element.clientWidth + 1 && !element.closest("table")) {
+      const display = window.getComputedStyle(element).display;
+      if (display !== "inline" && element.scrollWidth > element.clientWidth + 1 && !element.closest("table")) {
         failures.push(`text overflow: ${element.tagName.toLowerCase()} ${element.textContent.trim().slice(0, 80)}`);
       }
     }
@@ -53,6 +54,29 @@ async function assertNoUnexpectedOverflow(page) {
 
   expect(result.bodyOverflow, "Unerwarteter horizontaler Seiten-Overflow").toBeLessThanOrEqual(1);
   expect(result.failures, "Elemente laufen aus der Anzeige oder aus ihrem Container").toEqual([]);
+}
+
+async function assertReadableContrast(locator, minimumRatio = 4.5) {
+  const colors = await locator.evaluate((element) => {
+    const styles = window.getComputedStyle(element);
+    return { background: styles.backgroundColor, foreground: styles.color };
+  });
+
+  const parseRgb = (value) => value.match(/[\d.]+/g).slice(0, 3).map(Number);
+  const luminance = (value) => {
+    const channels = parseRgb(value).map((channel) => {
+      const normalized = channel / 255;
+      return normalized <= 0.04045
+        ? normalized / 12.92
+        : ((normalized + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+  };
+  const foreground = luminance(colors.foreground);
+  const background = luminance(colors.background);
+  const ratio = (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
+
+  expect(ratio, `Kontrast ${colors.foreground} auf ${colors.background}`).toBeGreaterThanOrEqual(minimumRatio);
 }
 
 function addDays(date, days) {
@@ -398,6 +422,47 @@ test("Theme follows the system preference without a saved selection", async ({ p
 
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(page.locator("[data-theme-toggle]")).toHaveAttribute("aria-checked", "true");
+});
+
+test("Dark theme keeps contextual surfaces readable and responsive", async ({ page }) => {
+  const browserErrors = [];
+  const failedRequests = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") browserErrors.push(message.text());
+  });
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  page.on("requestfailed", (request) => failedRequests.push(`${request.method()} ${request.url()}`));
+
+  await setupFirstAdmin(page);
+  await createCamp(page, "Dark-Mode-Lager");
+  const campId = new URL(page.url()).pathname.match(/\/camps\/(\d+)\//)[1];
+  await page.locator("[data-theme-toggle]").click();
+
+  const surfaces = [
+    { path: "/help/admin/", selector: ".info-callout" },
+    { path: "/help/", selector: ".info-callout" },
+    { path: `/camps/${campId}/`, selector: ".info-callout" },
+    { path: `/camps/${campId}/prices/`, selector: ".info-callout" },
+    { path: `/camps/${campId}/import/`, selector: ".info-callout" },
+    { path: `/camps/${campId}/shifts/report/`, selector: ".shift-stat-card" },
+  ];
+
+  for (const surface of surfaces) {
+    await page.goto(surface.path);
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect(page.locator(surface.selector).first()).toBeVisible();
+    await assertReadableContrast(page.locator(surface.selector).first());
+    await assertNoUnexpectedOverflow(page);
+  }
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const path of ["/help/", `/camps/${campId}/shifts/report/`]) {
+    await page.goto(path);
+    await assertNoUnexpectedOverflow(page);
+  }
+
+  expect(browserErrors).toEqual([]);
+  expect(failedRequests).toEqual([]);
 });
 
 test("Import flow: upload CSV and confirm", async ({ page }) => {

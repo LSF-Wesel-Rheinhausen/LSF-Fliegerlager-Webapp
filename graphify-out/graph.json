@@ -450,29 +450,11 @@
   },
   "nodes": [
     {
-      "label": "pr-171-private-kiosk-session.md",
-      "file_type": "document",
-      "source_file": "changelog/pr-171-private-kiosk-session.md",
-      "source_location": "L1",
-      "id": "changelog_pr_171_private_kiosk_session",
-      "community": 318,
-      "norm_label": "pr-171-private-kiosk-session.md"
-    },
-    {
-      "label": "Privater PWA-Kiosk bleibt angemeldet",
-      "file_type": "document",
-      "source_file": "changelog/pr-171-private-kiosk-session.md",
-      "source_location": "L1",
-      "id": "changelog_pr_171_private_kiosk_session_privater_pwa_kiosk_bleibt_angemeldet",
-      "community": 318,
-      "norm_label": "privater pwa-kiosk bleibt angemeldet"
-    },
-    {
       "label": "deployment_agent.py",
       "file_type": "code",
       "source_file": "deployment_agent.py",
       "source_location": "L1",
-      "community": 107,
+      "community": 87,
       "norm_label": "deployment_agent.py",
       "id": "deployment_agent"
     },
@@ -490,7 +472,7 @@
       "file_type": "code",
       "source_file": "",
       "source_location": "",
-      "community": 107,
+      "community": 226,
       "norm_label": "runtimeerror",
       "id": "runtimeerror"
     },
@@ -778,7 +760,7 @@
       "file_type": "code",
       "source_file": "deployment_agent.py",
       "source_location": "L354",
-      "community": 107,
+      "community": 234,
       "norm_label": "bytes",
       "id": "deployment_agent_py_bytes"
     },
@@ -796,7 +778,7 @@
       "file_type": "code",
       "source_file": "deployment_agent.py",
       "source_location": "L408",
-      "community": 263,
+      "community": 231,
       "norm_label": "choose_manifest_descriptor()",
       "id": "deployment_agent_choose_manifest_descriptor"
     },
@@ -832,7 +814,7 @@
       "file_type": "code",
       "source_file": "deployment_agent.py",
       "source_location": "L506",
-      "community": 263,
+      "community": 87,
       "norm_label": "current_metadata_from_payload()",
       "id": "deployment_agent_current_metadata_from_payload"
     },
@@ -859,7 +841,7 @@
       "file_type": "code",
       "source_file": "deployment_agent.py",
       "source_location": "L553",
-      "community": 254,
+      "community": 234,
       "norm_label": "deployment_status()",
       "id": "deployment_agent_deployment_status"
     },
@@ -877,7 +859,7 @@
       "file_type": "code",
       "source_file": "deployment_agent.py",
       "source_location": "L591",
-      "community": 226,
+      "community": 234,
       "norm_label": "parse_database_url()",
       "id": "deployment_agent_parse_database_url"
     },
@@ -886,7 +868,7 @@
       "file_type": "code",
       "source_file": "deployment_agent.py",
       "source_location": "L608",
-      "community": 107,
+      "community": 234,
       "norm_label": "database_dump_bytes()",
       "id": "deployment_agent_database_dump_bytes"
     },
@@ -895,7 +877,7 @@
       "file_type": "code",
       "source_file": "deployment_agent.py",
       "source_location": "L639",
-      "community": 254,
+      "community": 234,
       "norm_label": "create_backup()",
       "id": "deployment_agent_create_backup"
     },
@@ -904,7 +886,7 @@
       "file_type": "code",
       "source_file": "deployment_agent.py",
       "source_location": "L652",
-      "community": 254,
+      "community": 261,
       "norm_label": "backup_child_path()",
       "id": "deployment_agent_backup_child_path"
     },
@@ -949,7 +931,7 @@
       "file_type": "code",
       "source_file": "deployment_agent.py",
       "source_location": "L702",
-      "community": 254,
+      "community": 261,
       "norm_label": "redeploy_stack()",
       "id": "deployment_agent_redeploy_stack"
     },
@@ -958,7 +940,7 @@
       "file_type": "code",
       "source_file": "deployment_agent.py",
       "source_location": "L707",
-      "community": 87,
+      "community": 313,
       "norm_label": "wait_until_healthy()",
       "id": "deployment_agent_wait_until_healthy"
     },
@@ -1318,7 +1300,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L409",
-      "community": 263,
+      "community": 87,
       "norm_label": "pick a linux/amd64 manifest from an oci index, falling back to the first item.",
       "id": "deployment_agent_rationale_409"
     },
@@ -1354,7 +1336,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L507",
-      "community": 263,
+      "community": 87,
       "norm_label": "normalize current build metadata supplied by django.",
       "id": "deployment_agent_rationale_507"
     },
@@ -1381,7 +1363,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L554",
-      "community": 107,
+      "community": 234,
       "norm_label": "return persisted update state and the configured portainer stack image.",
       "id": "deployment_agent_rationale_554"
     },
@@ -1390,7 +1372,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L567",
-      "community": 87,
+      "community": 313,
       "norm_label": "check ghcr metadata and compare it with current django build metadata.",
       "id": "deployment_agent_rationale_567"
     },
@@ -1399,7 +1381,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L592",
-      "community": 226,
+      "community": 234,
       "norm_label": "parse database_url into pg_dump connection arguments without leaking passwords.",
       "id": "deployment_agent_rationale_592"
     },
@@ -1417,7 +1399,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L640",
-      "community": 254,
+      "community": 234,
       "norm_label": "create a gzipped postgresql backup using database_url connection details.",
       "id": "deployment_agent_rationale_640"
     },
@@ -1426,7 +1408,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L653",
-      "community": 254,
+      "community": 261,
       "norm_label": "resolve a backup child path and reject traversal outside backup_dir.",
       "id": "deployment_agent_rationale_653"
     },
@@ -1462,7 +1444,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L703",
-      "community": 254,
+      "community": 261,
       "norm_label": "set app_image in portainer and trigger a stack redeploy.",
       "id": "deployment_agent_rationale_703"
     },
@@ -1471,7 +1453,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L708",
-      "community": 87,
+      "community": 313,
       "norm_label": "poll the configured application health endpoint until it returns 2xx.",
       "id": "deployment_agent_rationale_708"
     },
@@ -2649,7 +2631,7 @@
       "file_type": "code",
       "source_file": "src/billing/admin.py",
       "source_location": "L1",
-      "community": 252,
+      "community": 111,
       "norm_label": "admin.py",
       "id": "billing_admin"
     },
@@ -2658,7 +2640,7 @@
       "file_type": "code",
       "source_file": "src/billing/admin.py",
       "source_location": "L32",
-      "community": 252,
+      "community": 111,
       "norm_label": "campadmin",
       "id": "billing_admin_campadmin"
     },
@@ -2667,7 +2649,7 @@
       "file_type": "code",
       "source_file": "src/billing/admin.py",
       "source_location": "L38",
-      "community": 252,
+      "community": 111,
       "norm_label": "participantadmin",
       "id": "billing_admin_participantadmin"
     },
@@ -2676,7 +2658,7 @@
       "file_type": "code",
       "source_file": "src/billing/admin.py",
       "source_location": "L43",
-      "community": 252,
+      "community": 111,
       "norm_label": ".has_delete_permission()",
       "id": "billing_admin_participantadmin_has_delete_permission"
     },
@@ -2685,7 +2667,7 @@
       "file_type": "code",
       "source_file": "src/billing/admin.py",
       "source_location": "L53",
-      "community": 252,
+      "community": 111,
       "norm_label": "participantfamilymemberadmin",
       "id": "billing_admin_participantfamilymemberadmin"
     },
@@ -2694,7 +2676,7 @@
       "file_type": "code",
       "source_file": "src/billing/admin.py",
       "source_location": "L60",
-      "community": 252,
+      "community": 111,
       "norm_label": "participantbookinglinkadmin",
       "id": "billing_admin_participantbookinglinkadmin"
     },
@@ -2703,7 +2685,7 @@
       "file_type": "code",
       "source_file": "src/billing/admin.py",
       "source_location": "L67",
-      "community": 252,
+      "community": 111,
       "norm_label": "priceruleadmin",
       "id": "billing_admin_priceruleadmin"
     },
@@ -2712,7 +2694,7 @@
       "file_type": "code",
       "source_file": "src/billing/admin.py",
       "source_location": "L82",
-      "community": 252,
+      "community": 111,
       "norm_label": "chargeadmin",
       "id": "billing_admin_chargeadmin"
     },
@@ -2730,7 +2712,7 @@
       "file_type": "code",
       "source_file": "src/billing/admin.py",
       "source_location": "L98",
-      "community": 252,
+      "community": 111,
       "norm_label": "charge",
       "id": "src_billing_admin_py_charge"
     },
@@ -2739,7 +2721,7 @@
       "file_type": "code",
       "source_file": "src/billing/admin.py",
       "source_location": "L98",
-      "community": 252,
+      "community": 111,
       "norm_label": "str",
       "id": "src_billing_admin_py_str"
     },
@@ -2748,7 +2730,7 @@
       "file_type": "code",
       "source_file": "src/billing/admin.py",
       "source_location": "L104",
-      "community": 252,
+      "community": 111,
       "norm_label": "bookingauditlogadmin",
       "id": "billing_admin_bookingauditlogadmin"
     },
@@ -2757,7 +2739,7 @@
       "file_type": "code",
       "source_file": "src/billing/admin.py",
       "source_location": "L117",
-      "community": 252,
+      "community": 111,
       "norm_label": "dailysettlementbackuplogadmin",
       "id": "billing_admin_dailysettlementbackuplogadmin"
     },
@@ -2766,7 +2748,7 @@
       "file_type": "code",
       "source_file": "src/billing/admin.py",
       "source_location": "L134",
-      "community": 252,
+      "community": 111,
       "norm_label": "mealsignupadmin",
       "id": "billing_admin_mealsignupadmin"
     },
@@ -2775,7 +2757,7 @@
       "file_type": "code",
       "source_file": "src/billing/admin.py",
       "source_location": "L146",
-      "community": 252,
+      "community": 111,
       "norm_label": "mealorderadmin",
       "id": "billing_admin_mealorderadmin"
     },
@@ -2784,7 +2766,7 @@
       "file_type": "code",
       "source_file": "src/billing/admin.py",
       "source_location": "L153",
-      "community": 252,
+      "community": 111,
       "norm_label": "mealplanentryadmin",
       "id": "billing_admin_mealplanentryadmin"
     },
@@ -2793,7 +2775,7 @@
       "file_type": "code",
       "source_file": "src/billing/admin.py",
       "source_location": "L162",
-      "community": 252,
+      "community": 111,
       "norm_label": "readonlysnapshotadmin",
       "id": "billing_admin_readonlysnapshotadmin"
     },
@@ -2802,7 +2784,7 @@
       "file_type": "code",
       "source_file": "src/billing/admin.py",
       "source_location": "L163",
-      "community": 252,
+      "community": 111,
       "norm_label": ".has_add_permission()",
       "id": "billing_admin_readonlysnapshotadmin_has_add_permission"
     },
@@ -2811,7 +2793,7 @@
       "file_type": "code",
       "source_file": "src/billing/admin.py",
       "source_location": "L166",
-      "community": 252,
+      "community": 111,
       "norm_label": ".has_change_permission()",
       "id": "billing_admin_readonlysnapshotadmin_has_change_permission"
     },
@@ -2820,7 +2802,7 @@
       "file_type": "code",
       "source_file": "src/billing/admin.py",
       "source_location": "L169",
-      "community": 252,
+      "community": 111,
       "norm_label": ".has_delete_permission()",
       "id": "billing_admin_readonlysnapshotadmin_has_delete_permission"
     },
@@ -2829,7 +2811,7 @@
       "file_type": "code",
       "source_file": "src/billing/admin.py",
       "source_location": "L174",
-      "community": 252,
+      "community": 111,
       "norm_label": "settlementrunadmin",
       "id": "billing_admin_settlementrunadmin"
     },
@@ -2838,7 +2820,7 @@
       "file_type": "code",
       "source_file": "src/billing/admin.py",
       "source_location": "L180",
-      "community": 252,
+      "community": 111,
       "norm_label": "settlementadmin",
       "id": "billing_admin_settlementadmin"
     },
@@ -2847,7 +2829,7 @@
       "file_type": "code",
       "source_file": "src/billing/admin.py",
       "source_location": "L185",
-      "community": 252,
+      "community": 111,
       "norm_label": "dailyshiftexceptioninline",
       "id": "billing_admin_dailyshiftexceptioninline"
     },
@@ -2856,7 +2838,7 @@
       "file_type": "code",
       "source_file": "src/billing/admin.py",
       "source_location": "L191",
-      "community": 252,
+      "community": 111,
       "norm_label": "dailyshifttemplateadmin",
       "id": "billing_admin_dailyshifttemplateadmin"
     },
@@ -2865,7 +2847,7 @@
       "file_type": "code",
       "source_file": "src/billing/admin.py",
       "source_location": "L198",
-      "community": 252,
+      "community": 111,
       "norm_label": ".generate_shifts_for_templates()",
       "id": "billing_admin_dailyshifttemplateadmin_generate_shifts_for_templates"
     },
@@ -2874,7 +2856,7 @@
       "file_type": "code",
       "source_file": "src/billing/admin.py",
       "source_location": "L252",
-      "community": 252,
+      "community": 111,
       "norm_label": "shiftassignmentinline",
       "id": "billing_admin_shiftassignmentinline"
     },
@@ -2883,7 +2865,7 @@
       "file_type": "code",
       "source_file": "src/billing/admin.py",
       "source_location": "L258",
-      "community": 252,
+      "community": 111,
       "norm_label": "shiftadmin",
       "id": "billing_admin_shiftadmin"
     },
@@ -3018,7 +3000,7 @@
       "file_type": "code",
       "source_file": "src/billing/auth.py",
       "source_location": "L46",
-      "community": 174,
+      "community": 259,
       "norm_label": ".authenticate()",
       "id": "billing_auth_emailorusernamebackend_authenticate"
     },
@@ -3747,7 +3729,7 @@
       "file_type": "code",
       "source_file": "src/billing/forms.py",
       "source_location": "L94",
-      "community": 252,
+      "community": 148,
       "norm_label": "meta",
       "id": "billing_forms_meta"
     },
@@ -3783,7 +3765,7 @@
       "file_type": "code",
       "source_file": "src/billing/forms.py",
       "source_location": "L118",
-      "community": 252,
+      "community": 148,
       "norm_label": "bool",
       "id": "src_billing_forms_py_bool"
     },
@@ -3846,7 +3828,7 @@
       "file_type": "code",
       "source_file": "src/billing/forms.py",
       "source_location": "L206",
-      "community": 146,
+      "community": 322,
       "norm_label": ".save()",
       "id": "billing_forms_usereditform_save"
     },
@@ -3999,7 +3981,7 @@
       "file_type": "code",
       "source_file": "src/billing/forms.py",
       "source_location": "L478",
-      "community": 146,
+      "community": 61,
       "norm_label": ".save()",
       "id": "billing_forms_campflatratesettingsform_save"
     },
@@ -4260,7 +4242,7 @@
       "file_type": "code",
       "source_file": "src/billing/forms.py",
       "source_location": "L888",
-      "community": 61,
+      "community": 148,
       "norm_label": "camp",
       "id": "src_billing_forms_py_camp"
     },
@@ -4341,7 +4323,7 @@
       "file_type": "code",
       "source_file": "src/billing/forms.py",
       "source_location": "L1041",
-      "community": 146,
+      "community": 61,
       "norm_label": ".save()",
       "id": "billing_forms_mealstandardpricesform_save"
     },
@@ -4431,7 +4413,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/forms.py",
       "source_location": "L207",
-      "community": 146,
+      "community": 322,
       "norm_label": "persist editable user metadata and the attached profile.",
       "id": "billing_forms_rationale_207"
     },
@@ -4926,7 +4908,7 @@
       "file_type": "code",
       "source_file": "src/billing/migrations/0001_initial.py",
       "source_location": "L1",
-      "community": 200,
+      "community": 138,
       "norm_label": "0001_initial.py",
       "id": "migrations_0001_initial"
     },
@@ -4935,7 +4917,7 @@
       "file_type": "code",
       "source_file": "src/billing/migrations/0001_initial.py",
       "source_location": "L11",
-      "community": 200,
+      "community": 138,
       "norm_label": "migration",
       "id": "migrations_0001_initial_migration"
     },
@@ -4944,7 +4926,7 @@
       "file_type": "code",
       "source_file": "src/billing/migrations/0002_camp_foerdersatz_charge_foerderfaehig_and_more.py",
       "source_location": "L1",
-      "community": 200,
+      "community": 138,
       "norm_label": "0002_camp_foerdersatz_charge_foerderfaehig_and_more.py",
       "id": "migrations_0002_camp_foerdersatz_charge_foerderfaehig_and_more"
     },
@@ -4953,7 +4935,7 @@
       "file_type": "code",
       "source_file": "src/billing/migrations/0002_camp_foerdersatz_charge_foerderfaehig_and_more.py",
       "source_location": "L8",
-      "community": 200,
+      "community": 138,
       "norm_label": "migration",
       "id": "migrations_0002_camp_foerdersatz_charge_foerderfaehig_and_more_migration"
     },
@@ -5241,7 +5223,7 @@
       "file_type": "code",
       "source_file": "src/billing/migrations/0014_subsidy_rate_per_price_element.py",
       "source_location": "L1",
-      "community": 200,
+      "community": 138,
       "norm_label": "0014_subsidy_rate_per_price_element.py",
       "id": "migrations_0014_subsidy_rate_per_price_element"
     },
@@ -5250,7 +5232,7 @@
       "file_type": "code",
       "source_file": "src/billing/migrations/0014_subsidy_rate_per_price_element.py",
       "source_location": "L9",
-      "community": 200,
+      "community": 138,
       "norm_label": "migrate_subsidy_rates()",
       "id": "migrations_0014_subsidy_rate_per_price_element_migrate_subsidy_rates"
     },
@@ -5259,7 +5241,7 @@
       "file_type": "code",
       "source_file": "src/billing/migrations/0014_subsidy_rate_per_price_element.py",
       "source_location": "L51",
-      "community": 200,
+      "community": 138,
       "norm_label": "restore_subsidy_flags()",
       "id": "migrations_0014_subsidy_rate_per_price_element_restore_subsidy_flags"
     },
@@ -5268,7 +5250,7 @@
       "file_type": "code",
       "source_file": "src/billing/migrations/0014_subsidy_rate_per_price_element.py",
       "source_location": "L82",
-      "community": 200,
+      "community": 138,
       "norm_label": "migration",
       "id": "migrations_0014_subsidy_rate_per_price_element_migration"
     },
@@ -5313,7 +5295,7 @@
       "file_type": "code",
       "source_file": "src/billing/migrations/0016_camp_shift_ratio_per_night_shift_shiftassignment.py",
       "source_location": "L1",
-      "community": 200,
+      "community": 138,
       "norm_label": "0016_camp_shift_ratio_per_night_shift_shiftassignment.py",
       "id": "migrations_0016_camp_shift_ratio_per_night_shift_shiftassignment"
     },
@@ -5322,7 +5304,7 @@
       "file_type": "code",
       "source_file": "src/billing/migrations/0016_camp_shift_ratio_per_night_shift_shiftassignment.py",
       "source_location": "L9",
-      "community": 200,
+      "community": 138,
       "norm_label": "migration",
       "id": "migrations_0016_camp_shift_ratio_per_night_shift_shiftassignment_migration"
     },
@@ -5412,7 +5394,7 @@
       "file_type": "code",
       "source_file": "src/billing/migrations/0021_settlementrun_versioned_snapshots.py",
       "source_location": "L1",
-      "community": 200,
+      "community": 138,
       "norm_label": "0021_settlementrun_versioned_snapshots.py",
       "id": "migrations_0021_settlementrun_versioned_snapshots"
     },
@@ -5421,7 +5403,7 @@
       "file_type": "code",
       "source_file": "src/billing/migrations/0021_settlementrun_versioned_snapshots.py",
       "source_location": "L8",
-      "community": 200,
+      "community": 138,
       "norm_label": "migration",
       "id": "migrations_0021_settlementrun_versioned_snapshots_migration"
     },
@@ -5646,7 +5628,7 @@
       "file_type": "code",
       "source_file": "src/billing/migrations/0034_daily_settlement_backups.py",
       "source_location": "L1",
-      "community": 124,
+      "community": 328,
       "norm_label": "0034_daily_settlement_backups.py",
       "id": "migrations_0034_daily_settlement_backups"
     },
@@ -5655,7 +5637,7 @@
       "file_type": "code",
       "source_file": "src/billing/migrations/0034_daily_settlement_backups.py",
       "source_location": "L8",
-      "community": 124,
+      "community": 328,
       "norm_label": "migration",
       "id": "migrations_0034_daily_settlement_backups_migration"
     },
@@ -5754,7 +5736,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L14",
-      "community": 252,
+      "community": 111,
       "norm_label": "timestampedmodel",
       "id": "billing_models_timestampedmodel"
     },
@@ -5772,7 +5754,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L22",
-      "community": 252,
+      "community": 61,
       "norm_label": "userprofile",
       "id": "billing_models_userprofile"
     },
@@ -5781,7 +5763,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L28",
-      "community": 252,
+      "community": 61,
       "norm_label": ".__str__()",
       "id": "billing_models_userprofile_str"
     },
@@ -5799,7 +5781,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L53",
-      "community": 131,
+      "community": 327,
       "norm_label": ".user_handle()",
       "id": "billing_models_passkeycredential_user_handle"
     },
@@ -5808,7 +5790,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L53",
-      "community": 131,
+      "community": 327,
       "norm_label": "bytes",
       "id": "src_billing_models_py_bytes"
     },
@@ -5835,7 +5817,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L61",
-      "community": 148,
+      "community": 111,
       "norm_label": "camp",
       "id": "billing_models_camp"
     },
@@ -5871,7 +5853,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L112",
-      "community": 148,
+      "community": 111,
       "norm_label": ".__str__()",
       "id": "billing_models_camp_str"
     },
@@ -5916,7 +5898,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L181",
-      "community": 200,
+      "community": 266,
       "norm_label": ".target_shifts()",
       "id": "billing_models_participant_target_shifts"
     },
@@ -5925,7 +5907,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L181",
-      "community": 200,
+      "community": 266,
       "norm_label": "int",
       "id": "src_billing_models_py_int"
     },
@@ -5934,7 +5916,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L185",
-      "community": 200,
+      "community": 266,
       "norm_label": ".completed_shifts()",
       "id": "billing_models_participant_completed_shifts"
     },
@@ -6024,7 +6006,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L254",
-      "community": 252,
+      "community": 0,
       "norm_label": "participantfamilymember",
       "id": "billing_models_participantfamilymember"
     },
@@ -6060,7 +6042,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L282",
-      "community": 252,
+      "community": 0,
       "norm_label": ".__str__()",
       "id": "billing_models_participantfamilymember_str"
     },
@@ -6069,7 +6051,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L286",
-      "community": 252,
+      "community": 0,
       "norm_label": "participantfamilymemberpin",
       "id": "billing_models_participantfamilymemberpin"
     },
@@ -6114,7 +6096,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L335",
-      "community": 252,
+      "community": 0,
       "norm_label": ".__str__()",
       "id": "billing_models_participantfamilymemberpin_str"
     },
@@ -6141,7 +6123,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L365",
-      "community": 0,
+      "community": 111,
       "norm_label": "pricerule",
       "id": "billing_models_pricerule"
     },
@@ -6186,7 +6168,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L409",
-      "community": 0,
+      "community": 111,
       "norm_label": ".__str__()",
       "id": "billing_models_pricerule_str"
     },
@@ -6258,7 +6240,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L500",
-      "community": 252,
+      "community": 111,
       "norm_label": "payment",
       "id": "billing_models_payment"
     },
@@ -6267,7 +6249,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L510",
-      "community": 252,
+      "community": 111,
       "norm_label": ".__str__()",
       "id": "billing_models_payment_str"
     },
@@ -6276,7 +6258,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L514",
-      "community": 252,
+      "community": 148,
       "norm_label": "expense",
       "id": "billing_models_expense"
     },
@@ -6303,7 +6285,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L565",
-      "community": 252,
+      "community": 148,
       "norm_label": ".__str__()",
       "id": "billing_models_expense_str"
     },
@@ -6384,7 +6366,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L671",
-      "community": 61,
+      "community": 111,
       "norm_label": "mealplanentry",
       "id": "billing_models_mealplanentry"
     },
@@ -6393,7 +6375,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L685",
-      "community": 61,
+      "community": 111,
       "norm_label": ".__str__()",
       "id": "billing_models_mealplanentry_str"
     },
@@ -6420,7 +6402,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L712",
-      "community": 200,
+      "community": 138,
       "norm_label": ".total()",
       "id": "billing_models_drinkentry_total"
     },
@@ -6501,7 +6483,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L775",
-      "community": 252,
+      "community": 111,
       "norm_label": "dailysettlementbackuplog",
       "id": "billing_models_dailysettlementbackuplog"
     },
@@ -6510,7 +6492,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L814",
-      "community": 252,
+      "community": 111,
       "norm_label": ".__str__()",
       "id": "billing_models_dailysettlementbackuplog_str"
     },
@@ -6537,7 +6519,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L853",
-      "community": 0,
+      "community": 148,
       "norm_label": "shift",
       "id": "billing_models_shift"
     },
@@ -6555,7 +6537,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L870",
-      "community": 0,
+      "community": 148,
       "norm_label": ".__str__()",
       "id": "billing_models_shift_str"
     },
@@ -6564,7 +6546,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L874",
-      "community": 252,
+      "community": 0,
       "norm_label": "dailyshifttemplate",
       "id": "billing_models_dailyshifttemplate"
     },
@@ -6573,7 +6555,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L884",
-      "community": 252,
+      "community": 0,
       "norm_label": ".__str__()",
       "id": "billing_models_dailyshifttemplate_str"
     },
@@ -6582,7 +6564,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L888",
-      "community": 252,
+      "community": 111,
       "norm_label": "dailyshiftexception",
       "id": "billing_models_dailyshiftexception"
     },
@@ -6591,7 +6573,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L900",
-      "community": 252,
+      "community": 111,
       "norm_label": ".__str__()",
       "id": "billing_models_dailyshiftexception_str"
     },
@@ -6600,7 +6582,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L904",
-      "community": 252,
+      "community": 111,
       "norm_label": "shiftassignment",
       "id": "billing_models_shiftassignment"
     },
@@ -6609,7 +6591,7 @@
       "file_type": "code",
       "source_file": "src/billing/models.py",
       "source_location": "L915",
-      "community": 252,
+      "community": 111,
       "norm_label": ".__str__()",
       "id": "billing_models_shiftassignment_str"
     },
@@ -6654,7 +6636,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L23",
-      "community": 252,
+      "community": 61,
       "norm_label": "store editable application metadata for a django user account.",
       "id": "billing_models_rationale_23"
     },
@@ -6672,7 +6654,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L54",
-      "community": 131,
+      "community": 327,
       "norm_label": "return the stable, non-pii webauthn user handle for this account.",
       "id": "billing_models_rationale_54"
     },
@@ -6690,7 +6672,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L255",
-      "community": 252,
+      "community": 0,
       "norm_label": "represent a kiosk-only family member billed through a participant.",
       "id": "billing_models_rationale_255"
     },
@@ -6717,7 +6699,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L287",
-      "community": 252,
+      "community": 0,
       "norm_label": "store the kiosk pin for a companion family member.",
       "id": "billing_models_rationale_287"
     },
@@ -6798,7 +6780,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L672",
-      "community": 61,
+      "community": 111,
       "norm_label": "store the visible menu description for one camp meal slot.",
       "id": "billing_models_rationale_672"
     },
@@ -6816,7 +6798,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L776",
-      "community": 252,
+      "community": 111,
       "norm_label": "record one attempted automated settlement backup for a camp and date.",
       "id": "billing_models_rationale_776"
     },
@@ -6852,7 +6834,7 @@
       "file_type": "code",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L18",
-      "community": 245,
+      "community": 265,
       "norm_label": "_json_payload()",
       "id": "billing_notification_views_json_payload"
     },
@@ -6861,7 +6843,7 @@
       "file_type": "code",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L18",
-      "community": 245,
+      "community": 265,
       "norm_label": "httprequest",
       "id": "src_billing_notification_views_py_httprequest"
     },
@@ -6879,7 +6861,7 @@
       "file_type": "code",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L18",
-      "community": 234,
+      "community": 265,
       "norm_label": "any",
       "id": "src_billing_notification_views_py_any"
     },
@@ -6888,7 +6870,7 @@
       "file_type": "code",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L26",
-      "community": 245,
+      "community": 254,
       "norm_label": "_private_participant()",
       "id": "billing_notification_views_private_participant"
     },
@@ -6897,7 +6879,7 @@
       "file_type": "code",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L26",
-      "community": 265,
+      "community": 254,
       "norm_label": "participant",
       "id": "src_billing_notification_views_py_participant"
     },
@@ -6906,7 +6888,7 @@
       "file_type": "code",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L39",
-      "community": 234,
+      "community": 265,
       "norm_label": "_owner_filter()",
       "id": "billing_notification_views_owner_filter"
     },
@@ -6915,7 +6897,7 @@
       "file_type": "code",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L39",
-      "community": 234,
+      "community": 265,
       "norm_label": "bool",
       "id": "src_billing_notification_views_py_bool"
     },
@@ -6987,7 +6969,7 @@
       "file_type": "code",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L101",
-      "community": 245,
+      "community": 265,
       "norm_label": "_subscribe()",
       "id": "billing_notification_views_subscribe"
     },
@@ -6996,7 +6978,7 @@
       "file_type": "code",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L101",
-      "community": 245,
+      "community": 265,
       "norm_label": "jsonresponse",
       "id": "src_billing_notification_views_py_jsonresponse"
     },
@@ -7005,7 +6987,7 @@
       "file_type": "code",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L149",
-      "community": 245,
+      "community": 265,
       "norm_label": "notification_subscribe()",
       "id": "billing_notification_views_notification_subscribe"
     },
@@ -7014,7 +6996,7 @@
       "file_type": "code",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L155",
-      "community": 245,
+      "community": 265,
       "norm_label": "kiosk_notification_subscribe()",
       "id": "billing_notification_views_kiosk_notification_subscribe"
     },
@@ -7023,7 +7005,7 @@
       "file_type": "code",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L163",
-      "community": 234,
+      "community": 265,
       "norm_label": "_revoke()",
       "id": "billing_notification_views_revoke"
     },
@@ -7032,7 +7014,7 @@
       "file_type": "code",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L163",
-      "community": 234,
+      "community": 254,
       "norm_label": "int",
       "id": "src_billing_notification_views_py_int"
     },
@@ -7041,7 +7023,7 @@
       "file_type": "code",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L171",
-      "community": 234,
+      "community": 265,
       "norm_label": "notification_revoke()",
       "id": "billing_notification_views_notification_revoke"
     },
@@ -7050,7 +7032,7 @@
       "file_type": "code",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L177",
-      "community": 245,
+      "community": 254,
       "norm_label": "kiosk_notification_revoke()",
       "id": "billing_notification_views_kiosk_notification_revoke"
     },
@@ -7059,7 +7041,7 @@
       "file_type": "code",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L185",
-      "community": 234,
+      "community": 254,
       "norm_label": "queue_test_notification()",
       "id": "billing_notification_views_queue_test_notification"
     },
@@ -7068,7 +7050,7 @@
       "file_type": "code",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L204",
-      "community": 234,
+      "community": 254,
       "norm_label": "notification_test()",
       "id": "billing_notification_views_notification_test"
     },
@@ -7077,7 +7059,7 @@
       "file_type": "code",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L211",
-      "community": 245,
+      "community": 254,
       "norm_label": "kiosk_notification_test()",
       "id": "billing_notification_views_kiosk_notification_test"
     },
@@ -7122,7 +7104,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L150",
-      "community": 245,
+      "community": 265,
       "norm_label": "create or update the current user's browser subscription.",
       "id": "billing_notification_views_rationale_150"
     },
@@ -7131,7 +7113,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L156",
-      "community": 245,
+      "community": 265,
       "norm_label": "create or update a private participant browser subscription.",
       "id": "billing_notification_views_rationale_156"
     },
@@ -7140,7 +7122,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L172",
-      "community": 234,
+      "community": 265,
       "norm_label": "revoke one push device owned by the current user.",
       "id": "billing_notification_views_rationale_172"
     },
@@ -7149,7 +7131,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L178",
-      "community": 245,
+      "community": 254,
       "norm_label": "revoke one push device owned by the private participant.",
       "id": "billing_notification_views_rationale_178"
     },
@@ -7158,7 +7140,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L186",
-      "community": 234,
+      "community": 254,
       "norm_label": "queue a harmless test message for one owner-controlled device.",
       "id": "billing_notification_views_rationale_186"
     },
@@ -7167,7 +7149,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L205",
-      "community": 234,
+      "community": 254,
       "norm_label": "queue a test message for one push device owned by the current user.",
       "id": "billing_notification_views_rationale_205"
     },
@@ -7176,7 +7158,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L212",
-      "community": 245,
+      "community": 254,
       "norm_label": "queue a test message for one push device owned by the private participant.",
       "id": "billing_notification_views_rationale_212"
     },
@@ -7518,7 +7500,7 @@
       "file_type": "code",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L1",
-      "community": 131,
+      "community": 263,
       "norm_label": "passkey_views.py",
       "id": "billing_passkey_views"
     },
@@ -7527,7 +7509,7 @@
       "file_type": "code",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L30",
-      "community": 131,
+      "community": 263,
       "norm_label": "_require_passkeys_enabled()",
       "id": "billing_passkey_views_require_passkeys_enabled"
     },
@@ -7536,7 +7518,7 @@
       "file_type": "code",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L35",
-      "community": 131,
+      "community": 252,
       "norm_label": "_json_request_body()",
       "id": "billing_passkey_views_json_request_body"
     },
@@ -7545,7 +7527,7 @@
       "file_type": "code",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L35",
-      "community": 131,
+      "community": 252,
       "norm_label": "httprequest",
       "id": "src_billing_passkey_views_py_httprequest"
     },
@@ -7554,7 +7536,7 @@
       "file_type": "code",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L35",
-      "community": 131,
+      "community": 252,
       "norm_label": "str",
       "id": "src_billing_passkey_views_py_str"
     },
@@ -7563,7 +7545,7 @@
       "file_type": "code",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L35",
-      "community": 131,
+      "community": 252,
       "norm_label": "any",
       "id": "src_billing_passkey_views_py_any"
     },
@@ -7572,7 +7554,7 @@
       "file_type": "code",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L47",
-      "community": 131,
+      "community": 252,
       "norm_label": "_audit_event()",
       "id": "billing_passkey_views_audit_event"
     },
@@ -7581,7 +7563,7 @@
       "file_type": "code",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L47",
-      "community": 131,
+      "community": 252,
       "norm_label": "int",
       "id": "src_billing_passkey_views_py_int"
     },
@@ -7590,7 +7572,7 @@
       "file_type": "code",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L47",
-      "community": 131,
+      "community": 252,
       "norm_label": "exception",
       "id": "src_billing_passkey_views_py_exception"
     },
@@ -7599,7 +7581,7 @@
       "file_type": "code",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L67",
-      "community": 131,
+      "community": 263,
       "norm_label": "passkey_management()",
       "id": "billing_passkey_views_passkey_management"
     },
@@ -7608,7 +7590,7 @@
       "file_type": "code",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L67",
-      "community": 131,
+      "community": 263,
       "norm_label": "httpresponse",
       "id": "src_billing_passkey_views_py_httpresponse"
     },
@@ -7617,7 +7599,7 @@
       "file_type": "code",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L76",
-      "community": 131,
+      "community": 263,
       "norm_label": "passkey_authentication_options()",
       "id": "billing_passkey_views_passkey_authentication_options"
     },
@@ -7626,7 +7608,7 @@
       "file_type": "code",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L84",
-      "community": 131,
+      "community": 263,
       "norm_label": "passkey_registration_options()",
       "id": "billing_passkey_views_passkey_registration_options"
     },
@@ -7635,7 +7617,7 @@
       "file_type": "code",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L96",
-      "community": 131,
+      "community": 252,
       "norm_label": "passkey_registration_verify()",
       "id": "billing_passkey_views_passkey_registration_verify"
     },
@@ -7644,7 +7626,7 @@
       "file_type": "code",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L96",
-      "community": 131,
+      "community": 252,
       "norm_label": "jsonresponse",
       "id": "src_billing_passkey_views_py_jsonresponse"
     },
@@ -7653,7 +7635,7 @@
       "file_type": "code",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L122",
-      "community": 131,
+      "community": 252,
       "norm_label": "passkey_authentication_verify()",
       "id": "billing_passkey_views_passkey_authentication_verify"
     },
@@ -7662,7 +7644,7 @@
       "file_type": "code",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L150",
-      "community": 131,
+      "community": 252,
       "norm_label": "passkey_delete()",
       "id": "billing_passkey_views_passkey_delete"
     },
@@ -7671,7 +7653,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L68",
-      "community": 131,
+      "community": 263,
       "norm_label": "render the current user's registered passkeys.",
       "id": "billing_passkey_views_rationale_68"
     },
@@ -7680,7 +7662,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L77",
-      "community": 131,
+      "community": 263,
       "norm_label": "return a discoverable-credential authentication challenge.",
       "id": "billing_passkey_views_rationale_77"
     },
@@ -7689,7 +7671,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L85",
-      "community": 131,
+      "community": 263,
       "norm_label": "return registration options bound to the authenticated user.",
       "id": "billing_passkey_views_rationale_85"
     },
@@ -7698,7 +7680,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L97",
-      "community": 131,
+      "community": 252,
       "norm_label": "verify and store a passkey registered by the authenticated user.",
       "id": "billing_passkey_views_rationale_97"
     },
@@ -7707,7 +7689,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L123",
-      "community": 131,
+      "community": 252,
       "norm_label": "verify a passkey assertion and create a django login session.",
       "id": "billing_passkey_views_rationale_123"
     },
@@ -7716,7 +7698,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L151",
-      "community": 131,
+      "community": 252,
       "norm_label": "delete one passkey owned by the authenticated user.",
       "id": "billing_passkey_views_rationale_151"
     },
@@ -7734,7 +7716,7 @@
       "file_type": "code",
       "source_file": "src/billing/passkeys.py",
       "source_location": "L34",
-      "community": 131,
+      "community": 252,
       "norm_label": "passkeyceremonyerror",
       "id": "billing_passkeys_passkeyceremonyerror"
     },
@@ -7860,7 +7842,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/passkeys.py",
       "source_location": "L35",
-      "community": 131,
+      "community": 252,
       "norm_label": "indicate that a webauthn ceremony cannot be completed safely.",
       "id": "billing_passkeys_rationale_35"
     },
@@ -8004,7 +7986,7 @@
       "file_type": "code",
       "source_file": "src/billing/pwa_views.py",
       "source_location": "L1",
-      "community": 224,
+      "community": 245,
       "norm_label": "pwa_views.py",
       "id": "billing_pwa_views"
     },
@@ -8076,7 +8058,7 @@
       "file_type": "code",
       "source_file": "src/billing/pwa_views.py",
       "source_location": "L99",
-      "community": 224,
+      "community": 245,
       "norm_label": "pwa_template_context()",
       "id": "billing_pwa_views_pwa_template_context"
     },
@@ -8085,7 +8067,7 @@
       "file_type": "code",
       "source_file": "src/billing/pwa_views.py",
       "source_location": "L99",
-      "community": 224,
+      "community": 245,
       "norm_label": "any",
       "id": "src_billing_pwa_views_py_any"
     },
@@ -8121,7 +8103,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/pwa_views.py",
       "source_location": "L100",
-      "community": 224,
+      "community": 245,
       "norm_label": "return manifest and service-worker urls for a pwa surface.",
       "id": "billing_pwa_views_rationale_100"
     },
@@ -8337,7 +8319,7 @@
       "file_type": "code",
       "source_file": "src/billing/services.py",
       "source_location": "L113",
-      "community": 190,
+      "community": 2,
       "norm_label": "is_meal_change_locked()",
       "id": "billing_services_is_meal_change_locked"
     },
@@ -8463,7 +8445,7 @@
       "file_type": "code",
       "source_file": "src/billing/services.py",
       "source_location": "L203",
-      "community": 121,
+      "community": 190,
       "norm_label": "calculate_meal_overview()",
       "id": "billing_services_calculate_meal_overview"
     },
@@ -8481,7 +8463,7 @@
       "file_type": "code",
       "source_file": "src/billing/services.py",
       "source_location": "L257",
-      "community": 190,
+      "community": 2,
       "norm_label": "resolve_meal_price_rule()",
       "id": "billing_services_resolve_meal_price_rule"
     },
@@ -8760,7 +8742,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/services.py",
       "source_location": "L114",
-      "community": 190,
+      "community": 2,
       "norm_label": "return whether kiosk meal changes are closed for the requested meal date.      a",
       "id": "billing_services_rationale_114"
     },
@@ -8832,7 +8814,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/services.py",
       "source_location": "L204",
-      "community": 121,
+      "community": 190,
       "norm_label": "aggregate dinner signups for a camp by day for catering orders.",
       "id": "billing_services_rationale_204"
     },
@@ -8841,7 +8823,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/services.py",
       "source_location": "L258",
-      "community": 190,
+      "community": 2,
       "norm_label": "return the applicable meal price rule for one person and date.      args:",
       "id": "billing_services_rationale_258"
     },
@@ -8895,7 +8877,7 @@
       "file_type": "code",
       "source_file": "src/billing/signals.py",
       "source_location": "L1",
-      "community": 148,
+      "community": 326,
       "norm_label": "signals.py",
       "id": "billing_signals"
     },
@@ -8904,7 +8886,7 @@
       "file_type": "code",
       "source_file": "src/billing/signals.py",
       "source_location": "L8",
-      "community": 148,
+      "community": 326,
       "norm_label": "activate_remaining_camp()",
       "id": "billing_signals_activate_remaining_camp"
     },
@@ -8913,7 +8895,7 @@
       "file_type": "code",
       "source_file": "src/billing/signals.py",
       "source_location": "L16",
-      "community": 148,
+      "community": 326,
       "norm_label": "create_participant_pin()",
       "id": "billing_signals_create_participant_pin"
     },
@@ -8922,7 +8904,7 @@
       "file_type": "code",
       "source_file": "src/billing/signals.py",
       "source_location": "L22",
-      "community": 148,
+      "community": 326,
       "norm_label": "create_family_member_pin()",
       "id": "billing_signals_create_family_member_pin"
     },
@@ -9147,7 +9129,7 @@
       "file_type": "code",
       "source_file": "src/billing/views.py",
       "source_location": "L168",
-      "community": 253,
+      "community": 245,
       "norm_label": "_kiosk_context()",
       "id": "billing_views_kiosk_context"
     },
@@ -9183,7 +9165,7 @@
       "file_type": "code",
       "source_file": "src/billing/views.py",
       "source_location": "L205",
-      "community": 120,
+      "community": 304,
       "norm_label": "deployment_update()",
       "id": "billing_views_deployment_update"
     },
@@ -9192,7 +9174,7 @@
       "file_type": "code",
       "source_file": "src/billing/views.py",
       "source_location": "L241",
-      "community": 253,
+      "community": 316,
       "norm_label": "deployment_update_check()",
       "id": "billing_views_deployment_update_check"
     },
@@ -9399,7 +9381,7 @@
       "file_type": "code",
       "source_file": "src/billing/views.py",
       "source_location": "L523",
-      "community": 2,
+      "community": 200,
       "norm_label": "participant_detail()",
       "id": "billing_views_participant_detail"
     },
@@ -9408,7 +9390,7 @@
       "file_type": "code",
       "source_file": "src/billing/views.py",
       "source_location": "L579",
-      "community": 2,
+      "community": 138,
       "norm_label": "settlement_run_create()",
       "id": "billing_views_settlement_run_create"
     },
@@ -9660,7 +9642,7 @@
       "file_type": "code",
       "source_file": "src/billing/views.py",
       "source_location": "L1024",
-      "community": 2,
+      "community": 200,
       "norm_label": "shared_expense_approve()",
       "id": "billing_views_shared_expense_approve"
     },
@@ -9948,7 +9930,7 @@
       "file_type": "code",
       "source_file": "src/billing/views.py",
       "source_location": "L1503",
-      "community": 190,
+      "community": 2,
       "norm_label": "_meal_price_rule_for_targets()",
       "id": "billing_views_meal_price_rule_for_targets"
     },
@@ -9957,7 +9939,7 @@
       "file_type": "code",
       "source_file": "src/billing/views.py",
       "source_location": "L1526",
-      "community": 190,
+      "community": 2,
       "norm_label": "_kiosk_meal_calendar()",
       "id": "billing_views_kiosk_meal_calendar"
     },
@@ -10092,7 +10074,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L169",
-      "community": 253,
+      "community": 316,
       "norm_label": "return shared routing, session, and pwa context for kiosk templates.",
       "id": "billing_views_rationale_169"
     },
@@ -10110,7 +10092,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L206",
-      "community": 120,
+      "community": 304,
       "norm_label": "show image metadata and the latest deployment-agent state.",
       "id": "billing_views_rationale_206"
     },
@@ -10119,7 +10101,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L242",
-      "community": 253,
+      "community": 316,
       "norm_label": "pull the configured latest image and compare it with the running image.",
       "id": "billing_views_rationale_242"
     },
@@ -10353,7 +10335,7 @@
       "file_type": "code",
       "source_file": "src/config/context_processors.py",
       "source_location": "L1",
-      "community": 224,
+      "community": 323,
       "norm_label": "context_processors.py",
       "id": "config_context_processors"
     },
@@ -10362,7 +10344,7 @@
       "file_type": "code",
       "source_file": "src/config/context_processors.py",
       "source_location": "L9",
-      "community": 224,
+      "community": 323,
       "norm_label": "optional_authentication_features()",
       "id": "config_context_processors_optional_authentication_features"
     },
@@ -10371,7 +10353,7 @@
       "file_type": "code",
       "source_file": "src/config/context_processors.py",
       "source_location": "L9",
-      "community": 224,
+      "community": 323,
       "norm_label": "httprequest",
       "id": "src_config_context_processors_py_httprequest"
     },
@@ -10380,7 +10362,7 @@
       "file_type": "code",
       "source_file": "src/config/context_processors.py",
       "source_location": "L9",
-      "community": 224,
+      "community": 323,
       "norm_label": "str",
       "id": "src_config_context_processors_py_str"
     },
@@ -10389,7 +10371,7 @@
       "file_type": "code",
       "source_file": "src/config/context_processors.py",
       "source_location": "L9",
-      "community": 224,
+      "community": 323,
       "norm_label": "any",
       "id": "src_config_context_processors_py_any"
     },
@@ -10398,7 +10380,7 @@
       "file_type": "rationale",
       "source_file": "src/config/context_processors.py",
       "source_location": "L10",
-      "community": 224,
+      "community": 323,
       "norm_label": "expose optional authentication feature flags to server-rendered templates.",
       "id": "config_context_processors_rationale_10"
     },
@@ -11330,10 +11312,19 @@
       "id": "e2e_fliegerlager_spec_assertnounexpectedoverflow"
     },
     {
+      "label": "assertReadableContrast()",
+      "file_type": "code",
+      "source_file": "tests/e2e/fliegerlager.spec.js",
+      "source_location": "L59",
+      "community": 16,
+      "norm_label": "assertreadablecontrast()",
+      "id": "e2e_fliegerlager_spec_assertreadablecontrast"
+    },
+    {
       "label": "addDays()",
       "file_type": "code",
       "source_file": "tests/e2e/fliegerlager.spec.js",
-      "source_location": "L58",
+      "source_location": "L82",
       "community": 16,
       "norm_label": "adddays()",
       "id": "e2e_fliegerlager_spec_adddays"
@@ -11342,7 +11333,7 @@
       "label": "dateInputValue()",
       "file_type": "code",
       "source_file": "tests/e2e/fliegerlager.spec.js",
-      "source_location": "L64",
+      "source_location": "L88",
       "community": 16,
       "norm_label": "dateinputvalue()",
       "id": "e2e_fliegerlager_spec_dateinputvalue"
@@ -11351,7 +11342,7 @@
       "label": "setupFirstAdmin()",
       "file_type": "code",
       "source_file": "tests/e2e/fliegerlager.spec.js",
-      "source_location": "L71",
+      "source_location": "L95",
       "community": 16,
       "norm_label": "setupfirstadmin()",
       "id": "e2e_fliegerlager_spec_setupfirstadmin"
@@ -11360,7 +11351,7 @@
       "label": "logout()",
       "file_type": "code",
       "source_file": "tests/e2e/fliegerlager.spec.js",
-      "source_location": "L91",
+      "source_location": "L115",
       "community": 16,
       "norm_label": "logout()",
       "id": "e2e_fliegerlager_spec_logout"
@@ -11369,7 +11360,7 @@
       "label": "loginAsAdmin()",
       "file_type": "code",
       "source_file": "tests/e2e/fliegerlager.spec.js",
-      "source_location": "L95",
+      "source_location": "L119",
       "community": 16,
       "norm_label": "loginasadmin()",
       "id": "e2e_fliegerlager_spec_loginasadmin"
@@ -11378,7 +11369,7 @@
       "label": "createCamp()",
       "file_type": "code",
       "source_file": "tests/e2e/fliegerlager.spec.js",
-      "source_location": "L104",
+      "source_location": "L128",
       "community": 16,
       "norm_label": "createcamp()",
       "id": "e2e_fliegerlager_spec_createcamp"
@@ -11387,7 +11378,7 @@
       "label": "createParticipant()",
       "file_type": "code",
       "source_file": "tests/e2e/fliegerlager.spec.js",
-      "source_location": "L121",
+      "source_location": "L145",
       "community": 16,
       "norm_label": "createparticipant()",
       "id": "e2e_fliegerlager_spec_createparticipant"
@@ -11469,7 +11460,7 @@
       "file_type": "code",
       "source_file": "tests/factories.py",
       "source_location": "L31",
-      "community": 108,
+      "community": 178,
       "norm_label": "groupfactory",
       "id": "tests_factories_groupfactory"
     },
@@ -11847,7 +11838,7 @@
       "file_type": "code",
       "source_file": "tests/test_daily_settlement_backups.py",
       "source_location": "L19",
-      "community": 138,
+      "community": 124,
       "norm_label": "test_daily_backup_does_not_run_before_configured_time()",
       "id": "tests_test_daily_settlement_backups_test_daily_backup_does_not_run_before_configured_time"
     },
@@ -12243,7 +12234,7 @@
       "file_type": "code",
       "source_file": "tests/test_error_pages.py",
       "source_location": "L1",
-      "community": 313,
+      "community": 174,
       "norm_label": "test_error_pages.py",
       "id": "tests_test_error_pages"
     },
@@ -12252,7 +12243,7 @@
       "file_type": "code",
       "source_file": "tests/test_error_pages.py",
       "source_location": "L10",
-      "community": 313,
+      "community": 174,
       "norm_label": "test_healthcheck_reports_ready()",
       "id": "tests_test_error_pages_test_healthcheck_reports_ready"
     },
@@ -12261,7 +12252,7 @@
       "file_type": "code",
       "source_file": "tests/test_error_pages.py",
       "source_location": "L17",
-      "community": 313,
+      "community": 174,
       "norm_label": "test_healthcheck_reports_database_failure_without_details()",
       "id": "tests_test_error_pages_test_healthcheck_reports_database_failure_without_details"
     },
@@ -12270,7 +12261,7 @@
       "file_type": "code",
       "source_file": "tests/test_error_pages.py",
       "source_location": "L27",
-      "community": 313,
+      "community": 174,
       "norm_label": "test_unknown_url_renders_custom_not_found_page()",
       "id": "tests_test_error_pages_test_unknown_url_renders_custom_not_found_page"
     },
@@ -12279,7 +12270,7 @@
       "file_type": "code",
       "source_file": "tests/test_error_pages.py",
       "source_location": "L40",
-      "community": 313,
+      "community": 174,
       "norm_label": "test_unknown_url_renders_custom_not_found_page_in_debug_mode()",
       "id": "tests_test_error_pages_test_unknown_url_renders_custom_not_found_page_in_debug_mode"
     },
@@ -12288,7 +12279,7 @@
       "file_type": "code",
       "source_file": "tests/test_error_pages.py",
       "source_location": "L49",
-      "community": 313,
+      "community": 174,
       "norm_label": "test_unknown_url_links_authenticated_users_to_overview()",
       "id": "tests_test_error_pages_test_unknown_url_links_authenticated_users_to_overview"
     },
@@ -12333,7 +12324,7 @@
       "file_type": "code",
       "source_file": "tests/test_exporters.py",
       "source_location": "L97",
-      "community": 108,
+      "community": 138,
       "norm_label": "test_export_routes_allow_editor_and_admin_access()",
       "id": "tests_test_exporters_test_export_routes_allow_editor_and_admin_access"
     },
@@ -12450,7 +12441,7 @@
       "file_type": "code",
       "source_file": "tests/test_forms.py",
       "source_location": "L58",
-      "community": 124,
+      "community": 242,
       "norm_label": "test_kiosk_login_form_only_lists_non_archived_participants_from_active_camp()",
       "id": "tests_test_forms_test_kiosk_login_form_only_lists_non_archived_participants_from_active_camp"
     },
@@ -12459,7 +12450,7 @@
       "file_type": "code",
       "source_file": "tests/test_forms.py",
       "source_location": "L74",
-      "community": 124,
+      "community": 242,
       "norm_label": "test_kiosk_login_form_starts_empty_and_sorts_targets_by_last_name()",
       "id": "tests_test_forms_test_kiosk_login_form_starts_empty_and_sorts_targets_by_last_name"
     },
@@ -12468,7 +12459,7 @@
       "file_type": "code",
       "source_file": "tests/test_forms.py",
       "source_location": "L97",
-      "community": 124,
+      "community": 242,
       "norm_label": "test_kiosk_login_form_lists_companions_but_not_children()",
       "id": "tests_test_forms_test_kiosk_login_form_lists_companions_but_not_children"
     },
@@ -13386,7 +13377,7 @@
       "file_type": "code",
       "source_file": "tests/test_meal_overview.py",
       "source_location": "L1",
-      "community": 108,
+      "community": 178,
       "norm_label": "test_meal_overview.py",
       "id": "tests_test_meal_overview"
     },
@@ -13395,7 +13386,7 @@
       "file_type": "code",
       "source_file": "tests/test_meal_overview.py",
       "source_location": "L14",
-      "community": 108,
+      "community": 124,
       "norm_label": "test_calculate_meal_overview_counts_active_variants_and_retractions()",
       "id": "tests_test_meal_overview_test_calculate_meal_overview_counts_active_variants_and_retractions"
     },
@@ -13404,7 +13395,7 @@
       "file_type": "code",
       "source_file": "tests/test_meal_overview.py",
       "source_location": "L72",
-      "community": 108,
+      "community": 124,
       "norm_label": "test_camp_meal_overview_renders_counts_for_admin()",
       "id": "tests_test_meal_overview_test_camp_meal_overview_renders_counts_for_admin"
     },
@@ -13413,7 +13404,7 @@
       "file_type": "code",
       "source_file": "tests/test_meal_overview.py",
       "source_location": "L94",
-      "community": 108,
+      "community": 178,
       "norm_label": "test_camp_meal_overview_renders_and_saves_menu_for_huebers()",
       "id": "tests_test_meal_overview_test_camp_meal_overview_renders_and_saves_menu_for_huebers"
     },
@@ -13422,7 +13413,7 @@
       "file_type": "code",
       "source_file": "tests/test_meal_overview.py",
       "source_location": "L121",
-      "community": 108,
+      "community": 178,
       "norm_label": "test_meal_overview_marks_next_day_order_as_sent()",
       "id": "tests_test_meal_overview_test_meal_overview_marks_next_day_order_as_sent"
     },
@@ -13431,7 +13422,7 @@
       "file_type": "code",
       "source_file": "tests/test_migrations.py",
       "source_location": "L1",
-      "community": 130,
+      "community": 138,
       "norm_label": "test_migrations.py",
       "id": "tests_test_migrations"
     },
@@ -13440,7 +13431,7 @@
       "file_type": "code",
       "source_file": "tests/test_migrations.py",
       "source_location": "L15",
-      "community": 130,
+      "community": 138,
       "norm_label": "charge_columns()",
       "id": "tests_test_migrations_charge_columns"
     },
@@ -13449,7 +13440,7 @@
       "file_type": "code",
       "source_file": "tests/test_migrations.py",
       "source_location": "L15",
-      "community": 130,
+      "community": 138,
       "norm_label": "str",
       "id": "tests_test_migrations_py_str"
     },
@@ -13458,7 +13449,7 @@
       "file_type": "code",
       "source_file": "tests/test_migrations.py",
       "source_location": "L22",
-      "community": 130,
+      "community": 138,
       "norm_label": "test_legacy_charge_cancellation_columns_are_migrated_and_removed()",
       "id": "tests_test_migrations_test_legacy_charge_cancellation_columns_are_migrated_and_removed"
     },
@@ -13467,7 +13458,7 @@
       "file_type": "code",
       "source_file": "tests/test_migrations.py",
       "source_location": "L66",
-      "community": 130,
+      "community": 138,
       "norm_label": "test_legacy_charge_cleanup_is_a_noop_for_current_schema()",
       "id": "tests_test_migrations_test_legacy_charge_cleanup_is_a_noop_for_current_schema"
     },
@@ -13476,7 +13467,7 @@
       "file_type": "code",
       "source_file": "tests/test_migrations.py",
       "source_location": "L76",
-      "community": 130,
+      "community": 138,
       "norm_label": "test_legacy_charge_cleanup_removes_a_partial_legacy_schema()",
       "id": "tests_test_migrations_test_legacy_charge_cleanup_removes_a_partial_legacy_schema"
     },
@@ -13485,7 +13476,7 @@
       "file_type": "code",
       "source_file": "tests/test_migrations.py",
       "source_location": "L88",
-      "community": 130,
+      "community": 138,
       "norm_label": "test_price_element_subsidy_migration_preserves_existing_camp_rate()",
       "id": "tests_test_migrations_test_price_element_subsidy_migration_preserves_existing_camp_rate"
     },
@@ -13494,7 +13485,7 @@
       "file_type": "code",
       "source_file": "tests/test_notifications.py",
       "source_location": "L1",
-      "community": 261,
+      "community": 174,
       "norm_label": "test_notifications.py",
       "id": "tests_test_notifications"
     },
@@ -13503,7 +13494,7 @@
       "file_type": "code",
       "source_file": "tests/test_notifications.py",
       "source_location": "L38",
-      "community": 261,
+      "community": 174,
       "norm_label": "enable_web_push()",
       "id": "tests_test_notifications_enable_web_push"
     },
@@ -13512,7 +13503,7 @@
       "file_type": "code",
       "source_file": "tests/test_notifications.py",
       "source_location": "L45",
-      "community": 261,
+      "community": 174,
       "norm_label": "subscription_payload()",
       "id": "tests_test_notifications_subscription_payload"
     },
@@ -13530,7 +13521,7 @@
       "file_type": "code",
       "source_file": "tests/test_notifications.py",
       "source_location": "L55",
-      "community": 261,
+      "community": 174,
       "norm_label": "test_push_subscription_requires_exactly_one_owner()",
       "id": "tests_test_notifications_test_push_subscription_requires_exactly_one_owner"
     },
@@ -13539,7 +13530,7 @@
       "file_type": "code",
       "source_file": "tests/test_notifications.py",
       "source_location": "L76",
-      "community": 261,
+      "community": 174,
       "norm_label": "test_admin_can_create_and_update_own_push_subscription()",
       "id": "tests_test_notifications_test_admin_can_create_and_update_own_push_subscription"
     },
@@ -13548,7 +13539,7 @@
       "file_type": "code",
       "source_file": "tests/test_notifications.py",
       "source_location": "L116",
-      "community": 261,
+      "community": 174,
       "norm_label": "test_private_participant_can_subscribe_but_central_endpoint_does_not_exist()",
       "id": "tests_test_notifications_test_private_participant_can_subscribe_but_central_endpoint_does_not_exist"
     },
@@ -13557,7 +13548,7 @@
       "file_type": "code",
       "source_file": "tests/test_notifications.py",
       "source_location": "L135",
-      "community": 261,
+      "community": 174,
       "norm_label": "test_subscription_rejects_invalid_endpoint_and_category()",
       "id": "tests_test_notifications_test_subscription_rejects_invalid_endpoint_and_category"
     },
@@ -13566,7 +13557,7 @@
       "file_type": "code",
       "source_file": "tests/test_notifications.py",
       "source_location": "L152",
-      "community": 261,
+      "community": 174,
       "norm_label": "test_disabled_web_push_rejects_new_subscriptions()",
       "id": "tests_test_notifications_test_disabled_web_push_rejects_new_subscriptions"
     },
@@ -13575,7 +13566,7 @@
       "file_type": "code",
       "source_file": "tests/test_notifications.py",
       "source_location": "L168",
-      "community": 261,
+      "community": 174,
       "norm_label": "test_endpoint_cannot_silently_move_to_another_owner()",
       "id": "tests_test_notifications_test_endpoint_cannot_silently_move_to_another_owner"
     },
@@ -13584,7 +13575,7 @@
       "file_type": "code",
       "source_file": "tests/test_notifications.py",
       "source_location": "L193",
-      "community": 261,
+      "community": 174,
       "norm_label": "test_queue_notification_honors_category_and_deduplicates()",
       "id": "tests_test_notifications_test_queue_notification_honors_category_and_deduplicates"
     },
@@ -13611,7 +13602,7 @@
       "file_type": "code",
       "source_file": "tests/test_notifications.py",
       "source_location": "L294",
-      "community": 261,
+      "community": 174,
       "norm_label": "test_notification_settings_show_only_current_owners_devices()",
       "id": "tests_test_notifications_test_notification_settings_show_only_current_owners_devices"
     },
@@ -13620,7 +13611,7 @@
       "file_type": "code",
       "source_file": "tests/test_notifications.py",
       "source_location": "L325",
-      "community": 261,
+      "community": 174,
       "norm_label": "test_owner_can_queue_test_message_for_one_device()",
       "id": "tests_test_notifications_test_owner_can_queue_test_message_for_one_device"
     },
@@ -13638,7 +13629,7 @@
       "file_type": "code",
       "source_file": "tests/test_notifications.py",
       "source_location": "L380",
-      "community": 261,
+      "community": 174,
       "norm_label": "test_scheduled_shift_reminder_uses_one_hour_lead_and_deduplicates()",
       "id": "tests_test_notifications_test_scheduled_shift_reminder_uses_one_hour_lead_and_deduplicates"
     },
@@ -13647,7 +13638,7 @@
       "file_type": "code",
       "source_file": "tests/test_notifications.py",
       "source_location": "L408",
-      "community": 261,
+      "community": 174,
       "norm_label": "test_scheduled_meal_deadline_skips_existing_signup()",
       "id": "tests_test_notifications_test_scheduled_meal_deadline_skips_existing_signup"
     },
@@ -13674,7 +13665,7 @@
       "file_type": "code",
       "source_file": "tests/test_notifications.py",
       "source_location": "L499",
-      "community": 124,
+      "community": 174,
       "norm_label": "test_linked_participant_quick_cancellation_passes_current_actor()",
       "id": "tests_test_notifications_test_linked_participant_quick_cancellation_passes_current_actor"
     },
@@ -13683,7 +13674,7 @@
       "file_type": "code",
       "source_file": "tests/test_notifications.py",
       "source_location": "L539",
-      "community": 124,
+      "community": 174,
       "norm_label": "test_linked_participant_meal_retraction_passes_current_actor()",
       "id": "tests_test_notifications_test_linked_participant_meal_retraction_passes_current_actor"
     },
@@ -13692,7 +13683,7 @@
       "file_type": "code",
       "source_file": "tests/test_notifications.py",
       "source_location": "L591",
-      "community": 261,
+      "community": 200,
       "norm_label": "test_expense_approval_queues_after_transaction_commit()",
       "id": "tests_test_notifications_test_expense_approval_queues_after_transaction_commit"
     },
@@ -13701,7 +13692,7 @@
       "file_type": "code",
       "source_file": "tests/test_notifications.py",
       "source_location": "L618",
-      "community": 261,
+      "community": 174,
       "norm_label": "test_booking_invitation_view_queues_after_commit()",
       "id": "tests_test_notifications_test_booking_invitation_view_queues_after_commit"
     },
@@ -13710,7 +13701,7 @@
       "file_type": "code",
       "source_file": "tests/test_participant_archiving.py",
       "source_location": "L1",
-      "community": 316,
+      "community": 174,
       "norm_label": "test_participant_archiving.py",
       "id": "tests_test_participant_archiving"
     },
@@ -13719,7 +13710,7 @@
       "file_type": "code",
       "source_file": "tests/test_participant_archiving.py",
       "source_location": "L11",
-      "community": 316,
+      "community": 174,
       "norm_label": "test_editor_can_edit_participant()",
       "id": "tests_test_participant_archiving_test_editor_can_edit_participant"
     },
@@ -13728,7 +13719,7 @@
       "file_type": "code",
       "source_file": "tests/test_participant_archiving.py",
       "source_location": "L36",
-      "community": 316,
+      "community": 174,
       "norm_label": "test_admin_archives_and_restores_participant_without_deleting_financial_data()",
       "id": "tests_test_participant_archiving_test_admin_archives_and_restores_participant_without_deleting_financial_data"
     },
@@ -13737,7 +13728,7 @@
       "file_type": "code",
       "source_file": "tests/test_participant_archiving.py",
       "source_location": "L60",
-      "community": 316,
+      "community": 174,
       "norm_label": "test_editor_cannot_archive_participant()",
       "id": "tests_test_participant_archiving_test_editor_cannot_archive_participant"
     },
@@ -13746,7 +13737,7 @@
       "file_type": "code",
       "source_file": "tests/test_participant_archiving.py",
       "source_location": "L74",
-      "community": 316,
+      "community": 174,
       "norm_label": "test_archived_participant_is_removed_from_live_camp_settlement()",
       "id": "tests_test_participant_archiving_test_archived_participant_is_removed_from_live_camp_settlement"
     },
@@ -14115,7 +14106,7 @@
       "file_type": "code",
       "source_file": "tests/test_price_rules.py",
       "source_location": "L1",
-      "community": 200,
+      "community": 138,
       "norm_label": "test_price_rules.py",
       "id": "tests_test_price_rules"
     },
@@ -14124,7 +14115,7 @@
       "file_type": "code",
       "source_file": "tests/test_price_rules.py",
       "source_location": "L11",
-      "community": 200,
+      "community": 138,
       "norm_label": "test_admin_can_manage_camp_flat_rates_without_dropdowns()",
       "id": "tests_test_price_rules_test_admin_can_manage_camp_flat_rates_without_dropdowns"
     },
@@ -14133,7 +14124,7 @@
       "file_type": "code",
       "source_file": "tests/test_price_rules.py",
       "source_location": "L44",
-      "community": 200,
+      "community": 138,
       "norm_label": "test_price_rule_manage_page_shows_camp_flat_matrix()",
       "id": "tests_test_price_rules_test_price_rule_manage_page_shows_camp_flat_matrix"
     },
@@ -14142,7 +14133,7 @@
       "file_type": "code",
       "source_file": "tests/test_price_rules.py",
       "source_location": "L59",
-      "community": 200,
+      "community": 138,
       "norm_label": "test_price_rule_create_redirects_to_manage_page()",
       "id": "tests_test_price_rules_test_price_rule_create_redirects_to_manage_page"
     },
@@ -14151,7 +14142,7 @@
       "file_type": "code",
       "source_file": "tests/test_price_rules.py",
       "source_location": "L82",
-      "community": 200,
+      "community": 138,
       "norm_label": "test_price_rule_edit_redirects_to_manage_page()",
       "id": "tests_test_price_rules_test_price_rule_edit_redirects_to_manage_page"
     },
@@ -14160,7 +14151,7 @@
       "file_type": "code",
       "source_file": "tests/test_price_rules.py",
       "source_location": "L109",
-      "community": 200,
+      "community": 138,
       "norm_label": "test_price_rule_form_validates_camp_flat_fields()",
       "id": "tests_test_price_rules_test_price_rule_form_validates_camp_flat_fields"
     },
@@ -14250,7 +14241,7 @@
       "file_type": "code",
       "source_file": "tests/test_pwa.py",
       "source_location": "L56",
-      "community": 124,
+      "community": 297,
       "norm_label": "test_private_kiosk_login_uses_persistent_session_without_autologout()",
       "id": "tests_test_pwa_test_private_kiosk_login_uses_persistent_session_without_autologout"
     },
@@ -14259,7 +14250,7 @@
       "file_type": "code",
       "source_file": "tests/test_pwa.py",
       "source_location": "L80",
-      "community": 124,
+      "community": 297,
       "norm_label": "test_central_kiosk_login_enforces_short_autologout()",
       "id": "tests_test_pwa_test_central_kiosk_login_enforces_short_autologout"
     },
@@ -14268,7 +14259,7 @@
       "file_type": "code",
       "source_file": "tests/test_pwa.py",
       "source_location": "L99",
-      "community": 124,
+      "community": 297,
       "norm_label": "test_switching_kiosk_modes_clears_participant_session()",
       "id": "tests_test_pwa_test_switching_kiosk_modes_clears_participant_session"
     },
@@ -14475,7 +14466,7 @@
       "file_type": "code",
       "source_file": "tests/test_settlements.py",
       "source_location": "L93",
-      "community": 200,
+      "community": 138,
       "norm_label": "test_settlement_applies_price_element_subsidy_rates_for_youth_group_members()",
       "id": "tests_test_settlements_test_settlement_applies_price_element_subsidy_rates_for_youth_group_members"
     },
@@ -14484,7 +14475,7 @@
       "file_type": "code",
       "source_file": "tests/test_settlements.py",
       "source_location": "L127",
-      "community": 200,
+      "community": 124,
       "norm_label": "test_settlement_selects_matching_camp_flat_rate_for_companion_and_duration()",
       "id": "tests_test_settlements_test_settlement_selects_matching_camp_flat_rate_for_companion_and_duration"
     },
@@ -14529,7 +14520,7 @@
       "file_type": "code",
       "source_file": "tests/test_setup_flow.py",
       "source_location": "L1",
-      "community": 304,
+      "community": 174,
       "norm_label": "test_setup_flow.py",
       "id": "tests_test_setup_flow"
     },
@@ -14538,7 +14529,7 @@
       "file_type": "code",
       "source_file": "tests/test_setup_flow.py",
       "source_location": "L11",
-      "community": 304,
+      "community": 174,
       "norm_label": "test_login_redirects_to_setup_before_first_user()",
       "id": "tests_test_setup_flow_test_login_redirects_to_setup_before_first_user"
     },
@@ -14547,7 +14538,7 @@
       "file_type": "code",
       "source_file": "tests/test_setup_flow.py",
       "source_location": "L19",
-      "community": 304,
+      "community": 174,
       "norm_label": "test_setup_creates_first_admin_and_logs_in()",
       "id": "tests_test_setup_flow_test_setup_creates_first_admin_and_logs_in"
     },
@@ -14556,7 +14547,7 @@
       "file_type": "code",
       "source_file": "tests/test_setup_flow.py",
       "source_location": "L45",
-      "community": 304,
+      "community": 174,
       "norm_label": "test_setup_form_escapes_rejected_user_input()",
       "id": "tests_test_setup_flow_test_setup_form_escapes_rejected_user_input"
     },
@@ -14565,7 +14556,7 @@
       "file_type": "code",
       "source_file": "tests/test_setup_flow.py",
       "source_location": "L63",
-      "community": 304,
+      "community": 174,
       "norm_label": "test_root_opens_private_kiosk()",
       "id": "tests_test_setup_flow_test_root_opens_private_kiosk"
     },
@@ -14574,7 +14565,7 @@
       "file_type": "code",
       "source_file": "tests/test_setup_flow.py",
       "source_location": "L71",
-      "community": 304,
+      "community": 174,
       "norm_label": "test_setup_is_disabled_after_user_exists()",
       "id": "tests_test_setup_flow_test_setup_is_disabled_after_user_exists"
     },
@@ -14583,7 +14574,7 @@
       "file_type": "code",
       "source_file": "tests/test_setup_flow.py",
       "source_location": "L80",
-      "community": 304,
+      "community": 174,
       "norm_label": "test_app_stylesheet_is_discoverable_by_staticfiles()",
       "id": "tests_test_setup_flow_test_app_stylesheet_is_discoverable_by_staticfiles"
     },
@@ -14592,7 +14583,7 @@
       "file_type": "code",
       "source_file": "tests/test_shift_templates.py",
       "source_location": "L1",
-      "community": 130,
+      "community": 325,
       "norm_label": "test_shift_templates.py",
       "id": "tests_test_shift_templates"
     },
@@ -14601,7 +14592,7 @@
       "file_type": "code",
       "source_file": "tests/test_shift_templates.py",
       "source_location": "L10",
-      "community": 130,
+      "community": 325,
       "norm_label": "active_camp()",
       "id": "tests_test_shift_templates_active_camp"
     },
@@ -14610,7 +14601,7 @@
       "file_type": "code",
       "source_file": "tests/test_shift_templates.py",
       "source_location": "L21",
-      "community": 130,
+      "community": 325,
       "norm_label": "test_shift_templates_manage_view()",
       "id": "tests_test_shift_templates_test_shift_templates_manage_view"
     },
@@ -14619,7 +14610,7 @@
       "file_type": "code",
       "source_file": "tests/test_shift_templates.py",
       "source_location": "L28",
-      "community": 130,
+      "community": 325,
       "norm_label": "test_shift_template_create()",
       "id": "tests_test_shift_templates_test_shift_template_create"
     },
@@ -14628,7 +14619,7 @@
       "file_type": "code",
       "source_file": "tests/test_shift_templates.py",
       "source_location": "L41",
-      "community": 130,
+      "community": 325,
       "norm_label": "test_shift_template_edit()",
       "id": "tests_test_shift_templates_test_shift_template_edit"
     },
@@ -14637,7 +14628,7 @@
       "file_type": "code",
       "source_file": "tests/test_shift_templates.py",
       "source_location": "L57",
-      "community": 130,
+      "community": 325,
       "norm_label": "test_shift_templates_generate()",
       "id": "tests_test_shift_templates_test_shift_templates_generate"
     },
@@ -14646,7 +14637,7 @@
       "file_type": "code",
       "source_file": "tests/test_shifts.py",
       "source_location": "L1",
-      "community": 130,
+      "community": 266,
       "norm_label": "test_shifts.py",
       "id": "tests_test_shifts"
     },
@@ -14655,7 +14646,7 @@
       "file_type": "code",
       "source_file": "tests/test_shifts.py",
       "source_location": "L11",
-      "community": 130,
+      "community": 266,
       "norm_label": "active_camp()",
       "id": "tests_test_shifts_active_camp"
     },
@@ -14664,7 +14655,7 @@
       "file_type": "code",
       "source_file": "tests/test_shifts.py",
       "source_location": "L22",
-      "community": 130,
+      "community": 266,
       "norm_label": "shift()",
       "id": "tests_test_shifts_shift"
     },
@@ -14673,7 +14664,7 @@
       "file_type": "code",
       "source_file": "tests/test_shifts.py",
       "source_location": "L32",
-      "community": 130,
+      "community": 266,
       "norm_label": "test_target_shifts_calculation()",
       "id": "tests_test_shifts_test_target_shifts_calculation"
     },
@@ -14682,7 +14673,7 @@
       "file_type": "code",
       "source_file": "tests/test_shifts.py",
       "source_location": "L44",
-      "community": 130,
+      "community": 266,
       "norm_label": "test_admin_can_create_shift()",
       "id": "tests_test_shifts_test_admin_can_create_shift"
     },
@@ -14691,7 +14682,7 @@
       "file_type": "code",
       "source_file": "tests/test_shifts.py",
       "source_location": "L59",
-      "community": 130,
+      "community": 266,
       "norm_label": "test_admin_can_delete_shift()",
       "id": "tests_test_shifts_test_admin_can_delete_shift"
     },
@@ -14700,7 +14691,7 @@
       "file_type": "code",
       "source_file": "tests/test_shifts.py",
       "source_location": "L67",
-      "community": 130,
+      "community": 266,
       "norm_label": "test_generate_shifts_from_templates()",
       "id": "tests_test_shifts_test_generate_shifts_from_templates"
     },
@@ -14714,10 +14705,19 @@
       "id": "tests_test_ui_improvements"
     },
     {
+      "label": "test_template_theme_properties_are_defined_in_the_shared_stylesheet()",
+      "file_type": "code",
+      "source_file": "tests/test_ui_improvements.py",
+      "source_location": "L11",
+      "community": 104,
+      "norm_label": "test_template_theme_properties_are_defined_in_the_shared_stylesheet()",
+      "id": "tests_test_ui_improvements_test_template_theme_properties_are_defined_in_the_shared_stylesheet"
+    },
+    {
       "label": "test_participant_detail_shows_donation_prompt_for_credit()",
       "file_type": "code",
       "source_file": "tests/test_ui_improvements.py",
-      "source_location": "L10",
+      "source_location": "L25",
       "community": 104,
       "norm_label": "test_participant_detail_shows_donation_prompt_for_credit()",
       "id": "tests_test_ui_improvements_test_participant_detail_shows_donation_prompt_for_credit"
@@ -14726,7 +14726,7 @@
       "label": "test_base_layout_renders_favicon()",
       "file_type": "code",
       "source_file": "tests/test_ui_improvements.py",
-      "source_location": "L26",
+      "source_location": "L41",
       "community": 104,
       "norm_label": "test_base_layout_renders_favicon()",
       "id": "tests_test_ui_improvements_test_base_layout_renders_favicon"
@@ -14862,7 +14862,7 @@
       "file_type": "code",
       "source_file": "tests/test_view_permissions.py",
       "source_location": "L42",
-      "community": 108,
+      "community": 138,
       "norm_label": "permission_dataset()",
       "id": "tests_test_view_permissions_permission_dataset"
     },
@@ -16586,6 +16586,42 @@
       "id": "changelog_pr_167_camp_detail_system_runs_icons_lager\u00fcbersicht_und_app_icons"
     },
     {
+      "label": "pr-171-private-kiosk-session.md",
+      "file_type": "document",
+      "source_file": "changelog/pr-171-private-kiosk-session.md",
+      "source_location": "L1",
+      "community": 318,
+      "norm_label": "pr-171-private-kiosk-session.md",
+      "id": "changelog_pr_171_private_kiosk_session"
+    },
+    {
+      "label": "Privater PWA-Kiosk bleibt angemeldet",
+      "file_type": "document",
+      "source_file": "changelog/pr-171-private-kiosk-session.md",
+      "source_location": "L1",
+      "community": 318,
+      "norm_label": "privater pwa-kiosk bleibt angemeldet",
+      "id": "changelog_pr_171_private_kiosk_session_privater_pwa_kiosk_bleibt_angemeldet"
+    },
+    {
+      "label": "pr-179-dark-mode-contrast.md",
+      "file_type": "document",
+      "source_file": "changelog/pr-179-dark-mode-contrast.md",
+      "source_location": "L1",
+      "community": 324,
+      "norm_label": "pr-179-dark-mode-contrast.md",
+      "id": "changelog_pr_179_dark_mode_contrast"
+    },
+    {
+      "label": "Dark-Mode-Kontraste vereinheitlicht",
+      "file_type": "document",
+      "source_file": "changelog/pr-179-dark-mode-contrast.md",
+      "source_location": "L1",
+      "community": 324,
+      "norm_label": "dark-mode-kontraste vereinheitlicht",
+      "id": "changelog_pr_179_dark_mode_contrast_dark_mode_kontraste_vereinheitlicht"
+    },
+    {
       "label": "pr-29-remove-redundant-settlement-table.md",
       "file_type": "document",
       "source_file": "changelog/pr-29-remove-redundant-settlement-table.md",
@@ -17805,7 +17841,7 @@
       "file_type": "code",
       "source_file": "tests/test_pwa.py",
       "source_location": "L56",
-      "community": 124,
+      "community": 297,
       "norm_label": "test_private_kiosk_login_uses_browser_session_without_autologout()",
       "id": "tests_test_pwa_test_private_kiosk_login_uses_browser_session_without_autologout"
     },
@@ -17868,7 +17904,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L131",
-      "community": 245,
+      "community": 265,
       "norm_label": "create or update the current user's browser subscription.",
       "id": "billing_notification_views_rationale_131"
     },
@@ -17877,7 +17913,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L137",
-      "community": 245,
+      "community": 265,
       "norm_label": "create or update a private participant browser subscription.",
       "id": "billing_notification_views_rationale_137"
     },
@@ -17886,7 +17922,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L153",
-      "community": 234,
+      "community": 265,
       "norm_label": "revoke one push device owned by the current user.",
       "id": "billing_notification_views_rationale_153"
     },
@@ -17895,7 +17931,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L159",
-      "community": 245,
+      "community": 254,
       "norm_label": "revoke one push device owned by the private participant.",
       "id": "billing_notification_views_rationale_159"
     },
@@ -17904,7 +17940,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L167",
-      "community": 234,
+      "community": 254,
       "norm_label": "queue a harmless test message for one owner-controlled device.",
       "id": "billing_notification_views_rationale_167"
     },
@@ -17913,7 +17949,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/notification_views.py",
       "source_location": "L193",
-      "community": 245,
+      "community": 254,
       "norm_label": "queue a test message for one push device owned by the private participant.",
       "id": "billing_notification_views_rationale_193"
     },
@@ -17940,7 +17976,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/pwa_views.py",
       "source_location": "L90",
-      "community": 224,
+      "community": 245,
       "norm_label": "return manifest and service-worker urls for a pwa surface.",
       "id": "billing_pwa_views_rationale_90"
     },
@@ -18264,7 +18300,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/services.py",
       "source_location": "L113",
-      "community": 190,
+      "community": 2,
       "norm_label": "return whether kiosk meal changes are closed for the requested meal date.      a",
       "id": "billing_services_rationale_113"
     },
@@ -18336,7 +18372,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/services.py",
       "source_location": "L203",
-      "community": 121,
+      "community": 190,
       "norm_label": "aggregate dinner signups for a camp by day for catering orders.",
       "id": "billing_services_rationale_203"
     },
@@ -18345,7 +18381,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/services.py",
       "source_location": "L257",
-      "community": 190,
+      "community": 2,
       "norm_label": "return the applicable meal price rule for one person and date.      args:",
       "id": "billing_services_rationale_257"
     },
@@ -18399,7 +18435,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L133",
-      "community": 120,
+      "community": 304,
       "norm_label": "show image metadata and the latest deployment-agent state.",
       "id": "billing_views_rationale_133"
     },
@@ -18561,7 +18597,7 @@
       "file_type": "rationale",
       "source_file": "src/config/context_processors.py",
       "source_location": "L8",
-      "community": 224,
+      "community": 323,
       "norm_label": "expose optional authentication feature flags to server-rendered templates.",
       "id": "config_context_processors_rationale_8"
     },
@@ -18588,7 +18624,7 @@
       "file_type": "code",
       "source_file": "tests/test_setup_flow.py",
       "source_location": "L63",
-      "community": 304,
+      "community": 174,
       "norm_label": "test_root_opens_kiosk_login()",
       "id": "tests_test_setup_flow_test_root_opens_kiosk_login"
     },
@@ -18633,7 +18669,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L69",
-      "community": 131,
+      "community": 263,
       "norm_label": "render the current user's registered passkeys.",
       "id": "billing_passkey_views_rationale_69"
     },
@@ -18642,7 +18678,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L78",
-      "community": 131,
+      "community": 263,
       "norm_label": "return a discoverable-credential authentication challenge.",
       "id": "billing_passkey_views_rationale_78"
     },
@@ -18651,7 +18687,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L86",
-      "community": 131,
+      "community": 263,
       "norm_label": "return registration options bound to the authenticated user.",
       "id": "billing_passkey_views_rationale_86"
     },
@@ -18660,7 +18696,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L98",
-      "community": 131,
+      "community": 252,
       "norm_label": "verify and store a passkey registered by the authenticated user.",
       "id": "billing_passkey_views_rationale_98"
     },
@@ -18669,7 +18705,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L124",
-      "community": 131,
+      "community": 252,
       "norm_label": "verify a passkey assertion and create a django login session.",
       "id": "billing_passkey_views_rationale_124"
     },
@@ -18678,7 +18714,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/passkey_views.py",
       "source_location": "L152",
-      "community": 131,
+      "community": 252,
       "norm_label": "delete one passkey owned by the authenticated user.",
       "id": "billing_passkey_views_rationale_152"
     },
@@ -18687,7 +18723,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/passkeys.py",
       "source_location": "L34",
-      "community": 131,
+      "community": 252,
       "norm_label": "indicate that a webauthn ceremony cannot be completed safely.",
       "id": "billing_passkeys_rationale_34"
     },
@@ -18768,7 +18804,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L226",
-      "community": 252,
+      "community": 0,
       "norm_label": "represent a kiosk-only family member billed through a participant.",
       "id": "billing_models_rationale_226"
     },
@@ -18795,7 +18831,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L258",
-      "community": 252,
+      "community": 0,
       "norm_label": "store the kiosk pin for a companion family member.",
       "id": "billing_models_rationale_258"
     },
@@ -18876,7 +18912,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L643",
-      "community": 61,
+      "community": 111,
       "norm_label": "store the visible menu description for one camp meal slot.",
       "id": "billing_models_rationale_643"
     },
@@ -18894,7 +18930,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L747",
-      "community": 252,
+      "community": 111,
       "norm_label": "record one attempted automated settlement backup for a camp and date.",
       "id": "billing_models_rationale_747"
     },
@@ -19839,7 +19875,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/forms.py",
       "source_location": "L206",
-      "community": 146,
+      "community": 322,
       "norm_label": "persist editable user metadata and the attached profile.",
       "id": "billing_forms_rationale_206"
     },
@@ -20019,7 +20055,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L588",
-      "community": 61,
+      "community": 111,
       "norm_label": "store the visible menu description for one camp meal slot.",
       "id": "billing_models_rationale_588"
     },
@@ -20037,7 +20073,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L692",
-      "community": 252,
+      "community": 111,
       "norm_label": "record one attempted automated settlement backup for a camp and date.",
       "id": "billing_models_rationale_692"
     },
@@ -20046,7 +20082,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L128",
-      "community": 120,
+      "community": 304,
       "norm_label": "show image metadata and the latest deployment-agent state.",
       "id": "billing_views_rationale_128"
     },
@@ -20055,7 +20091,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L164",
-      "community": 253,
+      "community": 316,
       "norm_label": "pull the configured latest image and compare it with the running image.",
       "id": "billing_views_rationale_164"
     },
@@ -20280,7 +20316,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L127",
-      "community": 120,
+      "community": 304,
       "norm_label": "show image metadata and the latest deployment-agent state.",
       "id": "billing_views_rationale_127"
     },
@@ -20289,7 +20325,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L163",
-      "community": 253,
+      "community": 316,
       "norm_label": "pull the configured latest image and compare it with the running image.",
       "id": "billing_views_rationale_163"
     },
@@ -20316,7 +20352,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L274",
-      "community": 120,
+      "community": 145,
       "norm_label": "create a new application user and assign the selected billing role.",
       "id": "billing_views_rationale_274"
     },
@@ -20325,7 +20361,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L287",
-      "community": 106,
+      "community": 247,
       "norm_label": "edit account status and billing role for an existing user.",
       "id": "billing_views_rationale_287"
     },
@@ -20433,7 +20469,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L552",
-      "community": 254,
+      "community": 234,
       "norm_label": "return persisted update state and the configured portainer stack image.",
       "id": "deployment_agent_rationale_552"
     },
@@ -20451,7 +20487,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L590",
-      "community": 226,
+      "community": 234,
       "norm_label": "parse database_url into pg_dump connection arguments without leaking passwords.",
       "id": "deployment_agent_rationale_590"
     },
@@ -20460,7 +20496,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L607",
-      "community": 107,
+      "community": 234,
       "norm_label": "return a postgresql dump without writing credentials to process arguments.",
       "id": "deployment_agent_rationale_607"
     },
@@ -20469,7 +20505,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L638",
-      "community": 254,
+      "community": 234,
       "norm_label": "create a gzipped postgresql backup using database_url connection details.",
       "id": "deployment_agent_rationale_638"
     },
@@ -20478,7 +20514,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L651",
-      "community": 254,
+      "community": 261,
       "norm_label": "resolve a backup child path and reject traversal outside backup_dir.",
       "id": "deployment_agent_rationale_651"
     },
@@ -20514,7 +20550,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L701",
-      "community": 254,
+      "community": 261,
       "norm_label": "set app_image in portainer and trigger a stack redeploy.",
       "id": "deployment_agent_rationale_701"
     },
@@ -20523,7 +20559,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L706",
-      "community": 87,
+      "community": 313,
       "norm_label": "poll the configured application health endpoint until it returns 2xx.",
       "id": "deployment_agent_rationale_706"
     },
@@ -20595,7 +20631,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L73",
-      "community": 226,
+      "community": 241,
       "norm_label": "return a required environment value or raise a clear configuration error.",
       "id": "deployment_agent_rationale_73"
     },
@@ -20802,7 +20838,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L408",
-      "community": 263,
+      "community": 231,
       "norm_label": "pick a linux/amd64 manifest from an oci index, falling back to the first item.",
       "id": "deployment_agent_rationale_408"
     },
@@ -20829,7 +20865,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L481",
-      "community": 263,
+      "community": 87,
       "norm_label": "normalize current build metadata supplied by django.",
       "id": "deployment_agent_rationale_481"
     },
@@ -20847,7 +20883,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L504",
-      "community": 254,
+      "community": 234,
       "norm_label": "return persisted update state and the configured portainer stack image.",
       "id": "deployment_agent_rationale_504"
     },
@@ -20865,7 +20901,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L540",
-      "community": 226,
+      "community": 234,
       "norm_label": "parse database_url into pg_dump connection arguments without leaking passwords.",
       "id": "deployment_agent_rationale_540"
     },
@@ -20874,7 +20910,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L557",
-      "community": 107,
+      "community": 234,
       "norm_label": "return a postgresql dump without writing credentials to process arguments.",
       "id": "deployment_agent_rationale_557"
     },
@@ -20883,7 +20919,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L588",
-      "community": 254,
+      "community": 261,
       "norm_label": "create a gzipped postgresql backup using database_url connection details.",
       "id": "deployment_agent_rationale_588"
     },
@@ -20892,7 +20928,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L601",
-      "community": 254,
+      "community": 261,
       "norm_label": "resolve a backup child path and reject traversal outside backup_dir.",
       "id": "deployment_agent_rationale_601"
     },
@@ -20928,7 +20964,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L656",
-      "community": 87,
+      "community": 313,
       "norm_label": "poll the configured application health endpoint until it returns 2xx.",
       "id": "deployment_agent_rationale_656"
     },
@@ -21099,7 +21135,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L658",
-      "community": 87,
+      "community": 313,
       "norm_label": "poll the configured application health endpoint until it returns 2xx.",
       "id": "deployment_agent_rationale_658"
     },
@@ -21333,7 +21369,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L405",
-      "community": 263,
+      "community": 231,
       "norm_label": "pick a linux/amd64 manifest from an oci index, falling back to the first item.",
       "id": "deployment_agent_rationale_405"
     },
@@ -21360,7 +21396,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L478",
-      "community": 263,
+      "community": 87,
       "norm_label": "normalize current build metadata supplied by django.",
       "id": "deployment_agent_rationale_478"
     },
@@ -21369,7 +21405,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L501",
-      "community": 254,
+      "community": 261,
       "norm_label": "return persisted update state and the configured portainer stack image.",
       "id": "deployment_agent_rationale_501"
     },
@@ -21387,7 +21423,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L537",
-      "community": 226,
+      "community": 234,
       "norm_label": "parse database_url into pg_dump connection arguments without leaking passwords.",
       "id": "deployment_agent_rationale_537"
     },
@@ -21396,7 +21432,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L585",
-      "community": 254,
+      "community": 234,
       "norm_label": "create a gzipped postgresql backup using database_url connection details.",
       "id": "deployment_agent_rationale_585"
     },
@@ -21405,7 +21441,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L598",
-      "community": 254,
+      "community": 261,
       "norm_label": "resolve a backup child path and reject traversal outside backup_dir.",
       "id": "deployment_agent_rationale_598"
     },
@@ -21423,7 +21459,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L641",
-      "community": 254,
+      "community": 261,
       "norm_label": "set app_image in portainer and trigger a stack redeploy.",
       "id": "deployment_agent_rationale_641"
     },
@@ -21432,7 +21468,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L646",
-      "community": 87,
+      "community": 313,
       "norm_label": "poll the configured application health endpoint until it returns 2xx.",
       "id": "deployment_agent_rationale_646"
     },
@@ -21693,7 +21729,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L377",
-      "community": 263,
+      "community": 231,
       "norm_label": "fetch a bearer token from a registry www-authenticate challenge.",
       "id": "deployment_agent_rationale_377"
     },
@@ -21702,7 +21738,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L403",
-      "community": 263,
+      "community": 231,
       "norm_label": "pick a linux/amd64 manifest from an oci index, falling back to the first item.",
       "id": "deployment_agent_rationale_403"
     },
@@ -21729,7 +21765,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L476",
-      "community": 263,
+      "community": 87,
       "norm_label": "normalize current build metadata supplied by django.",
       "id": "deployment_agent_rationale_476"
     },
@@ -21747,7 +21783,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L499",
-      "community": 254,
+      "community": 234,
       "norm_label": "return persisted update state and the configured portainer stack image.",
       "id": "deployment_agent_rationale_499"
     },
@@ -21774,7 +21810,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L593",
-      "community": 87,
+      "community": 313,
       "norm_label": "poll the configured application health endpoint until it returns 2xx.",
       "id": "deployment_agent_rationale_593"
     },
@@ -21873,7 +21909,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/forms.py",
       "source_location": "L192",
-      "community": 146,
+      "community": 322,
       "norm_label": "persist editable user metadata and the attached profile.",
       "id": "billing_forms_rationale_192"
     },
@@ -21963,7 +21999,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L123",
-      "community": 120,
+      "community": 304,
       "norm_label": "show image metadata and the latest deployment-agent state.",
       "id": "billing_views_rationale_123"
     },
@@ -21972,7 +22008,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L146",
-      "community": 253,
+      "community": 316,
       "norm_label": "pull the configured latest image and compare it with the running image.",
       "id": "billing_views_rationale_146"
     },
@@ -22197,7 +22233,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L580",
-      "community": 61,
+      "community": 111,
       "norm_label": "store the visible menu description for one camp meal slot.",
       "id": "billing_models_rationale_580"
     },
@@ -22206,7 +22242,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L122",
-      "community": 120,
+      "community": 304,
       "norm_label": "show image metadata and the latest deployment-agent state.",
       "id": "billing_views_rationale_122"
     },
@@ -22215,7 +22251,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L145",
-      "community": 253,
+      "community": 316,
       "norm_label": "pull the configured latest image and compare it with the running image.",
       "id": "billing_views_rationale_145"
     },
@@ -22512,7 +22548,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L450",
-      "community": 263,
+      "community": 87,
       "norm_label": "normalize current build metadata supplied by django.",
       "id": "deployment_agent_rationale_450"
     },
@@ -22521,7 +22557,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L473",
-      "community": 254,
+      "community": 234,
       "norm_label": "return persisted update state and the configured portainer stack image.",
       "id": "deployment_agent_rationale_473"
     },
@@ -22530,7 +22566,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L509",
-      "community": 226,
+      "community": 234,
       "norm_label": "parse database_url into pg_dump connection arguments without leaking passwords.",
       "id": "deployment_agent_rationale_509"
     },
@@ -22539,7 +22575,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L526",
-      "community": 254,
+      "community": 234,
       "norm_label": "create a gzipped postgresql backup using database_url connection details.",
       "id": "deployment_agent_rationale_526"
     },
@@ -22548,7 +22584,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L562",
-      "community": 254,
+      "community": 261,
       "norm_label": "set app_image in portainer and trigger a stack redeploy.",
       "id": "deployment_agent_rationale_562"
     },
@@ -22647,7 +22683,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/forms.py",
       "source_location": "L191",
-      "community": 146,
+      "community": 322,
       "norm_label": "persist editable user metadata and the attached profile.",
       "id": "billing_forms_rationale_191"
     },
@@ -22737,7 +22773,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L22",
-      "community": 252,
+      "community": 61,
       "norm_label": "store editable application metadata for a django user account.",
       "id": "billing_models_rationale_22"
     },
@@ -22755,7 +22791,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L225",
-      "community": 252,
+      "community": 0,
       "norm_label": "represent a kiosk-only family member billed through a participant.",
       "id": "billing_models_rationale_225"
     },
@@ -22854,7 +22890,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/services.py",
       "source_location": "L111",
-      "community": 190,
+      "community": 2,
       "norm_label": "return whether kiosk meal changes are closed for the requested meal date.      a",
       "id": "billing_services_rationale_111"
     },
@@ -22926,7 +22962,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/services.py",
       "source_location": "L201",
-      "community": 121,
+      "community": 190,
       "norm_label": "aggregate dinner signups for a camp by day for catering orders.",
       "id": "billing_services_rationale_201"
     },
@@ -22971,7 +23007,7 @@
       "file_type": "code",
       "source_file": "src/billing/views.py",
       "source_location": "L1086",
-      "community": 190,
+      "community": 2,
       "norm_label": "_meal_price_rule()",
       "id": "billing_views_meal_price_rule"
     },
@@ -22980,7 +23016,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L119",
-      "community": 120,
+      "community": 304,
       "norm_label": "show image metadata and the latest deployment-agent state.",
       "id": "billing_views_rationale_119"
     },
@@ -23196,7 +23232,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L579",
-      "community": 61,
+      "community": 111,
       "norm_label": "store the visible menu description for one camp meal slot.",
       "id": "billing_models_rationale_579"
     },
@@ -23403,7 +23439,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L336",
-      "community": 263,
+      "community": 231,
       "norm_label": "pick a linux/amd64 manifest from an oci index, falling back to the first item.",
       "id": "deployment_agent_rationale_336"
     },
@@ -23430,7 +23466,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L427",
-      "community": 254,
+      "community": 234,
       "norm_label": "return persisted update state and the configured portainer stack image.",
       "id": "deployment_agent_rationale_427"
     },
@@ -23448,7 +23484,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L463",
-      "community": 226,
+      "community": 234,
       "norm_label": "parse database_url into pg_dump connection arguments without leaking passwords.",
       "id": "deployment_agent_rationale_463"
     },
@@ -23457,7 +23493,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L480",
-      "community": 254,
+      "community": 234,
       "norm_label": "create a gzipped postgresql backup using database_url connection details.",
       "id": "deployment_agent_rationale_480"
     },
@@ -23466,7 +23502,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L516",
-      "community": 254,
+      "community": 261,
       "norm_label": "set app_image in portainer and trigger a stack redeploy.",
       "id": "deployment_agent_rationale_516"
     },
@@ -23475,7 +23511,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L521",
-      "community": 87,
+      "community": 313,
       "norm_label": "poll the configured application health endpoint until it returns 2xx.",
       "id": "deployment_agent_rationale_521"
     },
@@ -23520,7 +23556,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L323",
-      "community": 263,
+      "community": 231,
       "norm_label": "pick a linux/amd64 manifest from an oci index, falling back to the first item.",
       "id": "deployment_agent_rationale_323"
     },
@@ -23547,7 +23583,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L396",
-      "community": 263,
+      "community": 87,
       "norm_label": "normalize current build metadata supplied by django.",
       "id": "deployment_agent_rationale_396"
     },
@@ -23565,7 +23601,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L414",
-      "community": 254,
+      "community": 234,
       "norm_label": "return persisted update state and the configured portainer stack image.",
       "id": "deployment_agent_rationale_414"
     },
@@ -23583,7 +23619,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L448",
-      "community": 226,
+      "community": 234,
       "norm_label": "parse database_url into pg_dump connection arguments without leaking passwords.",
       "id": "deployment_agent_rationale_448"
     },
@@ -23592,7 +23628,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L465",
-      "community": 254,
+      "community": 234,
       "norm_label": "create a gzipped postgresql backup using database_url connection details.",
       "id": "deployment_agent_rationale_465"
     },
@@ -23601,7 +23637,7 @@
       "file_type": "rationale",
       "source_file": "deployment_agent.py",
       "source_location": "L506",
-      "community": 87,
+      "community": 313,
       "norm_label": "poll the configured application health endpoint until it returns 2xx.",
       "id": "deployment_agent_rationale_506"
     },
@@ -23655,7 +23691,7 @@
       "file_type": "code",
       "source_file": "deployment_agent.py",
       "source_location": "L31",
-      "community": 107,
+      "community": 227,
       "norm_label": "get_env_file()",
       "id": "deployment_agent_get_env_file"
     },
@@ -23664,7 +23700,7 @@
       "file_type": "code",
       "source_file": "deployment_agent.py",
       "source_location": "L61",
-      "community": 107,
+      "community": 226,
       "norm_label": "composeuperror",
       "id": "deployment_agent_composeuperror"
     },
@@ -23718,7 +23754,7 @@
       "file_type": "code",
       "source_file": "deployment_agent.py",
       "source_location": "L216",
-      "community": 107,
+      "community": 226,
       "norm_label": "compose_up()",
       "id": "deployment_agent_compose_up"
     },
@@ -23790,7 +23826,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/forms.py",
       "source_location": "L137",
-      "community": 146,
+      "community": 322,
       "norm_label": "edit non-password user account metadata and billing role.",
       "id": "billing_forms_rationale_137"
     },
@@ -23799,7 +23835,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/forms.py",
       "source_location": "L168",
-      "community": 146,
+      "community": 322,
       "norm_label": "persist editable user metadata and the attached profile.",
       "id": "billing_forms_rationale_168"
     },
@@ -23862,7 +23898,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L117",
-      "community": 120,
+      "community": 304,
       "norm_label": "show image metadata and the latest deployment-agent state.",
       "id": "billing_views_rationale_117"
     },
@@ -23871,7 +23907,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L140",
-      "community": 253,
+      "community": 316,
       "norm_label": "pull the configured latest image and compare it with the running image.",
       "id": "billing_views_rationale_140"
     },
@@ -24069,7 +24105,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L116",
-      "community": 120,
+      "community": 304,
       "norm_label": "show image metadata and the latest deployment-agent state.",
       "id": "billing_views_rationale_116"
     },
@@ -24078,7 +24114,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L139",
-      "community": 253,
+      "community": 316,
       "norm_label": "pull the configured latest image and compare it with the running image.",
       "id": "billing_views_rationale_139"
     },
@@ -24204,7 +24240,7 @@
       "file_type": "code",
       "source_file": "src/billing/forms.py",
       "source_location": "L32",
-      "community": 200,
+      "community": 138,
       "norm_label": "decimal",
       "id": "decimal"
     },
@@ -24267,7 +24303,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L21",
-      "community": 252,
+      "community": 61,
       "norm_label": "store editable application metadata for a django user account.",
       "id": "billing_models_rationale_21"
     },
@@ -24276,7 +24312,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L174",
-      "community": 252,
+      "community": 0,
       "norm_label": "represent a kiosk-only family member billed through a participant.",
       "id": "billing_models_rationale_174"
     },
@@ -24375,7 +24411,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/services.py",
       "source_location": "L97",
-      "community": 190,
+      "community": 2,
       "norm_label": "return whether kiosk meal changes are closed for the requested meal date.      a",
       "id": "billing_services_rationale_97"
     },
@@ -24447,7 +24483,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/services.py",
       "source_location": "L187",
-      "community": 121,
+      "community": 190,
       "norm_label": "aggregate dinner signups for a camp by day for catering orders.",
       "id": "billing_services_rationale_187"
     },
@@ -25338,7 +25374,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L139",
-      "community": 252,
+      "community": 0,
       "norm_label": "represent a kiosk-only family member billed through a participant.",
       "id": "billing_models_rationale_139"
     },
@@ -25500,7 +25536,7 @@
       "file_type": "code",
       "source_file": "tests/test_settlements.py",
       "source_location": "L91",
-      "community": 200,
+      "community": 124,
       "norm_label": "test_settlement_applies_subsidy_factor_for_youth_group_members()",
       "id": "tests_test_settlements_test_settlement_applies_subsidy_factor_for_youth_group_members"
     },
@@ -25599,7 +25635,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L128",
-      "community": 252,
+      "community": 0,
       "norm_label": "represent a kiosk-only family member billed through a participant.",
       "id": "billing_models_rationale_128"
     },
@@ -25653,7 +25689,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/services.py",
       "source_location": "L186",
-      "community": 121,
+      "community": 190,
       "norm_label": "aggregate dinner signups for a camp by day for catering orders.",
       "id": "billing_services_rationale_186"
     },
@@ -25779,7 +25815,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/services.py",
       "source_location": "L86",
-      "community": 190,
+      "community": 2,
       "norm_label": "return whether kiosk meal changes are closed for the requested meal date.      a",
       "id": "billing_services_rationale_86"
     },
@@ -25824,7 +25860,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/services.py",
       "source_location": "L150",
-      "community": 121,
+      "community": 190,
       "norm_label": "aggregate dinner signups for a camp by day for catering orders.",
       "id": "billing_services_rationale_150"
     },
@@ -25941,7 +25977,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L126",
-      "community": 252,
+      "community": 0,
       "norm_label": "represent a kiosk-only family member billed through a participant.",
       "id": "billing_models_rationale_126"
     },
@@ -26121,7 +26157,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/services.py",
       "source_location": "L85",
-      "community": 190,
+      "community": 2,
       "norm_label": "return whether kiosk meal changes are closed for the requested meal date.      a",
       "id": "billing_services_rationale_85"
     },
@@ -26148,7 +26184,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/services.py",
       "source_location": "L127",
-      "community": 121,
+      "community": 190,
       "norm_label": "aggregate dinner signups for a camp by day for catering orders.",
       "id": "billing_services_rationale_127"
     },
@@ -26292,7 +26328,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/services.py",
       "source_location": "L123",
-      "community": 121,
+      "community": 190,
       "norm_label": "aggregate active and retracted meal signups for a camp by day and meal.",
       "id": "billing_services_rationale_123"
     },
@@ -27959,7 +27995,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 3,
+      "community": 75,
       "norm_label": "automated dependency updates",
       "id": "dependabot_automated_dependency_updates"
     },
@@ -30240,16 +30276,6 @@
     }
   ],
   "links": [
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "changelog/pr-171-private-kiosk-session.md",
-      "source_location": "L1",
-      "weight": 1.0,
-      "source": "changelog_pr_171_private_kiosk_session",
-      "target": "changelog_pr_171_private_kiosk_session_privater_pwa_kiosk_bleibt_angemeldet",
-      "confidence_score": 1.0
-    },
     {
       "relation": "imports_from",
       "context": "import",
@@ -89782,6 +89808,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests/e2e/fliegerlager.spec.js",
+      "source_location": "L58",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "e2e_fliegerlager_spec",
+      "target": "e2e_fliegerlager_spec_assertreadablecontrast"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/e2e/fliegerlager.spec.js",
       "source_location": "L94",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -100540,6 +100576,16 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "tests/test_ui_improvements.py",
+      "source_location": "L11",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "tests_test_ui_improvements",
+      "target": "tests_test_ui_improvements_test_template_theme_properties_are_defined_in_the_shared_stylesheet"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "tests/test_user_management.py",
       "source_location": "L10",
       "weight": 1.0,
@@ -102523,6 +102569,26 @@
       "confidence_score": 1.0,
       "source": "changelog_pr_167_camp_detail_system_runs_icons",
       "target": "changelog_pr_167_camp_detail_system_runs_icons_lager\u00fcbersicht_und_app_icons"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "changelog/pr-171-private-kiosk-session.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "changelog_pr_171_private_kiosk_session",
+      "target": "changelog_pr_171_private_kiosk_session_privater_pwa_kiosk_bleibt_angemeldet"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "changelog/pr-179-dark-mode-contrast.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "changelog_pr_179_dark_mode_contrast",
+      "target": "changelog_pr_179_dark_mode_contrast_dark_mode_kontraste_vereinheitlicht"
     },
     {
       "relation": "contains",
@@ -108936,5 +109002,5 @@
       "source_file": "tests/e2e/fliegerlager.spec.js"
     }
   ],
-  "built_at_commit": "70e20055efa11947d8e5dc0009cf96aa76c00f9f"
+  "built_at_commit": "71d5d07eeea7476015a5bbd6054a9d93a5982025"
 }

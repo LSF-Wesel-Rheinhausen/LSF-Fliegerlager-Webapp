@@ -48,12 +48,14 @@
                 <em>Niemand</em>
               {% endif %}
             </td>
-            <td class="actions-cell" style="display: flex; gap: 0.5rem; align-items: center;">
+            <td>
+              <div class="row-actions">
               <a href="{% url 'shift-edit' shift.pk %}">Bearbeiten</a>
-              <form action="{% url 'shift-delete' shift.pk %}" method="post" class="inline-form" onsubmit="return confirm('Möchtest du diesen Dienst wirklich löschen?');" style="margin: 0;">
+              <form action="{% url 'shift-delete' shift.pk %}" method="post" onsubmit="return confirm('Möchtest du diesen Dienst wirklich löschen?');">
                 {% csrf_token %}
-                <button type="submit" class="button-text text-danger" style="padding: 0; border: none; background: none; color: var(--color-danger); cursor: pointer; text-decoration: underline;">Löschen</button>
+                <button type="submit" class="button-link button-link-danger">Löschen</button>
               </form>
+              </div>
             </td>
           </tr>
         {% empty %}

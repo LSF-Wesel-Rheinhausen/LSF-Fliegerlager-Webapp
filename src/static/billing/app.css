@@ -13,6 +13,8 @@
   --focus: #7ab6f0;
   --danger: #b42318;
   --danger-soft: #fef3f2;
+  --warning: #8a4b08;
+  --warning-soft: #fff7ed;
   --ok: #067647;
   --ok-soft: #ecfdf3;
   --button-bg: var(--accent);
@@ -38,6 +40,8 @@
   --focus: #83c5f4;
   --danger: #ff9b93;
   --danger-soft: #452326;
+  --warning: #ffd48a;
+  --warning-soft: #3b2d17;
   --ok: #6bd7a3;
   --ok-soft: #193a2d;
   --button-bg: #176fae;
@@ -266,6 +270,23 @@ button:hover,
   background: #fffaeb;
 }
 
+.info-callout {
+  margin-bottom: 16px;
+  padding: 12px;
+  border-left: 4px solid var(--accent);
+  border-radius: 0 4px 4px 0;
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.info-callout--compact {
+  font-size: 0.9em;
+}
+
+.info-callout p {
+  color: inherit;
+}
+
 .nav-link {
   min-height: 32px;
   padding: 6px 10px;
@@ -337,12 +358,172 @@ tbody tr:hover {
   color: #4b5565;
 }
 
+.status-badge--warning {
+  border-color: color-mix(in srgb, var(--warning) 45%, var(--line));
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.guide-section {
+  margin-bottom: 3rem;
+}
+
+.guide-media {
+  margin: 1.5rem 0;
+  padding: 1rem;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-soft);
+  text-align: center;
+}
+
+.guide-media img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.guide-media .placeholder-text {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9em;
+}
+
+.guide-step-list {
+  margin-top: 1rem;
+  padding-left: 1.5rem;
+}
+
+.guide-step-list li {
+  margin-bottom: 0.5rem;
+}
+
+.shift-dashboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.shift-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.shift-pie-chart {
+  position: relative;
+  display: flex;
+  flex: 0 0 100px;
+  align-items: center;
+  justify-content: center;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: conic-gradient(var(--ok) 0% var(--shift-progress), color-mix(in srgb, var(--text) 8%, transparent) var(--shift-progress) 100%);
+  box-shadow: inset 0 3px 6px rgba(0, 0, 0, 0.1);
+}
+
+.shift-pie-chart::after {
+  position: absolute;
+  width: 65px;
+  height: 65px;
+  border-radius: 50%;
+  background: var(--panel);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  content: "";
+}
+
+.shift-pie-chart__text {
+  position: relative;
+  z-index: 1;
+  color: var(--text);
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.shift-stat-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.shift-stat-title,
+.shift-stat-sub {
+  color: var(--muted);
+}
+
+.shift-stat-title {
+  font-size: 0.9rem;
+  text-transform: uppercase;
+}
+
+.shift-stat-value {
+  color: var(--text);
+  font-size: 1.8rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.shift-stat-sub {
+  font-size: 0.85rem;
+}
+
+.shift-ranking-row--first {
+  border-left: 4px solid #d4a900;
+  background: linear-gradient(90deg, rgba(212, 169, 0, 0.15), transparent);
+}
+
+.shift-ranking-row--second {
+  border-left: 4px solid #8b95a1;
+  background: linear-gradient(90deg, rgba(139, 149, 161, 0.15), transparent);
+}
+
+.shift-ranking-row--third {
+  border-left: 4px solid #a85f24;
+  background: linear-gradient(90deg, rgba(168, 95, 36, 0.15), transparent);
+}
+
+.shift-ranking-row--missing {
+  background: color-mix(in srgb, var(--danger-soft) 55%, transparent);
+}
+
+.shift-ranking-position {
+  display: inline-block;
+  width: 1.5em;
+  color: var(--muted);
+}
+
+.shift-ranking-name {
+  font-size: 1.1em;
+}
+
+.shift-ranking-value {
+  font-size: 1.2em;
+  font-weight: 700;
+}
+
+.shift-ranking-value--complete {
+  color: var(--ok);
+}
+
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 24px;
   box-shadow: var(--shadow);
+}
+
+.panel.info-callout {
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .deployment-grid {
