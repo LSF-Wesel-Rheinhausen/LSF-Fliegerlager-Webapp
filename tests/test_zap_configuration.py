@@ -15,6 +15,6 @@ def test_modern_web_application_alert_is_documented_as_ignored() -> None:
             "10109",
             "IGNORE",
             "(The JavaScript-enhanced help page is expected to be detected as a modern "
-            "web application; this informational alert does not identify a security issue)",
+            + "web application; this informational alert does not identify a security issue)",
         ]
     ]
