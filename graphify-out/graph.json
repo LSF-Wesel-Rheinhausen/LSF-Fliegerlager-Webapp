@@ -15704,24 +15704,6 @@
       "id": "changelog_feature_user_profile_phone"
     },
     {
-      "label": "fix-169-private-kiosk-session.md",
-      "file_type": "document",
-      "source_file": "changelog/fix-169-private-kiosk-session.md",
-      "source_location": "L1",
-      "community": 266,
-      "norm_label": "fix-169-private-kiosk-session.md",
-      "id": "changelog_fix_169_private_kiosk_session"
-    },
-    {
-      "label": "Privater PWA-Kiosk bleibt angemeldet",
-      "file_type": "document",
-      "source_file": "changelog/fix-169-private-kiosk-session.md",
-      "source_location": "L1",
-      "community": 266,
-      "norm_label": "privater pwa-kiosk bleibt angemeldet",
-      "id": "changelog_fix_169_private_kiosk_session_privater_pwa_kiosk_bleibt_angemeldet"
-    },
-    {
       "label": "fix-catering-overview-dinner-only.md",
       "file_type": "document",
       "source_file": "changelog/fix-catering-overview-dinner-only.md",
@@ -101931,16 +101913,6 @@
       "confidence_score": 1.0,
       "source": "changelog_feature_auditable_booking_edit_pr_zusammenfassung_feature_auditable_booking_edit",
       "target": "changelog_feature_auditable_booking_edit_zusammenfassung"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "changelog/fix-169-private-kiosk-session.md",
-      "source_location": "L1",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "changelog_fix_169_private_kiosk_session",
-      "target": "changelog_fix_169_private_kiosk_session_privater_pwa_kiosk_bleibt_angemeldet"
     },
     {
       "relation": "contains",
