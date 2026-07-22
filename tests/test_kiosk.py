@@ -550,20 +550,35 @@ def test_kiosk_expense_receipt_rejects_other_participants(client):
 
 
 @pytest.mark.django_db
-def test_kiosk_home_marks_rejected_shared_expenses_and_uses_single_contact_entrypoint(client):
+def test_kiosk_home_sorts_shared_expense_cards_by_status_and_recency(client):
     camp = CampFactory()
-    admin_user = UserFactory(username="leitung", email="leitung@example.test")
-    admin_user.is_superuser = True
-    admin_user.save()
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
-    ExpenseFactory(
+    approved = ExpenseFactory(
         participant=participant,
         camp=camp,
-        description="Grillgut",
-        amount=Decimal("42.00"),
-        status=Expense.Status.REJECTED,
-        rejection_reason="Beleg fehlt",
+        description="Genehmigter Einkauf",
+        status=Expense.Status.APPROVED,
     )
+    rejected = ExpenseFactory(
+        participant=participant,
+        camp=camp,
+        description="Abgelehnter Einkauf",
+        status=Expense.Status.REJECTED,
+    )
+    pending_older = ExpenseFactory(
+        participant=participant,
+        camp=camp,
+        description="Alter offener Einkauf",
+        status=Expense.Status.PENDING,
+    )
+    pending_newer = ExpenseFactory(
+        participant=participant,
+        camp=camp,
+        description="Neuer offener Einkauf",
+        status=Expense.Status.PENDING,
+    )
+    Expense.objects.filter(pk=pending_older.pk).update(created_at=timezone.now() - timedelta(days=2))
+    Expense.objects.filter(pk=pending_newer.pk).update(created_at=timezone.now() - timedelta(days=1))
     session = client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session.save()
@@ -571,11 +586,87 @@ def test_kiosk_home_marks_rejected_shared_expenses_and_uses_single_contact_entry
     response = client.get(reverse("kiosk-home"))
 
     assert response.status_code == 200
-    assert b"kiosk-table__row--rejected" in response.content
-    assert b"kiosk-status-text kiosk-status-text--danger" in response.content
-    assert b"Abgelehnt" in response.content
-    assert b"Kontakt anzeigen" not in response.content
-    assert response.content.count(b"data-open-contact-dialog>Kontakt Lagerleitung</button>") == 1
+    assert [expense.pk for expense in response.context["participant_expenses"]] == [
+        pending_newer.pk,
+        pending_older.pk,
+        rejected.pk,
+        approved.pk,
+    ]
+
+
+@pytest.mark.django_db
+def test_kiosk_home_renders_shared_expense_cards_with_receipt_and_rejection_details(client):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    rejected = ExpenseFactory(
+        participant=participant,
+        camp=camp,
+        description="Grillgut für alle mit einer langen Beschreibung",
+        amount=Decimal("42.00"),
+        paid_on=date(2026, 7, 2),
+        status=Expense.Status.REJECTED,
+        rejection_reason="Der Beleg ist nicht lesbar.",
+    )
+    pending = ExpenseFactory(
+        participant=participant,
+        camp=camp,
+        description="Getränkekisten",
+        amount=Decimal("18.50"),
+        paid_on=date(2026, 7, 3),
+        status=Expense.Status.PENDING,
+        receipt=SimpleUploadedFile("kisten.pdf", b"receipt", content_type="application/pdf"),
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    try:
+        response = client.get(reverse("kiosk-home"))
+
+        assert response.status_code == 200
+        content = response.content
+        assert content.count(b'class="shared-expense-card"') == 2
+        assert f'data-expense-id="{rejected.pk}"'.encode() in content
+        assert "Grillgut für alle mit einer langen Beschreibung".encode() in content
+        assert "42,00 €".encode() in content
+        assert b'datetime="2026-07-02"' in content
+        assert b"Kein Beleg" in content
+        assert b"kiosk-status-text kiosk-status-text--danger" in content
+        assert b"<summary>Ablehnungsgrund anzeigen</summary>" in content
+        assert b"Der Beleg ist nicht lesbar." in content
+        assert b"rejection-reason-dialog" not in content
+        assert reverse("expense-receipt", args=[pending.pk]).encode() in content
+    finally:
+        pending.receipt.delete(save=False)
+
+
+@pytest.mark.django_db
+def test_kiosk_home_renders_ordered_card_grid_and_empty_expense_state(client):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.get(reverse("kiosk-home"))
+
+    assert response.status_code == 200
+    content = response.content
+    assert b"data-kiosk-masonry" in content
+    card_markers = [
+        b'data-kiosk-card="drinks"',
+        b'data-kiosk-card="food"',
+        b'data-kiosk-card="meal-calendar"',
+        b'data-kiosk-card="shifts"',
+        b'data-kiosk-card="check-in"',
+        b'data-kiosk-card="quick-bookings"',
+        b'data-kiosk-card="shared-expenses"',
+        b'data-kiosk-card="family"',
+        b'data-kiosk-card="booking-links"',
+    ]
+    positions = [content.index(marker) for marker in card_markers]
+    assert positions == sorted(positions)
+    assert "Noch keine Anträge eingereicht.".encode() in content
 
 
 @pytest.mark.django_db

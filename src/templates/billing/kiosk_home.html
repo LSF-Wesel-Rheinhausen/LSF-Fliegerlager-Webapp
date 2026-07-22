@@ -66,15 +66,14 @@
     </section>
   {% endif %}
 
-  <div class="kiosk-split">
-    <div class="kiosk-stack">
-        <form method="post" id="quick-booking-form" style="display: contents;">
+  <div class="kiosk-masonry" data-kiosk-masonry>
+        <form method="post" id="quick-booking-form" class="kiosk-masonry__contents">
           {% csrf_token %}
           <input type="hidden" name="action" value="quick">
           <input type="hidden" name="quick-price_rule" id="quick-price-rule" value="">
           <input type="hidden" name="quick-quantity" id="id_quick-quantity" value="1">
 
-        <section class="panel kiosk-card kiosk-card--accent">
+        <section class="panel kiosk-card kiosk-card--accent" data-kiosk-card="drinks">
           <div class="kiosk-card__header">
             <div class="kiosk-card__header-main">
               <span class="kiosk-card__eyebrow">Schnellaktion</span>
@@ -105,7 +104,7 @@
           </div>
         </section>
 
-        <section class="panel kiosk-card kiosk-card--accent">
+        <section class="panel kiosk-card kiosk-card--accent" data-kiosk-card="food">
           <div class="kiosk-card__header">
             <div class="kiosk-card__header-main">
               <span class="kiosk-card__eyebrow">Aktion</span>
@@ -144,74 +143,11 @@
         {% endfor %}
       </form>
 
-      <section class="panel kiosk-card kiosk-card--muted">
-        <div class="kiosk-card__header kiosk-section-heading">
-          <div>
-            <h2>Dienste</h2>
-            <p>Du hast <strong>{{ participant.completed_shifts }} von {{ participant.target_shifts }}</strong> Pflichtdiensten erledigt.</p>
-          </div>
-          <a class="button kiosk-card__action" href="{{ kiosk_urls.shifts }}">Zum Dienstplan</a>
-        </div>
-      </section>
-
-      <section class="panel kiosk-card kiosk-card--muted">
-        <div class="kiosk-card__header kiosk-section-heading">
-          <div class="kiosk-card__header-main">
-            <h2 class="kiosk-title">Check-in</h2>
-            <p>Pflege An- und Abreise für dich, Begleitpersonen und freigegebene Mitbuchungen.</p>
-          </div>
-          <button type="button" class="button kiosk-card__action" data-open-checkin-dialog>Eintragen</button>
-        </div>
-      </section>
-
-      <section class="panel kiosk-card kiosk-card--muted kiosk-table">
-        <div class="kiosk-table__header">
-          <h2>Letzte Schnellbuchungen</h2>
-          <p>Getränke, Frühstück und Snack können 15 Minuten lang storniert werden.</p>
-        </div>
-        <div class="quick-booking-list" role="list">
-          {% for entry in recent_quick_charges %}
-            <article class="quick-booking-row" role="listitem">
-              <div class="quick-booking-row__main">
-                <strong>{{ entry.description }}</strong>
-                <time datetime="{{ entry.created_at|date:'c' }}">{{ entry.created_at|date:"d.m.Y H:i" }} Uhr</time>
-              </div>
-              <div class="quick-booking-row__action">
-                {% if entry.is_kiosk_cancelable %}
-                  <button
-                    type="button"
-                    class="button button-secondary"
-                    data-open-quick-cancel-dialog
-                    data-charge-id="{{ entry.pk }}"
-                    data-charge-description="{{ entry.description }}"
-                    data-charge-total="{{ entry.total|money_eur }}"
-                  >Stornieren</button>
-                {% else %}
-                  <span class="muted">Nicht mehr möglich</span>
-                {% endif %}
-              </div>
-              <dl class="quick-booking-row__meta">
-                <div><dt>Menge</dt><dd>{{ entry.quantity }}</dd></div>
-                <div><dt>Einzelpreis</dt><dd>{{ entry.unit_price|money_eur }}</dd></div>
-                <div><dt>Summe</dt><dd>{{ entry.total|money_eur }}</dd></div>
-              </dl>
-            </article>
-          {% empty %}
-            <p class="kiosk-empty">Noch keine Schnellbuchungen vorhanden.</p>
-          {% endfor %}
-        </div>
-      </section>
-
-    </div>
-
-    <div class="kiosk-stack">
-      <section class="panel kiosk-card kiosk-card--accent" id="meal-calendar">
+      <section class="panel kiosk-card kiosk-card--accent" id="meal-calendar" data-kiosk-card="meal-calendar">
         <div class="kiosk-card__header kiosk-section-heading">
           <div class="kiosk-card__header-main">
             <span class="kiosk-card__eyebrow">Heute</span>
-            <h2 class="kiosk-title">
-              Essenskalender
-            </h2>
+            <h2 class="kiosk-title">Essenskalender</h2>
             <p>Deine gespeicherten Abendessen nach Lagertag.</p>
           </div>
           <button type="button" class="button kiosk-card__action" data-open-meal-dialog-new data-meal="dinner">Essen buchen</button>
@@ -270,7 +206,65 @@
         </div>
       </section>
 
-      <section class="panel kiosk-card kiosk-card--muted">
+      <section class="panel kiosk-card kiosk-card--muted" data-kiosk-card="shifts">
+        <div class="kiosk-card__header kiosk-section-heading">
+          <div>
+            <h2>Dienste</h2>
+            <p>Du hast <strong>{{ participant.completed_shifts }} von {{ participant.target_shifts }}</strong> Pflichtdiensten erledigt.</p>
+          </div>
+          <a class="button kiosk-card__action" href="{{ kiosk_urls.shifts }}">Zum Dienstplan</a>
+        </div>
+      </section>
+
+      <section class="panel kiosk-card kiosk-card--muted" data-kiosk-card="check-in">
+        <div class="kiosk-card__header kiosk-section-heading">
+          <div class="kiosk-card__header-main">
+            <h2 class="kiosk-title">Check-in</h2>
+            <p>Pflege An- und Abreise für dich, Begleitpersonen und freigegebene Mitbuchungen.</p>
+          </div>
+          <button type="button" class="button kiosk-card__action" data-open-checkin-dialog>Eintragen</button>
+        </div>
+      </section>
+
+      <section class="panel kiosk-card kiosk-card--muted kiosk-table" data-kiosk-card="quick-bookings">
+        <div class="kiosk-table__header">
+          <h2>Letzte Schnellbuchungen</h2>
+          <p>Getränke, Frühstück und Snack können 15 Minuten lang storniert werden.</p>
+        </div>
+        <div class="quick-booking-list" role="list">
+          {% for entry in recent_quick_charges %}
+            <article class="quick-booking-row" role="listitem">
+              <div class="quick-booking-row__main">
+                <strong>{{ entry.description }}</strong>
+                <time datetime="{{ entry.created_at|date:'c' }}">{{ entry.created_at|date:"d.m.Y H:i" }} Uhr</time>
+              </div>
+              <div class="quick-booking-row__action">
+                {% if entry.is_kiosk_cancelable %}
+                  <button
+                    type="button"
+                    class="button button-secondary"
+                    data-open-quick-cancel-dialog
+                    data-charge-id="{{ entry.pk }}"
+                    data-charge-description="{{ entry.description }}"
+                    data-charge-total="{{ entry.total|money_eur }}"
+                  >Stornieren</button>
+                {% else %}
+                  <span class="muted">Nicht mehr möglich</span>
+                {% endif %}
+              </div>
+              <dl class="quick-booking-row__meta">
+                <div><dt>Menge</dt><dd>{{ entry.quantity }}</dd></div>
+                <div><dt>Einzelpreis</dt><dd>{{ entry.unit_price|money_eur }}</dd></div>
+                <div><dt>Summe</dt><dd>{{ entry.total|money_eur }}</dd></div>
+              </dl>
+            </article>
+          {% empty %}
+            <p class="kiosk-empty">Noch keine Schnellbuchungen vorhanden.</p>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="panel kiosk-card kiosk-card--muted" data-kiosk-card="shared-expenses">
         <div class="kiosk-card__header kiosk-section-heading">
           <div class="kiosk-card__header-main">
             <h2 class="kiosk-title">
@@ -283,50 +277,50 @@
         </div>
 
         {% if participant_expenses %}
-          <div class="kiosk-table">
-            <div class="kiosk-table__header">
-              <h3>Meine Anträge</h3>
-            </div>
-            <div class="kiosk-table__wrapper">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>Status</th>
-                    <th>Beschreibung</th>
-                    <th>Betrag</th>
-                    <th>Datum</th>
-                    <th>Beleg</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for expense in participant_expenses %}
-                    <tr class="{% if expense.status == 'rejected' %}kiosk-table__row--rejected{% endif %}">
-                      <td>
-                        {% if expense.status == "pending" %}
-                          <span class="kiosk-status-text kiosk-status-text--pending">Ausstehend</span>
-                        {% elif expense.status == "approved" %}
-                          <span class="kiosk-status-text kiosk-status-text--ok">Genehmigt</span>
-                        {% elif expense.status == "rejected" %}
-                          <button type="button" class="button-link kiosk-status-text kiosk-status-text--danger" data-open-rejection-reason-dialog data-reason="{{ expense.rejection_reason }}">Abgelehnt ℹ️</button>
-                        {% else %}
-                          {{ expense.get_status_display }}
-                        {% endif %}
-                      </td>
-                      <td>{{ expense.description }}</td>
-                      <td>{{ expense.amount }} €</td>
-                      <td>{{ expense.paid_on|default:expense.created_at|date:"d.m.Y" }}</td>
-                      <td>
-                        {% if expense.receipt %}
-                          <a href="{% url 'expense-receipt' expense.pk %}" target="_blank" rel="noopener" class="button button-small button-secondary">Beleg ansehen</a>
-                        {% else %}
-                          <span class="muted">Kein Beleg</span>
-                        {% endif %}
-                      </td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
+          <div class="shared-expense-list" aria-labelledby="shared-expense-list-title">
+            <h3 id="shared-expense-list-title">Meine Anträge</h3>
+            {% for expense in participant_expenses %}
+              <article class="shared-expense-card" data-expense-id="{{ expense.pk }}">
+                <div class="shared-expense-card__header">
+                  <h4>{{ expense.description }}</h4>
+                  {% if expense.status == "pending" %}
+                    <span class="kiosk-status-text kiosk-status-text--pending">Ausstehend</span>
+                  {% elif expense.status == "approved" %}
+                    <span class="kiosk-status-text kiosk-status-text--ok">Genehmigt</span>
+                  {% elif expense.status == "rejected" %}
+                    <span class="kiosk-status-text kiosk-status-text--danger">Abgelehnt</span>
+                  {% else %}
+                    <span class="kiosk-status-text">{{ expense.get_status_display }}</span>
+                  {% endif %}
+                </div>
+                <dl class="shared-expense-card__meta">
+                  <div>
+                    <dt>Betrag</dt>
+                    <dd>{{ expense.amount|money_eur }}</dd>
+                  </div>
+                  <div>
+                    <dt>Datum</dt>
+                    <dd><time datetime="{{ expense.paid_on|default:expense.created_at|date:'Y-m-d' }}">{{ expense.paid_on|default:expense.created_at|date:"d.m.Y" }}</time></dd>
+                  </div>
+                  <div>
+                    <dt>Beleg</dt>
+                    <dd>
+                      {% if expense.receipt %}
+                        <a href="{% url 'expense-receipt' expense.pk %}" target="_blank" rel="noopener">Beleg ansehen</a>
+                      {% else %}
+                        <span class="muted">Kein Beleg</span>
+                      {% endif %}
+                    </dd>
+                  </div>
+                </dl>
+                {% if expense.status == "rejected" %}
+                  <details class="shared-expense-card__rejection">
+                    <summary>Ablehnungsgrund anzeigen</summary>
+                    <p>{% if expense.rejection_reason %}{{ expense.rejection_reason }}{% else %}Keine Begründung angegeben.{% endif %}</p>
+                  </details>
+                {% endif %}
+              </article>
+            {% endfor %}
           </div>
         {% else %}
           <div class="kiosk-empty">
@@ -335,7 +329,7 @@
           </div>
         {% endif %}
       </section>
-      <section class="panel kiosk-card kiosk-card--muted">
+      <section class="panel kiosk-card kiosk-card--muted" data-kiosk-card="family">
         <div class="kiosk-card__header kiosk-section-heading">
           <div class="kiosk-card__header-main">
             <h2 class="kiosk-title">
@@ -368,7 +362,7 @@
         {% endfor %}
       </section>
 
-      <section class="panel kiosk-card kiosk-card--muted">
+      <section class="panel kiosk-card kiosk-card--muted" data-kiosk-card="booking-links">
         <div class="kiosk-card__header kiosk-section-heading">
           <div class="kiosk-card__header-main">
             <h2 class="kiosk-title">
@@ -411,7 +405,6 @@
           </div>
         {% endfor %}
       </section>
-    </div>
   </div>
   <dialog id="quick-cancel-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="quick-cancel-dialog-title">
     <form method="dialog" class="dialog-heading">
@@ -787,20 +780,71 @@
     </div>
   </dialog>
 
-  <dialog id="rejection-reason-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="rejection-reason-dialog-title">
-    <form method="dialog" class="dialog-heading">
-      <h2 id="rejection-reason-dialog-title">Ablehnungsgrund</h2>
-      <button class="button button-secondary">Schließen</button>
-    </form>
-    <p id="rejection-reason-text" class="rejection-reason-text"></p>
-    <form method="dialog" class="form-actions">
-      <button type="submit" class="button">OK</button>
-    </form>
-  </dialog>
 {% endblock %}
 {% block scripts %}
   <script nonce="{{ request.csp_nonce }}">
     (() => {
+      const masonryGrid = document.querySelector("[data-kiosk-masonry]");
+      const masonryCards = masonryGrid
+        ? Array.from(masonryGrid.querySelectorAll(":scope > .kiosk-card, :scope > form > .kiosk-card"))
+        : [];
+      const masonryBreakpoint = window.matchMedia("(min-width: 781px)");
+      let masonryFrame;
+
+      const updateMasonry = () => {
+        if (!masonryGrid) return;
+
+        if (!masonryBreakpoint.matches) {
+          masonryGrid.classList.remove("is-enhanced");
+          masonryCards.forEach((card) => {
+            card.style.removeProperty("grid-column");
+            card.style.removeProperty("grid-row-start");
+            card.style.removeProperty("grid-row-end");
+          });
+          return;
+        }
+
+        const styles = window.getComputedStyle(masonryGrid);
+        const rowGap = Number.parseFloat(styles.rowGap);
+        const rowHeight = 1;
+        if (!masonryGrid.classList.contains("is-enhanced")) {
+          masonryCards.forEach((card, index) => {
+            card.style.gridColumn = `${(index % 2) + 1} / span 1`;
+          });
+        }
+        const rowSpans = masonryCards.map((card) =>
+          Math.ceil((card.getBoundingClientRect().height + rowGap) / (rowHeight + rowGap))
+        );
+        const columnStarts = [1, 1];
+
+        masonryGrid.classList.add("is-enhanced");
+        masonryCards.forEach((card, index) => {
+          const columnIndex = columnStarts[0] <= columnStarts[1] ? 0 : 1;
+          const placement = {
+            column: String(columnIndex + 1),
+            row: String(columnStarts[columnIndex]),
+            span: `span ${rowSpans[index]}`,
+          };
+          const gridColumn = `${placement.column} / span 1`;
+          if (card.style.gridColumn !== gridColumn) card.style.gridColumn = gridColumn;
+          if (card.style.gridRowStart !== placement.row) card.style.gridRowStart = placement.row;
+          if (card.style.gridRowEnd !== placement.span) card.style.gridRowEnd = placement.span;
+          columnStarts[columnIndex] += rowSpans[index];
+        });
+      };
+
+      const scheduleMasonryUpdate = () => {
+        window.cancelAnimationFrame(masonryFrame);
+        masonryFrame = window.requestAnimationFrame(updateMasonry);
+      };
+
+      if (masonryGrid && "ResizeObserver" in window) {
+        const masonryObserver = new ResizeObserver(scheduleMasonryUpdate);
+        masonryCards.forEach((card) => masonryObserver.observe(card));
+        masonryBreakpoint.addEventListener("change", scheduleMasonryUpdate);
+        updateMasonry();
+      }
+
       const drinkDialog = document.getElementById("quick-dialog");
       const drinkForm = document.getElementById("quick-booking-form");
       const priceRuleInput = document.getElementById("quick-price-rule");
@@ -959,14 +1003,6 @@
       const summaryDialog = document.getElementById("summary-dialog");
       document.querySelector("[data-open-summary-dialog]")?.addEventListener("click", () => summaryDialog.showModal());
 
-      const rejectionDialog = document.getElementById("rejection-reason-dialog");
-      const rejectionReasonText = document.getElementById("rejection-reason-text");
-      document.querySelectorAll("[data-open-rejection-reason-dialog]").forEach((button) => {
-        button.addEventListener("click", () => {
-          rejectionReasonText.textContent = button.dataset.reason || "Keine Begründung angegeben.";
-          rejectionDialog.showModal();
-        });
-      });
     })();
   </script>
 {% endblock %}
