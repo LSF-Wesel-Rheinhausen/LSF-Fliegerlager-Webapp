@@ -2707,6 +2707,15 @@ dialog::backdrop {
   margin: 0;
 }
 
+.button-group {
+  display: grid;
+  gap: 8px;
+}
+
+.button-group .button {
+  width: 100%;
+}
+
 .table-actions {
   display: flex;
   gap: 8px;
