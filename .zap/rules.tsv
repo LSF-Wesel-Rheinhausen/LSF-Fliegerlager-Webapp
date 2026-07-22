@@ -6,3 +6,4 @@
 10111	IGNORE	(Authentication form detection is expected on setup and login pages)
 10112	IGNORE	(Session management detection is expected for Django session flows)
 10031	IGNORE	(Setup form values are escaped by Django template rendering and covered by regression tests)
+10109	IGNORE	(The JavaScript-enhanced help page is expected to be detected as a modern web application; this informational alert does not identify a security issue)
