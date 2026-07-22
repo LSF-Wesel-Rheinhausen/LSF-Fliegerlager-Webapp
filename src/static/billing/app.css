@@ -2533,6 +2533,14 @@ textarea {
   flex-wrap: wrap;
 }
 
+.notification-rename-dialog {
+  width: min(440px, calc(100vw - 32px));
+}
+
+.notification-rename-dialog h3 {
+  margin: 0;
+}
+
 .pwa-install-dialog {
   width: min(560px, calc(100vw - 32px));
   max-height: calc(100vh - 32px);

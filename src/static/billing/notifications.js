@@ -7,6 +7,7 @@
   const form = root.querySelector("[data-notification-subscribe-form]");
   const submitButton = root.querySelector("[data-notification-submit]");
   const deviceList = root.querySelector("[data-notification-device-list]");
+  const installGuidance = root.querySelector("[data-notification-install-guidance]");
   let registration;
   let browserSubscription;
   let currentDeviceId;
@@ -56,6 +57,26 @@
     form?.setAttribute("aria-busy", busy ? "true" : "false");
   };
 
+  const installationAllowsNotifications = () => {
+    if (!isIos()) {
+      if (installGuidance) {
+        installGuidance.textContent = "Installation optional – Benachrichtigungen können direkt im Browser aktiviert werden.";
+      }
+      return true;
+    }
+    if (isStandalone()) {
+      if (installGuidance) {
+        installGuidance.textContent = "Als Home-Screen-App installiert – Benachrichtigungen können aktiviert werden.";
+      }
+      return true;
+    }
+    if (installGuidance) {
+      installGuidance.textContent =
+        "Installiere die App zuerst zum Home-Bildschirm. iOS und iPadOS erlauben Web Push nur in der installierten App.";
+    }
+    return false;
+  };
+
   const serviceWorkerReady = async () => {
     if (registration) return registration;
     let timeoutId;
@@ -89,6 +110,7 @@
     const name = document.createElement("span");
     name.className = "device-list__name";
     const strong = document.createElement("strong");
+    strong.dataset.notificationDeviceName = "";
     strong.textContent = device.device_name;
     const currentBadge = document.createElement("span");
     currentBadge.className = "status-badge status-badge--ok";
@@ -108,13 +130,59 @@
     testButton.type = "button";
     testButton.dataset.testSubscription = String(device.id);
     testButton.textContent = "Testen";
+    const renameButton = document.createElement("button");
+    renameButton.className = "button button-secondary";
+    renameButton.type = "button";
+    renameButton.dataset.renameSubscription = String(device.id);
+    renameButton.textContent = "Umbenennen";
     const revokeButton = document.createElement("button");
     revokeButton.className = "button button-danger";
     revokeButton.type = "button";
     revokeButton.dataset.revokeSubscription = String(device.id);
     revokeButton.textContent = "Entfernen";
-    actions.append(testButton, revokeButton);
-    item.append(details, actions);
+    actions.append(renameButton, testButton, revokeButton);
+
+    const dialog = document.createElement("dialog");
+    dialog.className = "notification-rename-dialog";
+    const titleId = `notification-rename-title-${device.id}`;
+    dialog.setAttribute("aria-labelledby", titleId);
+    const renameForm = document.createElement("form");
+    renameForm.className = "form-grid";
+    renameForm.dataset.renameForm = String(device.id);
+    const title = document.createElement("h3");
+    title.id = titleId;
+    title.textContent = "Gerät umbenennen";
+    const label = document.createElement("label");
+    const inputId = `notification-rename-name-${device.id}`;
+    label.htmlFor = inputId;
+    label.textContent = "Gerätename";
+    const input = document.createElement("input");
+    input.id = inputId;
+    input.name = "device_name";
+    input.maxLength = 80;
+    input.required = true;
+    input.value = device.device_name;
+    const renameError = document.createElement("p");
+    renameError.className = "message error";
+    renameError.dataset.renameError = "";
+    renameError.setAttribute("role", "alert");
+    renameError.hidden = true;
+    const dialogActions = document.createElement("div");
+    dialogActions.className = "actions";
+    const cancelButton = document.createElement("button");
+    cancelButton.className = "button button-secondary";
+    cancelButton.type = "button";
+    cancelButton.dataset.closeDialog = "";
+    cancelButton.textContent = "Abbrechen";
+    const saveButton = document.createElement("button");
+    saveButton.className = "button";
+    saveButton.type = "submit";
+    saveButton.textContent = "Speichern";
+    dialogActions.append(cancelButton, saveButton);
+    renameForm.append(title, label, input, renameError, dialogActions);
+    dialog.append(renameForm);
+
+    item.append(details, actions, dialog);
     return item;
   };
 
@@ -156,11 +224,12 @@
       if (form) form.hidden = true;
       return;
     }
-    if (isIos() && !isStandalone()) {
+    if (!installationAllowsNotifications()) {
       setStatus("Installation erforderlich");
       if (submitButton) submitButton.disabled = true;
       return;
     }
+    if (submitButton) submitButton.disabled = false;
     if (Notification.permission === "denied") {
       setStatus("Im Browser blockiert");
       if (submitButton) submitButton.disabled = true;
@@ -212,6 +281,22 @@
   deviceList?.addEventListener("click", async (event) => {
     const revokeButton = event.target.closest("[data-revoke-subscription]");
     const testButton = event.target.closest("[data-test-subscription]");
+    const renameButton = event.target.closest("[data-rename-subscription]");
+    const closeButton = event.target.closest("[data-close-dialog]");
+    if (closeButton) {
+      closeButton.closest("dialog")?.close();
+      return;
+    }
+    if (renameButton) {
+      const dialog = renameButton.closest("[data-notification-device]")?.querySelector("dialog");
+      const dialogError = dialog?.querySelector("[data-rename-error]");
+      if (dialogError) {
+        dialogError.hidden = true;
+        dialogError.textContent = "";
+      }
+      dialog?.showModal();
+      return;
+    }
     if (!revokeButton && !testButton) return;
     clearError();
     const button = revokeButton || testButton;
@@ -219,7 +304,7 @@
     const id = revokeButton?.dataset.revokeSubscription || testButton.dataset.testSubscription;
     const action = revokeButton ? "revoke" : "test";
     try {
-      const response = await fetch(`${root.dataset.revokeBaseUrl}${id}/${action}/`, {
+      const response = await fetch(`${root.dataset.subscriptionBaseUrl}${id}/${action}/`, {
         method: "POST",
         headers: { "X-CSRFToken": csrfToken() },
       });
@@ -240,6 +325,49 @@
       showError(revokeButton ? "Gerät konnte nicht entfernt werden." : "Test konnte nicht eingeplant werden.");
     } finally {
       button.disabled = false;
+    }
+  });
+
+  deviceList?.addEventListener("submit", async (event) => {
+    const renameForm = event.target.closest("[data-rename-form]");
+    if (!renameForm) return;
+    event.preventDefault();
+    clearError();
+    const id = renameForm.dataset.renameForm;
+    const saveButton = renameForm.querySelector('button[type="submit"]');
+    const renameError = renameForm.querySelector("[data-rename-error]");
+    renameError.hidden = true;
+    renameError.textContent = "";
+    saveButton.disabled = true;
+    try {
+      const data = new FormData(renameForm);
+      const response = await fetch(`${root.dataset.subscriptionBaseUrl}${id}/rename/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken() },
+        body: JSON.stringify({ device_name: data.get("device_name") }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Gerät konnte nicht umbenannt werden.");
+      const item = renameForm.closest("[data-notification-device]");
+      item.querySelector("[data-notification-device-name]").textContent = payload.device.device_name;
+      renameForm.querySelector('input[name="device_name"]').value = payload.device.device_name;
+      renameForm.closest("dialog").close();
+    } catch (exception) {
+      renameError.textContent = exception.message || "Gerät konnte nicht umbenannt werden.";
+      renameError.hidden = false;
+    } finally {
+      saveButton.disabled = false;
+    }
+  });
+
+  window.addEventListener("pwa:statechange", () => {
+    if (
+      "Notification" in window &&
+      installationAllowsNotifications() &&
+      submitButton &&
+      Notification.permission !== "denied"
+    ) {
+      submitButton.disabled = false;
     }
   });
 

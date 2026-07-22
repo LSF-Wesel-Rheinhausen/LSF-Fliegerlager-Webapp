@@ -84,7 +84,7 @@ test("Notification enrollment updates the current page without reload", async ({
       data-notification-settings
       data-public-key="AQ"
       data-subscribe-url="/notifications/subscriptions/"
-      data-revoke-base-url="/notifications/subscriptions/"
+      data-subscription-base-url="/notifications/subscriptions/"
     >
       <span data-notification-status>Wird geprüft</span>
       <form data-notification-subscribe-form>
@@ -136,6 +136,23 @@ test("Notification enrollment updates the current page without reload", async ({
     Object.defineProperty(window, "PushManager", { configurable: true, value: function PushManager() {} });
     window.fetch = async (url, options) => {
       if (url.endsWith("/revoke/")) return new Response(null, { status: 204 });
+      if (url.endsWith("/rename/")) {
+        const body = JSON.parse(options.body);
+        if (!body.device_name.trim()) {
+          return new Response(JSON.stringify({ error: "Ungültiger Gerätename." }), {
+            status: 400,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({
+          device: {
+            id: 42,
+            device_name: body.device_name.trim(),
+            last_success_at: null,
+            endpoint_fingerprint: "current-device",
+          },
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
       if (options?.method === "POST") {
         return new Response(JSON.stringify({
           device: {
@@ -157,6 +174,84 @@ test("Notification enrollment updates the current page without reload", async ({
   await expect(page.locator("[data-notification-device-list]")).toContainText("Mein Smartphone");
   await expect.poll(() => page.evaluate(() => window.__notificationPageMarker)).toBe("retained");
 
+  await page.getByRole("button", { name: "Umbenennen" }).click();
+  const renameDialog = page.getByRole("dialog", { name: "Gerät umbenennen" });
+  await renameDialog.getByLabel("Gerätename").fill("   ");
+  await renameDialog.getByRole("button", { name: "Speichern" }).click();
+  await expect(renameDialog.getByRole("alert")).toHaveText("Ungültiger Gerätename.");
+  await expect(renameDialog).toBeVisible();
+  await renameDialog.getByLabel("Gerätename").fill("  Familien-Tablet  ");
+  await renameDialog.getByRole("button", { name: "Speichern" }).click();
+  await expect(renameDialog).not.toBeVisible();
+  await expect(page.locator("[data-notification-device-list]")).toContainText("Familien-Tablet");
+  await expect.poll(() => page.evaluate(() => window.__notificationPageMarker)).toBe("retained");
+
   await page.getByRole("button", { name: "Entfernen" }).click();
   await expect(page.locator("[data-notification-device-list]")).toContainText("Noch kein Gerät registriert.");
+});
+
+test("Notification setup guidance distinguishes desktop and iOS installation state", async ({ browser }) => {
+  const scenarios = [
+    {
+      name: "desktop",
+      userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/136.0 Safari/537.36",
+      standalone: false,
+      guidance: "Installation optional",
+      disabled: false,
+    },
+    {
+      name: "iOS browser",
+      userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1",
+      standalone: false,
+      guidance: "Installiere die App zuerst zum Home-Bildschirm",
+      disabled: true,
+    },
+    {
+      name: "installed iOS app",
+      userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1",
+      standalone: true,
+      guidance: "Als Home-Screen-App installiert",
+      disabled: false,
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const context = await browser.newContext({ userAgent: scenario.userAgent });
+    await context.addInitScript(({ standalone }) => {
+      Object.defineProperty(window.navigator, "standalone", { configurable: true, value: standalone });
+      Object.defineProperty(window, "Notification", {
+        configurable: true,
+        value: { permission: "default", requestPermission: async () => "default" },
+      });
+      Object.defineProperty(navigator, "serviceWorker", {
+        configurable: true,
+        value: { ready: Promise.resolve({ pushManager: { getSubscription: async () => null } }) },
+      });
+      Object.defineProperty(window, "PushManager", { configurable: true, value: function PushManager() {} });
+    }, { standalone: scenario.standalone });
+    const scenarioPage = await context.newPage();
+    await scenarioPage.setContent(`
+      <section data-notification-settings data-public-key="AQ" data-subscribe-url="/notifications/subscriptions/"
+        data-subscription-base-url="/notifications/subscriptions/">
+        <span data-notification-status>Wird geprüft</span>
+        <p data-notification-install-guidance></p>
+        <form data-notification-subscribe-form>
+          <input name="csrfmiddlewaretoken" value="test-csrf">
+          <button type="submit" data-notification-submit>Benachrichtigungen aktivieren</button>
+        </form>
+        <ul data-notification-device-list></ul>
+        <p data-notification-error hidden></p>
+      </section>
+    `);
+    await scenarioPage.addScriptTag({ path: "src/static/billing/notifications.js" });
+
+    await expect(scenarioPage.locator("[data-notification-install-guidance]"), scenario.name)
+      .toContainText(scenario.guidance);
+    if (scenario.disabled) {
+      await expect(scenarioPage.locator("[data-notification-submit]"), scenario.name).toBeDisabled();
+    } else {
+      await expect(scenarioPage.locator("[data-notification-submit]"), scenario.name).toBeEnabled();
+    }
+    await context.close();
+  }
 });

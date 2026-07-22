@@ -59,6 +59,17 @@ def _device_payload(subscription: PushSubscription) -> dict[str, Any]:
     }
 
 
+def _device_name(payload: dict[str, Any] | None) -> str | None:
+    """Return a normalized valid device name from a JSON payload."""
+    if payload is None:
+        return None
+    value = payload.get("device_name")
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized if 1 <= len(normalized) <= 80 else None
+
+
 def _settings_response(request: HttpRequest, owner: Any, *, participant_owner: bool) -> HttpResponse:
     subscriptions = [
         _device_payload(subscription)
@@ -71,7 +82,7 @@ def _settings_response(request: HttpRequest, owner: Any, *, participant_owner: b
         "notification_subscribe_url": (
             "/kiosk/notifications/subscriptions/" if participant_owner else "/notifications/subscriptions/"
         ),
-        "notification_revoke_base_url": (
+        "notification_subscription_base_url": (
             "/kiosk/notifications/subscriptions/" if participant_owner else "/notifications/subscriptions/"
         ),
     }
@@ -115,7 +126,8 @@ def _subscribe(request: HttpRequest, owner: Any, *, participant_owner: bool) -> 
         return JsonResponse({"error": "Ungültige Browser-Schlüssel."}, status=400)
     if any(len(keys[key]) > 512 or not keys[key] for key in ("p256dh", "auth")):
         return JsonResponse({"error": "Ungültige Browser-Schlüssel."}, status=400)
-    if not isinstance(device_name, str) or not device_name.strip() or len(device_name.strip()) > 80:
+    normalized_device_name = _device_name({"device_name": device_name})
+    if normalized_device_name is None:
         return JsonResponse({"error": "Ungültiger Gerätename."}, status=400)
     if not isinstance(categories, list) or not categories or any(category not in allowed for category in categories):
         return JsonResponse({"error": "Ungültige Benachrichtigungskategorie."}, status=400)
@@ -135,7 +147,7 @@ def _subscribe(request: HttpRequest, owner: Any, *, participant_owner: bool) -> 
             **owner_values,
             "p256dh": keys["p256dh"],
             "auth": keys["auth"],
-            "device_name": device_name.strip(),
+            "device_name": normalized_device_name,
             "categories": categories,
             "is_active": True,
             "failure_count": 0,
@@ -180,6 +192,42 @@ def kiosk_notification_revoke(request: HttpRequest, subscription_id: int) -> Jso
     if participant is None:
         return JsonResponse({"error": "Private Kiosk-Anmeldung erforderlich."}, status=403)
     return _revoke(request, participant, subscription_id, participant_owner=True)
+
+
+def _rename(
+    owner: Any,
+    subscription_id: int,
+    payload: dict[str, Any] | None,
+    *,
+    participant_owner: bool,
+) -> JsonResponse:
+    subscription = get_object_or_404(
+        PushSubscription,
+        pk=subscription_id,
+        **_owner_filter(owner, participant_owner),
+    )
+    device_name = _device_name(payload)
+    if device_name is None:
+        return JsonResponse({"error": "Ungültiger Gerätename."}, status=400)
+    subscription.device_name = device_name
+    subscription.save(update_fields=["device_name", "updated_at"])
+    return JsonResponse({"device": _device_payload(subscription)})
+
+
+@login_required
+@require_POST
+def notification_rename(request: HttpRequest, subscription_id: int) -> JsonResponse:
+    """Rename one push device owned by the current user."""
+    return _rename(request.user, subscription_id, _json_payload(request), participant_owner=False)
+
+
+@require_POST
+def kiosk_notification_rename(request: HttpRequest, subscription_id: int) -> JsonResponse:
+    """Rename one push device owned by the private participant."""
+    participant = _private_participant(request)
+    if participant is None:
+        return JsonResponse({"error": "Private Kiosk-Anmeldung erforderlich."}, status=403)
+    return _rename(participant, subscription_id, _json_payload(request), participant_owner=True)
 
 
 def queue_test_notification(owner: Any, *, participant_owner: bool, subscription_id: int) -> None:
