@@ -149,6 +149,7 @@ def settlement_email_compose(request, run_id):
     )
     preview = None
     has_previously_sent = False
+    has_already_queued = False
     if request.method == "POST" and form.is_valid():
         if not configuration.enabled:
             form.add_error(None, "Der E-Mail-Versand ist in den Einstellungen deaktiviert.")
@@ -158,17 +159,27 @@ def settlement_email_compose(request, run_id):
                 settlement_ids=form.cleaned_data["settlements"],
             )
             has_previously_sent = any(recipient.previously_sent for recipient in preview)
+            has_already_queued = any(recipient.already_queued for recipient in preview)
             if request.POST.get("action") == "confirm":
-                if not has_previously_sent or request.POST.get("confirm_resend") == "yes":
-                    batch = queue_settlement_email_batch(
-                        run=run,
-                        settlement_ids=form.cleaned_data["settlements"],
-                        subject=form.cleaned_data["subject"],
-                        body=form.cleaned_data["body"],
-                        created_by=request.user,
-                    )
-                    messages.success(request, f"{batch.deliveries.count()} Rechnung(en) wurden zum Versand vorgemerkt.")
-                    return redirect("email-batch-detail", batch_id=batch.pk)
+                if has_already_queued:
+                    form.add_error(None, "Mindestens eine Rechnung ist bereits zum Versand vorgemerkt.")
+                elif not has_previously_sent or request.POST.get("confirm_resend") == "yes":
+                    try:
+                        batch = queue_settlement_email_batch(
+                            run=run,
+                            settlement_ids=form.cleaned_data["settlements"],
+                            subject=form.cleaned_data["subject"],
+                            body=form.cleaned_data["body"],
+                            created_by=request.user,
+                        )
+                    except ValueError as error:
+                        form.add_error(None, str(error))
+                    else:
+                        messages.success(
+                            request,
+                            f"{batch.deliveries.count()} Rechnung(en) wurden zum Versand vorgemerkt.",
+                        )
+                        return redirect("email-batch-detail", batch_id=batch.pk)
     missing_snapshots = (
         run.settlements.select_related("participant")
         .filter(
@@ -186,6 +197,7 @@ def settlement_email_compose(request, run_id):
             "missing_snapshots": missing_snapshots,
             "preview": preview,
             "has_previously_sent": has_previously_sent,
+            "has_already_queued": has_already_queued,
             "run": run,
         },
     )

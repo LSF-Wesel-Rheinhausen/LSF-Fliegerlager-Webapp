@@ -48,6 +48,7 @@ class SettlementRecipient:
     name: str
     filename: str
     previously_sent: bool
+    already_queued: bool
 
 
 def _validate_message(subject: str, body: str) -> tuple[str, str]:
@@ -105,6 +106,12 @@ def resolve_settlement_recipients(
             status=EmailDelivery.Status.SENT,
         ).values_list("settlement_id", flat=True)
     )
+    already_queued_ids = set(
+        EmailDelivery.objects.filter(
+            settlement_id__in=requested_ids,
+            status__in=[EmailDelivery.Status.PENDING, EmailDelivery.Status.PROCESSING],
+        ).values_list("settlement_id", flat=True)
+    )
     recipients = []
     for settlement in settlements:
         normalized_email = settlement.participant.email.strip().casefold()
@@ -116,6 +123,7 @@ def resolve_settlement_recipients(
                 name=settlement.participant_name,
                 filename=f"abrechnung-{settlement.pk}-v{run.version}.pdf",
                 previously_sent=settlement.pk in previously_sent_ids,
+                already_queued=settlement.pk in already_queued_ids,
             )
         )
     return recipients
@@ -168,7 +176,18 @@ def queue_settlement_email_batch(
 ) -> EmailBatch:
     """Queue selected immutable settlement PDFs for their current participant addresses."""
     clean_subject, clean_body = _validate_message(subject, body)
-    recipients = resolve_settlement_recipients(run=run, settlement_ids=settlement_ids)
+    requested_ids = {int(settlement_id) for settlement_id in settlement_ids}
+    locked_ids = set(
+        Settlement.objects.select_for_update().filter(run=run, pk__in=requested_ids).values_list("pk", flat=True)
+    )
+    if not requested_ids or locked_ids != requested_ids:
+        raise ValueError("Die Auswahl enthält ungültige Abrechnungen.")
+    if EmailDelivery.objects.filter(
+        settlement_id__in=requested_ids,
+        status__in=[EmailDelivery.Status.PENDING, EmailDelivery.Status.PROCESSING],
+    ).exists():
+        raise ValueError("Mindestens eine Rechnung ist bereits zum Versand vorgemerkt.")
+    recipients = resolve_settlement_recipients(run=run, settlement_ids=requested_ids)
 
     deliveries: list[EmailDelivery] = []
     for recipient in recipients:
@@ -334,7 +353,7 @@ def send_due_email_deliveries(*, batch_size: int = 25, connection: Any | None = 
             delivery.attempts += 1
             smtp_code = getattr(error, "smtp_code", None)
             permanent = isinstance(smtp_code, int) and 500 <= smtp_code < 600
-            if permanent or delivery.attempts >= len(EMAIL_RETRY_DELAYS):
+            if permanent or delivery.attempts > len(EMAIL_RETRY_DELAYS):
                 delivery.status = EmailDelivery.Status.FAILED
                 failed += 1
             else:

@@ -108,4 +108,8 @@ class Migration(migrations.Migration):
             model_name='emaildelivery',
             constraint=models.UniqueConstraint(fields=('batch', 'dedupe_key'), name='unique_email_delivery_dedupe'),
         ),
+        migrations.AddConstraint(
+            model_name='emaildelivery',
+            constraint=models.UniqueConstraint(condition=models.Q(('settlement__isnull', False), ('status__in', ['pending', 'processing'])), fields=('settlement',), name='unique_active_settlement_email_delivery'),
+        ),
     ]

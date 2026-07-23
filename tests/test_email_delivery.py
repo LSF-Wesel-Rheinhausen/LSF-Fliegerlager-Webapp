@@ -1,5 +1,6 @@
 import logging
 import smtplib
+from datetime import timedelta
 from io import StringIO
 from unittest.mock import patch
 
@@ -12,6 +13,7 @@ from django.urls import reverse
 
 from billing.email_credentials import EmailCredentialError
 from billing.email_delivery import (
+    EMAIL_RETRY_DELAYS,
     EmailDeliveryResult,
     queue_information_email_batch,
     queue_settlement_email_batch,
@@ -502,6 +504,52 @@ def test_repeated_invoice_delivery_requires_additional_confirmation(client):
 
 
 @pytest.mark.django_db
+def test_pending_invoice_delivery_blocks_duplicate_batch_and_web_confirmation(client):
+    admin = SuperUserFactory()
+    participant = ParticipantFactory(email="ada@example.test")
+    ChargeFactory(participant=participant)
+    run = create_settlement_run(participant.camp, admin)
+    snapshot = run.settlements.get()
+    configuration = EmailConfiguration.load()
+    configuration.enabled = True
+    configuration.host = "smtp.example.test"
+    configuration.from_email = "lager@example.test"
+    configuration.set_password("smtp-secret")
+    configuration.save()
+    queue_settlement_email_batch(
+        run=run,
+        settlement_ids=[snapshot.pk],
+        subject="Abrechnung",
+        body="Deine Abrechnung.",
+        created_by=admin,
+    )
+
+    with pytest.raises(ValueError, match="bereits zum Versand vorgemerkt"):
+        queue_settlement_email_batch(
+            run=run,
+            settlement_ids=[snapshot.pk],
+            subject="Abrechnung",
+            body="Deine Abrechnung.",
+            created_by=admin,
+        )
+
+    client.force_login(admin)
+    response = client.post(
+        reverse("settlement-email-compose", args=[run.pk]),
+        {
+            "action": "confirm",
+            "subject": "Abrechnung",
+            "body": "Deine Abrechnung.",
+            "settlements": [str(snapshot.pk)],
+        },
+    )
+
+    assert response.status_code == 200
+    assert b"bereits zum Versand vorgemerkt" in response.content
+    assert EmailBatch.objects.count() == 1
+
+
+@pytest.mark.django_db
 def test_email_batch_requires_run_exactly_for_settlement_kind():
     admin = SuperUserFactory()
     participant = ParticipantFactory(email="ada@example.test")
@@ -590,6 +638,45 @@ def test_worker_marks_permanent_smtp_failure_without_retry():
     assert delivery.status == EmailDelivery.Status.FAILED
     assert delivery.attempts == 1
     assert delivery.last_error_code == "550"
+
+
+@pytest.mark.django_db
+def test_worker_schedules_final_configured_retry_delay():
+    admin = SuperUserFactory()
+    participant = ParticipantFactory(email="private-person@example.test")
+    configuration = EmailConfiguration.load()
+    configuration.enabled = True
+    configuration.host = "smtp.example.test"
+    configuration.from_email = "lager@example.test"
+    configuration.set_password("smtp-secret")
+    configuration.save()
+    batch = queue_information_email_batch(
+        camp=participant.camp,
+        participant_ids=[participant.pk],
+        subject="Information",
+        body="Nachricht",
+        created_by=admin,
+    )
+    delivery = batch.deliveries.get()
+    delivery.attempts = len(EMAIL_RETRY_DELAYS) - 1
+    delivery.save(update_fields=["attempts", "updated_at"])
+    attempted_at = delivery.next_attempt_at + timedelta(minutes=1)
+
+    with (
+        patch("billing.email_delivery.timezone.now", return_value=attempted_at),
+        patch(
+            "billing.email_delivery._send_delivery",
+            side_effect=smtplib.SMTPResponseException(451, b"temporary failure"),
+        ),
+    ):
+        result = send_due_email_deliveries(connection=object())
+
+    assert result.retried == 1
+    assert result.failed == 0
+    delivery.refresh_from_db()
+    assert delivery.status == EmailDelivery.Status.PENDING
+    assert delivery.attempts == len(EMAIL_RETRY_DELAYS)
+    assert delivery.next_attempt_at == attempted_at + timedelta(seconds=EMAIL_RETRY_DELAYS[-1])
 
 
 @pytest.mark.django_db

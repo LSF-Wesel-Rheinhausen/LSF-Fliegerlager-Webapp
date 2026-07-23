@@ -51,19 +51,33 @@
                 <td>{{ recipient.email }}</td>
                 <td>{{ recipient.name }}</td>
                 <td>{{ recipient.filename }}</td>
-                <td>{% if recipient.previously_sent %}Bereits versendet{% else %}-{% endif %}</td>
+                <td>
+                  {% if recipient.already_queued %}
+                    Zum Versand vorgemerkt
+                  {% elif recipient.previously_sent %}
+                    Bereits versendet
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
               </tr>
             {% endfor %}
           </tbody>
         </table>
         <p>Die Zuordnung von Adresse, Teilnehmer und PDF wird mit der Bestätigung eingefroren.</p>
-        {% if has_previously_sent %}
+        {% if has_already_queued %}
+          <p class="message warning" role="status">
+            Mindestens eine Rechnung ist bereits zum Versand vorgemerkt und kann nicht erneut bestätigt werden.
+          </p>
+        {% elif has_previously_sent %}
           <label>
             <input type="checkbox" name="confirm_resend" value="yes" required>
             Bereits versendete Rechnungen erneut senden
           </label>
         {% endif %}
-        <button type="submit" name="action" value="confirm">Versand verbindlich bestätigen</button>
+        <button type="submit" name="action" value="confirm"{% if has_already_queued %} disabled{% endif %}>
+          Versand verbindlich bestätigen
+        </button>
       </section>
     {% else %}
       <button type="submit" name="action" value="preview">Versandvorschau anzeigen</button>

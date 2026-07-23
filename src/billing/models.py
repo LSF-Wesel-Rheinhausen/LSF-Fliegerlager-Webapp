@@ -180,6 +180,14 @@ class EmailDelivery(TimeStampedModel):
         ordering = ["created_at", "pk"]
         constraints = [
             models.UniqueConstraint(fields=["batch", "dedupe_key"], name="unique_email_delivery_dedupe"),
+            models.UniqueConstraint(
+                fields=["settlement"],
+                condition=models.Q(
+                    settlement__isnull=False,
+                    status__in=["pending", "processing"],
+                ),
+                name="unique_active_settlement_email_delivery",
+            ),
         ]
         indexes = [models.Index(fields=["status", "next_attempt_at"], name="email_delivery_due_idx")]
 
