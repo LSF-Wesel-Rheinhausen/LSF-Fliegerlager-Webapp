@@ -8,6 +8,7 @@ from datetime import timedelta
 from email.utils import formataddr
 from typing import Any
 
+from django.core.exceptions import ValidationError
 from django.core.mail import EmailMultiAlternatives, get_connection
 from django.core.validators import validate_email
 from django.db import transaction
@@ -20,6 +21,25 @@ from .models import Camp, EmailBatch, EmailConfiguration, EmailDelivery, Partici
 logger = logging.getLogger(__name__)
 EMAIL_RETRY_DELAYS = (60, 300, 1800, 7200, 21600)
 PROCESSING_LEASE = timedelta(minutes=15)
+
+
+def normalize_recipient_email(email: str) -> str:
+    """Normalize and validate one recipient address from persisted application data."""
+    normalized_email = email.strip().casefold()
+    try:
+        validate_email(normalized_email)
+    except ValidationError as error:
+        raise ValueError("Die Empfängerauswahl enthält eine ungültige E-Mail-Adresse.") from error
+    return normalized_email
+
+
+def has_valid_recipient_email(email: str) -> bool:
+    """Return whether persisted application data contains a deliverable address."""
+    try:
+        normalize_recipient_email(email)
+    except ValueError:
+        return False
+    return True
 
 
 @dataclass(frozen=True)
@@ -78,8 +98,7 @@ def resolve_information_recipients(*, camp: Camp, participant_ids: Iterable[int]
 
     recipients: dict[str, list[str]] = defaultdict(list)
     for participant in participants:
-        normalized_email = participant.email.strip().casefold()
-        validate_email(normalized_email)
+        normalized_email = normalize_recipient_email(participant.email)
         recipients[normalized_email].append(participant.full_name)
     return [InformationRecipient(email=email, names=sorted(names)) for email, names in sorted(recipients.items())]
 
@@ -114,8 +133,7 @@ def resolve_settlement_recipients(
     )
     recipients = []
     for settlement in settlements:
-        normalized_email = settlement.participant.email.strip().casefold()
-        validate_email(normalized_email)
+        normalized_email = normalize_recipient_email(settlement.participant.email)
         recipients.append(
             SettlementRecipient(
                 settlement=settlement,
@@ -235,8 +253,7 @@ def _html_body(body: str) -> str:
 
 def send_configuration_test_email(configuration: EmailConfiguration, recipient: str) -> None:
     """Send one explicit test message for a saved SMTP configuration."""
-    normalized_recipient = recipient.strip().casefold()
-    validate_email(normalized_recipient)
+    normalized_recipient = normalize_recipient_email(recipient)
     body = "Diese Test-E-Mail bestätigt die gespeicherte SMTP-Konfiguration."
     connection = _smtp_connection(configuration)
     message = EmailMultiAlternatives(

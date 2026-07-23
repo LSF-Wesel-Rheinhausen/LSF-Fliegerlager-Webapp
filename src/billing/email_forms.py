@@ -2,6 +2,7 @@ from typing import Any, cast
 
 from django import forms
 
+from .email_delivery import has_valid_recipient_email
 from .models import EmailConfiguration
 
 
@@ -28,16 +29,14 @@ class InformationEmailForm(ManualEmailContentForm):
 
     def __init__(self, *args: Any, camp: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        eligible = (
-            camp.participants.filter(
-                archived_at__isnull=True,
-            )
-            .exclude(email="")
-            .order_by("last_name", "first_name", "pk")
-        )
+        participants = camp.participants.filter(
+            archived_at__isnull=True,
+        ).order_by("last_name", "first_name", "pk")
         participant_field = cast(forms.MultipleChoiceField, self.fields["participants"])
         participant_field.choices = [
-            (str(participant.pk), f"{participant.full_name} · {participant.email}") for participant in eligible
+            (str(participant.pk), f"{participant.full_name} · {participant.email}")
+            for participant in participants
+            if has_valid_recipient_email(participant.email)
         ]
 
 
@@ -49,20 +48,15 @@ class SettlementEmailForm(ManualEmailContentForm):
 
     def __init__(self, *args: Any, run: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        eligible = (
-            run.settlements.select_related("participant")
-            .exclude(
-                participant__email="",
-            )
-            .order_by("participant_name", "pk")
-        )
+        settlements = run.settlements.select_related("participant").order_by("participant_name", "pk")
         settlement_field = cast(forms.MultipleChoiceField, self.fields["settlements"])
         settlement_field.choices = [
             (
                 str(settlement.pk),
                 f"{settlement.participant_name} · {settlement.participant.email}",
             )
-            for settlement in eligible
+            for settlement in settlements
+            if has_valid_recipient_email(settlement.participant.email)
         ]
 
 
@@ -118,6 +112,12 @@ class EmailConfigurationForm(forms.ModelForm):
         if not cleaned_data.get("password") and not self.instance.password_encrypted:
             self.add_error("password", "Für den aktivierten Versand ist ein SMTP-Passwort erforderlich.")
         return cleaned_data
+
+    def clean_from_name(self) -> str:
+        from_name = self.cleaned_data["from_name"].strip()
+        if "\r" in from_name or "\n" in from_name:
+            raise forms.ValidationError("Der Absendername darf keinen Zeilenumbruch enthalten.")
+        return from_name
 
     def save(self, commit: bool = True, *, updated_by: Any | None = None) -> EmailConfiguration:
         configuration = super().save(commit=False)

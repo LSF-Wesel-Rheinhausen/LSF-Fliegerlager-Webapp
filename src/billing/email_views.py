@@ -8,6 +8,7 @@ from django.views.decorators.http import require_POST
 
 from .email_credentials import EmailCredentialError
 from .email_delivery import (
+    has_valid_recipient_email,
     queue_information_email_batch,
     queue_settlement_email_batch,
     requeue_failed_email_delivery,
@@ -83,9 +84,8 @@ def information_email_compose(request, camp_id):
     """Preview and manually confirm one informational email batch."""
     camp = get_object_or_404(Camp, pk=camp_id)
     configuration = EmailConfiguration.load()
-    eligible_ids = list(
-        camp.participants.filter(archived_at__isnull=True).exclude(email="").values_list("pk", flat=True)
-    )
+    participants = list(camp.participants.filter(archived_at__isnull=True).order_by("last_name", "first_name", "pk"))
+    eligible_ids = [participant.pk for participant in participants if has_valid_recipient_email(participant.email)]
     initial = {
         "subject": f"Information zu {camp.name} {camp.year}",
         "participants": [str(participant_id) for participant_id in eligible_ids],
@@ -114,10 +114,9 @@ def information_email_compose(request, camp_id):
                 )
                 messages.success(request, f"{batch.deliveries.count()} E-Mail(s) wurden zum Versand vorgemerkt.")
                 return redirect("email-batch-detail", batch_id=batch.pk)
-    missing_participants = camp.participants.filter(
-        archived_at__isnull=True,
-        email="",
-    ).order_by("last_name", "first_name")
+    missing_participants = [
+        participant for participant in participants if not has_valid_recipient_email(participant.email)
+    ]
     return render(
         request,
         "billing/information_email_compose.html",
@@ -136,7 +135,10 @@ def settlement_email_compose(request, run_id):
     """Preview and manually confirm invoice PDFs from one immutable settlement run."""
     run = get_object_or_404(SettlementRun.objects.select_related("camp"), pk=run_id)
     configuration = EmailConfiguration.load()
-    eligible_ids = list(run.settlements.exclude(participant__email="").values_list("pk", flat=True))
+    settlements = list(run.settlements.select_related("participant").order_by("participant_name", "pk"))
+    eligible_ids = [
+        settlement.pk for settlement in settlements if has_valid_recipient_email(settlement.participant.email)
+    ]
     initial = {
         "subject": f"Abrechnung {run.camp.name} {run.camp.year} · V{run.version}",
         "body": "Im Anhang findest du deine Abrechnung.",
@@ -180,13 +182,9 @@ def settlement_email_compose(request, run_id):
                             f"{batch.deliveries.count()} Rechnung(en) wurden zum Versand vorgemerkt.",
                         )
                         return redirect("email-batch-detail", batch_id=batch.pk)
-    missing_snapshots = (
-        run.settlements.select_related("participant")
-        .filter(
-            participant__email="",
-        )
-        .order_by("participant_name", "pk")
-    )
+    missing_snapshots = [
+        settlement for settlement in settlements if not has_valid_recipient_email(settlement.participant.email)
+    ]
     return render(
         request,
         "billing/settlement_email_compose.html",

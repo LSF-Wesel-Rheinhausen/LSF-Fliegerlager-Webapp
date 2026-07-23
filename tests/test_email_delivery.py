@@ -226,6 +226,35 @@ def test_admin_manages_smtp_configuration_without_rendering_stored_password(clie
 
 
 @pytest.mark.django_db
+def test_email_configuration_rejects_sender_name_header_newlines(client):
+    admin = SuperUserFactory()
+    client.force_login(admin)
+
+    response = client.post(
+        reverse("email-settings"),
+        {
+            "action": "save",
+            "enabled": "on",
+            "host": "smtp.example.test",
+            "port": "587",
+            "username": "mailer",
+            "password": "smtp-secret",
+            "security": EmailConfiguration.Security.STARTTLS,
+            "from_name": "Fliegerlager\nBcc: attacker@example.test",
+            "from_email": "lager@example.test",
+            "reply_to": "",
+            "timeout": "15",
+        },
+    )
+
+    assert response.status_code == 200
+    assert b"keinen Zeilenumbruch" in response.content
+    configuration = EmailConfiguration.load()
+    assert configuration.enabled is False
+    assert configuration.from_name == ""
+
+
+@pytest.mark.django_db
 @patch("billing.email_views.send_configuration_test_email")
 def test_admin_saves_configuration_and_sends_explicit_test_message(send_test, client):
     admin = SuperUserFactory(email="admin@example.test")
@@ -299,7 +328,7 @@ def test_admin_previews_and_confirms_exact_information_recipients(client):
     assert first.full_name.encode() in response.content
     assert second.full_name.encode() in response.content
     assert missing.full_name.encode() in response.content
-    assert b"Keine E-Mail-Adresse" in response.content
+    assert b"Keine g\xc3\xbcltige E-Mail-Adresse" in response.content
 
     data = {
         "subject": "Treffpunkt",
@@ -347,7 +376,7 @@ def test_admin_previews_and_confirms_selected_snapshot_recipient_mapping(client)
     assert b"Ada Lovelace" in response.content
     assert b"ada@example.test" in response.content
     assert b"Ohne Adresse" in response.content
-    assert b"Keine E-Mail-Adresse" in response.content
+    assert b"Keine g\xc3\xbcltige E-Mail-Adresse" in response.content
 
     data = {
         "subject": "Abrechnung",
@@ -369,6 +398,63 @@ def test_admin_previews_and_confirms_selected_snapshot_recipient_mapping(client)
     assert confirmed["Location"] == reverse("email-batch-detail", args=[batch.pk])
     assert batch.settlement_run == run
     assert batch.deliveries.get().settlement == snapshot
+
+
+@pytest.mark.django_db
+def test_compose_views_exclude_invalid_imported_email_addresses(client):
+    admin = SuperUserFactory()
+    valid = ParticipantFactory(email="valid@example.test")
+    invalid = ParticipantFactory(camp=valid.camp, email="not-an-email")
+    ChargeFactory(participant=valid)
+    ChargeFactory(participant=invalid)
+    run = create_settlement_run(valid.camp, admin)
+    invalid_snapshot = run.settlements.get(participant=invalid)
+    configuration = EmailConfiguration.load()
+    configuration.enabled = True
+    configuration.host = "smtp.example.test"
+    configuration.from_email = "lager@example.test"
+    configuration.set_password("smtp-secret")
+    configuration.save()
+    client.force_login(admin)
+
+    information_url = reverse("information-email-compose", args=[valid.camp_id])
+    information_response = client.get(information_url)
+
+    assert information_response.status_code == 200
+    assert invalid.full_name.encode() in information_response.content
+    assert b"Keine g\xc3\xbcltige E-Mail-Adresse" in information_response.content
+    assert f'value="{invalid.pk}"'.encode() not in information_response.content
+    invalid_information_post = client.post(
+        information_url,
+        {
+            "action": "preview",
+            "subject": "Information",
+            "body": "Nachricht",
+            "participants": [str(invalid.pk)],
+        },
+    )
+    assert invalid_information_post.status_code == 200
+    assert b"g\xc3\xbcltige Auswahl" in invalid_information_post.content
+
+    settlement_url = reverse("settlement-email-compose", args=[run.pk])
+    settlement_response = client.get(settlement_url)
+
+    assert settlement_response.status_code == 200
+    assert invalid.full_name.encode() in settlement_response.content
+    assert b"Keine g\xc3\xbcltige E-Mail-Adresse" in settlement_response.content
+    assert f'value="{invalid_snapshot.pk}"'.encode() not in settlement_response.content
+    invalid_settlement_post = client.post(
+        settlement_url,
+        {
+            "action": "preview",
+            "subject": "Abrechnung",
+            "body": "Nachricht",
+            "settlements": [str(invalid_snapshot.pk)],
+        },
+    )
+    assert invalid_settlement_post.status_code == 200
+    assert b"g\xc3\xbcltige Auswahl" in invalid_settlement_post.content
+    assert EmailBatch.objects.count() == 0
 
 
 @pytest.mark.django_db

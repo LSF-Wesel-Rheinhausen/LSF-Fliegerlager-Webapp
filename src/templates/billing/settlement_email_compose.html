@@ -31,10 +31,10 @@
       {{ form.settlements.errors }}
       {{ form.settlements }}
       {% if missing_snapshots %}
-        <h3>Keine E-Mail-Adresse</h3>
+        <h3>Keine gültige E-Mail-Adresse</h3>
         <ul>
           {% for snapshot in missing_snapshots %}
-            <li>{{ snapshot.participant_name }} · Keine E-Mail-Adresse</li>
+            <li>{{ snapshot.participant_name }} · Keine gültige E-Mail-Adresse</li>
           {% endfor %}
         </ul>
       {% endif %}

@@ -31,10 +31,10 @@
       {{ form.participants.errors }}
       {{ form.participants }}
       {% if missing_participants %}
-        <h3>Keine E-Mail-Adresse</h3>
+        <h3>Keine gültige E-Mail-Adresse</h3>
         <ul>
           {% for participant in missing_participants %}
-            <li>{{ participant.full_name }} · Keine E-Mail-Adresse</li>
+            <li>{{ participant.full_name }} · Keine gültige E-Mail-Adresse</li>
           {% endfor %}
         </ul>
       {% endif %}
