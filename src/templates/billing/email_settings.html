@@ -42,7 +42,7 @@
             <td>{{ batch.camp }}</td>
             <td>{{ batch.get_kind_display }}</td>
             <td>{{ batch.subject }}</td>
-            <td>{{ batch.deliveries.count }}</td>
+            <td>{{ batch.delivery_count }}</td>
             <td><a href="{% url 'email-batch-detail' batch.pk %}">Status öffnen</a></td>
           </tr>
         {% empty %}

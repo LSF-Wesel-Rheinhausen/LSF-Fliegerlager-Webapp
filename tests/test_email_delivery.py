@@ -1284,6 +1284,31 @@ def test_email_settings_lists_recent_manual_batches(client):
     assert response.status_code == 200
     assert b"Aktuelle Lagerinformation" in response.content
     assert reverse("email-batch-detail", args=[batch.pk]).encode() in response.content
+    recent_batch = list(response.context["recent_batches"])[0]
+    assert recent_batch.delivery_count == 1
+    assert "deliveries" not in getattr(recent_batch, "_prefetched_objects_cache", {})
+
+
+@pytest.mark.django_db
+def test_email_batch_status_defers_frozen_invoice_attachment(client):
+    admin = SuperUserFactory()
+    participant = ParticipantFactory(email="ada@example.test")
+    ChargeFactory(participant=participant)
+    run = create_settlement_run(participant.camp, admin)
+    batch = queue_settlement_email_batch(
+        run=run,
+        settlement_ids=[run.settlements.get().pk],
+        subject="Abrechnung",
+        body="Deine Abrechnung.",
+        created_by=admin,
+    )
+    client.force_login(admin)
+
+    response = client.get(reverse("email-batch-detail", args=[batch.pk]))
+
+    assert response.status_code == 200
+    delivery = list(response.context["deliveries"])[0]
+    assert "attachment_content" in delivery.get_deferred_fields()
 
 
 @pytest.mark.django_db

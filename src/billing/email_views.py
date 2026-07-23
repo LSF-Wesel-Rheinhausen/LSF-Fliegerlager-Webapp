@@ -117,9 +117,9 @@ def email_settings(request):
         {
             "form": form,
             "configuration": configuration,
-            "recent_batches": EmailBatch.objects.select_related("camp", "created_by").prefetch_related("deliveries")[
-                :20
-            ],
+            "recent_batches": EmailBatch.objects.select_related("camp", "created_by").annotate(
+                delivery_count=Count("deliveries")
+            )[:20],
             "recent_test_logs": EmailTestLog.objects.select_related("requested_by")[:10],
         },
     )
@@ -297,7 +297,7 @@ def settlement_email_compose(request, run_id):
 def email_batch_detail(request, batch_id):
     """Show the recipient-level status of a manually confirmed batch."""
     batch = get_object_or_404(EmailBatch.objects.select_related("camp", "created_by"), pk=batch_id)
-    deliveries = batch.deliveries.select_related("settlement", "settlement__run").all()
+    deliveries = batch.deliveries.select_related("settlement", "settlement__run").defer("attachment_content")
     counts = deliveries.aggregate(
         pending=Count("pk", filter=Q(status=EmailDelivery.Status.PENDING)),
         processing=Count("pk", filter=Q(status=EmailDelivery.Status.PROCESSING)),
