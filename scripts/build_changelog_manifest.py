@@ -20,10 +20,10 @@ def last_revision_for(path: Path) -> str:
     return output or "unknown"
 
 
-def revision_order() -> dict[str, int]:
-    """Return commit order from oldest to newest for deterministic sorting."""
-    revisions = git_output("rev-list", "--reverse", "HEAD").splitlines()
-    return {revision: index for index, revision in enumerate(revisions)}
+def revision_versions() -> dict[str, int]:
+    """Return deterministic first-parent build versions from oldest to newest."""
+    revisions = git_output("rev-list", "--reverse", "--first-parent", "HEAD").splitlines()
+    return {revision: version for version, revision in enumerate(revisions, start=1)}
 
 
 def changelog_title_and_body(path: Path) -> tuple[str, str]:
@@ -50,7 +50,7 @@ def changelog_title_and_body(path: Path) -> tuple[str, str]:
 
 def build_manifest() -> list[dict[str, str]]:
     """Build the changelog manifest consumed by the deployment updater."""
-    order = revision_order()
+    versions = revision_versions()
     entries = []
     for path in sorted(CHANGELOG_DIR.glob("*.md")):
         if path.name == "README.md":
@@ -59,13 +59,14 @@ def build_manifest() -> list[dict[str, str]]:
         title, body = changelog_title_and_body(path)
         entries.append(
             {
+                "version": str(versions.get(revision, 0)),
                 "revision": revision,
                 "path": str(path.relative_to(ROOT)),
                 "title": title,
                 "body": body,
             }
         )
-    return sorted(entries, key=lambda entry: (order.get(entry["revision"], -1), entry["path"]))
+    return sorted(entries, key=lambda entry: (int(entry["version"]), entry["path"]))
 
 
 if __name__ == "__main__":

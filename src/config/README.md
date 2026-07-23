@@ -33,7 +33,7 @@ Unterstuetzte Umgebungsvariablen:
 - `BACKUP_DIR`: gemeinsames Backup-Verzeichnis im Container; Compose setzt für App, Scheduler und Updater `/backups`.
 - `WEB_PUSH_KEY_DIR`: Verzeichnis des persistenten VAPID-Schlüsselpaars; Compose setzt `/run/secrets/webpush`.
 - `DAILY_SETTLEMENT_BACKUP_INTERVAL_SECONDS`: Prüfintervall des Scheduler-Containers; Default `300`.
-- `APP_VERSION`, `APP_REVISION`, `APP_BUILD_DATE` und `APP_CHANGE`: vom Container-Build gesetzte Versionsmetadaten.
+- `APP_VERSION`, `APP_REVISION`, `APP_BUILD_DATE` und `APP_CHANGE`: vom Container-Build gesetzte Versionsmetadaten. Veröffentlichte Images verwenden für `APP_VERSION` die deterministische First-Parent-Position auf `main`; `APP_REVISION` enthält weiterhin den Commit-SHA.
 
 WhiteNoise liefert die durch `collectstatic` erzeugten Dateien direkt über Gunicorn aus. Der Update-Agent bleibt ein
 separater Container; der Django-Prozess erhält keinen Zugriff auf Portainer-Zugangsdaten.

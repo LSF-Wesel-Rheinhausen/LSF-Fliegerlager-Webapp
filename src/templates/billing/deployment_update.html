@@ -78,7 +78,7 @@
       <section class="panel stack">
         <div>
           <h2>{% if deployment_status.phase == "complete" %}Installierte Änderungen{% else %}Änderungen seit installierter Version{% endif %}</h2>
-          <p>Diese Einträge stammen aus den Changelog-Dateien zwischen installierter und verfügbarer Revision.</p>
+          <p>Diese Einträge stammen aus den Changelog-Dateien zwischen installierter und verfügbarer Version.</p>
         </div>
         <div class="changelog-list">
           {% for entry in deployment_status.changelog %}

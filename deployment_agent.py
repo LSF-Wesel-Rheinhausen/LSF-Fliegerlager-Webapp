@@ -473,12 +473,16 @@ def normalized_changelog_entries(raw_changelog: Any) -> list[dict[str, str]]:
         if not isinstance(item, dict):
             continue
         revision = str(item.get("revision", "")).strip()
+        version = str(item.get("version", "")).strip()
         title = str(item.get("title", "")).strip()
         body = str(item.get("body", "")).strip()
         path = str(item.get("path", "")).strip()
         if not revision or not title:
             continue
-        entries.append({"revision": revision, "title": title, "body": body, "path": path})
+        entry = {"revision": revision, "title": title, "body": body, "path": path}
+        if version:
+            entry["version"] = version
+        entries.append(entry)
     return entries
 
 
@@ -527,10 +531,21 @@ def has_update(latest: dict[str, Any], current: dict[str, str], current_image: s
 
 
 def changelog_between_versions(latest: dict[str, Any], current: dict[str, str]) -> list[dict[str, str]]:
-    """Return changelog entries after the current revision up to the latest revision."""
+    """Return changelog entries after the current build up to the latest build."""
     entries = normalized_changelog_entries(latest.get("changelog", []))
     if not entries:
         return []
+
+    current_version_text = current.get("version", "")
+    latest_version_text = str(latest.get("version", ""))
+    if current_version_text.isdecimal() and latest_version_text.isdecimal():
+        current_version = int(current_version_text)
+        latest_version = int(latest_version_text)
+        return [
+            entry
+            for entry in entries
+            if entry.get("version", "").isdecimal() and current_version < int(entry["version"]) <= latest_version
+        ]
 
     current_revision = current.get("revision") or current.get("version") or ""
     latest_revision = str(latest.get("revision") or latest.get("version") or "")

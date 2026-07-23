@@ -167,6 +167,7 @@ def test_deployment_page_renders_update_changelog(client, superuser):
 
     assert response.status_code == 200
     assert "Änderungen seit installierter Version" in response.content.decode("utf-8")
+    assert "zwischen installierter und verfügbarer Version" in response.content.decode("utf-8")
     assert "Kiosk verbessert" in response.content.decode("utf-8")
     assert "Schnellbuchung stabilisiert" in response.content.decode("utf-8")
 
