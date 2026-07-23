@@ -759,6 +759,38 @@ def test_worker_retries_temporary_smtp_failure_without_logging_recipient(caplog)
 
 
 @pytest.mark.django_db
+def test_worker_retries_smtp_authentication_failure_after_configuration_can_be_fixed():
+    admin = SuperUserFactory()
+    participant = ParticipantFactory(email="private-person@example.test")
+    configuration = EmailConfiguration.load()
+    configuration.enabled = True
+    configuration.host = "smtp.example.test"
+    configuration.from_email = "lager@example.test"
+    configuration.set_password("outdated-secret")
+    configuration.save()
+    batch = queue_information_email_batch(
+        camp=participant.camp,
+        participant_ids=[participant.pk],
+        subject="Information",
+        body="Nachricht",
+        created_by=admin,
+    )
+
+    with patch(
+        "billing.email_delivery._send_delivery",
+        side_effect=smtplib.SMTPAuthenticationError(535, b"authentication failed"),
+    ):
+        result = send_due_email_deliveries(connection=object())
+
+    assert result.retried == 1
+    assert result.failed == 0
+    delivery = batch.deliveries.get()
+    assert delivery.status == EmailDelivery.Status.PENDING
+    assert delivery.attempts == 1
+    assert delivery.last_error_code == "535"
+
+
+@pytest.mark.django_db
 def test_worker_marks_permanent_smtp_failure_without_retry():
     admin = SuperUserFactory()
     participant = ParticipantFactory(email="private-person@example.test")

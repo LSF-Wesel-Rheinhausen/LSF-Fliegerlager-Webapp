@@ -320,6 +320,20 @@ def _smtp_status_code(error: smtplib.SMTPException | OSError) -> int | None:
     return None
 
 
+def _is_permanent_smtp_failure(error: smtplib.SMTPException | OSError, smtp_code: int | None) -> bool:
+    """Return whether an SMTP failure cannot recover after a configuration update."""
+    if isinstance(
+        error,
+        (
+            smtplib.SMTPAuthenticationError,
+            smtplib.SMTPSenderRefused,
+            smtplib.SMTPHeloError,
+        ),
+    ):
+        return False
+    return isinstance(smtp_code, int) and 500 <= smtp_code < 600
+
+
 def _send_delivery(
     delivery: EmailDelivery,
     *,
@@ -400,7 +414,7 @@ def send_due_email_deliveries(*, batch_size: int = 25, connection: Any | None = 
         except (smtplib.SMTPException, OSError) as error:
             delivery.attempts += 1
             smtp_code = _smtp_status_code(error)
-            permanent = isinstance(smtp_code, int) and 500 <= smtp_code < 600
+            permanent = _is_permanent_smtp_failure(error, smtp_code)
             if permanent or delivery.attempts > len(EMAIL_RETRY_DELAYS):
                 delivery.status = EmailDelivery.Status.FAILED
                 failed += 1
