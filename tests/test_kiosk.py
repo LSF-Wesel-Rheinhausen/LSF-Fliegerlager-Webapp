@@ -1951,6 +1951,26 @@ def test_kiosk_deactivates_own_family_member(client):
 
 
 @pytest.mark.django_db
+def test_invalid_booking_link_invite_reopens_management_dialog(client):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "booking_link_invite",
+            "link-participant": "",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.context["booking_link_form"].errors
+    assert b'id="booking-links-dialog" data-auto-open-dialog' in response.content
+
+
+@pytest.mark.django_db
 def test_kiosk_booking_link_invite_accept_revoke_flow(client):
     camp = CampFactory()
     inviter = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")

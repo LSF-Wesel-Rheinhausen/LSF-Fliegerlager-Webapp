@@ -375,7 +375,7 @@
         {% endfor %}
       </dialog>
 
-      <dialog id="booking-links-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="booking-links-dialog-title">
+      <dialog id="booking-links-dialog"{% if booking_link_form.errors %} data-auto-open-dialog{% endif %} class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="booking-links-dialog-title">
         <div class="kiosk-card__header kiosk-section-heading">
           <div class="kiosk-card__header-main">
             <h2 class="kiosk-title" id="booking-links-dialog-title">
@@ -1029,6 +1029,7 @@
       if (window.location.hash === "#meal-calendar") {
         openDialog(document.getElementById("meal-calendar-dialog"));
       }
+      document.querySelectorAll("[data-auto-open-dialog]").forEach((dialog) => openDialog(dialog));
 
     })();
   </script>
