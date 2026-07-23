@@ -71,6 +71,7 @@ Run commands from the repository root. Use the existing `.venv` and `package-loc
 - Keep templates presentational, reuse includes, avoid inline styles and jQuery, and prefer existing vanilla JavaScript, Flexbox, and Grid patterns.
 - Prefer native `<dialog>` workflows for in-context create/edit actions, with progressive enhancement. Confirm destructive or settlement-altering actions and report outcomes through Django messages.
 - Format currency and dates consistently with the configured locale.
+- When a static asset listed by `service_worker()` changes, bump `PWA_CACHE_VERSION` and update the exact cache-name regression test so installed PWAs receive the new asset.
 - Before automating UI assertions, exercise the smallest runnable change against real application state with a Playwright-controlled browser at representative desktop and mobile viewports; include light and dark themes when affected.
 - Check keyboard operation, disabled and error states, overflow or overlap, browser console errors, and failed requests. Then encode the verified behavior and discovered edge cases in deterministic Playwright or pytest regression tests.
 
