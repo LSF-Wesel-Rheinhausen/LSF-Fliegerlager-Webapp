@@ -1706,6 +1706,17 @@ textarea {
   min-height: 44px;
 }
 
+.target-row--checkin {
+  grid-template-columns: minmax(140px, 1fr) repeat(2, minmax(190px, 240px));
+  align-items: end;
+}
+
+.checkin-target-list {
+  max-height: none;
+  overflow-y: visible;
+  padding-right: 0;
+}
+
 .target-row--single {
   grid-template-columns: 1fr;
 }

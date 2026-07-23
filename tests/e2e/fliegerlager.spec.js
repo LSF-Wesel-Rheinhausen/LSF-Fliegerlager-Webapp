@@ -124,6 +124,14 @@ function dateInputValue(date) {
   return `${year}-${month}-${day}`;
 }
 
+function germanDate(date) {
+  return new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
+}
+
 async function setupFirstAdmin(page) {
   await page.goto("/setup/");
   if (page.url().includes("/login/")) {
@@ -376,12 +384,28 @@ test("Kiosk flow: login, pin setup, drink and meal booking", async ({ page }) =>
   // Check-in can be entered from the kiosk.
   const checkinArrival = dateInputValue(addDays(new Date(), 2));
   const checkinDeparture = dateInputValue(addDays(new Date(), 4));
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "Eintragen" }).click();
-  await expect(page.locator("dialog#checkin-dialog")).toBeVisible();
-  await page.locator("dialog#checkin-dialog").getByLabel("Anreise").fill(checkinArrival);
-  await page.locator("dialog#checkin-dialog").getByLabel("Abreise").fill(checkinDeparture);
-  await page.locator("dialog#checkin-dialog").getByRole("button", { name: "Check-in speichern" }).click();
+  const checkinDialog = page.locator("dialog#checkin-dialog");
+  await expect(checkinDialog).toBeVisible();
+  const nestedVerticalScrollContainers = await checkinDialog.evaluate((dialog) =>
+    [...dialog.querySelectorAll("*")]
+      .filter((element) => ["auto", "scroll"].includes(getComputedStyle(element).overflowY))
+      .map((element) => element.className),
+  );
+  expect(nestedVerticalScrollContainers).toEqual([]);
+  const departureInput = checkinDialog.getByLabel("Abreise").first();
+  await departureInput.fill(dateInputValue(addDays(new Date(), 5)));
+  const validationMessage = await departureInput.evaluate((input) => {
+    input.checkValidity();
+    return input.validationMessage;
+  });
+  expect(validationMessage).toBe(`Bitte wähle ein Datum bis zum ${germanDate(addDays(new Date(), 4))}.`);
+  await checkinDialog.getByLabel("Anreise").fill(checkinArrival);
+  await departureInput.fill(checkinDeparture);
+  await checkinDialog.getByRole("button", { name: "Check-in speichern" }).click();
   await expect(page.getByText("Check-in-Daten wurden gespeichert.")).toBeVisible();
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.getByRole("button", { name: "Eintragen" }).click();
   await expect(page.locator("dialog#checkin-dialog").getByLabel("Anreise")).toHaveValue(checkinArrival);
   await expect(page.locator("dialog#checkin-dialog").getByLabel("Abreise")).toHaveValue(checkinDeparture);

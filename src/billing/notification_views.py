@@ -54,6 +54,7 @@ def _device_payload(subscription: PushSubscription) -> dict[str, Any]:
     return {
         "id": subscription.pk,
         "device_name": subscription.device_name,
+        "categories": list(subscription.categories),
         "last_success_at": subscription.last_success_at,
         "endpoint_fingerprint": _endpoint_fingerprint(subscription.endpoint),
     }
@@ -68,6 +69,20 @@ def _device_name(payload: dict[str, Any] | None) -> str | None:
         return None
     normalized = value.strip()
     return normalized if 1 <= len(normalized) <= 80 else None
+
+
+def _category_selection(payload: dict[str, Any] | None, allowed: dict[str, str]) -> list[str] | None:
+    """Return a non-empty, deduplicated selection restricted to allowed categories."""
+    if payload is None:
+        return None
+    categories = payload.get("categories")
+    if (
+        not isinstance(categories, list)
+        or not categories
+        or any(not isinstance(category, str) or category not in allowed for category in categories)
+    ):
+        return None
+    return list(dict.fromkeys(categories))
 
 
 def _settings_response(request: HttpRequest, owner: Any, *, participant_owner: bool) -> HttpResponse:
@@ -118,7 +133,6 @@ def _subscribe(request: HttpRequest, owner: Any, *, participant_owner: bool) -> 
     endpoint = payload.get("endpoint")
     keys = payload.get("keys")
     device_name = payload.get("device_name", "Dieses Gerät")
-    categories = payload.get("categories")
     allowed = allowed_categories(participant_owner=participant_owner)
     if not isinstance(endpoint, str) or len(endpoint) > 2048 or urlsplit(endpoint).scheme != "https":
         return JsonResponse({"error": "Ungültiger Push-Endpoint."}, status=400)
@@ -129,9 +143,9 @@ def _subscribe(request: HttpRequest, owner: Any, *, participant_owner: bool) -> 
     normalized_device_name = _device_name({"device_name": device_name})
     if normalized_device_name is None:
         return JsonResponse({"error": "Ungültiger Gerätename."}, status=400)
-    if not isinstance(categories, list) or not categories or any(category not in allowed for category in categories):
+    categories = _category_selection(payload, allowed)
+    if categories is None:
         return JsonResponse({"error": "Ungültige Benachrichtigungskategorie."}, status=400)
-    categories = list(dict.fromkeys(categories))
 
     existing = PushSubscription.objects.filter(endpoint=endpoint).first()
     owner_matches = existing is not None and (
@@ -228,6 +242,55 @@ def kiosk_notification_rename(request: HttpRequest, subscription_id: int) -> Jso
     if participant is None:
         return JsonResponse({"error": "Private Kiosk-Anmeldung erforderlich."}, status=403)
     return _rename(participant, subscription_id, _json_payload(request), participant_owner=True)
+
+
+def _update_preferences(
+    owner: Any,
+    subscription_id: int,
+    payload: dict[str, Any] | None,
+    *,
+    participant_owner: bool,
+) -> JsonResponse:
+    subscription = get_object_or_404(
+        PushSubscription,
+        pk=subscription_id,
+        **_owner_filter(owner, participant_owner),
+    )
+    categories = _category_selection(
+        payload,
+        allowed_categories(participant_owner=participant_owner),
+    )
+    if categories is None:
+        return JsonResponse({"error": "Ungültige Benachrichtigungskategorie."}, status=400)
+    subscription.categories = categories
+    subscription.save(update_fields=["categories", "updated_at"])
+    return JsonResponse({"device": _device_payload(subscription)})
+
+
+@login_required
+@require_POST
+def notification_preferences(request: HttpRequest, subscription_id: int) -> JsonResponse:
+    """Update notification categories for one push device owned by the current user."""
+    return _update_preferences(
+        request.user,
+        subscription_id,
+        _json_payload(request),
+        participant_owner=False,
+    )
+
+
+@require_POST
+def kiosk_notification_preferences(request: HttpRequest, subscription_id: int) -> JsonResponse:
+    """Update notification categories for one push device owned by the private participant."""
+    participant = _private_participant(request)
+    if participant is None:
+        return JsonResponse({"error": "Private Kiosk-Anmeldung erforderlich."}, status=403)
+    return _update_preferences(
+        participant,
+        subscription_id,
+        _json_payload(request),
+        participant_owner=True,
+    )
 
 
 def queue_test_notification(owner: Any, *, participant_owner: bool, subscription_id: int) -> None:

@@ -101,6 +101,61 @@
     }).format(new Date(value))}`;
   };
 
+  const categoryOptions = Array.from(form?.querySelectorAll('input[name="category"]') || []).map((input) => ({
+    value: input.value,
+    label: input.closest("label")?.textContent.trim() || input.value,
+  }));
+
+  const preferencesDialogElement = (device) => {
+    const dialog = document.createElement("dialog");
+    dialog.className = "notification-preferences-dialog";
+    const titleId = `notification-preferences-title-${device.id}`;
+    dialog.setAttribute("aria-labelledby", titleId);
+    const preferencesForm = document.createElement("form");
+    preferencesForm.className = "form-grid";
+    preferencesForm.dataset.preferencesForm = String(device.id);
+    const title = document.createElement("h3");
+    title.id = titleId;
+    title.textContent = "Nachrichten auswählen";
+    const fieldset = document.createElement("fieldset");
+    const legend = document.createElement("legend");
+    legend.textContent = `Kategorien für ${device.device_name}`;
+    fieldset.append(legend);
+    categoryOptions.forEach((category) => {
+      const label = document.createElement("label");
+      label.className = "checkbox-row";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.name = "category";
+      checkbox.value = category.value;
+      checkbox.checked = (device.categories || []).includes(category.value);
+      const text = document.createElement("span");
+      text.textContent = category.label;
+      label.append(checkbox, text);
+      fieldset.append(label);
+    });
+    const preferencesError = document.createElement("p");
+    preferencesError.className = "message error";
+    preferencesError.dataset.preferencesError = "";
+    preferencesError.setAttribute("role", "alert");
+    preferencesError.hidden = true;
+    const dialogActions = document.createElement("div");
+    dialogActions.className = "actions";
+    const cancelButton = document.createElement("button");
+    cancelButton.className = "button button-secondary";
+    cancelButton.type = "button";
+    cancelButton.dataset.closeDialog = "";
+    cancelButton.textContent = "Abbrechen";
+    const saveButton = document.createElement("button");
+    saveButton.className = "button";
+    saveButton.type = "submit";
+    saveButton.textContent = "Speichern";
+    dialogActions.append(cancelButton, saveButton);
+    preferencesForm.append(title, fieldset, preferencesError, dialogActions);
+    dialog.append(preferencesForm);
+    return dialog;
+  };
+
   const deviceElement = (device, current = false) => {
     const item = document.createElement("li");
     item.dataset.notificationDevice = String(device.id);
@@ -135,13 +190,19 @@
     renameButton.type = "button";
     renameButton.dataset.renameSubscription = String(device.id);
     renameButton.textContent = "Umbenennen";
+    const preferencesButton = document.createElement("button");
+    preferencesButton.className = "button button-secondary";
+    preferencesButton.type = "button";
+    preferencesButton.dataset.preferencesSubscription = String(device.id);
+    preferencesButton.textContent = "Nachrichten auswählen";
     const revokeButton = document.createElement("button");
     revokeButton.className = "button button-danger";
     revokeButton.type = "button";
     revokeButton.dataset.revokeSubscription = String(device.id);
     revokeButton.textContent = "Entfernen";
-    actions.append(renameButton, testButton, revokeButton);
+    actions.append(preferencesButton, renameButton, testButton, revokeButton);
 
+    const preferencesDialog = preferencesDialogElement(device);
     const dialog = document.createElement("dialog");
     dialog.className = "notification-rename-dialog";
     const titleId = `notification-rename-title-${device.id}`;
@@ -182,7 +243,7 @@
     renameForm.append(title, label, input, renameError, dialogActions);
     dialog.append(renameForm);
 
-    item.append(details, actions, dialog);
+    item.append(details, actions, preferencesDialog, dialog);
     return item;
   };
 
@@ -282,14 +343,33 @@
     const revokeButton = event.target.closest("[data-revoke-subscription]");
     const testButton = event.target.closest("[data-test-subscription]");
     const renameButton = event.target.closest("[data-rename-subscription]");
+    const preferencesButton = event.target.closest("[data-preferences-subscription]");
     const closeButton = event.target.closest("[data-close-dialog]");
     if (closeButton) {
       closeButton.closest("dialog")?.close();
       return;
     }
     if (renameButton) {
-      const dialog = renameButton.closest("[data-notification-device]")?.querySelector("dialog");
+      const id = renameButton.dataset.renameSubscription;
+      const dialog = renameButton
+        .closest("[data-notification-device]")
+        ?.querySelector(`[data-rename-form="${id}"]`)
+        ?.closest("dialog");
       const dialogError = dialog?.querySelector("[data-rename-error]");
+      if (dialogError) {
+        dialogError.hidden = true;
+        dialogError.textContent = "";
+      }
+      dialog?.showModal();
+      return;
+    }
+    if (preferencesButton) {
+      const id = preferencesButton.dataset.preferencesSubscription;
+      const dialog = preferencesButton
+        .closest("[data-notification-device]")
+        ?.querySelector(`[data-preferences-form="${id}"]`)
+        ?.closest("dialog");
+      const dialogError = dialog?.querySelector("[data-preferences-error]");
       if (dialogError) {
         dialogError.hidden = true;
         dialogError.textContent = "";
@@ -329,6 +409,39 @@
   });
 
   deviceList?.addEventListener("submit", async (event) => {
+    const preferencesForm = event.target.closest("[data-preferences-form]");
+    if (preferencesForm) {
+      event.preventDefault();
+      clearError();
+      const id = preferencesForm.dataset.preferencesForm;
+      const saveButton = preferencesForm.querySelector('button[type="submit"]');
+      const preferencesError = preferencesForm.querySelector("[data-preferences-error]");
+      preferencesError.hidden = true;
+      preferencesError.textContent = "";
+      saveButton.disabled = true;
+      try {
+        const data = new FormData(preferencesForm);
+        const response = await fetch(`${root.dataset.subscriptionBaseUrl}${id}/preferences/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken() },
+          body: JSON.stringify({ categories: data.getAll("category") }),
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || "Nachrichtenauswahl konnte nicht gespeichert werden.");
+        preferencesForm.querySelectorAll('input[name="category"]').forEach((checkbox) => {
+          checkbox.checked = payload.device.categories.includes(checkbox.value);
+        });
+        preferencesForm.closest("dialog").close();
+      } catch (exception) {
+        preferencesError.textContent =
+          exception.message || "Nachrichtenauswahl konnte nicht gespeichert werden.";
+        preferencesError.hidden = false;
+      } finally {
+        saveButton.disabled = false;
+      }
+      return;
+    }
+
     const renameForm = event.target.closest("[data-rename-form]");
     if (!renameForm) return;
     event.preventDefault();

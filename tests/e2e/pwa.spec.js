@@ -90,7 +90,8 @@ test("Notification enrollment updates the current page without reload", async ({
       <form data-notification-subscribe-form>
         <input name="csrfmiddlewaretoken" value="test-csrf">
         <input name="device_name" value="Mein Smartphone">
-        <input type="checkbox" name="category" value="shifts" checked>
+        <label><input type="checkbox" name="category" value="shifts" checked>Dienste</label>
+        <label><input type="checkbox" name="category" value="meal_deadlines">Essensfristen</label>
         <button type="submit" data-notification-submit>Benachrichtigungen aktivieren</button>
       </form>
       <ul data-notification-device-list>
@@ -148,6 +149,19 @@ test("Notification enrollment updates the current page without reload", async ({
           device: {
             id: 42,
             device_name: body.device_name.trim(),
+            categories: ["shifts"],
+            last_success_at: null,
+            endpoint_fingerprint: "current-device",
+          },
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.endsWith("/preferences/")) {
+        const body = JSON.parse(options.body);
+        return new Response(JSON.stringify({
+          device: {
+            id: 42,
+            device_name: "Familien-Tablet",
+            categories: body.categories,
             last_success_at: null,
             endpoint_fingerprint: "current-device",
           },
@@ -158,6 +172,7 @@ test("Notification enrollment updates the current page without reload", async ({
           device: {
             id: 42,
             device_name: "Mein Smartphone",
+            categories: ["shifts"],
             last_success_at: null,
             endpoint_fingerprint: "current-device",
           },
@@ -184,6 +199,20 @@ test("Notification enrollment updates the current page without reload", async ({
   await renameDialog.getByRole("button", { name: "Speichern" }).click();
   await expect(renameDialog).not.toBeVisible();
   await expect(page.locator("[data-notification-device-list]")).toContainText("Familien-Tablet");
+  await expect.poll(() => page.evaluate(() => window.__notificationPageMarker)).toBe("retained");
+
+  await page.getByRole("button", { name: "Nachrichten auswählen" }).click();
+  const preferencesDialog = page.getByRole("dialog", { name: "Nachrichten auswählen" });
+  await expect(preferencesDialog.getByRole("checkbox", { name: "Dienste" })).toBeChecked();
+  await expect(preferencesDialog.getByRole("checkbox", { name: "Essensfristen" })).not.toBeChecked();
+  await preferencesDialog.getByRole("checkbox", { name: "Dienste" }).uncheck();
+  await preferencesDialog.getByRole("checkbox", { name: "Essensfristen" }).check();
+  await preferencesDialog.getByRole("button", { name: "Speichern" }).click();
+  await expect(preferencesDialog).not.toBeVisible();
+  await page.getByRole("button", { name: "Nachrichten auswählen" }).click();
+  await expect(preferencesDialog.getByRole("checkbox", { name: "Dienste" })).not.toBeChecked();
+  await expect(preferencesDialog.getByRole("checkbox", { name: "Essensfristen" })).toBeChecked();
+  await preferencesDialog.getByRole("button", { name: "Abbrechen" }).click();
   await expect.poll(() => page.evaluate(() => window.__notificationPageMarker)).toBe("retained");
 
   await page.getByRole("button", { name: "Entfernen" }).click();
