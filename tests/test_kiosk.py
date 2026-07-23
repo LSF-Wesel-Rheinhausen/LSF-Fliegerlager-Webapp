@@ -1925,6 +1925,32 @@ def test_kiosk_creates_family_member_and_books_meal_on_guardian(client, monkeypa
 
 
 @pytest.mark.django_db
+def test_kiosk_deactivates_own_family_member(client):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    family_member = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Byron",
+        last_name="Lovelace",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "family_member_deactivate",
+            "family_member_id": family_member.pk,
+        },
+    )
+
+    assert response.status_code == 302
+    family_member.refresh_from_db()
+    assert family_member.is_active is False
+
+
+@pytest.mark.django_db
 def test_kiosk_booking_link_invite_accept_revoke_flow(client):
     camp = CampFactory()
     inviter = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")
