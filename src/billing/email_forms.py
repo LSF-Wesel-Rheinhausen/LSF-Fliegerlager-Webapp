@@ -2,6 +2,7 @@ from typing import Any, cast
 
 from django import forms
 
+from .email_credentials import EmailCredentialError
 from .email_delivery import has_valid_recipient_email
 from .models import EmailConfiguration
 
@@ -109,8 +110,17 @@ class EmailConfigurationForm(forms.ModelForm):
         for field_name in ("host", "from_email"):
             if not cleaned_data.get(field_name):
                 self.add_error(field_name, "Dieses Feld ist bei aktiviertem Versand erforderlich.")
-        if not cleaned_data.get("password") and not self.instance.password_encrypted:
-            self.add_error("password", "Für den aktivierten Versand ist ein SMTP-Passwort erforderlich.")
+        if not cleaned_data.get("password"):
+            if not self.instance.password_encrypted:
+                self.add_error("password", "Für den aktivierten Versand ist ein SMTP-Passwort erforderlich.")
+            else:
+                try:
+                    self.instance.get_password()
+                except EmailCredentialError:
+                    self.add_error(
+                        "password",
+                        "Das gespeicherte Passwort ist nicht mehr gültig. Bitte ein neues SMTP-Passwort eingeben.",
+                    )
         return cleaned_data
 
     def clean_from_name(self) -> str:

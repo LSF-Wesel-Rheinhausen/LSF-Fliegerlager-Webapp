@@ -262,6 +262,43 @@ def test_admin_manages_smtp_configuration_without_rendering_stored_password(clie
 
 
 @pytest.mark.django_db
+def test_admin_must_replace_stored_smtp_password_after_secret_key_rotation(client, settings):
+    settings.SECRET_KEY = "old-test-secret-key-with-more-than-fifty-characters-123456"
+    admin = SuperUserFactory()
+    configuration = EmailConfiguration.load()
+    configuration.host = "smtp.example.test"
+    configuration.from_email = "lager@example.test"
+    configuration.set_password("old-secret")
+    configuration.save()
+    settings.SECRET_KEY = "new-test-secret-key-with-more-than-fifty-characters-654321"
+    client.force_login(admin)
+
+    response = client.post(
+        reverse("email-settings"),
+        {
+            "action": "save",
+            "enabled": "on",
+            "host": "smtp.example.test",
+            "port": "587",
+            "username": "mailer",
+            "password": "",
+            "security": EmailConfiguration.Security.STARTTLS,
+            "from_name": "Fliegerlager",
+            "from_email": "lager@example.test",
+            "reply_to": "",
+            "timeout": "15",
+        },
+    )
+
+    assert response.status_code == 200
+    assert b"neues SMTP-Passwort" in response.content
+    configuration.refresh_from_db()
+    assert configuration.enabled is False
+    with pytest.raises(EmailCredentialError):
+        configuration.get_password()
+
+
+@pytest.mark.django_db
 def test_email_configuration_rejects_sender_name_header_newlines(client):
     admin = SuperUserFactory()
     client.force_login(admin)
