@@ -35,6 +35,21 @@ def _freeze_meal_lock_time(monkeypatch, fixed_now):
 
 
 @pytest.mark.django_db
+def test_kiosk_user_guide_points_menu_only_sections_to_menu(client):
+    response = client.get(reverse("user-guide"))
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert "Menü → Letzte Schnellbuchungen" in content
+    assert "Menü → Essenskalender" in content
+    assert "Menü → Familie" in content
+    assert "Menü → Mitbuchungen" in content
+    assert "scrolle auf der Startseite" not in content
+    for animation in ("login", "drinks", "meals", "family", "shifts"):
+        assert f"/static/billing/docs/kiosk_{animation}.gif?v=2" in content
+
+
+@pytest.mark.django_db
 def test_kiosk_login_rejects_empty_participant_placeholder(client):
     response = client.post(reverse("kiosk-login"), {"participant": "", "pin": "1234"})
 
