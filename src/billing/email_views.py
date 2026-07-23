@@ -1,6 +1,7 @@
 import smtplib
 
 from django.contrib import messages
+from django.core import signing
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -19,6 +20,47 @@ from .email_delivery import (
 from .email_forms import EmailConfigurationForm, InformationEmailForm, SettlementEmailForm
 from .models import Camp, EmailBatch, EmailConfiguration, EmailDelivery, EmailTestLog, SettlementRun
 from .permissions import admin_required
+
+EMAIL_PREVIEW_SIGNING_SALT = "billing.manual-email-preview.v1"
+EMAIL_PREVIEW_MAX_AGE_SECONDS = 60 * 60
+
+
+def _preview_payload(
+    *,
+    kind: str,
+    scope_id: int,
+    user_id: int,
+    subject: str,
+    body: str,
+    selected_ids: list[str],
+) -> dict[str, object]:
+    """Return the normalized state an administrator explicitly previewed."""
+    return {
+        "kind": kind,
+        "scope_id": scope_id,
+        "user_id": user_id,
+        "subject": subject,
+        "body": body,
+        "selected_ids": sorted(int(selected_id) for selected_id in selected_ids),
+    }
+
+
+def _sign_preview(payload: dict[str, object]) -> str:
+    """Sign one preview state without storing server-side session data."""
+    return signing.dumps(payload, salt=EMAIL_PREVIEW_SIGNING_SALT, compress=True)
+
+
+def _matches_preview_token(token: str, payload: dict[str, object]) -> bool:
+    """Return whether a non-expired token represents exactly the current form state."""
+    try:
+        signed_payload = signing.loads(
+            token,
+            salt=EMAIL_PREVIEW_SIGNING_SALT,
+            max_age=EMAIL_PREVIEW_MAX_AGE_SECONDS,
+        )
+    except signing.BadSignature:
+        return False
+    return signed_payload == payload
 
 
 @admin_required
@@ -96,6 +138,7 @@ def information_email_compose(request, camp_id):
         initial=initial,
     )
     preview = None
+    preview_token = ""
     if request.method == "POST" and form.is_valid():
         if not configuration.enabled:
             form.add_error(None, "Der E-Mail-Versand ist in den Einstellungen deaktiviert.")
@@ -104,16 +147,31 @@ def information_email_compose(request, camp_id):
                 camp=camp,
                 participant_ids=form.cleaned_data["participants"],
             )
+            preview_payload = _preview_payload(
+                kind=EmailBatch.Kind.INFORMATION,
+                scope_id=camp.pk,
+                user_id=request.user.pk,
+                subject=form.cleaned_data["subject"],
+                body=form.cleaned_data["body"],
+                selected_ids=form.cleaned_data["participants"],
+            )
+            preview_token = _sign_preview(preview_payload)
             if request.POST.get("action") == "confirm":
-                batch = queue_information_email_batch(
-                    camp=camp,
-                    participant_ids=form.cleaned_data["participants"],
-                    subject=form.cleaned_data["subject"],
-                    body=form.cleaned_data["body"],
-                    created_by=request.user,
-                )
-                messages.success(request, f"{batch.deliveries.count()} E-Mail(s) wurden zum Versand vorgemerkt.")
-                return redirect("email-batch-detail", batch_id=batch.pk)
+                if not _matches_preview_token(request.POST.get("preview_token", ""), preview_payload):
+                    form.add_error(
+                        None,
+                        "Auswahl oder Inhalt wurde nach der Vorschau geändert. Bitte Vorschau erneut prüfen.",
+                    )
+                else:
+                    batch = queue_information_email_batch(
+                        camp=camp,
+                        participant_ids=form.cleaned_data["participants"],
+                        subject=form.cleaned_data["subject"],
+                        body=form.cleaned_data["body"],
+                        created_by=request.user,
+                    )
+                    messages.success(request, f"{batch.deliveries.count()} E-Mail(s) wurden zum Versand vorgemerkt.")
+                    return redirect("email-batch-detail", batch_id=batch.pk)
     missing_participants = [
         participant for participant in participants if not has_valid_recipient_email(participant.email)
     ]
@@ -126,6 +184,7 @@ def information_email_compose(request, camp_id):
             "form": form,
             "missing_participants": missing_participants,
             "preview": preview,
+            "preview_token": preview_token,
         },
     )
 
@@ -150,6 +209,7 @@ def settlement_email_compose(request, run_id):
         initial=initial,
     )
     preview = None
+    preview_token = ""
     has_previously_sent = False
     has_already_queued = False
     if request.method == "POST" and form.is_valid():
@@ -160,10 +220,24 @@ def settlement_email_compose(request, run_id):
                 run=run,
                 settlement_ids=form.cleaned_data["settlements"],
             )
+            preview_payload = _preview_payload(
+                kind=EmailBatch.Kind.SETTLEMENT,
+                scope_id=run.pk,
+                user_id=request.user.pk,
+                subject=form.cleaned_data["subject"],
+                body=form.cleaned_data["body"],
+                selected_ids=form.cleaned_data["settlements"],
+            )
+            preview_token = _sign_preview(preview_payload)
             has_previously_sent = any(recipient.previously_sent for recipient in preview)
             has_already_queued = any(recipient.already_queued for recipient in preview)
             if request.POST.get("action") == "confirm":
-                if has_already_queued:
+                if not _matches_preview_token(request.POST.get("preview_token", ""), preview_payload):
+                    form.add_error(
+                        None,
+                        "Auswahl oder Inhalt wurde nach der Vorschau geändert. Bitte Vorschau erneut prüfen.",
+                    )
+                elif has_already_queued:
                     form.add_error(None, "Mindestens eine Rechnung ist bereits zum Versand vorgemerkt.")
                 elif not has_previously_sent or request.POST.get("confirm_resend") == "yes":
                     try:
@@ -194,6 +268,7 @@ def settlement_email_compose(request, run_id):
             "form": form,
             "missing_snapshots": missing_snapshots,
             "preview": preview,
+            "preview_token": preview_token,
             "has_previously_sent": has_previously_sent,
             "has_already_queued": has_already_queued,
             "run": run,

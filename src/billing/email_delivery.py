@@ -118,7 +118,7 @@ def resolve_settlement_recipients(
     if not requested_ids:
         raise ValueError("Mindestens eine Rechnung muss ausgewählt werden.")
     settlements = list(
-        Settlement.objects.select_related("participant")
+        Settlement.objects.select_related("participant", "run", "run__camp")
         .filter(run=run, pk__in=requested_ids)
         .order_by("participant_name", "pk")
     )
@@ -214,6 +214,7 @@ def queue_settlement_email_batch(
 
     deliveries: list[EmailDelivery] = []
     for recipient in recipients:
+        attachment = settlement_snapshot_pdf_bytes(recipient.settlement)
         deliveries.append(
             EmailDelivery(
                 recipient_email=recipient.email,
@@ -222,6 +223,9 @@ def queue_settlement_email_batch(
                 dedupe_key=f"settlement:{recipient.settlement.pk}",
                 subject=clean_subject,
                 body_text=clean_body,
+                attachment_filename=recipient.filename,
+                attachment_content=attachment,
+                attachment_sha256=hashlib.sha256(attachment).hexdigest(),
             )
         )
 
@@ -349,16 +353,12 @@ def _send_delivery(
         connection=connection,
     )
     message.attach_alternative(_html_body(delivery.body_text), "text/html")
-    attachment_sha256 = ""
-    settlement = delivery.settlement
-    if settlement is not None:
-        attachment = settlement_snapshot_pdf_bytes(settlement)
-        run = settlement.run
-        if run is None:
-            raise ValueError("Invoice email requires a versioned settlement.")
-        filename = f"abrechnung-{settlement.pk}-v{run.version}.pdf"
-        message.attach(filename, attachment, "application/pdf")
-        attachment_sha256 = hashlib.sha256(attachment).hexdigest()
+    attachment_sha256 = delivery.attachment_sha256
+    if delivery.settlement_id is not None:
+        attachment = bytes(delivery.attachment_content or b"")
+        if not attachment or not delivery.attachment_filename or not attachment_sha256:
+            raise ValueError("Invoice email requires a frozen attachment.")
+        message.attach(delivery.attachment_filename, attachment, "application/pdf")
     message.send(fail_silently=False)
     return attachment_sha256
 

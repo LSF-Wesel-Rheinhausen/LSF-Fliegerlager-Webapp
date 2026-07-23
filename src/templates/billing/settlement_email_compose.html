@@ -41,6 +41,7 @@
     </section>
 
     {% if preview %}
+      <input type="hidden" name="preview_token" value="{{ preview_token }}">
       <section class="panel stack" aria-labelledby="settlement-email-preview-heading">
         <h2 id="settlement-email-preview-heading">Versandvorschau</h2>
         <table>

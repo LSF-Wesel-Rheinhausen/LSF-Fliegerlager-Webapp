@@ -73,6 +73,8 @@ class Migration(migrations.Migration):
                 ('attempts', models.PositiveSmallIntegerField(default=0)),
                 ('sent_at', models.DateTimeField(blank=True, null=True)),
                 ('last_error_code', models.CharField(blank=True, max_length=40)),
+                ('attachment_filename', models.CharField(blank=True, max_length=255)),
+                ('attachment_content', models.BinaryField(blank=True, editable=False, null=True)),
                 ('attachment_sha256', models.CharField(blank=True, max_length=64)),
                 ('batch', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='deliveries', to='billing.emailbatch')),
                 ('settlement', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.RESTRICT, related_name='email_deliveries', to='billing.settlement')),

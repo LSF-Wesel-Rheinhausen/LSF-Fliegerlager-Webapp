@@ -174,6 +174,8 @@ class EmailDelivery(TimeStampedModel):
     attempts = models.PositiveSmallIntegerField(default=0)
     sent_at = models.DateTimeField(null=True, blank=True)
     last_error_code = models.CharField(max_length=40, blank=True)
+    attachment_filename = models.CharField(max_length=255, blank=True)
+    attachment_content = models.BinaryField(null=True, blank=True, editable=False)
     attachment_sha256 = models.CharField(max_length=64, blank=True)
 
     class Meta:

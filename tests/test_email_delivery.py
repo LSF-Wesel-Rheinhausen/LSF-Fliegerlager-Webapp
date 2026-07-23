@@ -176,6 +176,8 @@ def test_worker_sends_one_private_information_message_from_web_configuration():
 def test_worker_attaches_pdf_from_selected_settlement_snapshot():
     admin = SuperUserFactory()
     participant = ParticipantFactory(first_name="Ada", last_name="Lovelace", email="ada@example.test")
+    participant.camp.iban = "DE02120300000000202051"
+    participant.camp.save(update_fields=["iban", "updated_at"])
     ChargeFactory(participant=participant)
     run = create_settlement_run(participant.camp, admin)
     snapshot = run.settlements.get()
@@ -192,6 +194,14 @@ def test_worker_attaches_pdf_from_selected_settlement_snapshot():
         body="Im Anhang findest du deine Abrechnung.",
         created_by=admin,
     )
+    delivery = batch.deliveries.get()
+    frozen_attachment = bytes(delivery.attachment_content)
+    assert frozen_attachment.startswith(b"%PDF-")
+    assert delivery.attachment_filename == f"abrechnung-{snapshot.pk}-v{run.version}.pdf"
+    assert delivery.attachment_sha256 == hashlib.sha256(frozen_attachment).hexdigest()
+
+    participant.camp.iban = "DE89370400440532013000"
+    participant.camp.save(update_fields=["iban", "updated_at"])
 
     result = send_due_email_deliveries(
         connection=get_connection("django.core.mail.backends.locmem.EmailBackend"),
@@ -202,9 +212,7 @@ def test_worker_attaches_pdf_from_selected_settlement_snapshot():
     attachment = message.attachments[0]
     assert attachment.filename == f"abrechnung-{snapshot.pk}-v{run.version}.pdf"
     assert attachment.mimetype == "application/pdf"
-    assert attachment.content.startswith(b"%PDF-")
-    delivery = batch.deliveries.get()
-    assert len(delivery.attachment_sha256) == 64
+    assert attachment.content == frozen_attachment
 
 
 @pytest.mark.django_db
@@ -367,8 +375,30 @@ def test_admin_previews_and_confirms_exact_information_recipients(client):
     assert b"Ada Lovelace" in preview.content
     assert b"Grace Hopper" in preview.content
     assert EmailBatch.objects.count() == 0
+    preview_token = preview.context["preview_token"]
 
-    confirmed = client.post(url, {**data, "action": "confirm"})
+    changed_confirmation = client.post(
+        url,
+        {
+            **data,
+            "participants": [str(first.pk)],
+            "action": "confirm",
+            "preview_token": preview_token,
+        },
+    )
+
+    assert changed_confirmation.status_code == 200
+    assert b"nach der Vorschau ge\xc3\xa4ndert" in changed_confirmation.content
+    assert EmailBatch.objects.count() == 0
+
+    confirmed = client.post(
+        url,
+        {
+            **data,
+            "action": "confirm",
+            "preview_token": preview_token,
+        },
+    )
 
     batch = EmailBatch.objects.get()
     assert confirmed.status_code == 302
@@ -380,11 +410,19 @@ def test_admin_previews_and_confirms_exact_information_recipients(client):
 def test_admin_previews_and_confirms_selected_snapshot_recipient_mapping(client):
     admin = SuperUserFactory()
     recipient = ParticipantFactory(first_name="Ada", last_name="Lovelace", email="ada@example.test")
+    other_recipient = ParticipantFactory(
+        camp=recipient.camp,
+        first_name="Grace",
+        last_name="Hopper",
+        email="grace@example.test",
+    )
     missing = ParticipantFactory(camp=recipient.camp, first_name="Ohne", last_name="Adresse", email="")
     ChargeFactory(participant=recipient)
+    ChargeFactory(participant=other_recipient)
     ChargeFactory(participant=missing)
     run = create_settlement_run(recipient.camp, admin)
     snapshot = run.settlements.get(participant=recipient)
+    other_snapshot = run.settlements.get(participant=other_recipient)
     configuration = EmailConfiguration.load()
     configuration.enabled = True
     configuration.host = "smtp.example.test"
@@ -414,8 +452,30 @@ def test_admin_previews_and_confirms_selected_snapshot_recipient_mapping(client)
     assert b"ada@example.test" in preview.content
     assert f"abrechnung-{snapshot.pk}-v{run.version}.pdf".encode() in preview.content
     assert EmailBatch.objects.count() == 0
+    preview_token = preview.context["preview_token"]
 
-    confirmed = client.post(url, {**data, "action": "confirm"})
+    changed_confirmation = client.post(
+        url,
+        {
+            **data,
+            "settlements": [str(other_snapshot.pk)],
+            "action": "confirm",
+            "preview_token": preview_token,
+        },
+    )
+
+    assert changed_confirmation.status_code == 200
+    assert b"nach der Vorschau ge\xc3\xa4ndert" in changed_confirmation.content
+    assert EmailBatch.objects.count() == 0
+
+    confirmed = client.post(
+        url,
+        {
+            **data,
+            "action": "confirm",
+            "preview_token": preview_token,
+        },
+    )
 
     batch = EmailBatch.objects.get()
     assert confirmed.status_code == 302
@@ -634,19 +694,26 @@ def test_repeated_invoice_delivery_requires_additional_confirmation(client):
     client.force_login(admin)
     url = reverse("settlement-email-compose", args=[run.pk])
     data = {
-        "action": "confirm",
         "subject": "Abrechnung",
         "body": "Deine Abrechnung.",
         "settlements": [str(snapshot.pk)],
     }
 
-    blocked = client.post(url, data)
+    preview = client.post(url, {**data, "action": "preview"})
 
-    assert blocked.status_code == 200
-    assert b"Bereits versendete Rechnungen erneut senden" in blocked.content
+    assert preview.status_code == 200
+    assert b"Bereits versendete Rechnungen erneut senden" in preview.content
     assert EmailBatch.objects.count() == 1
 
-    confirmed = client.post(url, {**data, "confirm_resend": "yes"})
+    confirmed = client.post(
+        url,
+        {
+            **data,
+            "action": "confirm",
+            "preview_token": preview.context["preview_token"],
+            "confirm_resend": "yes",
+        },
+    )
 
     assert confirmed.status_code == 302
     assert EmailBatch.objects.count() == 2
@@ -683,13 +750,19 @@ def test_pending_invoice_delivery_blocks_duplicate_batch_and_web_confirmation(cl
         )
 
     client.force_login(admin)
+    url = reverse("settlement-email-compose", args=[run.pk])
+    data = {
+        "subject": "Abrechnung",
+        "body": "Deine Abrechnung.",
+        "settlements": [str(snapshot.pk)],
+    }
+    preview = client.post(url, {**data, "action": "preview"})
     response = client.post(
-        reverse("settlement-email-compose", args=[run.pk]),
+        url,
         {
+            **data,
             "action": "confirm",
-            "subject": "Abrechnung",
-            "body": "Deine Abrechnung.",
-            "settlements": [str(snapshot.pk)],
+            "preview_token": preview.context["preview_token"],
         },
     )
 
