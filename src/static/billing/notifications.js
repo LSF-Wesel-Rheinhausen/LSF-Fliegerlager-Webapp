@@ -106,6 +106,12 @@
     label: input.closest("label")?.textContent.trim() || input.value,
   }));
 
+  const syncActivationCategories = (categories) => {
+    form?.querySelectorAll('input[name="category"]').forEach((checkbox) => {
+      checkbox.checked = categories.includes(checkbox.value);
+    });
+  };
+
   const preferencesDialogElement = (device) => {
     const dialog = document.createElement("dialog");
     dialog.className = "notification-preferences-dialog";
@@ -276,6 +282,11 @@
     if (!item) return false;
     item.querySelector("[data-notification-current]").hidden = false;
     currentDeviceId = item.dataset.notificationDevice;
+    syncActivationCategories(
+      Array.from(item.querySelectorAll('[data-preferences-form] input[name="category"]:checked')).map(
+        (checkbox) => checkbox.value,
+      ),
+    );
     return true;
   };
 
@@ -431,6 +442,7 @@
         preferencesForm.querySelectorAll('input[name="category"]').forEach((checkbox) => {
           checkbox.checked = payload.device.categories.includes(checkbox.value);
         });
+        if (id === currentDeviceId) syncActivationCategories(payload.device.categories);
         preferencesForm.closest("dialog").close();
       } catch (exception) {
         preferencesError.textContent =

@@ -209,6 +209,8 @@ test("Notification enrollment updates the current page without reload", async ({
   await preferencesDialog.getByRole("checkbox", { name: "Essensfristen" }).check();
   await preferencesDialog.getByRole("button", { name: "Speichern" }).click();
   await expect(preferencesDialog).not.toBeVisible();
+  await expect(page.locator("[data-notification-subscribe-form]").getByRole("checkbox", { name: "Dienste" })).not.toBeChecked();
+  await expect(page.locator("[data-notification-subscribe-form]").getByRole("checkbox", { name: "Essensfristen" })).toBeChecked();
   await page.getByRole("button", { name: "Nachrichten auswählen" }).click();
   await expect(preferencesDialog.getByRole("checkbox", { name: "Dienste" })).not.toBeChecked();
   await expect(preferencesDialog.getByRole("checkbox", { name: "Essensfristen" })).toBeChecked();
