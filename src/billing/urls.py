@@ -1,8 +1,25 @@
 from django.urls import path
 
-from . import notification_views, passkey_views, pwa_views, views
+from . import email_views, notification_views, passkey_views, pwa_views, views
 
 urlpatterns = [
+    path("settings/email/", email_views.email_settings, name="email-settings"),
+    path(
+        "camps/<int:camp_id>/emails/information/",
+        email_views.information_email_compose,
+        name="information-email-compose",
+    ),
+    path(
+        "settlements/runs/<int:run_id>/email/",
+        email_views.settlement_email_compose,
+        name="settlement-email-compose",
+    ),
+    path("emails/batches/<int:batch_id>/", email_views.email_batch_detail, name="email-batch-detail"),
+    path(
+        "emails/deliveries/<int:delivery_id>/retry/",
+        email_views.email_delivery_retry,
+        name="email-delivery-retry",
+    ),
     path("passkeys/", passkey_views.passkey_management, name="passkey-manage"),
     path(
         "passkeys/registration/options/",

@@ -140,6 +140,17 @@ Der Service `push-worker` erzeugt terminierte Erinnerungen und verarbeitet die D
 verwenden `/central/kiosk/` und bieten keine Push-Aktivierung an. Weitere Betriebsdetails stehen in
 [`../docs/pwa-push.md`](../docs/pwa-push.md).
 
+## Manueller E-Mail-Versand
+
+SMTP-Host, Zugangsdaten, Transportverschlüsselung und Absender werden nicht in `.env`, sondern durch einen Admin unter
+**E-Mail** im Webinterface gepflegt. Das SMTP-Passwort liegt verschlüsselt in PostgreSQL; die Schlüsselableitung nutzt
+den vorhandenen `DJANGO_SECRET_KEY`. Nach dessen Rotation muss das SMTP-Passwort erneut gespeichert werden.
+
+Der Service `email-worker` verarbeitet ausschließlich Informations- und Rechnungs-E-Mails, die ein Admin nach einer
+Empfängervorschau ausdrücklich bestätigt hat. Er benötigt ausgehenden Zugriff auf den konfigurierten SMTP-Server,
+veröffentlicht aber keinen Port. Betriebs- und Sicherheitshinweise stehen in
+[`../docs/email-delivery.md`](../docs/email-delivery.md).
+
 ## Updates
 
 Ein Django-Superuser öffnet **Updates**, prüft das bereitgestellte `latest`-Image und bestätigt die Installation. Der

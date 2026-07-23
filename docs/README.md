@@ -25,6 +25,7 @@ Der typische Ablauf:
 - Förderlogik: Jugendgruppenmitglieder erhalten je Position Förderung über `Element-Fördersatz * Hilfssatz * Berufssatz`.
 - Kiosk: privater PIN-Login mit Browser-Session unter `/kiosk/` und zentraler Gemeinschaftsmodus mit automatischer Abmeldung unter `/central/kiosk/`.
 - PWA und Push: getrennte Installationen für Verwaltung, private Geräte und zentrale Kiosks; Push ist nur auf privaten Geräten verfügbar und wird über eine Datenbank-Outbox zugestellt.
+- E-Mail: Admins konfigurieren SMTP im Webinterface und bestätigen Informations- oder Rechnungsversand erst nach einer exakten Empfängervorschau.
 - Dienstplanung: tägliche Vorlagen, automatische Generierung über den Lagerzeitraum, manuelle Dienste, Soll-Dienste anhand gebuchter Nächte, Fortschrittsanzeige, Besetzungsauswertung und Tauschangebote.
 - Buchungsbearbeitung: Admins können Kostenpositionen stornieren, wiederherstellen und korrigieren; abrechnungsrelevante Änderungen werden im Audit-Protokoll gespeichert.
 - Teilnehmerverwaltung: Bearbeiten, verlustfreies Archivieren und Wiederherstellen; archivierte Teilnehmer bleiben historisch nachvollziehbar, sind aber nicht im Kiosk oder in neuen Abrechnungsläufen sichtbar.
@@ -44,6 +45,7 @@ Der typische Ablauf:
 - [`../tests/e2e/README.md`](../tests/e2e/README.md): Playwright-End-to-End-Tests.
 - [`passkeys.md`](passkeys.md): Passkey-Betrieb, Sicherheitsgrenzen und Recovery.
 - [`pwa-push.md`](pwa-push.md): PWA-Gerätemodi, Offline-Grenzen, VAPID-Konfiguration und Push-Worker.
+- [`email-delivery.md`](email-delivery.md): manuelle Empfängerauswahl, verschlüsselte SMTP-Konfiguration und E-Mail-Outbox.
 
 ## Zentrale Codebereiche
 

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1>Information versenden</h1>
+      <p>{{ camp.name }} {{ camp.year }} · Auswahl und Versand erfolgen ausschließlich manuell.</p>
+    </div>
+    <a class="button button-secondary" href="{% url 'camp-detail' camp.pk %}">Zur Lagerübersicht</a>
+  </div>
+
+  {% if not configuration.enabled %}
+    <section class="message warning" role="status">
+      Der E-Mail-Versand ist deaktiviert.
+      <a href="{% url 'email-settings' %}">E-Mail-Einstellungen öffnen</a>
+    </section>
+  {% endif %}
+
+  <form method="post" class="stack">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <section class="panel stack">
+      <h2>Inhalt</h2>
+      {{ form.subject.errors }}
+      <p>{{ form.subject.label_tag }} {{ form.subject }}</p>
+      {{ form.body.errors }}
+      <p>{{ form.body.label_tag }} {{ form.body }}</p>
+    </section>
+
+    <section class="panel stack">
+      <h2>Empfänger auswählen</h2>
+      {{ form.participants.errors }}
+      {{ form.participants }}
+      {% if missing_participants %}
+        <h3>Keine gültige E-Mail-Adresse</h3>
+        <ul>
+          {% for participant in missing_participants %}
+            <li>{{ participant.full_name }} · Keine gültige E-Mail-Adresse</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </section>
+
+    {% if preview %}
+      <input type="hidden" name="preview_token" value="{{ preview_token }}">
+      <section class="panel stack" aria-labelledby="email-preview-heading">
+        <h2 id="email-preview-heading">Versandvorschau</h2>
+        <p>Pro Adresse wird genau eine E-Mail versendet.</p>
+        <table>
+          <thead><tr><th>Adresse</th><th>Ausgewählte Teilnehmer</th></tr></thead>
+          <tbody>
+            {% for recipient in preview %}
+              <tr><td>{{ recipient.email }}</td><td>{{ recipient.names|join:", " }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <button type="submit" name="action" value="confirm">Versand verbindlich bestätigen</button>
+      </section>
+    {% else %}
+      <button type="submit" name="action" value="preview">Versandvorschau anzeigen</button>
+    {% endif %}
+  </form>
+{% endblock %}

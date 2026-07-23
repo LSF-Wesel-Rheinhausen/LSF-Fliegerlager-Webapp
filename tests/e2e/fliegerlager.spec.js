@@ -46,7 +46,13 @@ async function assertNoUnexpectedOverflow(page) {
         failures.push(`${element.tagName.toLowerCase()} ${element.textContent.trim().slice(0, 80)}`);
       }
       const display = window.getComputedStyle(element).display;
-      if (display !== "inline" && element.scrollWidth > element.clientWidth + 1 && !element.closest("table")) {
+      const hasInternallyScrollableValue = element instanceof HTMLInputElement;
+      if (
+        !hasInternallyScrollableValue &&
+        display !== "inline" &&
+        element.scrollWidth > element.clientWidth + 1 &&
+        !element.closest("table")
+      ) {
         failures.push(`text overflow: ${element.tagName.toLowerCase()} ${element.textContent.trim().slice(0, 80)}`);
       }
     }
@@ -168,11 +174,12 @@ async function createCamp(page, name = "Sommerlager") {
   return campName;
 }
 
-async function createParticipant(page, firstName, lastName) {
+async function createParticipant(page, firstName, lastName, email = "") {
   await page.getByRole("link", { name: "Teilnehmer anlegen" }).click();
   await expect(page.getByRole("heading", { name: "Teilnehmer anlegen" })).toBeVisible();
   await page.getByLabel("Vorname").fill(firstName);
   await page.getByLabel("Nachname").fill(lastName);
+  if (email) await page.getByLabel("E-Mail-Adresse").fill(email);
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(page.getByRole("heading", { name: `${firstName} ${lastName}` })).toBeVisible();
 }
@@ -723,6 +730,69 @@ test("Role flow: editor cannot see admin functions", async ({ page }) => {
 
   await expect(page.getByRole("link", { name: "Lager anlegen" })).toBeHidden();
   await expect(page.getByRole("link", { name: "Nutzer" })).toBeHidden();
+});
+
+test("Admin configures SMTP and manually confirms exact information recipients", async ({ page }) => {
+  const browserErrors = [];
+  const failedRequests = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") browserErrors.push(message.text());
+  });
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  page.on("requestfailed", (request) => failedRequests.push(`${request.method()} ${request.url()}`));
+
+  await setupFirstAdmin(page);
+  await page.getByRole("link", { name: "E-Mail", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "E-Mail-Einstellungen" })).toBeVisible();
+  await page.getByLabel("E-Mail-Versand aktivieren").check();
+  await page.getByLabel("SMTP-Host").fill("smtp.example.test");
+  await page.getByLabel("SMTP-Benutzername").fill("mailer");
+  await page.getByLabel("SMTP-Passwort").fill("browser-test-secret");
+  await page.getByLabel("Absendername").fill("Fliegerlager");
+  await page.getByLabel("Absenderadresse").fill("lager@example.test");
+  await page.getByRole("button", { name: "Einstellungen speichern" }).click();
+  await expect(page.getByText("E-Mail-Einstellungen wurden gespeichert.")).toBeVisible();
+  await expect(page.getByLabel("SMTP-Passwort")).toHaveValue("");
+  await assertNoUnexpectedOverflow(page);
+
+  await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
+  const campName = await createCamp(page, "Sommerlager E-Mail");
+  await createParticipant(page, "Ada", "Lovelace", "Family@example.test");
+  await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
+  await page.getByRole("link", { name: campName, exact: true }).click();
+  await page.getByRole("link", { name: "Information versenden" }).click();
+  await expect(page.getByRole("heading", { name: "Information versenden" })).toBeVisible();
+  await page.getByLabel("Nachricht").fill("Treffpunkt ist morgen um 8 Uhr.");
+  await page.getByRole("button", { name: "Versandvorschau anzeigen" }).click();
+  await expect(page.getByRole("heading", { name: "Versandvorschau" })).toBeVisible();
+  await expect(page.getByText("family@example.test", { exact: true })).toBeVisible();
+  await expect(page.getByText("Ada Lovelace", { exact: true })).toBeVisible();
+  await assertNoUnexpectedOverflow(page);
+
+  await page.setViewportSize({ width: 430, height: 932 });
+  await page.getByRole("switch", { name: "Dunkles Farbschema" }).click();
+  await assertNoUnexpectedOverflow(page);
+  await page.getByRole("button", { name: "Versand verbindlich bestätigen" }).click();
+
+  await expect(page.getByRole("heading", { name: "Information · Versandauftrag" })).toBeVisible();
+  await expect(page.getByText("Ausstehend", { exact: true }).first()).toBeVisible();
+
+  await page.getByRole("link", { name: "Zur Lagerübersicht" }).click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Abrechnungslauf erstellen" }).click();
+  await expect(page.getByRole("heading", { name: /Abrechnung .* · V1/ })).toBeVisible();
+  await page.getByRole("link", { name: "Rechnungen versenden" }).click();
+  await expect(page.getByRole("heading", { name: "Rechnungen versenden" })).toBeVisible();
+  await page.getByRole("button", { name: "Versandvorschau anzeigen" }).click();
+  await expect(page.getByRole("heading", { name: "Versandvorschau" })).toBeVisible();
+  await expect(page.getByText("family@example.test", { exact: true })).toBeVisible();
+  await expect(page.getByText(/abrechnung-\d+-v1\.pdf/)).toBeVisible();
+  await assertNoUnexpectedOverflow(page);
+  await page.getByRole("button", { name: "Versand verbindlich bestätigen" }).click();
+  await expect(page.getByRole("heading", { name: "Rechnung · Versandauftrag" })).toBeVisible();
+
+  expect(browserErrors).toEqual([]);
+  expect(failedRequests).toEqual([]);
 });
 
 test("Daily shift template and kiosk shift flow", async ({ page }) => {

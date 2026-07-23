@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1>E-Mail-Einstellungen</h1>
+      <p>Globale SMTP-Verbindung für manuell bestätigte Informations- und Rechnungs-E-Mails.</p>
+    </div>
+  </div>
+
+  <section class="panel stack">
+    <form method="post" class="stack">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="actions">
+        <button type="submit" name="action" value="save">Einstellungen speichern</button>
+        <button class="button button-secondary" type="submit" name="action" value="test">
+          Speichern und Test-E-Mail senden
+        </button>
+      </div>
+    </form>
+    {% if configuration.last_tested_at %}
+      <p>Letzter erfolgreicher Test: {{ configuration.last_tested_at }}</p>
+    {% endif %}
+    {% if recent_test_logs %}
+      <h3>Letzte Verbindungstests</h3>
+      <ul>
+        {% for test_log in recent_test_logs %}
+          <li>{{ test_log.created_at }} · {{ test_log.recipient_email }} · {{ test_log.get_status_display }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </section>
+
+  <section class="panel stack">
+    <h2>Letzte manuelle Versandaufträge</h2>
+    <table>
+      <thead><tr><th>Zeitpunkt</th><th>Lager</th><th>Art</th><th>Betreff</th><th>Empfänger</th><th></th></tr></thead>
+      <tbody>
+        {% for batch in recent_batches %}
+          <tr>
+            <td>{{ batch.created_at }}</td>
+            <td>{{ batch.camp }}</td>
+            <td>{{ batch.get_kind_display }}</td>
+            <td>{{ batch.subject }}</td>
+            <td>{{ batch.delivery_count }}</td>
+            <td><a href="{% url 'email-batch-detail' batch.pk %}">Status öffnen</a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6">Noch keine E-Mails zum Versand bestätigt.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endblock %}
