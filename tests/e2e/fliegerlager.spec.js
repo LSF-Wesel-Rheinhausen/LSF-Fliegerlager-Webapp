@@ -804,7 +804,9 @@ for (const viewport of [
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await setupFirstAdmin(page);
     const campName = await createCamp(page, "Sommerlager Kiosk Mobile");
-    await createParticipant(page, "Mobile", "ExtremLangerUngetrennterTeilnehmername");
+    const participantFirstName = viewport.name === "mobile portrait" ? "MobilePortrait" : "MobileLandscape";
+    const participantName = `${participantFirstName} ExtremLangerUngetrennterTeilnehmername`;
+    await createParticipant(page, participantFirstName, "ExtremLangerUngetrennterTeilnehmername");
 
     await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
     await page.getByRole("link", { name: campName, exact: true }).click();
@@ -815,7 +817,7 @@ for (const viewport of [
     await logout(page);
 
     await page.goto("/kiosk/login/");
-    await page.getByLabel("Teilnehmer").selectOption({ label: "Mobile ExtremLangerUngetrennterTeilnehmername" });
+    await page.getByLabel("Teilnehmer").selectOption({ label: participantName });
     await page.getByLabel("PIN").fill("0000");
     await page.getByRole("button", { name: "Anmelden", exact: true }).click();
     await page.getByLabel("Neuer PIN").fill("1234");
