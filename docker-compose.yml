@@ -149,6 +149,8 @@ services:
     image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}
     env_file: .env
     restart: unless-stopped
+    environment:
+      WEB_PUSH_KEY_DIR: /run/secrets/webpush
     command: ["python", "manage.py", "run_email_worker", "--loop"]
     healthcheck:
       disable: true
@@ -157,6 +159,8 @@ services:
         condition: service_healthy
       app:
         condition: service_healthy
+    volumes:
+      - ${PERSISTENCE_DIR:-./data}/secrets/webpush:/run/secrets/webpush:ro
     networks:
       - frontend
       - backend

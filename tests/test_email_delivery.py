@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import smtplib
 from datetime import timedelta
@@ -69,9 +70,31 @@ def test_information_batch_groups_selected_participants_by_normalized_address():
     delivery = batch.deliveries.get()
     assert delivery.recipient_email == "family@example.test"
     assert delivery.recipient_names == ["Ada Lovelace", "Grace Hopper"]
-    assert delivery.dedupe_key == "information:family@example.test"
+    expected_digest = hashlib.sha256(b"family@example.test").hexdigest()
+    assert delivery.dedupe_key == f"information:{expected_digest}"
     assert delivery.recipient_email not in str(delivery)
     assert str(delivery) == f"E-Mail-Zustellung {delivery.pk} (Ausstehend)"
+
+
+@pytest.mark.django_db
+def test_information_batch_hashes_a_maximum_length_valid_recipient_address():
+    admin = SuperUserFactory()
+    long_email = f"{'a' * 64}@{'b' * 63}.{'c' * 63}.{'d' * 56}.test"
+    participant = ParticipantFactory(email=long_email)
+
+    batch = queue_information_email_batch(
+        camp=participant.camp,
+        participant_ids=[participant.pk],
+        subject="Treffpunkt",
+        body="Wir treffen uns um 18 Uhr.",
+        created_by=admin,
+    )
+
+    delivery = batch.deliveries.get()
+    field_limit = EmailDelivery._meta.get_field("dedupe_key").max_length
+    assert delivery.recipient_email == long_email
+    assert delivery.dedupe_key == f"information:{hashlib.sha256(long_email.encode()).hexdigest()}"
+    assert len(delivery.dedupe_key) <= field_limit
 
 
 @pytest.mark.django_db

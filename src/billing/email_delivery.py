@@ -42,6 +42,11 @@ def has_valid_recipient_email(email: str) -> bool:
     return True
 
 
+def _information_dedupe_key(email: str) -> str:
+    """Return a fixed-length, non-PII key for one normalized information recipient."""
+    return f"information:{hashlib.sha256(email.encode()).hexdigest()}"
+
+
 @dataclass(frozen=True)
 class EmailDeliveryResult:
     """Summarize one bounded manual email outbox delivery batch."""
@@ -173,7 +178,7 @@ def queue_information_email_batch(
                 batch=batch,
                 recipient_email=recipient.email,
                 recipient_names=recipient.names,
-                dedupe_key=f"information:{recipient.email}",
+                dedupe_key=_information_dedupe_key(recipient.email),
                 subject=clean_subject,
                 body_text=clean_body,
             )
