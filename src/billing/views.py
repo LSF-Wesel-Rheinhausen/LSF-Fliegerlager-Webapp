@@ -1033,10 +1033,14 @@ def shared_expense_approve(request, expense_id):
         participant_ids = [int(pid) for pid in form.cleaned_data.get("participant_ids", [])]
         cost_center = form.cleaned_data.get("cost_center", "")
 
-        expense.allocation_method = allocation_method
-        expense.cost_center = cost_center
         try:
-            approve_shared_expense(expense, approved_by=request.user, participant_ids=participant_ids)
+            approve_shared_expense(
+                expense,
+                approved_by=request.user,
+                participant_ids=participant_ids,
+                allocation_method=allocation_method,
+                cost_center=cost_center,
+            )
             messages.success(request, "Gemeinschaftsausgabe genehmigt.")
         except ValidationError as e:
             messages.error(request, e.message)
@@ -1534,6 +1538,9 @@ def _kiosk_meal_calendar(camp, participant, meal_signups, meal_targets):
         entry.meal_date: entry.description
         for entry in MealPlanEntry.objects.filter(camp=camp, meal=MealSignup.Meal.DINNER, meal_date__in=meal_dates)
     }
+    sent_order_dates = set(
+        MealOrder.objects.filter(camp=camp, meal_date__in=meal_dates).values_list("meal_date", flat=True)
+    )
     meal_labels = dict(MealSignup.Meal.choices)
     days = []
     for meal_date in meal_dates:
@@ -1542,8 +1549,10 @@ def _kiosk_meal_calendar(camp, participant, meal_signups, meal_targets):
             scoped = signups_by_date_meal.get((meal_date, meal), [])
             active_signups = [signup for signup in scoped if signup.status == MealSignup.Status.ACTIVE]
             retracted_signups = [signup for signup in scoped if signup.status == MealSignup.Status.RETRACTED]
-            locked = is_meal_change_locked(camp, meal_date)
-            lock_message = meal_change_lock_message(camp, meal_date) if locked else ""
+            locked = is_meal_change_locked(camp, meal_date, sent_order_dates=sent_order_dates)
+            lock_message = (
+                meal_change_lock_message(camp, meal_date, sent_order_dates=sent_order_dates) if locked else ""
+            )
             if active_signups and retracted_signups:
                 status = "mixed"
                 status_label = "Teilweise zurückgenommen"
@@ -1841,9 +1850,25 @@ def kiosk_home(request, kiosk_mode="private"):
             if meal_form.is_valid():
                 meal_dates = meal_form.cleaned_data["meal_dates"]
                 meal = meal_form.cleaned_data["meal"]
+                sent_order_dates = set(
+                    MealOrder.objects.filter(camp=participant.camp, meal_date__in=meal_dates).values_list(
+                        "meal_date", flat=True
+                    )
+                )
                 for meal_date in meal_dates:
-                    if is_meal_change_locked(participant.camp, meal_date):
-                        meal_form.add_error(None, meal_change_lock_message(participant.camp, meal_date))
+                    if is_meal_change_locked(
+                        participant.camp,
+                        meal_date,
+                        sent_order_dates=sent_order_dates,
+                    ):
+                        meal_form.add_error(
+                            None,
+                            meal_change_lock_message(
+                                participant.camp,
+                                meal_date,
+                                sent_order_dates=sent_order_dates,
+                            ),
+                        )
                 selected_tokens = list(dict.fromkeys(request.POST.getlist("meal-target")))
                 targets_by_token = _target_lookup(meal_targets)
                 if not selected_tokens and request.POST.get("meal-targets-submitted") != "1":
@@ -1892,7 +1917,7 @@ def kiosk_home(request, kiosk_mode="private"):
                         f"Essensanmeldung wurde für {len(meal_dates)} {day_label} und "
                         f"{len(selected_targets)} {person_label} gespeichert.",
                     )
-                    return redirect(f"{reverse(_kiosk_route(kiosk_mode, 'home'))}#meal-calendar")
+                    return redirect(f"{reverse(_kiosk_route(kiosk_mode, 'home'))}?dialog=meal-calendar")
         elif request.POST.get("action") == "meal_retract":
             signup_id = request.POST.get("meal_signup_id")
             targets_by_token = _target_lookup(meal_targets)
@@ -2077,7 +2102,7 @@ def kiosk_home(request, kiosk_mode="private"):
         "kiosk_contacts": admin_interface_contacts(User),
         "next_order_date": next_order_date,
         "next_meal_order": next_meal_order,
-        "next_order_locked": is_meal_change_locked(participant.camp, next_order_date),
+        "next_order_locked": bool(next_meal_order) or is_meal_change_locked(participant.camp, next_order_date),
         "today": today,
         "tomorrow": tomorrow,
         "participant_expenses": participant.expenses.annotate(

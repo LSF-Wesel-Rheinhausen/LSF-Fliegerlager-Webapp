@@ -43,7 +43,7 @@
           <td>{{ snapshot.total_paid|money_eur }}</td>
           <td>{{ snapshot.total_advanced|money_eur }}</td>
           <td>{{ snapshot.balance|money_eur }}</td>
-          <td><a href="{% url 'settlement-snapshot-pdf' snapshot.pk %}" data-pdf-popup="true">PDF</a></td>
+          <td><a href="{% url 'settlement-snapshot-pdf' snapshot.pk %}" target="_blank" rel="noopener">PDF</a></td>
         </tr>
       {% empty %}
         <tr><td colspan="7">Dieser Lauf enthält keine Teilnehmer.</td></tr>

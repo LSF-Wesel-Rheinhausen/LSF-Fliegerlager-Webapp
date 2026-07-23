@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Fliegerlager Kiosk</title>
+  <rect width="512" height="512" fill="#a84d16"/>
+  <path d="M96 142h320" stroke="#79b88a" stroke-width="28" stroke-linecap="round"/>
+  <circle cx="256" cy="284" r="132" fill="#fff"/>
+  <path d="M184 394V196h56v75l62-75h68l-78 91 84 107h-70l-66-88v88z" fill="#a84d16"/>
+</svg>

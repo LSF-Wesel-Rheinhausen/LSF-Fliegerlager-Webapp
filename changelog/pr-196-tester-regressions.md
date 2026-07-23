@@ -1,4 +1,4 @@
-# Tester-Rückmeldungen zu Kiosk und PWA
+# Tester-Regressionsfixes für Kiosk und PWA
 
 - Die PWA-Oberflächen erhalten auf macOS sichtbare und klar unterscheidbare App-Icons.
 - PDF-Abrechnungen öffnen browserübergreifend ohne blockierte eingebettete Vorschau.

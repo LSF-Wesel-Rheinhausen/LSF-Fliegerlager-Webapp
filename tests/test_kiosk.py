@@ -706,10 +706,14 @@ def test_kiosk_home_renders_only_ordered_core_cards_and_menu_dialogs(client):
 
 @pytest.mark.django_db
 def test_kiosk_home_shows_order_sent_for_next_day(client, monkeypatch):
-    fixed_now = timezone.make_aware(datetime(2026, 7, 1, 18, 30))
+    fixed_now = timezone.make_aware(datetime(2026, 7, 1, 10, 30))
     monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
     monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
-    camp = CampFactory(meal_booking_cutoff_time=time(12, 0))
+    camp = CampFactory(
+        starts_on=date(2026, 7, 1),
+        ends_on=date(2026, 7, 3),
+        meal_booking_cutoff_time=time(12, 0),
+    )
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     MealOrder.objects.create(camp=camp, meal_date=date(2026, 7, 2))
     session = client.session
@@ -720,6 +724,71 @@ def test_kiosk_home_shows_order_sent_for_next_day(client, monkeypatch):
 
     assert response.status_code == 200
     assert b"Die Bestellung wurde abgeschickt." in response.content
+    content = response.content.decode()
+    next_day_start = content.index('data-open-meal-day-detail="meal-day-detail-2026-07-02"')
+    next_day_end = content.index("</button>", next_day_start)
+    assert "Geschlossen" in content[next_day_start:next_day_end]
+    assert 'data-meal-date="2026-07-02"' not in content
+
+
+@pytest.mark.django_db
+def test_kiosk_rejects_meal_booking_after_order_was_sent(client, monkeypatch):
+    fixed_now = timezone.make_aware(datetime(2026, 7, 1, 10, 30))
+    monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
+    camp = CampFactory(meal_booking_cutoff_time=time(14, 45))
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    meal_date = date(2026, 7, 2)
+    MealOrder.objects.create(camp=camp, meal_date=meal_date)
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        is_default=True,
+        applies_to_children=False,
+        applies_to_adults=True,
+        name="Abendessen",
+        unit_price=Decimal("7.00"),
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-meal_dates": [meal_date.isoformat()],
+            "meal-meal": MealSignup.Meal.DINNER,
+            "meal-variant": MealSignup.Variant.NORMAL,
+            "meal-target": [f"participant-{participant.pk}"],
+            f"meal-variant-participant-{participant.pk}": MealSignup.Variant.NORMAL,
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Die Bestellung für 02.07.2026 wurde bereits abgeschickt.".encode() in response.content
+    assert not MealSignup.objects.filter(participant=participant, meal_date=meal_date).exists()
+
+
+@pytest.mark.django_db
+def test_kiosk_menu_explains_destinations_and_has_an_explicit_trigger(client):
+    participant = ParticipantFactory()
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.get(reverse("kiosk-home"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'aria-controls="kiosk-menu-dialog"' in content
+    assert 'aria-haspopup="dialog"' in content
+    assert "Weitere Bereiche öffnen" in content
+    assert "Essenskalender" in content
+    assert "Abendessen nach Lagertag buchen und verwalten." in content
+    assert "Letzte Schnellbuchungen" in content
+    assert "Getränke, Frühstück und Snacks prüfen oder stornieren." in content
 
 
 @pytest.mark.django_db
@@ -1403,7 +1472,7 @@ def test_kiosk_books_multiple_meal_dates_and_targets_atomically(client, monkeypa
     )
 
     assert response.status_code == 302
-    assert response["Location"] == f"{reverse('kiosk-home')}#meal-calendar"
+    assert response["Location"] == f"{reverse('kiosk-home')}?dialog=meal-calendar"
     assert (
         MealSignup.objects.filter(
             participant__in=[participant, selected],

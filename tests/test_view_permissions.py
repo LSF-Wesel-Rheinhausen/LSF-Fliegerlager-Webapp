@@ -199,6 +199,39 @@ def test_expense_receipt_download_returns_not_found_when_file_is_missing(client,
 
 
 @pytest.mark.django_db
+def test_shared_expense_approval_persists_selected_cost_center(client, editor_user, permission_dataset):
+    expense = Expense.objects.create(
+        camp=permission_dataset["camp"],
+        participant=permission_dataset["participant"],
+        category="Einkauf",
+        description="Frühstück für alle",
+        amount=Decimal("42.00"),
+        status=Expense.Status.PENDING,
+    )
+    client.force_login(editor_user)
+
+    response = client.post(
+        reverse("shared-expense-approve", args=[expense.pk]),
+        {
+            "allocation_method": Expense.AllocationMethod.COST_CENTER,
+            "cost_center": Expense.CostCenter.FOOD_BREAKFAST,
+        },
+    )
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("camp-detail", args=[expense.camp_id])
+    expense.refresh_from_db()
+    assert expense.status == Expense.Status.APPROVED
+    assert expense.allocation_method == Expense.AllocationMethod.COST_CENTER
+    assert expense.cost_center == Expense.CostCenter.FOOD_BREAKFAST
+
+    detail_response = client.get(reverse("camp-detail", args=[expense.camp_id]))
+
+    assert detail_response.status_code == 200
+    assert "Frühstück für alle".encode() in detail_response.content
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize(
     ("route_name", "arg_getter"),
     [

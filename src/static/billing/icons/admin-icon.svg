@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Fliegerlager Verwaltung</title>
+  <rect width="512" height="512" fill="#164f86"/>
+  <path d="M96 142h320" stroke="#f7b733" stroke-width="28" stroke-linecap="round"/>
+  <circle cx="256" cy="284" r="132" fill="#fff"/>
+  <path d="M174 218l82 182 82-182h-56l-26 70-26-70z" fill="#164f86"/>
+</svg>
