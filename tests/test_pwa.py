@@ -29,7 +29,7 @@ def test_private_kiosk_exposes_install_guide_and_apple_touch_icon(client):
     response = client.get(reverse("kiosk-login"))
 
     assert response.status_code == 200
-    assert b"/static/billing/app.css?v=8" in response.content
+    assert b"/static/billing/app-v8.css" in response.content
     assert b"data-pwa-install" in response.content
     assert b"data-pwa-install-dialog" in response.content
     assert b'rel="apple-touch-icon"' in response.content
@@ -43,7 +43,7 @@ def test_admin_login_busts_stylesheet_cache(client):
     response = client.get(reverse("login"))
 
     assert response.status_code == 200
-    assert b"/static/billing/app.css?v=8" in response.content
+    assert b"/static/billing/app-v8.css" in response.content
 
 
 @pytest.mark.django_db
@@ -158,6 +158,8 @@ def test_service_workers_have_explicit_scopes(client, route_name, expected_scope
     assert response["Cache-Control"] == "no-cache"
     javascript = response.content.decode().replace("\\u002D", "-")
     assert expected_cache_name in javascript
+    assert "/static/billing/app-v8.css" in javascript
+    assert '"/static/billing/app.css"' not in javascript
     assert b"offline" in response.content
     assert b'request.method !== "GET"' in response.content
 

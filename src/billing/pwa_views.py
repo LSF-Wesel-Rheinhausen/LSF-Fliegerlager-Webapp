@@ -77,7 +77,7 @@ def service_worker(request: HttpRequest, surface: str) -> HttpResponse:
             "offline_url": "/offline/",
             "static_assets": [
                 "/offline/",
-                static("billing/app.css"),
+                static("billing/app-v8.css"),
                 static("billing/theme.js"),
                 static("billing/pwa.js"),
                 static("billing/logo.jpg"),
