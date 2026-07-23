@@ -295,6 +295,15 @@ def requeue_failed_email_delivery(delivery: EmailDelivery) -> None:
         .exists()
     ):
         raise ValueError("Für diese Rechnung ist bereits ein Versand vorgemerkt.")
+    if (
+        locked_delivery.settlement_id is not None
+        and EmailDelivery.objects.filter(
+            settlement_id=locked_delivery.settlement_id,
+            status=EmailDelivery.Status.SENT,
+            pk__gt=locked_delivery.pk,
+        ).exists()
+    ):
+        raise ValueError("Für diese Rechnung wurde bereits ein neuerer Versand abgeschlossen.")
     locked_delivery.status = EmailDelivery.Status.PENDING
     locked_delivery.attempts = 0
     locked_delivery.next_attempt_at = timezone.now()

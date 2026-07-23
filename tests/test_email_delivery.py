@@ -610,6 +610,86 @@ def test_admin_cannot_requeue_superseded_failed_invoice_delivery(client):
 
 
 @pytest.mark.django_db
+def test_admin_cannot_requeue_failed_invoice_after_newer_delivery_was_sent(client):
+    admin = SuperUserFactory()
+    participant = ParticipantFactory(email="ada@example.test")
+    ChargeFactory(participant=participant)
+    run = create_settlement_run(participant.camp, admin)
+    snapshot = run.settlements.get()
+    failed_batch = queue_settlement_email_batch(
+        run=run,
+        settlement_ids=[snapshot.pk],
+        subject="Abrechnung",
+        body="Deine Abrechnung.",
+        created_by=admin,
+    )
+    failed_delivery = failed_batch.deliveries.get()
+    failed_delivery.status = EmailDelivery.Status.FAILED
+    failed_delivery.save(update_fields=["status", "updated_at"])
+    newer_batch = queue_settlement_email_batch(
+        run=run,
+        settlement_ids=[snapshot.pk],
+        subject="Korrigierte Abrechnung",
+        body="Deine Abrechnung.",
+        created_by=admin,
+    )
+    newer_delivery = newer_batch.deliveries.get()
+    newer_delivery.status = EmailDelivery.Status.SENT
+    newer_delivery.save(update_fields=["status", "updated_at"])
+    client.force_login(admin)
+
+    response = client.post(
+        reverse("email-delivery-retry", args=[failed_delivery.pk]),
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    response_messages = [str(message) for message in get_messages(response.wsgi_request)]
+    assert response_messages == ["Für diese Rechnung wurde bereits ein neuerer Versand abgeschlossen."]
+    failed_delivery.refresh_from_db()
+    assert failed_delivery.status == EmailDelivery.Status.FAILED
+    assert newer_delivery.status == EmailDelivery.Status.SENT
+
+
+@pytest.mark.django_db
+def test_admin_can_requeue_confirmed_resend_after_older_delivery_was_sent(client):
+    admin = SuperUserFactory()
+    participant = ParticipantFactory(email="ada@example.test")
+    ChargeFactory(participant=participant)
+    run = create_settlement_run(participant.camp, admin)
+    snapshot = run.settlements.get()
+    older_batch = queue_settlement_email_batch(
+        run=run,
+        settlement_ids=[snapshot.pk],
+        subject="Abrechnung",
+        body="Deine Abrechnung.",
+        created_by=admin,
+    )
+    older_delivery = older_batch.deliveries.get()
+    older_delivery.status = EmailDelivery.Status.SENT
+    older_delivery.save(update_fields=["status", "updated_at"])
+    resend_batch = queue_settlement_email_batch(
+        run=run,
+        settlement_ids=[snapshot.pk],
+        subject="Erneute Abrechnung",
+        body="Deine Abrechnung.",
+        created_by=admin,
+    )
+    resend_delivery = resend_batch.deliveries.get()
+    resend_delivery.status = EmailDelivery.Status.FAILED
+    resend_delivery.save(update_fields=["status", "updated_at"])
+    client.force_login(admin)
+
+    response = client.post(reverse("email-delivery-retry", args=[resend_delivery.pk]))
+
+    assert response.status_code == 302
+    resend_delivery.refresh_from_db()
+    assert resend_delivery.status == EmailDelivery.Status.PENDING
+    older_delivery.refresh_from_db()
+    assert older_delivery.status == EmailDelivery.Status.SENT
+
+
+@pytest.mark.django_db
 @patch(
     "billing.management.commands.run_email_worker.send_due_email_deliveries",
     return_value=EmailDeliveryResult(sent=2, retried=1, failed=0),
