@@ -3,7 +3,7 @@ import logging
 import smtplib
 from datetime import timedelta
 from io import StringIO
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from django.contrib.messages import get_messages
@@ -717,6 +717,79 @@ def test_worker_does_not_open_smtp_connection_without_due_deliveries(smtp_connec
 
     assert result == EmailDeliveryResult()
     smtp_connection.assert_not_called()
+
+
+@pytest.mark.django_db
+@patch("billing.email_delivery._send_delivery", return_value="")
+@patch("billing.email_delivery._smtp_connection")
+def test_worker_reuses_one_owned_smtp_connection_for_bounded_batch(smtp_connection, send_delivery):
+    admin = SuperUserFactory()
+    first = ParticipantFactory(email="ada@example.test")
+    second = ParticipantFactory(camp=first.camp, email="grace@example.test")
+    configuration = EmailConfiguration.load()
+    configuration.enabled = True
+    configuration.host = "smtp.example.test"
+    configuration.from_email = "lager@example.test"
+    configuration.set_password("smtp-secret")
+    configuration.save()
+    batch = queue_information_email_batch(
+        camp=first.camp,
+        participant_ids=[first.pk, second.pk],
+        subject="Information",
+        body="Nachricht",
+        created_by=admin,
+    )
+    connection = smtp_connection.return_value
+
+    result = send_due_email_deliveries()
+
+    assert result.sent == 2
+    assert batch.deliveries.filter(status=EmailDelivery.Status.SENT).count() == 2
+    connection.open.assert_called_once_with()
+    connection.close.assert_called_once_with()
+    assert send_delivery.call_count == 2
+    assert all(call.kwargs["connection"] is connection for call in send_delivery.call_args_list)
+
+
+@pytest.mark.django_db
+@patch("billing.email_delivery._send_delivery")
+@patch("billing.email_delivery._smtp_connection")
+def test_worker_applies_one_owned_connection_failure_to_entire_bounded_batch(smtp_connection, send_delivery):
+    admin = SuperUserFactory()
+    first = ParticipantFactory(email="ada@example.test")
+    second = ParticipantFactory(camp=first.camp, email="grace@example.test")
+    configuration = EmailConfiguration.load()
+    configuration.enabled = True
+    configuration.host = "smtp.example.test"
+    configuration.from_email = "lager@example.test"
+    configuration.set_password("outdated-secret")
+    configuration.save()
+    batch = queue_information_email_batch(
+        camp=first.camp,
+        participant_ids=[first.pk, second.pk],
+        subject="Information",
+        body="Nachricht",
+        created_by=admin,
+    )
+    connection = Mock()
+    connection.open.side_effect = smtplib.SMTPAuthenticationError(535, b"authentication failed")
+    smtp_connection.return_value = connection
+
+    result = send_due_email_deliveries()
+
+    assert result.retried == 2
+    assert result.failed == 0
+    assert (
+        batch.deliveries.filter(
+            status=EmailDelivery.Status.PENDING,
+            attempts=1,
+            last_error_code="535",
+        ).count()
+        == 2
+    )
+    connection.open.assert_called_once_with()
+    connection.close.assert_not_called()
+    send_delivery.assert_not_called()
 
 
 @pytest.mark.django_db

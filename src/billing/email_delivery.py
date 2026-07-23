@@ -396,81 +396,97 @@ def send_due_email_deliveries(*, batch_size: int = 25, connection: Any | None = 
     )
     if not delivery_ids:
         return EmailDeliveryResult()
+    owns_connection = connection is None
     mail_connection = connection or _smtp_connection(configuration)
-    sent = retried = failed = 0
-    for delivery_id in delivery_ids:
-        claimed = EmailDelivery.objects.filter(
-            pk=delivery_id,
-            status=EmailDelivery.Status.PENDING,
-            next_attempt_at__lte=now,
-        ).update(
-            status=EmailDelivery.Status.PROCESSING,
-            processing_started_at=now,
-        )
-        if not claimed:
-            continue
-        delivery = EmailDelivery.objects.select_related(
-            "settlement",
-            "settlement__run",
-            "settlement__run__camp",
-        ).get(pk=delivery_id)
+    connection_error: smtplib.SMTPException | OSError | None = None
+    connection_opened = False
+    if owns_connection:
         try:
-            attachment_sha256 = _send_delivery(
-                delivery,
-                configuration=configuration,
-                connection=mail_connection,
-            )
+            mail_connection.open()
         except (smtplib.SMTPException, OSError) as error:
-            delivery.attempts += 1
-            smtp_code = _smtp_status_code(error)
-            permanent = _is_permanent_smtp_failure(error, smtp_code)
-            if permanent or delivery.attempts > len(EMAIL_RETRY_DELAYS):
-                delivery.status = EmailDelivery.Status.FAILED
-                failed += 1
-            else:
-                delivery.status = EmailDelivery.Status.PENDING
-                delivery.next_attempt_at = now + timedelta(
-                    seconds=EMAIL_RETRY_DELAYS[delivery.attempts - 1],
+            connection_error = error
+        else:
+            connection_opened = True
+    sent = retried = failed = 0
+    try:
+        for delivery_id in delivery_ids:
+            claimed = EmailDelivery.objects.filter(
+                pk=delivery_id,
+                status=EmailDelivery.Status.PENDING,
+                next_attempt_at__lte=now,
+            ).update(
+                status=EmailDelivery.Status.PROCESSING,
+                processing_started_at=now,
+            )
+            if not claimed:
+                continue
+            delivery = EmailDelivery.objects.select_related(
+                "settlement",
+                "settlement__run",
+                "settlement__run__camp",
+            ).get(pk=delivery_id)
+            try:
+                if connection_error is not None:
+                    raise connection_error
+                attachment_sha256 = _send_delivery(
+                    delivery,
+                    configuration=configuration,
+                    connection=mail_connection,
                 )
-                retried += 1
+            except (smtplib.SMTPException, OSError) as error:
+                delivery.attempts += 1
+                smtp_code = _smtp_status_code(error)
+                permanent = _is_permanent_smtp_failure(error, smtp_code)
+                if permanent or delivery.attempts > len(EMAIL_RETRY_DELAYS):
+                    delivery.status = EmailDelivery.Status.FAILED
+                    failed += 1
+                else:
+                    delivery.status = EmailDelivery.Status.PENDING
+                    delivery.next_attempt_at = now + timedelta(
+                        seconds=EMAIL_RETRY_DELAYS[delivery.attempts - 1],
+                    )
+                    retried += 1
+                delivery.processing_started_at = None
+                delivery.last_error_code = str(smtp_code or "delivery_error")[:40]
+                delivery.save(
+                    update_fields=[
+                        "attempts",
+                        "status",
+                        "next_attempt_at",
+                        "processing_started_at",
+                        "last_error_code",
+                        "updated_at",
+                    ]
+                )
+                logger.warning(
+                    "Email delivery failed",
+                    extra={
+                        "email_delivery_id": delivery.pk,
+                        "status_code": smtp_code,
+                        "attempt": delivery.attempts,
+                    },
+                )
+                continue
+
+            delivery.status = EmailDelivery.Status.SENT
+            delivery.sent_at = now
+            delivery.attempts += 1
             delivery.processing_started_at = None
-            delivery.last_error_code = str(smtp_code or "delivery_error")[:40]
+            delivery.last_error_code = ""
+            delivery.attachment_sha256 = attachment_sha256
             delivery.save(
                 update_fields=[
-                    "attempts",
                     "status",
-                    "next_attempt_at",
+                    "sent_at",
+                    "attempts",
                     "processing_started_at",
                     "last_error_code",
+                    "attachment_sha256",
                     "updated_at",
                 ]
             )
-            logger.warning(
-                "Email delivery failed",
-                extra={
-                    "email_delivery_id": delivery.pk,
-                    "status_code": smtp_code,
-                    "attempt": delivery.attempts,
-                },
-            )
-            continue
-
-        delivery.status = EmailDelivery.Status.SENT
-        delivery.sent_at = now
-        delivery.attempts += 1
-        delivery.processing_started_at = None
-        delivery.last_error_code = ""
-        delivery.attachment_sha256 = attachment_sha256
-        delivery.save(
-            update_fields=[
-                "status",
-                "sent_at",
-                "attempts",
-                "processing_started_at",
-                "last_error_code",
-                "attachment_sha256",
-                "updated_at",
-            ]
-        )
-        sent += 1
+            sent += 1
+    finally:
+        if owns_connection and connection_opened:
+            mail_connection.close()
     return EmailDeliveryResult(sent=sent, retried=retried, failed=failed)
