@@ -1056,11 +1056,16 @@
         openDialog(summaryDialog, event.currentTarget)
       );
 
-      const requestedDialog = new URLSearchParams(window.location.search).get("dialog");
-      if (requestedDialog === "meal-calendar") {
+      const openRequestedMealCalendar = () => {
+        const requestedDialog = new URLSearchParams(window.location.search).get("dialog");
+        const requestedMealCalendar =
+          requestedDialog === "meal-calendar" || window.location.hash === "#meal-calendar";
+        if (!requestedMealCalendar) return;
         openDialog(document.getElementById("meal-calendar-dialog"));
         window.history.replaceState({}, "", window.location.pathname);
-      }
+      };
+      window.addEventListener("hashchange", openRequestedMealCalendar);
+      openRequestedMealCalendar();
       document.querySelectorAll("[data-auto-open-dialog]").forEach((dialog) => openDialog(dialog));
 
     })();

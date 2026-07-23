@@ -367,6 +367,12 @@ test("Kiosk flow: login, pin setup, drink and meal booking", async ({ page }) =>
   expect(sessionCookie).toBeDefined();
   expect(sessionCookie.expires).toBeGreaterThan(Date.now() / 1000);
 
+  // Existing meal-deadline notifications still use the legacy hash deep link.
+  await page.goto("/kiosk/#meal-calendar");
+  await expect(page.locator("dialog#meal-calendar-dialog")).toBeVisible();
+  await expect(page).toHaveURL(/.*\/kiosk\/$/);
+  await page.keyboard.press("Escape");
+
   // Check-in can be entered from the kiosk.
   const checkinArrival = dateInputValue(addDays(new Date(), 2));
   const checkinDeparture = dateInputValue(addDays(new Date(), 4));
