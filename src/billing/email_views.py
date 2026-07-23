@@ -229,9 +229,10 @@ def email_batch_detail(request, batch_id):
 def email_delivery_retry(request, delivery_id):
     """Requeue one failed delivery after an explicit administrator action."""
     delivery = get_object_or_404(EmailDelivery.objects.select_related("batch"), pk=delivery_id)
-    if delivery.status != EmailDelivery.Status.FAILED:
-        messages.error(request, "Nur fehlgeschlagene E-Mails können erneut eingeplant werden.")
-    else:
+    try:
         requeue_failed_email_delivery(delivery)
+    except ValueError as error:
+        messages.error(request, str(error))
+    else:
         messages.success(request, "Die fehlgeschlagene E-Mail wurde erneut eingeplant.")
     return redirect("email-batch-detail", batch_id=delivery.batch_id)

@@ -5,6 +5,7 @@ from io import StringIO
 from unittest.mock import patch
 
 import pytest
+from django.contrib.messages import get_messages
 from django.core import mail
 from django.core.mail import get_connection
 from django.core.management import call_command
@@ -487,6 +488,45 @@ def test_admin_manually_requeues_only_failed_delivery(client):
 
 
 @pytest.mark.django_db
+def test_admin_cannot_requeue_superseded_failed_invoice_delivery(client):
+    admin = SuperUserFactory()
+    participant = ParticipantFactory(email="ada@example.test")
+    ChargeFactory(participant=participant)
+    run = create_settlement_run(participant.camp, admin)
+    snapshot = run.settlements.get()
+    failed_batch = queue_settlement_email_batch(
+        run=run,
+        settlement_ids=[snapshot.pk],
+        subject="Abrechnung",
+        body="Deine Abrechnung.",
+        created_by=admin,
+    )
+    failed_delivery = failed_batch.deliveries.get()
+    failed_delivery.status = EmailDelivery.Status.FAILED
+    failed_delivery.save(update_fields=["status", "updated_at"])
+    active_batch = queue_settlement_email_batch(
+        run=run,
+        settlement_ids=[snapshot.pk],
+        subject="Korrigierte Abrechnung",
+        body="Deine Abrechnung.",
+        created_by=admin,
+    )
+    client.force_login(admin)
+
+    response = client.post(
+        reverse("email-delivery-retry", args=[failed_delivery.pk]),
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    response_messages = [str(message) for message in get_messages(response.wsgi_request)]
+    assert response_messages == ["Für diese Rechnung ist bereits ein Versand vorgemerkt."]
+    failed_delivery.refresh_from_db()
+    assert failed_delivery.status == EmailDelivery.Status.FAILED
+    assert active_batch.deliveries.get().status == EmailDelivery.Status.PENDING
+
+
+@pytest.mark.django_db
 @patch(
     "billing.management.commands.run_email_worker.send_due_email_deliveries",
     return_value=EmailDeliveryResult(sent=2, retried=1, failed=0),
@@ -724,6 +764,44 @@ def test_worker_marks_permanent_smtp_failure_without_retry():
     assert delivery.status == EmailDelivery.Status.FAILED
     assert delivery.attempts == 1
     assert delivery.last_error_code == "550"
+
+
+@pytest.mark.django_db
+def test_worker_marks_recipient_refusal_permanent_without_logging_address(caplog):
+    admin = SuperUserFactory()
+    participant = ParticipantFactory(email="private-person@example.test")
+    configuration = EmailConfiguration.load()
+    configuration.enabled = True
+    configuration.host = "smtp.example.test"
+    configuration.from_email = "lager@example.test"
+    configuration.set_password("smtp-secret")
+    configuration.save()
+    batch = queue_information_email_batch(
+        camp=participant.camp,
+        participant_ids=[participant.pk],
+        subject="Information",
+        body="Nachricht",
+        created_by=admin,
+    )
+
+    with (
+        patch(
+            "billing.email_delivery._send_delivery",
+            side_effect=smtplib.SMTPRecipientsRefused(
+                {participant.email: (550, b"mailbox unavailable")},
+            ),
+        ),
+        caplog.at_level(logging.WARNING),
+    ):
+        result = send_due_email_deliveries(connection=object())
+
+    assert result.failed == 1
+    assert result.retried == 0
+    delivery = batch.deliveries.get()
+    assert delivery.status == EmailDelivery.Status.FAILED
+    assert delivery.attempts == 1
+    assert delivery.last_error_code == "550"
+    assert participant.email not in caplog.text
 
 
 @pytest.mark.django_db

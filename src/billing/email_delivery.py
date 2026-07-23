@@ -268,16 +268,30 @@ def send_configuration_test_email(configuration: EmailConfiguration, recipient: 
     message.send(fail_silently=False)
 
 
+@transaction.atomic
 def requeue_failed_email_delivery(delivery: EmailDelivery) -> None:
     """Reset one permanently failed delivery after an explicit administrator action."""
-    if delivery.status != EmailDelivery.Status.FAILED:
+    if delivery.settlement_id is not None:
+        Settlement.objects.select_for_update().get(pk=delivery.settlement_id)
+    locked_delivery = EmailDelivery.objects.select_for_update().get(pk=delivery.pk)
+    if locked_delivery.status != EmailDelivery.Status.FAILED:
         raise ValueError("Nur fehlgeschlagene E-Mails können erneut eingeplant werden.")
-    delivery.status = EmailDelivery.Status.PENDING
-    delivery.attempts = 0
-    delivery.next_attempt_at = timezone.now()
-    delivery.processing_started_at = None
-    delivery.last_error_code = ""
-    delivery.save(
+    if (
+        locked_delivery.settlement_id is not None
+        and EmailDelivery.objects.filter(
+            settlement_id=locked_delivery.settlement_id,
+            status__in=[EmailDelivery.Status.PENDING, EmailDelivery.Status.PROCESSING],
+        )
+        .exclude(pk=locked_delivery.pk)
+        .exists()
+    ):
+        raise ValueError("Für diese Rechnung ist bereits ein Versand vorgemerkt.")
+    locked_delivery.status = EmailDelivery.Status.PENDING
+    locked_delivery.attempts = 0
+    locked_delivery.next_attempt_at = timezone.now()
+    locked_delivery.processing_started_at = None
+    locked_delivery.last_error_code = ""
+    locked_delivery.save(
         update_fields=[
             "status",
             "attempts",
@@ -287,6 +301,18 @@ def requeue_failed_email_delivery(delivery: EmailDelivery) -> None:
             "updated_at",
         ]
     )
+
+
+def _smtp_status_code(error: smtplib.SMTPException | OSError) -> int | None:
+    smtp_code = getattr(error, "smtp_code", None)
+    if isinstance(smtp_code, int):
+        return smtp_code
+    if isinstance(error, smtplib.SMTPRecipientsRefused):
+        for refusal in error.recipients.values():
+            code = refusal[0]
+            if isinstance(code, int):
+                return code
+    return None
 
 
 def _send_delivery(
@@ -368,7 +394,7 @@ def send_due_email_deliveries(*, batch_size: int = 25, connection: Any | None = 
             )
         except (smtplib.SMTPException, OSError) as error:
             delivery.attempts += 1
-            smtp_code = getattr(error, "smtp_code", None)
+            smtp_code = _smtp_status_code(error)
             permanent = isinstance(smtp_code, int) and 500 <= smtp_code < 600
             if permanent or delivery.attempts > len(EMAIL_RETRY_DELAYS):
                 delivery.status = EmailDelivery.Status.FAILED
