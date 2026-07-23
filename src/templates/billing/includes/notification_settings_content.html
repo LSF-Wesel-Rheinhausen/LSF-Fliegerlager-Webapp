@@ -68,10 +68,31 @@
           <span class="hint">{% if subscription.last_success_at %}Zuletzt erreicht: {{ subscription.last_success_at|date:"d.m.Y H:i" }}{% else %}Noch nicht erreicht{% endif %}</span>
         </div>
         <div class="actions">
+          <button class="button button-secondary" type="button" data-preferences-subscription="{{ subscription.id }}">Nachrichten auswählen</button>
           <button class="button button-secondary" type="button" data-rename-subscription="{{ subscription.id }}">Umbenennen</button>
           <button class="button button-secondary" type="button" data-test-subscription="{{ subscription.id }}">Testen</button>
           <button class="button button-danger" type="button" data-revoke-subscription="{{ subscription.id }}">Entfernen</button>
         </div>
+        <dialog class="notification-preferences-dialog" aria-labelledby="notification-preferences-title-{{ subscription.id }}">
+          <form class="form-grid" data-preferences-form="{{ subscription.id }}">
+            {% csrf_token %}
+            <h3 id="notification-preferences-title-{{ subscription.id }}">Nachrichten auswählen</h3>
+            <fieldset>
+              <legend>Kategorien für {{ subscription.device_name }}</legend>
+              {% for value, label in notification_categories.items %}
+                <label class="checkbox-row">
+                  <input type="checkbox" name="category" value="{{ value }}" {% if value in subscription.categories %}checked{% endif %}>
+                  <span>{{ label }}</span>
+                </label>
+              {% endfor %}
+            </fieldset>
+            <p class="message error" data-preferences-error role="alert" hidden></p>
+            <div class="actions">
+              <button class="button button-secondary" type="button" data-close-dialog>Abbrechen</button>
+              <button class="button" type="submit">Speichern</button>
+            </div>
+          </form>
+        </dialog>
         <dialog class="notification-rename-dialog" aria-labelledby="notification-rename-title-{{ subscription.id }}">
           <form class="form-grid" data-rename-form="{{ subscription.id }}">
             {% csrf_token %}
@@ -92,4 +113,4 @@
   </ul>
   <p class="message error" data-notification-error role="alert" hidden></p>
 </section>
-<script src="{% static 'billing/notifications.js' %}?v=3" defer></script>
+<script src="{% static 'billing/notifications.js' %}?v=4" defer></script>

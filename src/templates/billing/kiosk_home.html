@@ -755,12 +755,20 @@
     <form method="post" class="form-grid">
       {% csrf_token %}
       <input type="hidden" name="action" value="checkin">
-      <div class="target-list">
+      <div class="target-list checkin-target-list">
         {% for checkin_target in checkin_participants %}
-          <article class="target-row">
+          <article class="target-row target-row--checkin">
             <div class="kiosk-list-row__content">
               <strong>{{ checkin_target.name }}</strong>
               <span>{{ checkin_target.role }}</span>
+              {% if checkin_target.camp.starts_on or checkin_target.camp.ends_on %}
+                <span>
+                  Erlaubter Zeitraum:
+                  {% if checkin_target.camp.starts_on %}{{ checkin_target.camp.starts_on|date:"d.m.Y" }}{% endif %}
+                  {% if checkin_target.camp.starts_on and checkin_target.camp.ends_on %}–{% endif %}
+                  {% if checkin_target.camp.ends_on %}{{ checkin_target.camp.ends_on|date:"d.m.Y" }}{% endif %}
+                </span>
+              {% endif %}
             </div>
             <input type="hidden" name="checkin_target" value="{{ checkin_target.token }}">
             <p class="dialog-field">
@@ -773,6 +781,8 @@
                 value="{{ checkin_target.object.arrival_date|date:'Y-m-d' }}"
                 {% if checkin_target.camp.starts_on %}min="{{ checkin_target.camp.starts_on|date:'Y-m-d' }}"{% endif %}
                 {% if checkin_target.camp.ends_on %}max="{{ checkin_target.camp.ends_on|date:'Y-m-d' }}"{% endif %}
+                {% if checkin_target.camp.starts_on %}data-min-date-label="{{ checkin_target.camp.starts_on|date:'d.m.Y' }}"{% endif %}
+                {% if checkin_target.camp.ends_on %}data-max-date-label="{{ checkin_target.camp.ends_on|date:'d.m.Y' }}"{% endif %}
               >
             </p>
             <p class="dialog-field">
@@ -785,6 +795,8 @@
                 value="{{ checkin_target.object.departure_date|date:'Y-m-d' }}"
                 {% if checkin_target.camp.starts_on %}min="{{ checkin_target.camp.starts_on|date:'Y-m-d' }}"{% endif %}
                 {% if checkin_target.camp.ends_on %}max="{{ checkin_target.camp.ends_on|date:'Y-m-d' }}"{% endif %}
+                {% if checkin_target.camp.starts_on %}data-min-date-label="{{ checkin_target.camp.starts_on|date:'d.m.Y' }}"{% endif %}
+                {% if checkin_target.camp.ends_on %}data-max-date-label="{{ checkin_target.camp.ends_on|date:'d.m.Y' }}"{% endif %}
               >
             </p>
           </article>
@@ -906,6 +918,18 @@
       const mealSelectedDate = document.getElementById("meal-selected-date");
       const familyDialog = document.getElementById("family-dialog");
       const checkinDialog = document.getElementById("checkin-dialog");
+      checkinDialog?.querySelectorAll('input[type="date"]').forEach((input) => {
+        const updateDateValidityMessage = () => {
+          input.setCustomValidity("");
+          if (input.validity.rangeUnderflow && input.dataset.minDateLabel) {
+            input.setCustomValidity(`Bitte wähle ein Datum ab dem ${input.dataset.minDateLabel}.`);
+          } else if (input.validity.rangeOverflow && input.dataset.maxDateLabel) {
+            input.setCustomValidity(`Bitte wähle ein Datum bis zum ${input.dataset.maxDateLabel}.`);
+          }
+        };
+        input.addEventListener("input", updateDateValidityMessage);
+        input.addEventListener("invalid", updateDateValidityMessage);
+      });
       const contactDialog = document.getElementById("contact-dialog");
       const quickCancelDialog = document.getElementById("quick-cancel-dialog");
       const quickCancelChargeId = document.getElementById("quick-cancel-charge-id");

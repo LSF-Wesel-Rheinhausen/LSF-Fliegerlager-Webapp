@@ -94,6 +94,7 @@ def test_admin_can_create_and_update_own_push_subscription(client):
     assert response.json()["device"] == {
         "id": subscription.pk,
         "device_name": "Privates Telefon",
+        "categories": ["expenses_admin"],
         "last_success_at": None,
         "endpoint_fingerprint": hashlib.sha256(payload["endpoint"].encode()).hexdigest(),
     }
@@ -398,6 +399,132 @@ def test_private_participant_can_rename_own_push_subscription(client):
     subscription.refresh_from_db()
     assert subscription.device_name == "Mein iPhone"
     assert response.json()["device"]["device_name"] == "Mein iPhone"
+
+
+@pytest.mark.django_db
+def test_admin_can_update_own_push_subscription_categories(client):
+    user = UserFactory()
+    subscription = PushSubscription.objects.create(
+        user=user,
+        endpoint="https://push.example.test/admin-preferences",
+        p256dh="key",
+        auth="secret",
+        device_name="Admin-Laptop",
+        categories=["expenses_admin"],
+    )
+    client.force_login(user)
+
+    response = client.post(
+        f"/notifications/subscriptions/{subscription.pk}/preferences/",
+        data=json.dumps(
+            {
+                "categories": [
+                    "meal_orders_admin",
+                    "open_shifts_admin",
+                    "meal_orders_admin",
+                ]
+            }
+        ),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    subscription.refresh_from_db()
+    assert subscription.categories == ["meal_orders_admin", "open_shifts_admin"]
+    assert response.json()["device"]["categories"] == ["meal_orders_admin", "open_shifts_admin"]
+
+
+@pytest.mark.django_db
+def test_private_participant_can_update_own_push_subscription_categories(client):
+    participant = ParticipantFactory()
+    subscription = PushSubscription.objects.create(
+        participant=participant,
+        endpoint="https://push.example.test/participant-preferences",
+        p256dh="key",
+        auth="secret",
+        device_name="Privates Telefon",
+        categories=["shifts"],
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_MODE_SESSION_KEY] = "private"
+    session.save()
+
+    response = client.post(
+        f"/kiosk/notifications/subscriptions/{subscription.pk}/preferences/",
+        data=json.dumps({"categories": ["booking_links", "meal_deadlines"]}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    subscription.refresh_from_db()
+    assert subscription.categories == ["booking_links", "meal_deadlines"]
+    assert response.json()["device"]["categories"] == ["booking_links", "meal_deadlines"]
+
+
+@pytest.mark.django_db
+def test_admin_cannot_update_foreign_or_missing_push_subscription_categories(client):
+    user = UserFactory()
+    other = UserFactory()
+    foreign_subscription = PushSubscription.objects.create(
+        user=other,
+        endpoint="https://push.example.test/foreign-preferences",
+        p256dh="key",
+        auth="secret",
+        device_name="Fremdes Gerät",
+        categories=["expenses_admin"],
+    )
+    client.force_login(user)
+
+    foreign_response = client.post(
+        f"/notifications/subscriptions/{foreign_subscription.pk}/preferences/",
+        data=json.dumps({"categories": ["meal_orders_admin"]}),
+        content_type="application/json",
+    )
+    missing_response = client.post(
+        f"/notifications/subscriptions/{foreign_subscription.pk + 1000}/preferences/",
+        data=json.dumps({"categories": ["meal_orders_admin"]}),
+        content_type="application/json",
+    )
+
+    assert foreign_response.status_code == 404
+    assert missing_response.status_code == 404
+    foreign_subscription.refresh_from_db()
+    assert foreign_subscription.categories == ["expenses_admin"]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "categories",
+    [
+        None,
+        "expenses_admin",
+        [],
+        ["unknown"],
+        ["expenses_admin", 7],
+    ],
+)
+def test_preferences_reject_invalid_push_subscription_categories(client, categories):
+    user = UserFactory()
+    subscription = PushSubscription.objects.create(
+        user=user,
+        endpoint="https://push.example.test/invalid-preferences",
+        p256dh="key",
+        auth="secret",
+        categories=["expenses_admin"],
+    )
+    client.force_login(user)
+
+    response = client.post(
+        f"/notifications/subscriptions/{subscription.pk}/preferences/",
+        data=json.dumps({"categories": categories}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "Ungültige Benachrichtigungskategorie."}
+    subscription.refresh_from_db()
+    assert subscription.categories == ["expenses_admin"]
 
 
 @pytest.mark.django_db
