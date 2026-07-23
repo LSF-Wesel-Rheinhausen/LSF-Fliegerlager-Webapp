@@ -26,6 +26,7 @@ Web-App zur Verwaltung und Abrechnung eines Vereins-Fliegerlagers. Die Anwendung
 - Installierbare PWA für Verwaltung, private Teilnehmergeräte und zentrale Kiosk-Tablets mit explizitem Offline-Hinweis ohne Caching sensibler Anwendungsdaten
 - Teilnehmer-Kiosk: privater PIN-Login unter `/kiosk/`, zentraler 120-Sekunden-Kiosk unter `/central/kiosk/`, große Schnellbuchungen für Getränke, Frühstück und Snacks, 15-Minuten-Storno sowie Essensanmeldungen mit Tablet-/Mobilbedienung
 - Optionale Push-Benachrichtigungen für private Teilnehmer- und Verwaltungsgeräte zu Diensten, Buchungen, Essensfristen, Auslagen und offenen Verwaltungsaufgaben
+- Manueller E-Mail-Versand mit verschlüsselter SMTP-Konfiguration im Webinterface, expliziter Empfängervorschau sowie versionsgebundenen Rechnungs-PDFs
 - Dienstpläne: Anlage täglicher Vorlagen durch Admins, selbstständige Übernahme und Tausch von Diensten durch Teilnehmer im Kiosk sowie Tracking von Pflichtdiensten per Fortschrittsbalken
 - Admin-Bearbeitung, Löschung und Wiederherstellung von Buchungen mit Änderungsprotokoll der abrechnungsrelevanten Felder
 - CSV-/Excel-Import mit Vorschau und Validierung

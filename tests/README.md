@@ -20,6 +20,7 @@ Automatisierte Tests.
 - `test_setup_flow.py`: First-Launch-Websetup und Static-Finder.
 - `test_persistence_migration.py`: sichere und idempotente Übernahme bisheriger Docker-Volumes.
 - `test_webpush_keys.py`: Erzeugung, Wiederverwendung und Validierung persistenter VAPID-Schlüssel.
+- `test_email_delivery.py`: verschlüsselte SMTP-Konfiguration, manuelle Auswahl, Vorschau, Rechnungs-PDFs und Worker-Retries.
 - `factories.py`: Wiederverwendbare Testdaten mit `factory_boy`.
 - `e2e/fliegerlager.spec.js`: Playwright-Browsertests fuer Setup, Login, Lageranlage, Buchungs-Audit, Preisregel-Dialoge, Kiosk, Dienstplanung, Exporte und responsive Overflow-Pruefungen.
 

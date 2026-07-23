@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1>{{ batch.get_kind_display }} · Versandauftrag</h1>
+      <p>{{ batch.subject }} · bestätigt am {{ batch.created_at }}</p>
+    </div>
+    <a class="button button-secondary" href="{% url 'camp-detail' batch.camp.pk %}">Zur Lagerübersicht</a>
+  </div>
+
+  <dl class="metrics" aria-label="Versandstatus">
+    <div class="metric"><dt>Ausstehend</dt><dd><strong>{{ counts.pending }}</strong></dd></div>
+    <div class="metric"><dt>In Verarbeitung</dt><dd><strong>{{ counts.processing }}</strong></dd></div>
+    <div class="metric"><dt>Gesendet</dt><dd><strong>{{ counts.sent }}</strong></dd></div>
+    <div class="metric"><dt>Fehlgeschlagen</dt><dd><strong>{{ counts.failed }}</strong></dd></div>
+  </dl>
+
+  <section class="panel stack">
+    <h2>Empfänger</h2>
+    <table>
+      <thead><tr><th>Adresse</th><th>Teilnehmer</th><th>Inhalt</th><th>Status</th><th>Versendet</th><th></th></tr></thead>
+      <tbody>
+        {% for delivery in deliveries %}
+          <tr>
+            <td>{{ delivery.recipient_email }}</td>
+            <td>{{ delivery.recipient_names|join:", " }}</td>
+            <td>
+              {% if delivery.settlement %}
+                Abrechnung V{{ delivery.settlement.run.version }}
+              {% else %}
+                Information
+              {% endif %}
+            </td>
+            <td>{{ delivery.get_status_display }}</td>
+            <td>{{ delivery.sent_at|default:"-" }}</td>
+            <td>
+              {% if delivery.status == "failed" %}
+                <form method="post" action="{% url 'email-delivery-retry' delivery.pk %}">
+                  {% csrf_token %}
+                  <button type="submit" class="button button-secondary">Erneut versuchen</button>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endblock %}

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1>Rechnungen versenden</h1>
+      <p>{{ run.camp }} · Abrechnung V{{ run.version }}</p>
+    </div>
+    <a class="button button-secondary" href="{% url 'settlement-run-detail' run.pk %}">Zur Abrechnung</a>
+  </div>
+
+  {% if not configuration.enabled %}
+    <section class="message warning" role="status">
+      Der E-Mail-Versand ist deaktiviert.
+      <a href="{% url 'email-settings' %}">E-Mail-Einstellungen öffnen</a>
+    </section>
+  {% endif %}
+
+  <form method="post" class="stack">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <section class="panel stack">
+      <h2>Inhalt</h2>
+      {{ form.subject.errors }}
+      <p>{{ form.subject.label_tag }} {{ form.subject }}</p>
+      {{ form.body.errors }}
+      <p>{{ form.body.label_tag }} {{ form.body }}</p>
+    </section>
+
+    <section class="panel stack">
+      <h2>Rechnungen auswählen</h2>
+      {{ form.settlements.errors }}
+      {{ form.settlements }}
+      {% if missing_snapshots %}
+        <h3>Keine E-Mail-Adresse</h3>
+        <ul>
+          {% for snapshot in missing_snapshots %}
+            <li>{{ snapshot.participant_name }} · Keine E-Mail-Adresse</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </section>
+
+    {% if preview %}
+      <section class="panel stack" aria-labelledby="settlement-email-preview-heading">
+        <h2 id="settlement-email-preview-heading">Versandvorschau</h2>
+        <table>
+          <thead><tr><th>Adresse</th><th>Teilnehmer</th><th>Anhang</th><th>Vorheriger Versand</th></tr></thead>
+          <tbody>
+            {% for recipient in preview %}
+              <tr>
+                <td>{{ recipient.email }}</td>
+                <td>{{ recipient.name }}</td>
+                <td>{{ recipient.filename }}</td>
+                <td>{% if recipient.previously_sent %}Bereits versendet{% else %}-{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <p>Die Zuordnung von Adresse, Teilnehmer und PDF wird mit der Bestätigung eingefroren.</p>
+        {% if has_previously_sent %}
+          <label>
+            <input type="checkbox" name="confirm_resend" value="yes" required>
+            Bereits versendete Rechnungen erneut senden
+          </label>
+        {% endif %}
+        <button type="submit" name="action" value="confirm">Versand verbindlich bestätigen</button>
+      </section>
+    {% else %}
+      <button type="submit" name="action" value="preview">Versandvorschau anzeigen</button>
+    {% endif %}
+  </form>
+{% endblock %}

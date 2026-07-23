@@ -19,6 +19,174 @@ class TimeStampedModel(models.Model):
         abstract = True
 
 
+class EmailConfiguration(TimeStampedModel):
+    """Store the singleton SMTP configuration managed by administrators."""
+
+    class Security(models.TextChoices):
+        STARTTLS = "starttls", "STARTTLS"
+        SSL = "ssl", "SSL/TLS"
+
+    enabled = models.BooleanField(default=False)
+    host = models.CharField(max_length=255, blank=True)
+    port = models.PositiveIntegerField(default=587)
+    username = models.CharField(max_length=254, blank=True)
+    password_encrypted = models.TextField(blank=True)
+    security = models.CharField(max_length=20, choices=Security.choices, default=Security.STARTTLS)
+    from_name = models.CharField(max_length=160, blank=True)
+    from_email = models.EmailField(blank=True)
+    reply_to = models.EmailField(blank=True)
+    timeout = models.PositiveSmallIntegerField(default=10)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="updated_email_configurations",
+    )
+    last_tested_at = models.DateTimeField(null=True, blank=True)
+    last_tested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tested_email_configurations",
+    )
+
+    class Meta:
+        verbose_name = "E-Mail-Konfiguration"
+        verbose_name_plural = "E-Mail-Konfigurationen"
+
+    @classmethod
+    def load(cls) -> "EmailConfiguration":
+        configuration, _created = cls.objects.get_or_create(pk=1)
+        return configuration
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        return super().save(*args, **kwargs)
+
+    def set_password(self, password: str) -> None:
+        """Replace the encrypted SMTP password."""
+        from .email_credentials import encrypt_email_password
+
+        self.password_encrypted = encrypt_email_password(password)
+
+    def get_password(self) -> str:
+        """Return the decrypted SMTP password."""
+        from .email_credentials import decrypt_email_password
+
+        return decrypt_email_password(self.password_encrypted)
+
+    def __str__(self) -> str:
+        return self.from_email or "E-Mail-Versand"
+
+
+class EmailTestLog(TimeStampedModel):
+    """Audit one explicit SMTP test without storing credentials or response text."""
+
+    class Status(models.TextChoices):
+        SUCCESS = "success", "Erfolgreich"
+        FAILED = "failed", "Fehlgeschlagen"
+
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="email_test_logs",
+    )
+    recipient_email = models.EmailField()
+    status = models.CharField(max_length=20, choices=Status.choices)
+    error_code = models.CharField(max_length=40, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+
+    def __str__(self) -> str:
+        return f"{self.get_status_display()}: {self.created_at}"
+
+
+class EmailBatch(TimeStampedModel):
+    """Record one manually confirmed information or invoice delivery batch."""
+
+    class Kind(models.TextChoices):
+        INFORMATION = "information", "Information"
+        SETTLEMENT = "settlement", "Rechnung"
+
+    camp = models.ForeignKey("Camp", on_delete=models.RESTRICT, related_name="email_batches")
+    settlement_run = models.ForeignKey(
+        "SettlementRun",
+        on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
+        related_name="email_batches",
+    )
+    kind = models.CharField(max_length=20, choices=Kind.choices)
+    subject = models.CharField(max_length=160)
+    body = models.TextField()
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="created_email_batches",
+    )
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(kind="information", settlement_run__isnull=True)
+                    | models.Q(kind="settlement", settlement_run__isnull=False)
+                ),
+                name="email_batch_run_matches_kind",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.get_kind_display()}: {self.subject}"
+
+
+class EmailDelivery(TimeStampedModel):
+    """Store one recipient-specific delivery attempt in the manual email outbox."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Ausstehend"
+        PROCESSING = "processing", "In Verarbeitung"
+        SENT = "sent", "Gesendet"
+        FAILED = "failed", "Fehlgeschlagen"
+
+    batch = models.ForeignKey(EmailBatch, on_delete=models.CASCADE, related_name="deliveries")
+    settlement = models.ForeignKey(
+        "Settlement",
+        on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
+        related_name="email_deliveries",
+    )
+    recipient_email = models.EmailField()
+    recipient_names = models.JSONField(default=list)
+    dedupe_key = models.CharField(max_length=180)
+    subject = models.CharField(max_length=160)
+    body_text = models.TextField()
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    next_attempt_at = models.DateTimeField(default=timezone.now)
+    processing_started_at = models.DateTimeField(null=True, blank=True)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    last_error_code = models.CharField(max_length=40, blank=True)
+    attachment_sha256 = models.CharField(max_length=64, blank=True)
+
+    class Meta:
+        ordering = ["created_at", "pk"]
+        constraints = [
+            models.UniqueConstraint(fields=["batch", "dedupe_key"], name="unique_email_delivery_dedupe"),
+        ]
+        indexes = [models.Index(fields=["status", "next_attempt_at"], name="email_delivery_due_idx")]
+
+    def __str__(self) -> str:
+        return f"E-Mail-Zustellung {self.pk} ({self.get_status_display()})"
+
+
 class UserProfile(TimeStampedModel):
     """Store editable application metadata for a Django user account."""
 

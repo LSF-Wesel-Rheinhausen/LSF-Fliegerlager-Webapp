@@ -14,6 +14,9 @@
       <a class="button" href="{% url 'camp-meal-overview' camp.pk %}">Essensübersicht</a>
       <a class="button" href="{% url 'expense-create' camp.pk %}">Auslage erfassen</a>
       <a class="button" href="{% url 'participant-import' camp.pk %}">Teilnehmer importieren</a>
+      {% if user|can_manage_users %}
+        <a class="button" href="{% url 'information-email-compose' camp.pk %}">Information versenden</a>
+      {% endif %}
     </div>
   </div>
 

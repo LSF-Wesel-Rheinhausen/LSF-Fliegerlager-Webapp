@@ -17,6 +17,9 @@
       <a class="button button-secondary" href="{% url 'camp-detail' run.camp.pk %}">Zur Lagerübersicht</a>
       <a class="button" href="{% url 'settlement-run-csv' run.pk %}">CSV herunterladen</a>
       <a class="button" href="{% url 'settlement-run-workbook' run.pk %}">Excel herunterladen</a>
+      {% if user|can_manage_users %}
+        <a class="button" href="{% url 'settlement-email-compose' run.pk %}">Rechnungen versenden</a>
+      {% endif %}
     </div>
   </div>
 
