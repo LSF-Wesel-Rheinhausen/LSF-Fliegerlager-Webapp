@@ -2,11 +2,7 @@
 {% load billing_format %}
 {% block title %}Kiosk{% endblock %}
 {% block kiosk_nav %}
-  <a class="button button-secondary" href="{% url 'user-guide' %}">Hilfe</a>
-  <button type="button" class="button button-secondary" data-open-contact-dialog>Kontakt Lagerleitung</button>
-  {% if kiosk_mode == "private" and web_push_enabled %}
-    <a class="button button-secondary" href="{% url 'kiosk-notification-settings' %}">Benachrichtigungen</a>
-  {% endif %}
+  <button type="button" class="button button-secondary" data-open-kiosk-menu>Menü</button>
   <a class="button button-secondary" href="{{ kiosk_urls.logout }}">Abmelden</a>
 {% endblock %}
 {% block content %}
@@ -66,6 +62,25 @@
     </section>
   {% endif %}
 
+  <dialog id="kiosk-menu-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="kiosk-menu-dialog-title">
+    <form method="dialog" class="dialog-heading">
+      <h2 id="kiosk-menu-dialog-title">Menü</h2>
+      <button class="button button-secondary">Schließen</button>
+    </form>
+    <nav class="kiosk-menu" aria-label="Kiosk-Bereiche">
+      <button type="button" class="kiosk-menu__item" data-dialog-target="meal-calendar-dialog">Essenskalender</button>
+      <button type="button" class="kiosk-menu__item" data-dialog-target="quick-bookings-dialog">Letzte Schnellbuchungen</button>
+      <button type="button" class="kiosk-menu__item" data-dialog-target="shared-expenses-dialog">Gemeinschaftsausgaben</button>
+      <button type="button" class="kiosk-menu__item" data-dialog-target="family-management-dialog">Familie</button>
+      <button type="button" class="kiosk-menu__item" data-dialog-target="booking-links-dialog">Mitbuchungen</button>
+      <a class="kiosk-menu__item" href="{% url 'user-guide' %}">Hilfe</a>
+      <button type="button" class="kiosk-menu__item" data-dialog-target="contact-dialog">Kontakt Lagerleitung</button>
+      {% if kiosk_mode == "private" and web_push_enabled %}
+        <a class="kiosk-menu__item" href="{% url 'kiosk-notification-settings' %}">Benachrichtigungen</a>
+      {% endif %}
+    </nav>
+  </dialog>
+
   <div class="kiosk-masonry" data-kiosk-masonry>
         <form method="post" id="quick-booking-form" class="kiosk-masonry__contents">
           {% csrf_token %}
@@ -109,15 +124,11 @@
             <div class="kiosk-card__header-main">
               <span class="kiosk-card__eyebrow">Aktion</span>
               <h2 class="kiosk-title">Verpflegung buchen</h2>
-              <p>Buche hier Frühstück, Snacks und Abendessen.</p>
+              <p>Buche hier Frühstück und Snacks.</p>
             </div>
           </div>
           <div class="stack kiosk-drink-form">
             <div class="drink-card-grid" role="group" aria-label="Verpflegung auswählen">
-              <button type="button" class="drink-card" data-open-meal-dialog-new data-meal="dinner" aria-label="Abendessen im Kalender buchen">
-                <span class="drink-card__title">Abendessen</span>
-                <span class="drink-card__meta">Kalender öffnen</span>
-              </button>
               {% for rule in snack_rules %}
                 <button
                   type="button"
@@ -143,14 +154,17 @@
         {% endfor %}
       </form>
 
-      <section class="panel kiosk-card kiosk-card--accent" id="meal-calendar" data-kiosk-card="meal-calendar">
+      <dialog id="meal-calendar-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="meal-calendar-dialog-title">
         <div class="kiosk-card__header kiosk-section-heading">
           <div class="kiosk-card__header-main">
             <span class="kiosk-card__eyebrow">Heute</span>
-            <h2 class="kiosk-title">Essenskalender</h2>
+            <h2 class="kiosk-title" id="meal-calendar-dialog-title">Essenskalender</h2>
             <p>Deine gespeicherten Abendessen nach Lagertag.</p>
           </div>
-          <button type="button" class="button kiosk-card__action" data-open-meal-dialog-new data-meal="dinner">Essen buchen</button>
+          <div class="inline-actions">
+            <button type="button" class="button kiosk-card__action" data-open-meal-dialog-new data-meal="dinner">Essen buchen</button>
+            <button type="button" class="button button-secondary" data-close-dialog>Schließen</button>
+          </div>
         </div>
         <div class="meal-order-status" aria-label="Essensbestellung für {{ next_order_date|date:'d.m.Y' }}">
           <strong>Essensbestellung für {{ next_order_date|date:"d.m.Y" }}</strong>
@@ -192,7 +206,7 @@
           <div><dt class="meal-status-dot meal-status-dot--empty"></dt><dd>Offen</dd></div>
           <div><dt class="meal-status-dot meal-status-dot--closed"></dt><dd>Geschlossen</dd></div>
         </dl>
-      </section>
+      </dialog>
 
       <section class="panel kiosk-card kiosk-card--muted" data-kiosk-card="shifts">
         <div class="kiosk-card__header kiosk-section-heading">
@@ -214,10 +228,15 @@
         </div>
       </section>
 
-      <section class="panel kiosk-card kiosk-card--muted kiosk-table" data-kiosk-card="quick-bookings">
+  </div>
+
+      <dialog id="quick-bookings-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="quick-bookings-dialog-title">
         <div class="kiosk-table__header">
-          <h2>Letzte Schnellbuchungen</h2>
-          <p>Getränke, Frühstück und Snack können 15 Minuten lang storniert werden.</p>
+          <div>
+            <h2 id="quick-bookings-dialog-title">Letzte Schnellbuchungen</h2>
+            <p>Getränke, Frühstück und Snack können 15 Minuten lang storniert werden.</p>
+          </div>
+          <button type="button" class="button button-secondary" data-close-dialog>Schließen</button>
         </div>
         <div class="quick-booking-list" role="list">
           {% for entry in recent_quick_charges %}
@@ -250,18 +269,21 @@
             <p class="kiosk-empty">Noch keine Schnellbuchungen vorhanden.</p>
           {% endfor %}
         </div>
-      </section>
+      </dialog>
 
-      <section class="panel kiosk-card kiosk-card--muted" data-kiosk-card="shared-expenses">
+      <dialog id="shared-expenses-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="shared-expenses-dialog-title">
         <div class="kiosk-card__header kiosk-section-heading">
           <div class="kiosk-card__header-main">
-            <h2 class="kiosk-title">
+            <h2 class="kiosk-title" id="shared-expenses-dialog-title">
               Gemeinschaftsausgaben
               <button type="button" class="kiosk-help-button" data-help-text="Hier kannst du Ausgaben einreichen, die du für die Gemeinschaft vorgestreckt hast (z.B. Grillgut). Nach Freigabe durch die Lagerleitung wird der Betrag als Umlage auf die Teilnehmer aufgeteilt und dir als Gutschrift angerechnet." aria-label="Kurzhilfe Auslagen">?</button>
             </h2>
             <p>Geld für die Gemeinschaft vorgestreckt?</p>
           </div>
-          <a class="button button-secondary kiosk-card__action" href="{{ kiosk_urls.shared_expense_request }}">Antrag einreichen</a>
+          <div class="inline-actions">
+            <a class="button button-secondary kiosk-card__action" href="{{ kiosk_urls.shared_expense_request }}">Antrag einreichen</a>
+            <button type="button" class="button button-secondary" data-close-dialog>Schließen</button>
+          </div>
         </div>
 
         {% if participant_expenses %}
@@ -316,17 +338,20 @@
             <p>Wenn du etwas für die Gemeinschaft vorgestreckt hast, kannst du den Beleg hier einreichen.</p>
           </div>
         {% endif %}
-      </section>
-      <section class="panel kiosk-card kiosk-card--muted" data-kiosk-card="family">
+      </dialog>
+      <dialog id="family-management-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="family-management-dialog-title">
         <div class="kiosk-card__header kiosk-section-heading">
           <div class="kiosk-card__header-main">
-            <h2 class="kiosk-title">
+            <h2 class="kiosk-title" id="family-management-dialog-title">
               Familie
               <button type="button" class="kiosk-help-button" data-help-text="Hier legst du Familienmitglieder (z.B. Partner, Kinder) an. Ihre Kosten werden auf deine finale Abrechnung gebucht. Sie tauchen beim Essen als auswählbare Personen auf, haben aber keinen eigenen Kiosk-Login." aria-label="Kurzhilfe Familie">?</button>
             </h2>
             <p>Diese Personen werden über dein Konto abgerechnet.</p>
           </div>
-          <button type="button" class="button kiosk-card__action" data-open-family-dialog>Anlegen</button>
+          <div class="inline-actions">
+            <button type="button" class="button kiosk-card__action" data-open-family-dialog>Anlegen</button>
+            <button type="button" class="button button-secondary" data-close-dialog>Schließen</button>
+          </div>
         </div>
 
         {% for member in family_members %}
@@ -348,17 +373,18 @@
             <p>Lege Personen an, die über dein Konto mit Essen buchen oder mitgerechnet werden sollen.</p>
           </div>
         {% endfor %}
-      </section>
+      </dialog>
 
-      <section class="panel kiosk-card kiosk-card--muted" data-kiosk-card="booking-links">
+      <dialog id="booking-links-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="booking-links-dialog-title">
         <div class="kiosk-card__header kiosk-section-heading">
           <div class="kiosk-card__header-main">
-            <h2 class="kiosk-title">
+            <h2 class="kiosk-title" id="booking-links-dialog-title">
               Mitbuchungen
               <button type="button" class="kiosk-help-button" data-help-text="Lade andere Teilnehmer ein, damit ihr euch gegenseitig beim Essen mit anmelden könnt. Sobald die Einladung angenommen wurde, könnt ihr euch gegenseitig auswählen. Die Abrechnung bleibt dabei für jeden separat." aria-label="Kurzhilfe Mitbuchungen">?</button>
             </h2>
             <p>Lade andere Teilnehmer ein und verwalte bestehende Freigaben.</p>
           </div>
+          <button type="button" class="button button-secondary" data-close-dialog>Schließen</button>
         </div>
         <form method="post" class="form-grid">
           {% csrf_token %}
@@ -392,8 +418,7 @@
             <p>Einladungen erscheinen hier, sobald sie angenommen wurden.</p>
           </div>
         {% endfor %}
-      </section>
-  </div>
+      </dialog>
   <dialog id="quick-cancel-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="quick-cancel-dialog-title">
     <form method="dialog" class="dialog-heading">
       <div>
@@ -856,13 +881,14 @@
       const quickCancelChargeId = document.getElementById("quick-cancel-charge-id");
       const quickCancelDescription = document.getElementById("quick-cancel-description");
       const quickCancelTotal = document.getElementById("quick-cancel-total");
+      const openDialog = (dialog, trigger) => window.kioskDialogs.open(dialog, trigger);
 
       document.querySelectorAll("[data-quick-button]").forEach((button) => {
         button.addEventListener("click", () => {
           priceRuleInput.value = button.dataset.ruleId;
           customQuantityInput.value = "";
           drinkName.textContent = button.dataset.ruleName || "";
-          drinkDialog.showModal();
+          openDialog(drinkDialog, button);
         });
       });
 
@@ -874,7 +900,7 @@
         button.addEventListener("click", () => {
           priceRuleInput.value = button.dataset.ruleId;
           foodDialogName.textContent = button.dataset.ruleName || "";
-          foodDialog.showModal();
+          openDialog(foodDialog, button);
         });
       });
 
@@ -946,7 +972,7 @@
             checkbox.checked = false;
           });
           showMealDateStep();
-          mealDialog.showModal();
+          openDialog(mealDialog, button);
         });
       });
 
@@ -958,30 +984,37 @@
             checkbox.checked = checkbox.value === (button.dataset.mealDate || "");
           });
           showMealPersonStep();
-          mealDialog.showModal();
+          openDialog(mealDialog, button);
         });
       });
       updateMealDateSelection();
       {% if meal_dialog_open %}
         mealInput.value = mealInput.value || "dinner";
         {% if meal_dialog_step == "persons" %}showMealPersonStep();{% else %}showMealDateStep();{% endif %}
-        mealDialog.showModal();
+        openDialog(mealDialog);
+      {% endif %}
+      {% if family_member_form.errors %}
+        openDialog(familyDialog);
       {% endif %}
       document.querySelectorAll("[data-open-meal-day-detail]").forEach((button) => {
         button.addEventListener("click", () => {
-          document.getElementById(button.dataset.openMealDayDetail)?.showModal();
+          openDialog(document.getElementById(button.dataset.openMealDayDetail), button);
         });
       });
-      document.querySelector("[data-open-family-dialog]")?.addEventListener("click", () => familyDialog.showModal());
-      document.querySelector("[data-open-checkin-dialog]")?.addEventListener("click", () => checkinDialog.showModal());
-      document.querySelector("[data-open-contact-dialog]")?.addEventListener("click", () => contactDialog.showModal());
+      document.querySelector("[data-open-family-dialog]")?.addEventListener("click", (event) => openDialog(familyDialog, event.currentTarget));
+      document.querySelector("[data-open-checkin-dialog]")?.addEventListener("click", (event) => openDialog(checkinDialog, event.currentTarget));
+      document.querySelector("[data-open-contact-dialog]")?.addEventListener("click", (event) => openDialog(contactDialog, event.currentTarget));
+      const kioskMenuDialog = document.getElementById("kiosk-menu-dialog");
+      document.querySelector("[data-open-kiosk-menu]")?.addEventListener("click", (event) =>
+        openDialog(kioskMenuDialog, event.currentTarget)
+      );
 
       document.querySelectorAll("[data-open-quick-cancel-dialog]").forEach((button) => {
         button.addEventListener("click", () => {
           quickCancelChargeId.value = button.dataset.chargeId || "";
           quickCancelDescription.textContent = button.dataset.chargeDescription || "Schnellbuchung";
           quickCancelTotal.textContent = `Betrag: ${button.dataset.chargeTotal || ""}`;
-          quickCancelDialog.showModal();
+          openDialog(quickCancelDialog, button);
         });
       });
       document
@@ -989,7 +1022,13 @@
         ?.addEventListener("click", () => quickCancelDialog.close());
 
       const summaryDialog = document.getElementById("summary-dialog");
-      document.querySelector("[data-open-summary-dialog]")?.addEventListener("click", () => summaryDialog.showModal());
+      document.querySelector("[data-open-summary-dialog]")?.addEventListener("click", (event) =>
+        openDialog(summaryDialog, event.currentTarget)
+      );
+
+      if (window.location.hash === "#meal-calendar") {
+        openDialog(document.getElementById("meal-calendar-dialog"));
+      }
 
     })();
   </script>

@@ -222,6 +222,8 @@ def test_kiosk_home_hides_normal_admin_header_and_renders_drink_dialog_controls(
     assert "Details öffnen".encode() in response.content
     assert b'id="checkin-dialog"' in response.content
     assert b"data-open-checkin-dialog" in response.content
+    assert b"data-open-kiosk-menu" in response.content
+    assert b'id="kiosk-menu-dialog"' in response.content
     assert b"Brutto:" not in response.content
     assert b"Soll:" not in response.content
 
@@ -641,9 +643,11 @@ def test_kiosk_home_renders_shared_expense_cards_with_receipt_and_rejection_deta
 
 
 @pytest.mark.django_db
-def test_kiosk_home_renders_ordered_card_grid_and_empty_expense_state(client):
+def test_kiosk_home_renders_only_ordered_core_cards_and_menu_dialogs(client):
     camp = CampFactory()
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    inviter = ParticipantFactory(camp=camp, first_name="Grace", last_name="Hopper")
+    ParticipantBookingLink.objects.create(inviter=inviter, invitee=participant)
     session = client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session.save()
@@ -656,16 +660,32 @@ def test_kiosk_home_renders_ordered_card_grid_and_empty_expense_state(client):
     card_markers = [
         b'data-kiosk-card="drinks"',
         b'data-kiosk-card="food"',
-        b'data-kiosk-card="meal-calendar"',
         b'data-kiosk-card="shifts"',
         b'data-kiosk-card="check-in"',
-        b'data-kiosk-card="quick-bookings"',
-        b'data-kiosk-card="shared-expenses"',
-        b'data-kiosk-card="family"',
-        b'data-kiosk-card="booking-links"',
     ]
     positions = [content.index(marker) for marker in card_markers]
     assert positions == sorted(positions)
+    visible_section_positions = [
+        content.index(b'class="kiosk-hero"'),
+        content.index(b"Aktuelle Abrechnung"),
+        content.index(b"<h2>Einladungen</h2>"),
+        *positions,
+    ]
+    assert visible_section_positions == sorted(visible_section_positions)
+    assert content.count(b"data-kiosk-card=") == 4
+    food_card_end = content.index(b"</section>", positions[1])
+    food_card = content[positions[1] : food_card_end]
+    assert b"data-open-meal-dialog-new" not in food_card
+    assert "Buche hier Frühstück und Snacks.".encode() in food_card
+    for dialog_id in (
+        b"kiosk-menu-dialog",
+        b"meal-calendar-dialog",
+        b"quick-bookings-dialog",
+        b"shared-expenses-dialog",
+        b"family-management-dialog",
+        b"booking-links-dialog",
+    ):
+        assert b'id="' + dialog_id + b'"' in content
     assert "Noch keine Anträge eingereicht.".encode() in content
 
 
@@ -790,7 +810,7 @@ def test_kiosk_home_shows_contact_hint_after_cutoff_before_order_sent(client, mo
 
     assert response.status_code == 200
     content = response.content.decode()
-    meal_section_start = content.index("Kalender")
+    meal_section_start = content.index('id="meal-calendar-dialog"')
     assert "melde dich bitte bei der Lagerleitung" in content[meal_section_start:]
     status_start = content.index("Die Buchung ist geschlossen.")
     calendar_start = content.index('<div class="meal-status-calendar"')
