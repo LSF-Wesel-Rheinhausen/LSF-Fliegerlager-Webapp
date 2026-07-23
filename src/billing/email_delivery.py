@@ -76,6 +76,24 @@ class SettlementRecipient:
     already_queued: bool
 
 
+def information_recipient_mapping(recipients: Iterable[InformationRecipient]) -> list[dict[str, object]]:
+    """Return the stable recipient mapping included in an information preview."""
+    return [{"email": recipient.email, "names": list(recipient.names)} for recipient in recipients]
+
+
+def settlement_recipient_mapping(recipients: Iterable[SettlementRecipient]) -> list[dict[str, object]]:
+    """Return the stable recipient mapping included in an invoice preview."""
+    return [
+        {
+            "settlement_id": recipient.settlement.pk,
+            "email": recipient.email,
+            "name": recipient.name,
+            "filename": recipient.filename,
+        }
+        for recipient in recipients
+    ]
+
+
 def _validate_message(subject: str, body: str) -> tuple[str, str]:
     clean_subject = subject.strip()
     clean_body = body.strip()
@@ -160,10 +178,16 @@ def queue_information_email_batch(
     subject: str,
     body: str,
     created_by: Any,
+    expected_recipient_mapping: list[dict[str, object]] | None = None,
 ) -> EmailBatch:
     """Queue a manually confirmed information email once per normalized address."""
     clean_subject, clean_body = _validate_message(subject, body)
     recipients = resolve_information_recipients(camp=camp, participant_ids=participant_ids)
+    if (
+        expected_recipient_mapping is not None
+        and information_recipient_mapping(recipients) != expected_recipient_mapping
+    ):
+        raise ValueError("Die Empfängerzuordnung wurde nach der Vorschau geändert.")
 
     batch = EmailBatch.objects.create(
         camp=camp,
@@ -196,6 +220,7 @@ def queue_settlement_email_batch(
     subject: str,
     body: str,
     created_by: Any,
+    expected_recipient_mapping: list[dict[str, object]] | None = None,
 ) -> EmailBatch:
     """Queue selected immutable settlement PDFs for their current participant addresses."""
     clean_subject, clean_body = _validate_message(subject, body)
@@ -211,6 +236,11 @@ def queue_settlement_email_batch(
     ).exists():
         raise ValueError("Mindestens eine Rechnung ist bereits zum Versand vorgemerkt.")
     recipients = resolve_settlement_recipients(run=run, settlement_ids=requested_ids)
+    if (
+        expected_recipient_mapping is not None
+        and settlement_recipient_mapping(recipients) != expected_recipient_mapping
+    ):
+        raise ValueError("Die Empfängerzuordnung wurde nach der Vorschau geändert.")
 
     deliveries: list[EmailDelivery] = []
     for recipient in recipients:

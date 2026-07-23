@@ -10,12 +10,14 @@ from django.views.decorators.http import require_POST
 from .email_credentials import EmailCredentialError
 from .email_delivery import (
     has_valid_recipient_email,
+    information_recipient_mapping,
     queue_information_email_batch,
     queue_settlement_email_batch,
     requeue_failed_email_delivery,
     resolve_information_recipients,
     resolve_settlement_recipients,
     send_configuration_test_email,
+    settlement_recipient_mapping,
 )
 from .email_forms import EmailConfigurationForm, InformationEmailForm, SettlementEmailForm
 from .models import Camp, EmailBatch, EmailConfiguration, EmailDelivery, EmailTestLog, SettlementRun
@@ -33,6 +35,7 @@ def _preview_payload(
     subject: str,
     body: str,
     selected_ids: list[str],
+    recipient_mapping: list[dict[str, object]],
 ) -> dict[str, object]:
     """Return the normalized state an administrator explicitly previewed."""
     return {
@@ -42,6 +45,7 @@ def _preview_payload(
         "subject": subject,
         "body": body,
         "selected_ids": sorted(int(selected_id) for selected_id in selected_ids),
+        "recipient_mapping": recipient_mapping,
     }
 
 
@@ -147,6 +151,7 @@ def information_email_compose(request, camp_id):
                 camp=camp,
                 participant_ids=form.cleaned_data["participants"],
             )
+            recipient_mapping = information_recipient_mapping(preview)
             preview_payload = _preview_payload(
                 kind=EmailBatch.Kind.INFORMATION,
                 scope_id=camp.pk,
@@ -154,6 +159,7 @@ def information_email_compose(request, camp_id):
                 subject=form.cleaned_data["subject"],
                 body=form.cleaned_data["body"],
                 selected_ids=form.cleaned_data["participants"],
+                recipient_mapping=recipient_mapping,
             )
             preview_token = _sign_preview(preview_payload)
             if request.POST.get("action") == "confirm":
@@ -163,15 +169,23 @@ def information_email_compose(request, camp_id):
                         "Auswahl oder Inhalt wurde nach der Vorschau geändert. Bitte Vorschau erneut prüfen.",
                     )
                 else:
-                    batch = queue_information_email_batch(
-                        camp=camp,
-                        participant_ids=form.cleaned_data["participants"],
-                        subject=form.cleaned_data["subject"],
-                        body=form.cleaned_data["body"],
-                        created_by=request.user,
-                    )
-                    messages.success(request, f"{batch.deliveries.count()} E-Mail(s) wurden zum Versand vorgemerkt.")
-                    return redirect("email-batch-detail", batch_id=batch.pk)
+                    try:
+                        batch = queue_information_email_batch(
+                            camp=camp,
+                            participant_ids=form.cleaned_data["participants"],
+                            subject=form.cleaned_data["subject"],
+                            body=form.cleaned_data["body"],
+                            created_by=request.user,
+                            expected_recipient_mapping=recipient_mapping,
+                        )
+                    except ValueError as error:
+                        form.add_error(None, str(error))
+                    else:
+                        messages.success(
+                            request,
+                            f"{batch.deliveries.count()} E-Mail(s) wurden zum Versand vorgemerkt.",
+                        )
+                        return redirect("email-batch-detail", batch_id=batch.pk)
     missing_participants = [
         participant for participant in participants if not has_valid_recipient_email(participant.email)
     ]
@@ -220,6 +234,7 @@ def settlement_email_compose(request, run_id):
                 run=run,
                 settlement_ids=form.cleaned_data["settlements"],
             )
+            recipient_mapping = settlement_recipient_mapping(preview)
             preview_payload = _preview_payload(
                 kind=EmailBatch.Kind.SETTLEMENT,
                 scope_id=run.pk,
@@ -227,6 +242,7 @@ def settlement_email_compose(request, run_id):
                 subject=form.cleaned_data["subject"],
                 body=form.cleaned_data["body"],
                 selected_ids=form.cleaned_data["settlements"],
+                recipient_mapping=recipient_mapping,
             )
             preview_token = _sign_preview(preview_payload)
             has_previously_sent = any(recipient.previously_sent for recipient in preview)
@@ -247,6 +263,7 @@ def settlement_email_compose(request, run_id):
                             subject=form.cleaned_data["subject"],
                             body=form.cleaned_data["body"],
                             created_by=request.user,
+                            expected_recipient_mapping=recipient_mapping,
                         )
                     except ValueError as error:
                         form.add_error(None, str(error))

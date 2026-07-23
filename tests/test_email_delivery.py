@@ -17,9 +17,13 @@ from billing.email_credentials import EmailCredentialError
 from billing.email_delivery import (
     EMAIL_RETRY_DELAYS,
     EmailDeliveryResult,
+    information_recipient_mapping,
     queue_information_email_batch,
     queue_settlement_email_batch,
+    resolve_information_recipients,
+    resolve_settlement_recipients,
     send_due_email_deliveries,
+    settlement_recipient_mapping,
 )
 from billing.models import EmailBatch, EmailConfiguration, EmailDelivery, EmailTestLog
 from billing.permissions import EDITOR_GROUP
@@ -482,6 +486,107 @@ def test_admin_previews_and_confirms_selected_snapshot_recipient_mapping(client)
     assert confirmed["Location"] == reverse("email-batch-detail", args=[batch.pk])
     assert batch.settlement_run == run
     assert batch.deliveries.get().settlement == snapshot
+
+
+@pytest.mark.django_db
+def test_compose_confirmation_rejects_recipient_address_changed_after_preview(client):
+    admin = SuperUserFactory()
+    participant = ParticipantFactory(email="previewed@example.test")
+    ChargeFactory(participant=participant)
+    run = create_settlement_run(participant.camp, admin)
+    snapshot = run.settlements.get()
+    configuration = EmailConfiguration.load()
+    configuration.enabled = True
+    configuration.host = "smtp.example.test"
+    configuration.from_email = "lager@example.test"
+    configuration.set_password("smtp-secret")
+    configuration.save()
+    client.force_login(admin)
+    information_url = reverse("information-email-compose", args=[participant.camp_id])
+    information_data = {
+        "subject": "Information",
+        "body": "Nachricht",
+        "participants": [str(participant.pk)],
+    }
+    information_preview = client.post(information_url, {**information_data, "action": "preview"})
+    settlement_url = reverse("settlement-email-compose", args=[run.pk])
+    settlement_data = {
+        "subject": "Abrechnung",
+        "body": "Deine Abrechnung.",
+        "settlements": [str(snapshot.pk)],
+    }
+    settlement_preview = client.post(settlement_url, {**settlement_data, "action": "preview"})
+
+    participant.email = "changed@example.test"
+    participant.save(update_fields=["email", "updated_at"])
+
+    information_confirmation = client.post(
+        information_url,
+        {
+            **information_data,
+            "action": "confirm",
+            "preview_token": information_preview.context["preview_token"],
+        },
+    )
+    settlement_confirmation = client.post(
+        settlement_url,
+        {
+            **settlement_data,
+            "action": "confirm",
+            "preview_token": settlement_preview.context["preview_token"],
+        },
+    )
+
+    assert information_confirmation.status_code == 200
+    assert settlement_confirmation.status_code == 200
+    assert b"nach der Vorschau ge\xc3\xa4ndert" in information_confirmation.content
+    assert b"nach der Vorschau ge\xc3\xa4ndert" in settlement_confirmation.content
+    assert EmailBatch.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_queue_revalidates_previewed_recipient_mapping_inside_transaction():
+    admin = SuperUserFactory()
+    participant = ParticipantFactory(email="previewed@example.test")
+    ChargeFactory(participant=participant)
+    run = create_settlement_run(participant.camp, admin)
+    snapshot = run.settlements.get()
+    information_mapping = information_recipient_mapping(
+        resolve_information_recipients(
+            camp=participant.camp,
+            participant_ids=[participant.pk],
+        )
+    )
+    settlement_mapping = settlement_recipient_mapping(
+        resolve_settlement_recipients(
+            run=run,
+            settlement_ids=[snapshot.pk],
+        )
+    )
+
+    participant.email = "changed@example.test"
+    participant.save(update_fields=["email", "updated_at"])
+
+    with pytest.raises(ValueError, match="Empfängerzuordnung"):
+        queue_information_email_batch(
+            camp=participant.camp,
+            participant_ids=[participant.pk],
+            subject="Information",
+            body="Nachricht",
+            created_by=admin,
+            expected_recipient_mapping=information_mapping,
+        )
+    with pytest.raises(ValueError, match="Empfängerzuordnung"):
+        queue_settlement_email_batch(
+            run=run,
+            settlement_ids=[snapshot.pk],
+            subject="Abrechnung",
+            body="Deine Abrechnung.",
+            created_by=admin,
+            expected_recipient_mapping=settlement_mapping,
+        )
+
+    assert EmailBatch.objects.count() == 0
 
 
 @pytest.mark.django_db
