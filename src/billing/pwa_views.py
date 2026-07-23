@@ -4,7 +4,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.templatetags.static import static
 
-PWA_CACHE_VERSION = 3
+PWA_CACHE_VERSION = 4
 
 PWA_SURFACES: dict[str, dict[str, str]] = {
     "admin": {
@@ -77,7 +77,7 @@ def service_worker(request: HttpRequest, surface: str) -> HttpResponse:
             "offline_url": "/offline/",
             "static_assets": [
                 "/offline/",
-                static("billing/app.css"),
+                static("billing/app-v8.css"),
                 static("billing/theme.js"),
                 static("billing/pwa.js"),
                 static("billing/logo.jpg"),

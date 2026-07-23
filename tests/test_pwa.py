@@ -5,7 +5,7 @@ from django.templatetags.static import static
 from django.urls import reverse
 
 from billing.views import KIOSK_PARTICIPANT_SESSION_KEY
-from tests.factories import CampFactory, ParticipantFactory
+from tests.factories import CampFactory, ParticipantFactory, UserFactory
 
 
 @pytest.mark.django_db
@@ -29,10 +29,21 @@ def test_private_kiosk_exposes_install_guide_and_apple_touch_icon(client):
     response = client.get(reverse("kiosk-login"))
 
     assert response.status_code == 200
+    assert b"/static/billing/app-v8.css" in response.content
     assert b"data-pwa-install" in response.content
     assert b"data-pwa-install-dialog" in response.content
     assert b'rel="apple-touch-icon"' in response.content
     assert b"/static/billing/icons/icon-192.png" in response.content
+
+
+@pytest.mark.django_db
+def test_admin_login_busts_stylesheet_cache(client):
+    UserFactory()
+
+    response = client.get(reverse("login"))
+
+    assert response.status_code == 200
+    assert b"/static/billing/app-v8.css" in response.content
 
 
 @pytest.mark.django_db
@@ -133,9 +144,9 @@ def test_pwa_manifests_are_surface_specific(client, route_name, expected_scope, 
 @pytest.mark.parametrize(
     ("route_name", "expected_scope", "expected_cache_name"),
     [
-        ("pwa-worker-admin", "/", "fliegerlager-admin-v3"),
-        ("pwa-worker-kiosk", "/kiosk/", "fliegerlager-kiosk-v3"),
-        ("pwa-worker-central", "/central/kiosk/", "fliegerlager-central-v3"),
+        ("pwa-worker-admin", "/", "fliegerlager-admin-v4"),
+        ("pwa-worker-kiosk", "/kiosk/", "fliegerlager-kiosk-v4"),
+        ("pwa-worker-central", "/central/kiosk/", "fliegerlager-central-v4"),
     ],
 )
 def test_service_workers_have_explicit_scopes(client, route_name, expected_scope, expected_cache_name):
@@ -147,6 +158,8 @@ def test_service_workers_have_explicit_scopes(client, route_name, expected_scope
     assert response["Cache-Control"] == "no-cache"
     javascript = response.content.decode().replace("\\u002D", "-")
     assert expected_cache_name in javascript
+    assert "/static/billing/app-v8.css" in javascript
+    assert '"/static/billing/app.css"' not in javascript
     assert b"offline" in response.content
     assert b'request.method !== "GET"' in response.content
 

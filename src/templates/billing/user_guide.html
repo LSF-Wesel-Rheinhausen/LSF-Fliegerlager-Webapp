@@ -18,7 +18,7 @@
       <li><strong>PIN vergessen?</strong> Wende dich an die Lagerleitung (Bearbeiter oder Admin). Sie können deine PIN zurücksetzen, sodass du beim nächsten Login eine neue vergeben kannst.</li>
     </ul>
     <div class="guide-media">
-      <img src="{% static 'billing/docs/kiosk_login.gif' %}" alt="Animation: Login und PIN-Eingabe" width="768" height="576" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+      <img src="{% static 'billing/docs/kiosk_login.gif' %}?v=2" alt="Animation: Login und PIN-Eingabe" width="768" height="576" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
       <p class="placeholder-text" style="display:none;">(Hinweis für Admins: Bitte Datei <code>src/static/billing/docs/kiosk_login.gif</code> hinterlegen)</p>
     </div>
   </section>
@@ -28,25 +28,25 @@
     <p>Getränke, Frühstück und Snacks werden sofort auf deinen "Deckel" geschrieben. Du siehst deine offene Summe immer ganz oben auf der Startseite.</p>
     <ul class="guide-step-list">
       <li><strong>Buchen:</strong> Tippe auf die gewünschte Kachel (z.B. "Wasser", "Frühstück" oder "Snack"). Es öffnet sich ein Dialog, wo du Menge, Datum und Zielperson wählen kannst.</li>
-      <li><strong>Stornieren:</strong> Wenn du dich vertippt hast, scrolle auf der Startseite zu <em>Letzte Schnellbuchungen</em>. Dort kannst du eigene Buchungen und selbst ausgelöste Buchungen für verknüpfte Personen 15 Minuten lang stornieren.</li>
+      <li><strong>Stornieren:</strong> Wenn du dich vertippt hast, öffne <em>Menü → Letzte Schnellbuchungen</em>. Dort kannst du eigene Buchungen und selbst ausgelöste Buchungen für verknüpfte Personen 15 Minuten lang stornieren.</li>
     </ul>
     <div class="guide-media">
-      <img src="{% static 'billing/docs/kiosk_drinks.gif' %}" alt="Animation: Getränke buchen und stornieren" width="768" height="576" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+      <img src="{% static 'billing/docs/kiosk_drinks.gif' %}?v=2" alt="Animation: Getränke buchen und stornieren" width="768" height="576" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
       <p class="placeholder-text" style="display:none;">(Hinweis für Admins: Bitte Datei <code>src/static/billing/docs/kiosk_drinks.gif</code> hinterlegen)</p>
     </div>
   </section>
 
   <section class="guide-section" id="kiosk-meals">
     <h2>3. Mahlzeiten an- und abmelden</h2>
-    <p>Im Essenskalender kannst du dich für kommende Mahlzeiten eintragen. Vergangene Fristen (grau markiert) können nicht mehr bearbeitet werden.</p>
+    <p>Über <em>Menü → Essenskalender</em> kannst du dich für kommende Mahlzeiten eintragen. Vergangene Fristen (grau markiert) können nicht mehr bearbeitet werden.</p>
     <ul class="guide-step-list">
-      <li><strong>Anmelden:</strong> Tippe im Essenskalender auf den gewünschten Lagertag. Ein Dialog öffnet sich. Setze das Häkchen bei deinem Namen.</li>
+      <li><strong>Anmelden:</strong> Öffne <em>Menü → Essenskalender</em> und tippe auf den gewünschten Lagertag. Ein Dialog öffnet sich. Setze das Häkchen bei deinem Namen.</li>
       <li><strong>Variante wählen:</strong> Neben deinem Namen kannst du im Dropdown zwischen "Normal" und "Vegetarisch" (bzw. weiteren angebotenen Optionen) wählen.</li>
       <li><strong>Familie & Freunde:</strong> Wenn du Familienmitglieder angelegt oder Mitbucher verknüpft hast (siehe nächster Punkt), kannst du diese hier direkt mit anmelden.</li>
       <li>Klicke am Ende auf "Essensanmeldung speichern".</li>
     </ul>
     <div class="guide-media">
-      <img src="{% static 'billing/docs/kiosk_meals.gif' %}" alt="Animation: Essen anmelden" width="768" height="576" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+      <img src="{% static 'billing/docs/kiosk_meals.gif' %}?v=2" alt="Animation: Essen anmelden" width="768" height="576" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
       <p class="placeholder-text" style="display:none;">(Hinweis für Admins: Bitte Datei <code>src/static/billing/docs/kiosk_meals.gif</code> hinterlegen)</p>
     </div>
   </section>
@@ -55,11 +55,11 @@
     <h2>4. Familie und gegenseitiges Mitbuchen</h2>
     <p>Oft meldet man nicht nur sich selbst zum Essen an, sondern auch Partner, Kinder oder gute Freunde.</p>
     <ul class="guide-step-list">
-      <li><strong>Familie:</strong> Unter "Familie" kannst du Angehörige anlegen. Diese Personen erhalten keinen eigenen Login. Wenn du sie zum Essen anmeldest, werden ihre Mahlzeiten auf <strong>deiner Endabrechnung</strong> gebucht.</li>
-      <li><strong>Mitbuchungen (Freunde):</strong> Unter "Mitbuchungen" kannst du andere Lagerteilnehmer (die einen eigenen Kiosk-Login haben) einladen. Sobald diese die Einladung bei sich annehmen, könnt ihr euch gegenseitig beim Essen auswählen. <strong>Die Abrechnung bleibt jedoch strikt getrennt!</strong> Jeder zahlt sein eigenes Essen.</li>
+      <li><strong>Familie:</strong> Unter <em>Menü → Familie</em> kannst du Angehörige anlegen. Diese Personen erhalten keinen eigenen Login. Wenn du sie zum Essen anmeldest, werden ihre Mahlzeiten auf <strong>deiner Endabrechnung</strong> gebucht.</li>
+      <li><strong>Mitbuchungen (Freunde):</strong> Unter <em>Menü → Mitbuchungen</em> kannst du andere Lagerteilnehmer (die einen eigenen Kiosk-Login haben) einladen. Sobald diese die Einladung bei sich annehmen, könnt ihr euch gegenseitig beim Essen auswählen. <strong>Die Abrechnung bleibt jedoch strikt getrennt!</strong> Jeder zahlt sein eigenes Essen.</li>
     </ul>
     <div class="guide-media">
-      <img src="{% static 'billing/docs/kiosk_family.gif' %}" alt="Animation: Familie und Mitbuchungen" width="768" height="576" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+      <img src="{% static 'billing/docs/kiosk_family.gif' %}?v=2" alt="Animation: Familie und Mitbuchungen" width="768" height="576" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
       <p class="placeholder-text" style="display:none;">(Hinweis für Admins: Bitte Datei <code>src/static/billing/docs/kiosk_family.gif</code> hinterlegen)</p>
     </div>
   </section>
@@ -72,7 +72,7 @@
       <li><strong>Dienst tauschen/abgeben:</strong> Unter "Meine übernommenen Dienste" siehst du deine Schichten. Falls du verhindert bist, klicke auf "Zum Tausch anbieten". Der Dienst erscheint dann bei allen anderen ganz oben grün hervorgehoben als Tauschangebot. Erst wenn jemand anderes ihn übernimmt, bist du ausgetragen!</li>
     </ul>
     <div class="guide-media">
-      <img src="{% static 'billing/docs/kiosk_shifts.gif' %}" alt="Animation: Dienste eintragen und tauschen" width="768" height="576" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+      <img src="{% static 'billing/docs/kiosk_shifts.gif' %}?v=2" alt="Animation: Dienste eintragen und tauschen" width="768" height="576" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
       <p class="placeholder-text" style="display:none;">(Hinweis für Admins: Bitte Datei <code>src/static/billing/docs/kiosk_shifts.gif</code> hinterlegen)</p>
     </div>
   </section>

@@ -10,7 +10,7 @@ from tests.factories import CampFactory, ParticipantFactory, PaymentFactory, Sup
 
 def test_template_theme_properties_are_defined_in_the_shared_stylesheet():
     project_root = Path(__file__).resolve().parents[1]
-    stylesheet = (project_root / "src/static/billing/app.css").read_text(encoding="utf-8")
+    stylesheet = (project_root / "src/static/billing/app-v8.css").read_text(encoding="utf-8")
     templates = "\n".join(path.read_text(encoding="utf-8") for path in (project_root / "src/templates").rglob("*.html"))
 
     defined_properties = set(re.findall(r"(--[a-z0-9-]+)\s*:", stylesheet))

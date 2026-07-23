@@ -2,7 +2,7 @@
 
 Statische Assets der Billing-Oberflaeche.
 
-- `app.css`: Zentrales Stylesheet fuer Layout, Topbar, Formulare, Tabellen, Kennzahlen und responsive Regeln.
+- `app-v8.css`: Zentrales Stylesheet fuer Layout, Topbar, Formulare, Tabellen, Kennzahlen und responsive Regeln.
 - `passkeys.js`: WebAuthn-Registrierung und benutzernamenloser Passkey-Login über CSRF-geschützte JSON-Endpunkte.
 - `logo.jpg`: Vereinslogo der Luftsportfreunde Wesel-Rheinhausen e.V.
 

@@ -12,7 +12,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <script src="{% static 'billing/theme.js' %}?v=1"></script>
     <script src="{% static 'billing/pwa.js' %}?v=2" defer></script>
-    <link rel="stylesheet" href="{% static 'billing/app.css' %}?v=7">
+    <link rel="stylesheet" href="{% static 'billing/app-v8.css' %}">
   </head>
   <body class="kiosk-shell">
     <header class="topbar kiosk-topbar">
@@ -127,13 +127,64 @@
       </div>
     </dialog>
     <script nonce="{{ request.csp_nonce }}">
+      window.kioskDialogs = (() => {
+        const suppressedClose = new WeakSet();
+        const returnTargets = new WeakMap();
+        const rootFocusTargets = new WeakMap();
+        const boundDialogs = new WeakSet();
+
+        const bind = (dialog) => {
+          if (!dialog || boundDialogs.has(dialog)) return;
+          boundDialogs.add(dialog);
+          dialog.addEventListener("close", () => {
+            if (suppressedClose.delete(dialog)) return;
+            const returnTarget = returnTargets.get(dialog);
+            returnTargets.delete(dialog);
+            if (returnTarget?.dialog?.isConnected && !returnTarget.dialog.open) {
+              returnTarget.dialog.showModal();
+              window.requestAnimationFrame(() => returnTarget.focus?.focus());
+              return;
+            }
+            const rootFocusTarget = rootFocusTargets.get(dialog);
+            rootFocusTargets.delete(dialog);
+            window.requestAnimationFrame(() => rootFocusTarget?.focus());
+          });
+        };
+
+        const open = (dialog, trigger = document.activeElement) => {
+          if (!dialog || dialog.open) return;
+          bind(dialog);
+          const currentDialog = trigger?.closest?.("dialog[open]") || document.querySelector("dialog[open]");
+          if (currentDialog && currentDialog !== dialog) {
+            bind(currentDialog);
+            suppressedClose.add(currentDialog);
+            currentDialog.close();
+            returnTargets.set(dialog, { dialog: currentDialog, focus: trigger });
+          } else if (trigger?.focus) {
+            rootFocusTargets.set(dialog, trigger);
+          }
+          dialog.showModal();
+        };
+
+        document.querySelectorAll("dialog").forEach(bind);
+        document.addEventListener("click", (event) => {
+          const closeButton = event.target.closest("[data-close-dialog]");
+          if (closeButton) closeButton.closest("dialog")?.close();
+
+          const targetButton = event.target.closest("[data-dialog-target]");
+          if (targetButton) open(document.getElementById(targetButton.dataset.dialogTarget), targetButton);
+        });
+
+        return { open };
+      })();
+
       document.addEventListener("click", (e) => {
         const btn = e.target.closest(".kiosk-help-button");
         if (btn) {
           const dialog = document.getElementById("kiosk-help-dialog");
           const content = document.getElementById("kiosk-help-content");
           content.textContent = btn.dataset.helpText;
-          dialog.showModal();
+          window.kioskDialogs.open(dialog, btn);
         }
       });
     </script>

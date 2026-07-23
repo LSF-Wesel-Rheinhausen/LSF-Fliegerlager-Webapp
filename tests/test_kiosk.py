@@ -35,6 +35,21 @@ def _freeze_meal_lock_time(monkeypatch, fixed_now):
 
 
 @pytest.mark.django_db
+def test_kiosk_user_guide_points_menu_only_sections_to_menu(client):
+    response = client.get(reverse("user-guide"))
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert "Menü → Letzte Schnellbuchungen" in content
+    assert "Menü → Essenskalender" in content
+    assert "Menü → Familie" in content
+    assert "Menü → Mitbuchungen" in content
+    assert "scrolle auf der Startseite" not in content
+    for animation in ("login", "drinks", "meals", "family", "shifts"):
+        assert f"/static/billing/docs/kiosk_{animation}.gif?v=2" in content
+
+
+@pytest.mark.django_db
 def test_kiosk_login_rejects_empty_participant_placeholder(client):
     response = client.post(reverse("kiosk-login"), {"participant": "", "pin": "1234"})
 
@@ -222,6 +237,8 @@ def test_kiosk_home_hides_normal_admin_header_and_renders_drink_dialog_controls(
     assert "Details öffnen".encode() in response.content
     assert b'id="checkin-dialog"' in response.content
     assert b"data-open-checkin-dialog" in response.content
+    assert b"data-open-kiosk-menu" in response.content
+    assert b'id="kiosk-menu-dialog"' in response.content
     assert b"Brutto:" not in response.content
     assert b"Soll:" not in response.content
 
@@ -641,9 +658,11 @@ def test_kiosk_home_renders_shared_expense_cards_with_receipt_and_rejection_deta
 
 
 @pytest.mark.django_db
-def test_kiosk_home_renders_ordered_card_grid_and_empty_expense_state(client):
+def test_kiosk_home_renders_only_ordered_core_cards_and_menu_dialogs(client):
     camp = CampFactory()
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    inviter = ParticipantFactory(camp=camp, first_name="Grace", last_name="Hopper")
+    ParticipantBookingLink.objects.create(inviter=inviter, invitee=participant)
     session = client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session.save()
@@ -656,16 +675,32 @@ def test_kiosk_home_renders_ordered_card_grid_and_empty_expense_state(client):
     card_markers = [
         b'data-kiosk-card="drinks"',
         b'data-kiosk-card="food"',
-        b'data-kiosk-card="meal-calendar"',
         b'data-kiosk-card="shifts"',
         b'data-kiosk-card="check-in"',
-        b'data-kiosk-card="quick-bookings"',
-        b'data-kiosk-card="shared-expenses"',
-        b'data-kiosk-card="family"',
-        b'data-kiosk-card="booking-links"',
     ]
     positions = [content.index(marker) for marker in card_markers]
     assert positions == sorted(positions)
+    visible_section_positions = [
+        content.index(b'class="kiosk-hero"'),
+        content.index(b"Aktuelle Abrechnung"),
+        content.index(b"<h2>Einladungen</h2>"),
+        *positions,
+    ]
+    assert visible_section_positions == sorted(visible_section_positions)
+    assert content.count(b"data-kiosk-card=") == 4
+    food_card_end = content.index(b"</section>", positions[1])
+    food_card = content[positions[1] : food_card_end]
+    assert b"data-open-meal-dialog-new" not in food_card
+    assert "Buche hier Frühstück und Snacks.".encode() in food_card
+    for dialog_id in (
+        b"kiosk-menu-dialog",
+        b"meal-calendar-dialog",
+        b"quick-bookings-dialog",
+        b"shared-expenses-dialog",
+        b"family-management-dialog",
+        b"booking-links-dialog",
+    ):
+        assert b'id="' + dialog_id + b'"' in content
     assert "Noch keine Anträge eingereicht.".encode() in content
 
 
@@ -790,7 +825,7 @@ def test_kiosk_home_shows_contact_hint_after_cutoff_before_order_sent(client, mo
 
     assert response.status_code == 200
     content = response.content.decode()
-    meal_section_start = content.index("Kalender")
+    meal_section_start = content.index('id="meal-calendar-dialog"')
     assert "melde dich bitte bei der Lagerleitung" in content[meal_section_start:]
     status_start = content.index("Die Buchung ist geschlossen.")
     calendar_start = content.index('<div class="meal-status-calendar"')
@@ -1902,6 +1937,52 @@ def test_kiosk_creates_family_member_and_books_meal_on_guardian(client, monkeypa
     charge = Charge.objects.get(participant=participant, kind=Charge.Kind.FOOD)
     assert charge.description == "Abendessen Kind Abendessen für Kind Muster"
     assert charge.unit_price == Decimal("4.00")
+
+
+@pytest.mark.django_db
+def test_kiosk_deactivates_own_family_member(client):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    family_member = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Byron",
+        last_name="Lovelace",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "family_member_deactivate",
+            "family_member_id": family_member.pk,
+        },
+    )
+
+    assert response.status_code == 302
+    family_member.refresh_from_db()
+    assert family_member.is_active is False
+
+
+@pytest.mark.django_db
+def test_invalid_booking_link_invite_reopens_management_dialog(client):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "booking_link_invite",
+            "link-participant": "",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.context["booking_link_form"].errors
+    assert b'id="booking-links-dialog" data-auto-open-dialog' in response.content
 
 
 @pytest.mark.django_db

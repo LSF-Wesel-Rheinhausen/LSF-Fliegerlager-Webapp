@@ -56,14 +56,14 @@ def test_whitenoise_does_not_add_wildcard_cors_header():
 @override_settings(DEBUG=False)
 @pytest.mark.django_db
 def test_static_responses_keep_same_origin_protection(tmp_path):
-    static_file = tmp_path / "billing" / "app.css"
+    static_file = tmp_path / "billing" / "app-v8.css"
     static_file.parent.mkdir(parents=True)
     static_file.write_text("body { color: black; }", encoding="utf-8")
 
     with override_settings(STATIC_ROOT=tmp_path):
         static_handler = WhiteNoiseMiddleware(lambda request: HttpResponse(status=404))
         middleware = SecurityHeadersMiddleware(static_handler)
-        response = middleware(RequestFactory().get("/static/billing/app.css"))
+        response = middleware(RequestFactory().get("/static/billing/app-v8.css"))
 
     try:
         assert response.status_code == 200

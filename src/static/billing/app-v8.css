@@ -893,6 +893,35 @@ textarea {
   min-height: 36px;
 }
 
+.kiosk-menu {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.kiosk-menu__item {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 48px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-soft);
+  color: var(--text);
+  font: inherit;
+  font-weight: 750;
+  text-align: left;
+}
+
+.kiosk-menu__item:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  text-decoration: none;
+}
+
 .kiosk-header-actions {
   display: flex;
   flex: 0 0 auto;
@@ -2268,6 +2297,16 @@ textarea {
     align-items: stretch;
   }
 
+  .topbar .kiosk-nav,
+  .kiosk-menu {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar .kiosk-nav {
+    display: grid;
+    width: 100%;
+  }
+
   .kiosk-topbar {
     gap: 16px;
   }
@@ -2616,6 +2655,11 @@ dialog {
   margin: auto;
   position: fixed;
   top: 0; bottom: 0; left: 0; right: 0;
+}
+
+.kiosk-dialog {
+  max-height: calc(100vh - 32px);
+  overflow: auto;
 }
 
 .kiosk-dialog--compact {

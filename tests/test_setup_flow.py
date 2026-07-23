@@ -78,4 +78,4 @@ def test_setup_is_disabled_after_user_exists(client):
 
 
 def test_app_stylesheet_is_discoverable_by_staticfiles():
-    assert finders.find("billing/app.css")
+    assert finders.find("billing/app-v8.css")
