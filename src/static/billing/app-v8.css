@@ -895,13 +895,14 @@ textarea {
 
 .kiosk-menu {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 10px;
 }
 
 .kiosk-menu__item {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   justify-content: flex-start;
   min-height: 48px;
   width: 100%;
@@ -915,11 +916,22 @@ textarea {
   text-align: left;
 }
 
+.kiosk-menu__item small {
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
 .kiosk-menu__item:hover {
   border-color: var(--accent);
   background: var(--accent-soft);
   color: var(--accent-dark);
   text-decoration: none;
+}
+
+.kiosk-menu__item:hover small {
+  color: inherit;
 }
 
 .kiosk-header-actions {
@@ -2672,27 +2684,6 @@ dialog {
   max-width: min(1120px, calc(100vw - 32px));
   max-height: calc(100vh - 32px);
   overflow: auto;
-}
-
-.pdf-dialog {
-  width: min(960px, calc(100vw - 32px));
-  max-width: min(960px, calc(100vw - 32px));
-  max-height: calc(100vh - 32px);
-  padding: 16px;
-  flex-direction: column;
-}
-
-.pdf-dialog[open] {
-  display: flex;
-}
-
-.pdf-dialog iframe {
-  flex: 1;
-  width: 100%;
-  min-height: calc(100vh - 120px);
-  border: 1px solid var(--line);
-  border-radius: calc(var(--radius) - 2px);
-  background: white;
 }
 
 dialog::backdrop {

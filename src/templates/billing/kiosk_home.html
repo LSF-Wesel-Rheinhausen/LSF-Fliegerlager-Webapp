@@ -2,7 +2,13 @@
 {% load billing_format %}
 {% block title %}Kiosk{% endblock %}
 {% block kiosk_nav %}
-  <button type="button" class="button button-secondary" data-open-kiosk-menu>Menü</button>
+  <button
+    type="button"
+    class="button button-secondary"
+    data-open-kiosk-menu
+    aria-controls="kiosk-menu-dialog"
+    aria-haspopup="dialog"
+  ><span aria-hidden="true">☰</span> Weitere Bereiche öffnen</button>
   <a class="button button-secondary" href="{{ kiosk_urls.logout }}">Abmelden</a>
 {% endblock %}
 {% block content %}
@@ -64,19 +70,43 @@
 
   <dialog id="kiosk-menu-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="kiosk-menu-dialog-title">
     <form method="dialog" class="dialog-heading">
-      <h2 id="kiosk-menu-dialog-title">Menü</h2>
+      <h2 id="kiosk-menu-dialog-title">Weitere Bereiche</h2>
       <button class="button button-secondary">Schließen</button>
     </form>
     <nav class="kiosk-menu" aria-label="Kiosk-Bereiche">
-      <button type="button" class="kiosk-menu__item" data-dialog-target="meal-calendar-dialog">Essenskalender</button>
-      <button type="button" class="kiosk-menu__item" data-dialog-target="quick-bookings-dialog">Letzte Schnellbuchungen</button>
-      <button type="button" class="kiosk-menu__item" data-dialog-target="shared-expenses-dialog">Gemeinschaftsausgaben</button>
-      <button type="button" class="kiosk-menu__item" data-dialog-target="family-management-dialog">Familie</button>
-      <button type="button" class="kiosk-menu__item" data-dialog-target="booking-links-dialog">Mitbuchungen</button>
-      <a class="kiosk-menu__item" href="{% url 'user-guide' %}">Hilfe</a>
-      <button type="button" class="kiosk-menu__item" data-dialog-target="contact-dialog">Kontakt Lagerleitung</button>
+      <button type="button" class="kiosk-menu__item" data-dialog-target="meal-calendar-dialog">
+        <span>Essenskalender</span>
+        <small>Abendessen nach Lagertag buchen und verwalten.</small>
+      </button>
+      <button type="button" class="kiosk-menu__item" data-dialog-target="quick-bookings-dialog">
+        <span>Letzte Schnellbuchungen</span>
+        <small>Getränke, Frühstück und Snacks prüfen oder stornieren.</small>
+      </button>
+      <button type="button" class="kiosk-menu__item" data-dialog-target="shared-expenses-dialog">
+        <span>Gemeinschaftsausgaben</span>
+        <small>Vorgestreckte Ausgaben einreichen und ihren Status sehen.</small>
+      </button>
+      <button type="button" class="kiosk-menu__item" data-dialog-target="family-management-dialog">
+        <span>Familie</span>
+        <small>Begleitpersonen und Kinder verwalten.</small>
+      </button>
+      <button type="button" class="kiosk-menu__item" data-dialog-target="booking-links-dialog">
+        <span>Mitbuchungen</span>
+        <small>Einladungen und gegenseitige Buchungsfreigaben verwalten.</small>
+      </button>
+      <a class="kiosk-menu__item" href="{% url 'user-guide' %}">
+        <span>Hilfe</span>
+        <small>Anleitungen zu den wichtigsten Kiosk-Abläufen öffnen.</small>
+      </a>
+      <button type="button" class="kiosk-menu__item" data-dialog-target="contact-dialog">
+        <span>Kontakt Lagerleitung</span>
+        <small>Ansprechpersonen und Kontaktdaten anzeigen.</small>
+      </button>
       {% if kiosk_mode == "private" and web_push_enabled %}
-        <a class="kiosk-menu__item" href="{% url 'kiosk-notification-settings' %}">Benachrichtigungen</a>
+        <a class="kiosk-menu__item" href="{% url 'kiosk-notification-settings' %}">
+          <span>Benachrichtigungen</span>
+          <small>Nachrichtenauswahl und registrierte Geräte verwalten.</small>
+        </a>
       {% endif %}
     </nav>
   </dialog>
@@ -1026,9 +1056,16 @@
         openDialog(summaryDialog, event.currentTarget)
       );
 
-      if (window.location.hash === "#meal-calendar") {
+      const openRequestedMealCalendar = () => {
+        const requestedDialog = new URLSearchParams(window.location.search).get("dialog");
+        const requestedMealCalendar =
+          requestedDialog === "meal-calendar" || window.location.hash === "#meal-calendar";
+        if (!requestedMealCalendar) return;
         openDialog(document.getElementById("meal-calendar-dialog"));
-      }
+        window.history.replaceState({}, "", window.location.pathname);
+      };
+      window.addEventListener("hashchange", openRequestedMealCalendar);
+      openRequestedMealCalendar();
       document.querySelectorAll("[data-auto-open-dialog]").forEach((dialog) => openDialog(dialog));
 
     })();

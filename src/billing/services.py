@@ -110,17 +110,30 @@ def rate(value):
     return (value or ZERO).quantize(Decimal("0.0001"))
 
 
-def is_meal_change_locked(camp: Camp, meal_date: date, now: datetime | None = None) -> bool:
+def is_meal_change_locked(
+    camp: Camp,
+    meal_date: date,
+    now: datetime | None = None,
+    sent_order_dates: set[date] | None = None,
+) -> bool:
     """Return whether kiosk meal changes are closed for the requested meal date.
 
     Args:
         camp: Camp whose cutoff time controls kiosk meal changes.
         meal_date: Meal date the participant wants to book or retract.
         now: Optional timezone-aware timestamp for tests.
+        sent_order_dates: Optional preloaded dates whose catering orders were sent.
 
     Returns:
-        True when the meal date is in the past or tomorrow's bookings are past the camp cutoff time.
+        True when the catering order was sent, the meal date is in the past, or tomorrow's bookings are past cutoff.
     """
+    order_was_sent = (
+        meal_date in sent_order_dates
+        if sent_order_dates is not None
+        else MealOrder.objects.filter(camp=camp, meal_date=meal_date).exists()
+    )
+    if order_was_sent:
+        return True
     current_time = timezone.localtime(now) if now is not None else timezone.localtime()
     if meal_date <= current_time.date():
         return True
@@ -132,8 +145,19 @@ def is_meal_change_locked(camp: Camp, meal_date: date, now: datetime | None = No
     return meal_date == current_time.date() + timedelta(days=1) and current_time >= cutoff_at
 
 
-def meal_change_lock_message(camp: Camp, meal_date: date) -> str:
+def meal_change_lock_message(
+    camp: Camp,
+    meal_date: date,
+    sent_order_dates: set[date] | None = None,
+) -> str:
     """Return the user-facing message for a closed kiosk meal slot."""
+    order_was_sent = (
+        meal_date in sent_order_dates
+        if sent_order_dates is not None
+        else MealOrder.objects.filter(camp=camp, meal_date=meal_date).exists()
+    )
+    if order_was_sent:
+        return f"Die Bestellung für {meal_date:%d.%m.%Y} wurde bereits abgeschickt."
     if meal_date <= timezone.localdate():
         return f"Buchungen und Rücknahmen für {meal_date:%d.%m.%Y} sind geschlossen."
     return (
@@ -699,11 +723,34 @@ def participant_kiosk_summary(participant):
 
 
 @transaction.atomic
-def approve_shared_expense(expense: Expense, approved_by: Any, participant_ids: list[int] | None = None) -> None:
+def approve_shared_expense(
+    expense: Expense,
+    approved_by: Any,
+    participant_ids: list[int] | None = None,
+    *,
+    allocation_method: str | None = None,
+    cost_center: str | None = None,
+) -> None:
+    """Approve a shared expense and atomically persist its allocation decision.
+
+    Args:
+        expense: Pending expense to approve.
+        approved_by: User approving the expense.
+        participant_ids: Participants selected for a direct allocation.
+        allocation_method: Validated allocation method chosen by the approver.
+        cost_center: Validated cost center chosen by the approver.
+
+    Raises:
+        ValidationError: If the expense is no longer pending or its allocation has no participants.
+    """
     locked_expense = Expense.objects.select_for_update().get(pk=expense.pk)
     if locked_expense.status != Expense.Status.PENDING:
         raise ValidationError("Nur ausstehende Ausgaben können genehmigt werden.")
 
+    if allocation_method is not None:
+        locked_expense.allocation_method = allocation_method
+    if cost_center is not None:
+        locked_expense.cost_center = cost_center
     locked_expense.status = Expense.Status.APPROVED
     locked_expense.approved_by = approved_by
     locked_expense.approved_at = timezone.now()
@@ -713,6 +760,8 @@ def approve_shared_expense(expense: Expense, approved_by: Any, participant_ids: 
         expense.status = locked_expense.status
         expense.approved_by = locked_expense.approved_by
         expense.approved_at = locked_expense.approved_at
+        expense.allocation_method = locked_expense.allocation_method
+        expense.cost_center = locked_expense.cost_center
         transaction.on_commit(partial(_notify_expense_status_by_id, locked_expense.pk))
         return
 
@@ -747,6 +796,8 @@ def approve_shared_expense(expense: Expense, approved_by: Any, participant_ids: 
     expense.status = locked_expense.status
     expense.approved_by = locked_expense.approved_by
     expense.approved_at = locked_expense.approved_at
+    expense.allocation_method = locked_expense.allocation_method
+    expense.cost_center = locked_expense.cost_center
     transaction.on_commit(partial(_notify_expense_status_by_id, locked_expense.pk))
 
 

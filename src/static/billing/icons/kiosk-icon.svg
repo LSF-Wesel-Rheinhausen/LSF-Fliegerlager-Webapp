@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Mein Fliegerlager</title>
+  <rect width="512" height="512" fill="#1f5d42"/>
+  <path d="M96 142h320" stroke="#77bde3" stroke-width="28" stroke-linecap="round"/>
+  <circle cx="256" cy="284" r="132" fill="#fff"/>
+  <path d="M184 394V196h152v46h-96v37h82v45h-82v70z" fill="#1f5d42"/>
+</svg>

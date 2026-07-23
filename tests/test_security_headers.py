@@ -8,7 +8,6 @@ from django.urls import reverse
 from whitenoise.middleware import WhiteNoiseMiddleware
 
 from config.middleware import SecurityHeadersMiddleware
-from tests.factories import UserFactory
 
 
 @pytest.mark.django_db
@@ -32,10 +31,8 @@ def test_common_security_headers_are_set(client):
 
 
 @pytest.mark.django_db
-def test_base_template_inline_script_uses_the_response_csp_nonce(client):
-    UserFactory()
-
-    response = client.get(reverse("login"))
+def test_inline_script_uses_the_response_csp_nonce(client):
+    response = client.get(reverse("kiosk-login"))
     nonce_match = re.search(r"script-src 'self' 'nonce-([^']+)'", response["Content-Security-Policy"])
 
     assert nonce_match is not None

@@ -5,8 +5,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Kiosk{% endblock %}</title>
-    <link rel="icon" type="image/jpeg" href="{% static 'billing/logo.jpg' %}">
-    <link rel="apple-touch-icon" sizes="192x192" href="{% static 'billing/icons/icon-192.png' %}">
+    <link rel="icon" type="image/png" href="{{ pwa_icon_url }}">
+    <link rel="apple-touch-icon" sizes="192x192" href="{{ pwa_icon_url }}">
     <link rel="manifest" href="{{ pwa_manifest_url }}">
     <meta name="theme-color" content="#1f5d42">
     <meta name="apple-mobile-web-app-capable" content="yes">

@@ -45,4 +45,19 @@ def test_base_layout_renders_favicon(client):
 
     assert response.status_code == 200
     assert 'rel="icon"' in response.content.decode("utf-8")
-    assert "billing/logo.jpg" in response.content.decode("utf-8")
+    assert "billing/icons/admin-icon-192.png" in response.content.decode("utf-8")
+
+
+@pytest.mark.django_db
+def test_pdf_links_open_directly_without_embedded_preview(client):
+    participant = ParticipantFactory()
+    client.force_login(SuperUserFactory())
+
+    response = client.get(reverse("participant-detail", args=[participant.pk]))
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert 'target="_blank"' in content
+    assert 'rel="noopener"' in content
+    assert "data-pdf-popup" not in content
+    assert "global-pdf-iframe" not in content

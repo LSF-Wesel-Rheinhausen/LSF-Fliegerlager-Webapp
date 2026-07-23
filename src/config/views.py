@@ -22,7 +22,7 @@ def healthcheck(request: HttpRequest) -> JsonResponse:
 
 def platform_icon(_request: HttpRequest) -> HttpResponse:
     """Redirect conventional platform icon paths to the installed app icon."""
-    return redirect(static("billing/icons/icon-192.png"), permanent=True)
+    return redirect(static("billing/icons/admin-icon-192.png"), permanent=True)
 
 
 def page_not_found(request: HttpRequest, exception: Exception | None = None) -> HttpResponse:

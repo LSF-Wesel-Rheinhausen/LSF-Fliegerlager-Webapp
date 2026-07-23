@@ -367,6 +367,12 @@ test("Kiosk flow: login, pin setup, drink and meal booking", async ({ page }) =>
   expect(sessionCookie).toBeDefined();
   expect(sessionCookie.expires).toBeGreaterThan(Date.now() / 1000);
 
+  // Existing meal-deadline notifications still use the legacy hash deep link.
+  await page.goto("/kiosk/#meal-calendar");
+  await expect(page.locator("dialog#meal-calendar-dialog")).toBeVisible();
+  await expect(page).toHaveURL(/.*\/kiosk\/$/);
+  await page.keyboard.press("Escape");
+
   // Check-in can be entered from the kiosk.
   const checkinArrival = dateInputValue(addDays(new Date(), 2));
   const checkinDeparture = dateInputValue(addDays(new Date(), 4));
@@ -398,7 +404,7 @@ test("Kiosk flow: login, pin setup, drink and meal booking", async ({ page }) =>
   // The cancellation action stays directly usable on a phone-sized viewport.
   await page.setViewportSize({ width: 390, height: 844 });
   await assertNoUnexpectedOverflow(page);
-  await page.getByRole("button", { name: "Menü", exact: true }).click();
+  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).click();
   await page.getByRole("button", { name: "Letzte Schnellbuchungen" }).click();
   await expect(page.locator("dialog:open")).toHaveCount(1);
   await page.locator("dialog#quick-bookings-dialog [data-open-quick-cancel-dialog]").first().click();
@@ -410,8 +416,8 @@ test("Kiosk flow: login, pin setup, drink and meal booking", async ({ page }) =>
   await page.setViewportSize({ width: 1280, height: 800 });
 
   // Book the same participant for two meal dates in one submission.
-  await page.getByRole("button", { name: "Menü", exact: true }).click();
-  await page.getByRole("button", { name: "Essenskalender", exact: true }).click();
+  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).click();
+  await page.getByRole("button", { name: /Essenskalender/ }).click();
   await page.locator("dialog#meal-calendar-dialog").getByRole("button", { name: "Essen buchen" }).click();
   await expect(page.locator("dialog#meal-dialog")).toBeVisible();
   const mealDateChoices = page.locator("dialog#meal-dialog input[data-meal-date-checkbox]:not([disabled])");
@@ -421,13 +427,19 @@ test("Kiosk flow: login, pin setup, drink and meal booking", async ({ page }) =>
   await expect(page.locator("#meal-selected-date")).toContainText("2 Tage ausgewählt");
   await page.locator("dialog#meal-dialog").getByRole("button", { name: "Essensanmeldung speichern" }).click();
   await expect(page.getByText("Essensanmeldung wurde für 2 Tage und 1 Person gespeichert.")).toBeVisible();
-  await expect(page).toHaveURL(/.*\/kiosk\/#meal-calendar$/);
+  await expect(page).toHaveURL(/.*\/kiosk\/$/);
+  await expect(page.locator("dialog#meal-calendar-dialog")).toBeVisible();
 
   await page.locator("dialog#meal-calendar-dialog").getByRole("button", { name: "Essen buchen" }).click();
   await expect(page.locator("dialog#meal-dialog").getByText("Gebucht für Marie Curie").first()).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.locator("dialog#meal-calendar-dialog")).toBeVisible();
   await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "Apfelsaft" }).click();
+  await page.locator("dialog#quick-dialog").getByRole("button", { name: "1x" }).click();
+  await expect(page.getByText("Apfelsaft gebucht.")).toBeVisible();
+  await expect(page.locator("dialog#meal-calendar-dialog")).toBeHidden();
 
   await page.getByRole("link", { name: "Abmelden" }).click();
   await expect(page).toHaveURL(/.*\/kiosk\/login\//);
@@ -455,7 +467,7 @@ test("Kiosk masonry and expense cards stay responsive and accessible", async ({ 
   await page.getByLabel("PIN wiederholen").fill("1234");
   await page.getByRole("button", { name: "Speichern" }).click();
 
-  await page.getByRole("button", { name: "Menü", exact: true }).click();
+  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).click();
   await page.getByRole("button", { name: "Gemeinschaftsausgaben" }).click();
   await page.getByRole("link", { name: "Antrag einreichen" }).click();
   await page.getByLabel("Kategorie").selectOption({ label: "Verbrauchsmaterial" });
@@ -519,11 +531,11 @@ test("Kiosk masonry and expense cards stay responsive and accessible", async ({ 
   }
   expect(focusedCardIndexes).toEqual([...focusedCardIndexes].sort((left, right) => left - right));
 
-  const menuButton = page.getByRole("button", { name: "Menü", exact: true });
+  const menuButton = page.getByRole("button", { name: /Weitere Bereiche öffnen/ });
   await menuButton.focus();
   await menuButton.click();
   const menuDialog = page.locator("dialog#kiosk-menu-dialog");
-  const familyMenuButton = menuDialog.getByRole("button", { name: "Familie", exact: true });
+  const familyMenuButton = menuDialog.getByRole("button", { name: /Familie/ });
   await familyMenuButton.click();
   await expect(page.locator("dialog#family-management-dialog")).toBeVisible();
   await expect(page.locator("dialog:open")).toHaveCount(1);
@@ -897,8 +909,8 @@ for (const viewport of [
     await expect(page.getByRole("heading", { name: "Getränk buchen" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Verpflegung buchen" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Essenskalender" })).toBeHidden();
-    await page.getByRole("button", { name: "Menü", exact: true }).click();
-    await page.getByRole("button", { name: "Essenskalender", exact: true }).click();
+    await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).click();
+    await page.getByRole("button", { name: /Essenskalender/ }).click();
     await page.locator("dialog#meal-calendar-dialog").getByRole("button", { name: "Essen buchen" }).click();
     await expect(page.locator("dialog#meal-dialog")).toBeVisible();
     await assertNoUnexpectedOverflow(page);

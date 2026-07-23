@@ -33,7 +33,8 @@ def test_private_kiosk_exposes_install_guide_and_apple_touch_icon(client):
     assert b"data-pwa-install" in response.content
     assert b"data-pwa-install-dialog" in response.content
     assert b'rel="apple-touch-icon"' in response.content
-    assert b"/static/billing/icons/icon-192.png" in response.content
+    assert b"/static/billing/icons/kiosk-icon-192.png" in response.content
+    assert b'type="image/png"' in response.content
 
 
 @pytest.mark.django_db
@@ -60,7 +61,7 @@ def test_platform_icon_fallbacks_redirect_to_app_icon(client, path):
     response = client.get(path)
 
     assert response.status_code == 301
-    assert response["Location"] == static("billing/icons/icon-192.png")
+    assert response["Location"] == static("billing/icons/admin-icon-192.png")
 
 
 @pytest.mark.django_db
@@ -122,14 +123,14 @@ def test_switching_kiosk_modes_clears_participant_session(client):
 
 
 @pytest.mark.parametrize(
-    ("route_name", "expected_scope", "expected_start"),
+    ("route_name", "expected_scope", "expected_start", "expected_icon"),
     [
-        ("pwa-manifest-admin", "/", "/camps/"),
-        ("pwa-manifest-kiosk", "/kiosk/", "/kiosk/"),
-        ("pwa-manifest-central", "/central/kiosk/", "/central/kiosk/"),
+        ("pwa-manifest-admin", "/", "/camps/", "admin-icon"),
+        ("pwa-manifest-kiosk", "/kiosk/", "/kiosk/", "kiosk-icon"),
+        ("pwa-manifest-central", "/central/kiosk/", "/central/kiosk/", "central-icon"),
     ],
 )
-def test_pwa_manifests_are_surface_specific(client, route_name, expected_scope, expected_start):
+def test_pwa_manifests_are_surface_specific(client, route_name, expected_scope, expected_start, expected_icon):
     response = client.get(reverse(route_name))
 
     assert response.status_code == 200
@@ -139,14 +140,24 @@ def test_pwa_manifests_are_surface_specific(client, route_name, expected_scope, 
     assert manifest["start_url"] == expected_start
     assert {icon["sizes"] for icon in manifest["icons"]} >= {"192x192", "512x512"}
     assert next(icon for icon in manifest["icons"] if icon["sizes"] == "192x192")["purpose"] == "any"
+    assert all(expected_icon in icon["src"] for icon in manifest["icons"])
+
+
+def test_pwa_surfaces_use_distinct_install_icons(client):
+    icon_sources = []
+    for route_name in ("pwa-manifest-admin", "pwa-manifest-kiosk", "pwa-manifest-central"):
+        manifest = client.get(reverse(route_name)).json()
+        icon_sources.append(next(icon["src"] for icon in manifest["icons"] if icon["sizes"] == "512x512"))
+
+    assert len(set(icon_sources)) == 3
 
 
 @pytest.mark.parametrize(
     ("route_name", "expected_scope", "expected_cache_name"),
     [
-        ("pwa-worker-admin", "/", "fliegerlager-admin-v4"),
-        ("pwa-worker-kiosk", "/kiosk/", "fliegerlager-kiosk-v4"),
-        ("pwa-worker-central", "/central/kiosk/", "fliegerlager-central-v4"),
+        ("pwa-worker-admin", "/", "fliegerlager-admin-v5"),
+        ("pwa-worker-kiosk", "/kiosk/", "fliegerlager-kiosk-v5"),
+        ("pwa-worker-central", "/central/kiosk/", "fliegerlager-central-v5"),
     ],
 )
 def test_service_workers_have_explicit_scopes(client, route_name, expected_scope, expected_cache_name):
