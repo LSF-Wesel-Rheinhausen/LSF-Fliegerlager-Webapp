@@ -1,7 +1,7 @@
 import base64
 import json
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from functools import partial
 from typing import Any
 
@@ -14,7 +14,7 @@ from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, Validat
 from django.core.signing import BadSignature, Signer
 from django.db import transaction
 from django.db.models import Case, IntegerField, Q, Value, When
-from django.http import FileResponse, Http404, HttpRequest, HttpResponse, JsonResponse
+from django.http import FileResponse, Http404, HttpRequest, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -1209,6 +1209,66 @@ def _kiosk_family_member_from_session(request, participant):
     return family_member
 
 
+def _participant_historic_settlements(participant: Participant):
+    """Retrieve all finalized settlements for this participant and matching participant entries across camps."""
+    query = Q(participant=participant)
+    if participant.email:
+        query |= Q(participant__email__iexact=participant.email)
+    else:
+        query |= Q(
+            participant__first_name__iexact=participant.first_name,
+            participant__last_name__iexact=participant.last_name,
+        )
+
+    return (
+        Settlement.objects.filter(query, run__isnull=False)
+        .select_related("run", "run__camp", "participant", "participant__camp")
+        .order_by("-created_at")
+    )
+
+
+def kiosk_settlement_pdf(request, settlement_id, kiosk_mode="private"):
+    """Allow logged-in kiosk participants to download their own finalized settlement PDF."""
+    _activate_kiosk_mode(request, kiosk_mode)
+    participant = _kiosk_participant(request)
+    if participant is None:
+        return redirect(_kiosk_route(kiosk_mode, "login"))
+
+    snapshot = get_object_or_404(
+        Settlement.objects.select_related("run", "run__camp", "participant"),
+        pk=settlement_id,
+        run__isnull=False,
+    )
+
+    allowed = (
+        snapshot.participant_id == participant.pk
+        or (participant.email and snapshot.participant.email.lower() == participant.email.lower())
+        or (
+            snapshot.participant.first_name.lower() == participant.first_name.lower()
+            and snapshot.participant.last_name.lower() == participant.last_name.lower()
+        )
+        or ParticipantFamilyMember.objects.filter(
+            guardian=participant,
+            first_name__iexact=snapshot.participant.first_name,
+            last_name__iexact=snapshot.participant.last_name,
+        ).exists()
+    )
+    if not allowed:
+        return HttpResponseForbidden("Zugriff verweigert.")
+
+    return settlement_snapshot_pdf_response(snapshot)
+
+
+def kiosk_current_settlement_pdf(request, kiosk_mode="private"):
+    """Allow logged-in kiosk participants to download their live current settlement PDF."""
+    _activate_kiosk_mode(request, kiosk_mode)
+    participant = _kiosk_participant(request)
+    if participant is None:
+        return redirect(_kiosk_route(kiosk_mode, "login"))
+
+    return participant_pdf_response(participant)
+
+
 def kiosk_login(request, kiosk_mode="private"):
     """Authenticate a participant in a private or central kiosk session."""
     _activate_kiosk_mode(request, kiosk_mode)
@@ -2049,6 +2109,16 @@ def kiosk_home(request, kiosk_mode="private"):
         elif request.POST.get("action") == "checkin":
             if _update_kiosk_checkin_dates(request, participant, checkin_participants):
                 return redirect(_kiosk_route(kiosk_mode, "home"))
+        elif request.POST.get("action") == "update_attendance_dates":
+            arrival = request.POST.get("arrival_date")
+            departure = request.POST.get("departure_date")
+            if arrival:
+                participant.arrival_date = datetime.strptime(arrival, "%Y-%m-%d").date()
+            if departure:
+                participant.departure_date = datetime.strptime(departure, "%Y-%m-%d").date()
+            participant.save(update_fields=["arrival_date", "departure_date", "updated_at"])
+            messages.success(request, "Anmeldezeitraum wurde aktualisiert.")
+            return redirect(_kiosk_route(kiosk_mode, "home"))
 
     recent_quick_charges = list(
         Charge.objects.select_related("participant", "kiosk_booked_by")
@@ -2107,6 +2177,13 @@ def kiosk_home(request, kiosk_mode="private"):
     )
     accepted_links = _accepted_booking_links(participant)
     announcements = list(participant.camp.announcements.filter(is_active=True)[:3])
+    historic_settlements = list(_participant_historic_settlements(participant))
+    latest_settlement = historic_settlements[0] if historic_settlements else None
+    archived_settlements = historic_settlements[1:] if len(historic_settlements) > 1 else []
+    is_pre_camp = participant.camp.is_pre_camp()
+    is_post_camp = participant.camp.is_post_camp()
+    days_until_start = participant.camp.days_until_start()
+
     context = {
         "participant": participant,
         "kiosk_actor": default_booking_target,
@@ -2114,6 +2191,12 @@ def kiosk_home(request, kiosk_mode="private"):
         "default_booking_target_token": default_booking_target_token,
         "announcements": announcements,
         "summary": participant_kiosk_summary(participant),
+        "is_pre_camp": is_pre_camp,
+        "is_post_camp": is_post_camp,
+        "days_until_start": days_until_start,
+        "historic_settlements": historic_settlements,
+        "latest_settlement": latest_settlement,
+        "archived_settlements": archived_settlements,
         "meal_form": meal_form,
         "meal_default_variant": meal_form.fields["variant"].choices[0][0],
         "family_member_form": family_member_form,
