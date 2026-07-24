@@ -13,55 +13,98 @@
     </div>
   </div>
 
-  <section class="panel stack">
-    <h2>Alle Dienste</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Datum</th>
-          <th>Zeit</th>
-          <th>Name</th>
-          <th>Benötigt</th>
-          <th>Eingetragen</th>
-          <th>Aktionen</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for shift in shifts %}
+  <form method="post" action="{% url 'shift-bulk-delete' camp.pk %}" onsubmit="return confirm('Möchtest du die ausgewählten Dienste wirklich löschen?');">
+    {% csrf_token %}
+    <section class="panel stack">
+      <div class="toolbar compact-toolbar">
+        <h2>Alle Dienste</h2>
+        <div class="actions">
+          <button type="submit" class="button button-danger" id="bulk-delete-btn" disabled>Markierte Dienste löschen</button>
+        </div>
+      </div>
+      <table>
+        <thead>
           <tr>
-            <td>{{ shift.date|date:"d.m.Y" }}</td>
-            <td>
-              {% if shift.start_time %}{{ shift.start_time|time:"H:i" }}{% endif %}
-              {% if shift.start_time and shift.end_time %} - {% endif %}
-              {% if shift.end_time %}{{ shift.end_time|time:"H:i" }}{% endif %}
-            </td>
-            <td>{{ shift.name }}</td>
-            <td>{{ shift.required_slots }}</td>
-            <td>
-              {% if shift.assignments.all %}
-                <ul style="margin: 0; padding-left: 1.2rem;">
-                  {% for assignment in shift.assignments.all %}
-                    <li><a href="{% url 'participant-detail' assignment.participant.pk %}">{{ assignment.participant.full_name }}</a></li>
-                  {% endfor %}
-                </ul>
-              {% else %}
-                <em>Niemand</em>
-              {% endif %}
-            </td>
-            <td>
-              <div class="row-actions">
-              <a href="{% url 'shift-edit' shift.pk %}">Bearbeiten</a>
-              <form action="{% url 'shift-delete' shift.pk %}" method="post" onsubmit="return confirm('Möchtest du diesen Dienst wirklich löschen?');">
-                {% csrf_token %}
-                <button type="submit" class="button-link button-link-danger">Löschen</button>
-              </form>
-              </div>
-            </td>
+            <th style="width: 40px; text-align: center;">
+              <input type="checkbox" id="select-all-shifts" aria-label="Alle Dienste auswählen">
+            </th>
+            <th>Datum</th>
+            <th>Zeit</th>
+            <th>Name</th>
+            <th>Benötigt</th>
+            <th>Eingetragen</th>
+            <th>Aktionen</th>
           </tr>
-        {% empty %}
-          <tr><td colspan="6">Noch keine Dienste angelegt.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </section>
+        </thead>
+        <tbody>
+          {% for shift in shifts %}
+            <tr>
+              <td style="text-align: center;">
+                <input type="checkbox" name="shift_ids" value="{{ shift.pk }}" class="shift-checkbox" aria-label="Dienst {{ shift.name }} auswählen">
+              </td>
+              <td>{{ shift.date|date:"d.m.Y" }}</td>
+              <td>
+                {% if shift.start_time %}{{ shift.start_time|time:"H:i" }}{% endif %}
+                {% if shift.start_time and shift.end_time %} - {% endif %}
+                {% if shift.end_time %}{{ shift.end_time|time:"H:i" }}{% endif %}
+              </td>
+              <td>{{ shift.name }}</td>
+              <td>{{ shift.required_slots }}</td>
+              <td>
+                {% if shift.assignments.all %}
+                  <ul style="margin: 0; padding-left: 1.2rem;">
+                    {% for assignment in shift.assignments.all %}
+                      <li><a href="{% url 'participant-detail' assignment.participant.pk %}">{{ assignment.participant.full_name }}</a></li>
+                    {% endfor %}
+                  </ul>
+                {% else %}
+                  <em>Niemand</em>
+                {% endif %}
+              </td>
+              <td>
+                <div class="row-actions">
+                  <a href="{% url 'shift-edit' shift.pk %}">Bearbeiten</a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7">Noch keine Dienste angelegt.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </form>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const selectAll = document.getElementById('select-all-shifts');
+      const checkboxes = document.querySelectorAll('.shift-checkbox');
+      const deleteBtn = document.getElementById('bulk-delete-btn');
+
+      function updateButtonState() {
+        const checkedCount = document.querySelectorAll('.shift-checkbox:checked').length;
+        if (deleteBtn) {
+          deleteBtn.disabled = checkedCount === 0;
+        }
+      }
+
+      if (selectAll) {
+        selectAll.addEventListener('change', function() {
+          checkboxes.forEach(cb => cb.checked = selectAll.checked);
+          updateButtonState();
+        });
+      }
+
+      checkboxes.forEach(cb => {
+        cb.addEventListener('change', function() {
+          if (!cb.checked && selectAll) {
+            selectAll.checked = false;
+          } else if (selectAll && Array.from(checkboxes).every(c => c.checked)) {
+            selectAll.checked = true;
+          }
+          updateButtonState();
+        });
+      });
+    });
+  </script>
 {% endblock %}
