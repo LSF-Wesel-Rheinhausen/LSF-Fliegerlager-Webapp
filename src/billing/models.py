@@ -319,6 +319,7 @@ class Camp(TimeStampedModel):
 
 class Participant(TimeStampedModel):
     class Status(models.TextChoices):
+        PENDING_APPROVAL = "pending_approval", "Ausstehende Freigabe"
         REGISTERED = "registered", "Angemeldet"
         ACTIVE = "active", "Aktiv"
         SETTLED = "settled", "Abgerechnet"

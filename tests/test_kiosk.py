@@ -13,6 +13,7 @@ from billing.models import (
     MealOrder,
     MealPlanEntry,
     MealSignup,
+    Participant,
     ParticipantBookingLink,
     ParticipantFamilyMember,
     Payment,
@@ -2499,3 +2500,63 @@ def test_kiosk_show_invoices_setting_toggle(client):
     response_active = client.get(reverse("kiosk-home"))
     assert response_active.status_code == 200
     assert "Meine Rechnungen" in response_active.content.decode("utf-8")
+
+
+@pytest.mark.django_db
+def test_kiosk_self_registration_creates_pending_participant(client):
+    camp = CampFactory(is_active=True)
+    response = client.post(
+        reverse("kiosk-self-register"),
+        {
+            "first_name": "Lukas",
+            "last_name": "Neumann",
+            "email": "lukas@example.com",
+            "phone": "0170123456",
+        },
+    )
+    assert response.status_code == 302
+    assert response.url == reverse("kiosk-login")
+
+    p = Participant.objects.get(camp=camp, first_name="Lukas", last_name="Neumann")
+    assert p.status == Participant.Status.PENDING_APPROVAL
+
+    # Must NOT be visible in kiosk login dropdown
+    login_page = client.get(reverse("kiosk-login"))
+    assert "Lukas Neumann" not in login_page.content.decode("utf-8")
+
+
+@pytest.mark.django_db
+def test_admin_approves_self_registration(client):
+    admin_user = UserFactory(is_staff=True, is_superuser=True)
+    client.force_login(admin_user)
+    camp = CampFactory(is_active=True)
+    p = ParticipantFactory(
+        camp=camp, first_name="Clara", last_name="Müller", status=Participant.Status.PENDING_APPROVAL
+    )
+
+    # Approve
+    response = client.post(
+        reverse("participant-approve-registration", kwargs={"camp_id": camp.pk, "participant_id": p.pk})
+    )
+    assert response.status_code == 302
+    p.refresh_from_db()
+    assert p.status == Participant.Status.REGISTERED
+
+    # Now visible in kiosk login dropdown
+    login_page = client.get(reverse("kiosk-login"))
+    assert "Clara Müller" in login_page.content.decode("utf-8")
+
+
+@pytest.mark.django_db
+def test_admin_rejects_self_registration(client):
+    admin_user = UserFactory(is_staff=True, is_superuser=True)
+    client.force_login(admin_user)
+    camp = CampFactory(is_active=True)
+    p = ParticipantFactory(camp=camp, first_name="Tim", last_name="Test", status=Participant.Status.PENDING_APPROVAL)
+
+    # Reject
+    response = client.post(
+        reverse("participant-reject-registration", kwargs={"camp_id": camp.pk, "participant_id": p.pk})
+    )
+    assert response.status_code == 302
+    assert not Participant.objects.filter(pk=p.pk).exists()
