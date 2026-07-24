@@ -1,5 +1,5 @@
 from collections.abc import Collection
-from datetime import time, timedelta
+from datetime import date, time, timedelta
 from decimal import Decimal
 
 from django.conf import settings
@@ -286,6 +286,28 @@ class Camp(TimeStampedModel):
             exclude = []
         exclude = list(exclude) + ["is_active"]
         super().validate_constraints(exclude=exclude)
+
+    def is_pre_camp(self, on_date: date | None = None) -> bool:
+        """Return True if the camp starts in the future relative to on_date."""
+        if not self.starts_on:
+            return False
+        current_date = on_date or timezone.localdate()
+        return current_date < self.starts_on
+
+    def is_post_camp(self, on_date: date | None = None) -> bool:
+        """Return True if the camp has ended in the past relative to on_date."""
+        if not self.ends_on:
+            return False
+        current_date = on_date or timezone.localdate()
+        return current_date > self.ends_on
+
+    def days_until_start(self, on_date: date | None = None) -> int | None:
+        """Return the number of days remaining until the camp starts, or None."""
+        if not self.starts_on:
+            return None
+        current_date = on_date or timezone.localdate()
+        delta = (self.starts_on - current_date).days
+        return max(0, delta)
 
     def __str__(self):
         return f"{self.name} ({self.year})"
