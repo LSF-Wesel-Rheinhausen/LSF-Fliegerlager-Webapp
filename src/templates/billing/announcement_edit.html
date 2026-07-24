@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Ankündigung bearbeiten · {{ camp.name }}{% endblock %}
+{% block content %}
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">Aktivität & Kommunikation</span>
+      <h1>Ankündigung bearbeiten</h1>
+      <p class="subtitle">{{ camp.name }} {{ camp.year }}</p>
+    </div>
+    <div class="actions">
+      <a class="button button-secondary" href="{% url 'information-email-compose' camp.pk %}">Zurück</a>
+    </div>
+  </header>
+
+  <section class="panel" style="max-width: 600px;">
+    <form method="post" class="stack">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="actions" style="margin-top: 1rem;">
+        <button type="submit" class="button button-primary">Speichern</button>
+        <a class="button button-secondary" href="{% url 'information-email-compose' camp.pk %}">Abbrechen</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

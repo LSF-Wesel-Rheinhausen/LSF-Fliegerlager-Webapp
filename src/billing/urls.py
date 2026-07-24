@@ -10,6 +10,16 @@ urlpatterns = [
         name="information-email-compose",
     ),
     path(
+        "camps/<int:camp_id>/announcements/<int:announcement_id>/edit/",
+        email_views.announcement_edit,
+        name="announcement-edit",
+    ),
+    path(
+        "camps/<int:camp_id>/announcements/<int:announcement_id>/delete/",
+        email_views.announcement_delete,
+        name="announcement-delete",
+    ),
+    path(
         "settlements/runs/<int:run_id>/email/",
         email_views.settlement_email_compose,
         name="settlement-email-compose",

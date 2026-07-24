@@ -19,10 +19,10 @@ from .email_delivery import (
     send_configuration_test_email,
     settlement_recipient_mapping,
 )
-from .email_forms import EmailConfigurationForm, InformationEmailForm, SettlementEmailForm
+from .email_forms import CampAnnouncementForm, EmailConfigurationForm, InformationEmailForm, SettlementEmailForm
 from .models import Camp, CampAnnouncement, EmailBatch, EmailConfiguration, EmailDelivery, EmailTestLog, SettlementRun
 from .notifications import queue_information_push_batch
-from .permissions import admin_required
+from .permissions import admin_required, editor_required
 
 EMAIL_PREVIEW_SIGNING_SALT = "billing.manual-email-preview.v1"
 EMAIL_PREVIEW_MAX_AGE_SECONDS = 60 * 60
@@ -229,8 +229,42 @@ def information_email_compose(request, camp_id):
             "missing_participants": missing_participants,
             "preview": preview,
             "preview_token": preview_token,
+            "announcements": camp.announcements.all().order_by("-created_at"),
         },
     )
+
+
+@editor_required
+def announcement_edit(request, camp_id, announcement_id):
+    """Edit title, body, or active status of a camp announcement."""
+    camp = get_object_or_404(Camp, pk=camp_id)
+    announcement = get_object_or_404(CampAnnouncement, pk=announcement_id, camp=camp)
+    form = CampAnnouncementForm(request.POST or None, instance=announcement)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, f"Ankündigung »{announcement.title}« wurde aktualisiert.")
+        return redirect("information-email-compose", camp_id=camp.pk)
+    return render(
+        request,
+        "billing/announcement_edit.html",
+        {
+            "camp": camp,
+            "announcement": announcement,
+            "form": form,
+        },
+    )
+
+
+@editor_required
+@require_POST
+def announcement_delete(request, camp_id, announcement_id):
+    """Delete a camp announcement."""
+    camp = get_object_or_404(Camp, pk=camp_id)
+    announcement = get_object_or_404(CampAnnouncement, pk=announcement_id, camp=camp)
+    title = announcement.title
+    announcement.delete()
+    messages.success(request, f"Ankündigung »{title}« wurde gelöscht.")
+    return redirect("information-email-compose", camp_id=camp.pk)
 
 
 @admin_required
