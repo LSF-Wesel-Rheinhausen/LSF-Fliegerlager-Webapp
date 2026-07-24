@@ -1234,6 +1234,9 @@ def kiosk_settlement_pdf(request, settlement_id, kiosk_mode="private"):
     if participant is None:
         return redirect(_kiosk_route(kiosk_mode, "login"))
 
+    if not participant.camp.show_kiosk_invoices:
+        return HttpResponseForbidden("Rechnungen sind im Kiosk deaktiviert.")
+
     snapshot = get_object_or_404(
         Settlement.objects.select_related("run", "run__camp", "participant"),
         pk=settlement_id,
@@ -1265,6 +1268,9 @@ def kiosk_current_settlement_pdf(request, kiosk_mode="private"):
     participant = _kiosk_participant(request)
     if participant is None:
         return redirect(_kiosk_route(kiosk_mode, "login"))
+
+    if not participant.camp.show_kiosk_invoices:
+        return HttpResponseForbidden("Rechnungen sind im Kiosk deaktiviert.")
 
     return participant_pdf_response(participant)
 
@@ -1308,7 +1314,23 @@ def kiosk_login(request, kiosk_mode="private"):
         )
         return redirect(_kiosk_route(kiosk_mode, "pin-setup"))
 
-    return render(request, "billing/kiosk_login.html", {"form": form, **_kiosk_context(kiosk_mode)})
+    camp = Camp.objects.filter(is_active=True).first()
+    is_pre_camp = camp.is_pre_camp() if camp else False
+    is_post_camp = camp.is_post_camp() if camp else False
+    days_until_start = camp.days_until_start() if camp else None
+
+    return render(
+        request,
+        "billing/kiosk_login.html",
+        {
+            "form": form,
+            "camp": camp,
+            "is_pre_camp": is_pre_camp,
+            "is_post_camp": is_post_camp,
+            "days_until_start": days_until_start,
+            **_kiosk_context(kiosk_mode),
+        },
+    )
 
 
 def kiosk_logout(request, kiosk_mode="private"):

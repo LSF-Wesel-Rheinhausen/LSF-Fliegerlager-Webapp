@@ -1183,6 +1183,7 @@ textarea {
 .kiosk-card {
   display: grid;
   gap: 18px;
+  height: fit-content;
 }
 
 .kiosk-card--accent {

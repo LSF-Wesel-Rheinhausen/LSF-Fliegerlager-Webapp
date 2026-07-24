@@ -253,6 +253,10 @@ class Camp(TimeStampedModel):
     iban = models.CharField(max_length=40, blank=True, help_text="IBAN für Überweisungen")
     paypal_link = models.CharField(max_length=200, blank=True, help_text="PayPal.me Link oder E-Mail-Adresse")
     notes = models.TextField(blank=True)
+    show_kiosk_invoices = models.BooleanField(
+        default=True,
+        help_text="Steuert, ob Teilnehmer ihre Abrechnungen im Kiosk einsehen und herunterladen können.",
+    )
 
     class Meta:
         ordering = ["-year", "name"]

@@ -117,19 +117,35 @@
     </section>
   {% endif %}
 
-  <section class="panel kiosk-card" style="margin-bottom: 1.5rem;">
-    <h2 style="font-size: 1.25rem; margin-bottom: 0.5rem;">📄 Meine Rechnungen & Dokumente</h2>
-    <div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
-      <a href="{% url 'kiosk-current-settlement-pdf' %}" class="button button-secondary" target="_blank" rel="noopener">
-        Aktuelle Live-Abrechnung (PDF)
-      </a>
-      {% for item in historic_settlements %}
-        <a href="{% url 'kiosk-settlement-pdf' item.pk %}" class="button button-ghost" target="_blank" rel="noopener">
-          Abrechnung {{ item.run.camp.name }} ({{ item.run.created_at|date:"d.m.Y" }})
+  {% if participant.camp.show_kiosk_invoices %}
+    <section class="panel kiosk-card" style="margin-bottom: 1.5rem;">
+      <h2 style="font-size: 1.25rem; margin-bottom: 0.5rem;">📄 Meine Rechnungen & Dokumente</h2>
+      <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center;">
+        <a href="{% url 'kiosk-current-settlement-pdf' %}" class="button button-secondary" target="_blank" rel="noopener">
+          Aktuelle Live-Abrechnung (PDF)
         </a>
-      {% endfor %}
-    </div>
-  </section>
+        {% if latest_settlement %}
+          <a href="{% url 'kiosk-settlement-pdf' latest_settlement.pk %}" class="button button-ghost" target="_blank" rel="noopener">
+            Letzte Abrechnung ({{ latest_settlement.run.created_at|date:"d.m.Y" }})
+          </a>
+        {% endif %}
+      </div>
+      {% if archived_settlements %}
+        <details class="kiosk-archive-accordion" style="margin-top: 0.75rem; background: var(--panel-soft); padding: 0.5rem 0.75rem; border-radius: var(--radius);">
+          <summary style="cursor: pointer; font-size: 0.9rem; font-weight: 600; color: var(--muted);">
+            🗂️ Ältere Abrechnungen & Archiv ({{ archived_settlements|length }})
+          </summary>
+          <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
+            {% for item in archived_settlements %}
+              <a href="{% url 'kiosk-settlement-pdf' item.pk %}" class="button button-small button-ghost" target="_blank" rel="noopener">
+                {{ item.run.camp.name }} ({{ item.run.created_at|date:"d.m.Y" }})
+              </a>
+            {% endfor %}
+          </div>
+        </details>
+      {% endif %}
+    </section>
+  {% endif %}
 
   {% if pending_invites %}
     <section class="panel kiosk-card kiosk-card--muted">
