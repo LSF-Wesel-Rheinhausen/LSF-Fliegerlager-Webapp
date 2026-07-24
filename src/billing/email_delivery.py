@@ -121,8 +121,9 @@ def resolve_information_recipients(*, camp: Camp, participant_ids: Iterable[int]
 
     recipients: dict[str, list[str]] = defaultdict(list)
     for participant in participants:
-        normalized_email = normalize_recipient_email(participant.email)
-        recipients[normalized_email].append(participant.full_name)
+        if has_valid_recipient_email(participant.email):
+            normalized_email = normalize_recipient_email(participant.email)
+            recipients[normalized_email].append(participant.full_name)
     return [InformationRecipient(email=email, names=sorted(names)) for email, names in sorted(recipients.items())]
 
 
@@ -183,6 +184,8 @@ def queue_information_email_batch(
     """Queue a manually confirmed information email once per normalized address."""
     clean_subject, clean_body = _validate_message(subject, body)
     recipients = resolve_information_recipients(camp=camp, participant_ids=participant_ids)
+    if not recipients:
+        raise ValueError("Für die ausgewählten Teilnehmer wurde keine gültige E-Mail-Adresse gefunden.")
     if (
         expected_recipient_mapping is not None
         and information_recipient_mapping(recipients) != expected_recipient_mapping
