@@ -12,6 +12,18 @@
   <a class="button button-secondary" href="{{ kiosk_urls.logout }}">Abmelden</a>
 {% endblock %}
 {% block content %}
+  {% if announcements %}
+    <section class="kiosk-announcements stack" style="margin-bottom: 1.5rem;">
+      {% for announcement in announcements %}
+        <article class="panel kiosk-card--accent" role="status" style="border-left: 4px solid var(--accent); min-height: auto; height: fit-content; word-break: break-word;">
+          <span class="kiosk-hero__eyebrow">📢 Ankündigung · {{ announcement.created_at|date:"d.m.Y H:i" }}</span>
+          <h2 style="margin: 0.25rem 0 0.5rem; font-size: 1.25rem;">{{ announcement.title }}</h2>
+          <p style="margin: 0; white-space: pre-wrap; word-break: break-word;">{{ announcement.body }}</p>
+        </article>
+      {% endfor %}
+    </section>
+  {% endif %}
+
   <section class="kiosk-hero">
     <article class="panel kiosk-hero__intro kiosk-card--accent">
       <span class="kiosk-hero__eyebrow">Mein Kiosk</span>
@@ -31,7 +43,7 @@
     </article>
 
     <aside class="panel kiosk-summary-card">
-      <span class="kiosk-summary-card__label">Aktuelle Abrechnung</span>
+      <span class="kiosk-hero__eyebrow">Aktuelle Abrechnung</span>
       <strong class="kiosk-summary-card__value {% if summary.balance > 0 %}negative{% elif summary.balance < 0 %}positive{% endif %}">
         {% if summary.balance > 0 %}-{% elif summary.balance < 0 %}+{% endif %}{{ summary.balance|abs_value|money_eur }}
       </strong>
@@ -40,17 +52,7 @@
       </div>
       <button type="button" class="button" data-open-summary-dialog>Details öffnen</button>
     </aside>
-  {% if announcements %}
-    <section class="kiosk-announcements stack" style="margin-bottom: 1.5rem;">
-      {% for announcement in announcements %}
-        <article class="panel kiosk-card--accent" role="status" style="border-left: 4px solid var(--accent);">
-          <span class="kiosk-hero__eyebrow">📢 Ankündigung · {{ announcement.created_at|date:"d.m.Y H:i" }}</span>
-          <h2 style="margin: 0.25rem 0 0.5rem; font-size: 1.25rem;">{{ announcement.title }}</h2>
-          <p style="margin: 0; white-space: pre-wrap;">{{ announcement.body }}</p>
-        </article>
-      {% endfor %}
-    </section>
-  {% endif %}
+  </section>
 
   {% if is_pre_camp %}
     <section class="panel kiosk-card kiosk-card--accent" style="border-left: 4px solid var(--accent); margin-bottom: 1.5rem;">
@@ -71,7 +73,7 @@
             <label for="id_departure_date" style="font-size: 0.85rem;">Abreise:</label>
             <input type="date" id="id_departure_date" name="departure_date" value="{{ participant.departure_date|date:'Y-m-d' }}" required style="width: 100%;">
           </div>
-          <button type="submit" class="button button--secondary">Zeitraum speichern</button>
+          <button type="submit" class="button button-secondary">Zeitraum speichern</button>
         </div>
       </form>
     </section>
@@ -85,13 +87,13 @@
 
       {% if latest_settlement %}
         <div style="margin-bottom: 1.25rem;">
-          <a href="{% url 'kiosk-settlement-pdf' latest_settlement.pk %}" class="button button--primary" target="_blank" rel="noopener">
+          <a href="{% url 'kiosk-settlement-pdf' latest_settlement.pk %}" class="button button-primary" target="_blank" rel="noopener">
             📄 Letzte Abrechnung herunterladen ({{ latest_settlement.run.created_at|date:"d.m.Y" }} · {{ latest_settlement.balance|abs_value|money_eur }})
           </a>
         </div>
       {% else %}
         <div style="margin-bottom: 1.25rem;">
-          <a href="{% url 'kiosk-current-settlement-pdf' %}" class="button button--primary" target="_blank" rel="noopener">
+          <a href="{% url 'kiosk-current-settlement-pdf' %}" class="button button-primary" target="_blank" rel="noopener">
             📄 Aktuelle Abrechnung herunterladen (PDF)
           </a>
         </div>
@@ -106,7 +108,7 @@
             {% for item in archived_settlements %}
               <li style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.5rem 0; border-bottom: 1px solid var(--line);">
                 <span>{{ item.run.camp.name }} · {{ item.run.created_at|date:"d.m.Y H:i" }} ({{ item.balance|abs_value|money_eur }})</span>
-                <a href="{% url 'kiosk-settlement-pdf' item.pk %}" class="button button--small button--secondary" target="_blank" rel="noopener">PDF</a>
+                <a href="{% url 'kiosk-settlement-pdf' item.pk %}" class="button button-small button-secondary" target="_blank" rel="noopener">PDF</a>
               </li>
             {% endfor %}
           </ul>
@@ -118,11 +120,11 @@
   <section class="panel kiosk-card" style="margin-bottom: 1.5rem;">
     <h2 style="font-size: 1.25rem; margin-bottom: 0.5rem;">📄 Meine Rechnungen & Dokumente</h2>
     <div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
-      <a href="{% url 'kiosk-current-settlement-pdf' %}" class="button button--secondary" target="_blank" rel="noopener">
+      <a href="{% url 'kiosk-current-settlement-pdf' %}" class="button button-secondary" target="_blank" rel="noopener">
         Aktuelle Live-Abrechnung (PDF)
       </a>
       {% for item in historic_settlements %}
-        <a href="{% url 'kiosk-settlement-pdf' item.pk %}" class="button button--ghost" target="_blank" rel="noopener">
+        <a href="{% url 'kiosk-settlement-pdf' item.pk %}" class="button button-ghost" target="_blank" rel="noopener">
           Abrechnung {{ item.run.camp.name }} ({{ item.run.created_at|date:"d.m.Y" }})
         </a>
       {% endfor %}

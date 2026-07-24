@@ -979,6 +979,46 @@ def test_information_compose_supports_push_and_kiosk_announcement(admin_client):
 
 
 @pytest.mark.django_db
+def test_announcement_edit_and_delete_by_editor(client):
+    from billing.models import CampAnnouncement
+    from billing.permissions import EDITOR_GROUP
+    from tests.factories import GroupFactory, UserFactory
+
+    editor = UserFactory(username="editor_announcement")
+    editor.groups.add(GroupFactory(name=EDITOR_GROUP))
+    client.force_login(editor)
+
+    camp = CampFactory(is_active=True)
+    announcement = CampAnnouncement.objects.create(
+        camp=camp,
+        title="Alte Ankündigung",
+        body="Alte Nachricht",
+        created_by=editor,
+    )
+
+    edit_url = reverse("announcement-edit", args=[camp.pk, announcement.pk])
+    res_edit_get = client.get(edit_url)
+    assert res_edit_get.status_code == 200
+
+    res_edit_post = client.post(
+        edit_url,
+        {
+            "title": "Aktualisierte Ankündigung",
+            "body": "Aktualisierte Nachricht",
+            "is_active": "on",
+        },
+    )
+    assert res_edit_post.status_code == 302
+    announcement.refresh_from_db()
+    assert announcement.title == "Aktualisierte Ankündigung"
+
+    delete_url = reverse("announcement-delete", args=[camp.pk, announcement.pk])
+    res_delete = client.post(delete_url)
+    assert res_delete.status_code == 302
+    assert not CampAnnouncement.objects.filter(pk=announcement.pk).exists()
+
+
+@pytest.mark.django_db
 def test_information_compose_includes_participants_without_email_and_allows_editor(client):
     from billing.permissions import EDITOR_GROUP
     from tests.factories import GroupFactory, UserFactory

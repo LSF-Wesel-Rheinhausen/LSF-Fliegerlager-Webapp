@@ -3329,7 +3329,7 @@
       "source_file": "src/billing/daily_settlement_backups.py",
       "source_location": "L1",
       "id": "billing_daily_settlement_backups",
-      "community": 9,
+      "community": 15,
       "norm_label": "daily_settlement_backups.py"
     },
     {
@@ -3374,7 +3374,7 @@
       "source_file": "src/billing/daily_settlement_backups.py",
       "source_location": "L31",
       "id": "billing_daily_settlement_backups_build_settlement_backup_staging",
-      "community": 22,
+      "community": 15,
       "norm_label": "build_settlement_backup_staging()"
     },
     {
@@ -3464,7 +3464,7 @@
       "source_file": "src/billing/daily_settlement_backups.py",
       "source_location": "L32",
       "id": "billing_daily_settlement_backups_rationale_32",
-      "community": 22,
+      "community": 15,
       "norm_label": "create export files for a settlement run under the shared backup volume."
     },
     {
@@ -3797,7 +3797,7 @@
       "source_file": "src/billing/email_delivery.py",
       "source_location": "L175",
       "id": "src_billing_email_delivery_py_any",
-      "community": 33,
+      "community": 14,
       "norm_label": "any"
     },
     {
@@ -3824,7 +3824,7 @@
       "source_file": "src/billing/email_delivery.py",
       "source_location": "L279",
       "id": "billing_email_delivery_smtp_connection",
-      "community": 33,
+      "community": 14,
       "norm_label": "_smtp_connection()"
     },
     {
@@ -3833,7 +3833,7 @@
       "source_file": "src/billing/email_delivery.py",
       "source_location": "L279",
       "id": "src_billing_email_delivery_py_emailconfiguration",
-      "community": 33,
+      "community": 14,
       "norm_label": "emailconfiguration"
     },
     {
@@ -3851,7 +3851,7 @@
       "source_file": "src/billing/email_delivery.py",
       "source_location": "L296",
       "id": "billing_email_delivery_send_configuration_test_email",
-      "community": 117,
+      "community": 14,
       "norm_label": "send_configuration_test_email()"
     },
     {
@@ -4040,7 +4040,7 @@
       "source_file": "src/billing/email_delivery.py",
       "source_location": "L297",
       "id": "billing_email_delivery_rationale_297",
-      "community": 117,
+      "community": 14,
       "norm_label": "send one explicit test message for a saved smtp configuration."
     },
     {
@@ -4143,10 +4143,28 @@
       "norm_label": "any"
     },
     {
-      "label": "SettlementEmailForm",
+      "label": "CampAnnouncementForm",
       "file_type": "code",
       "source_file": "src/billing/email_forms.py",
       "source_location": "L69",
+      "id": "billing_email_forms_campannouncementform",
+      "community": 8,
+      "norm_label": "campannouncementform"
+    },
+    {
+      "label": "Meta",
+      "file_type": "code",
+      "source_file": "src/billing/email_forms.py",
+      "source_location": "L70",
+      "id": "billing_email_forms_meta",
+      "community": 8,
+      "norm_label": "meta"
+    },
+    {
+      "label": "SettlementEmailForm",
+      "file_type": "code",
+      "source_file": "src/billing/email_forms.py",
+      "source_location": "L85",
       "id": "billing_email_forms_settlementemailform",
       "community": 8,
       "norm_label": "settlementemailform"
@@ -4155,7 +4173,7 @@
       "label": ".__init__()",
       "file_type": "code",
       "source_file": "src/billing/email_forms.py",
-      "source_location": "L75",
+      "source_location": "L91",
       "id": "billing_email_forms_settlementemailform_init",
       "community": 58,
       "norm_label": ".__init__()"
@@ -4164,25 +4182,16 @@
       "label": "EmailConfigurationForm",
       "file_type": "code",
       "source_file": "src/billing/email_forms.py",
-      "source_location": "L89",
+      "source_location": "L105",
       "id": "billing_email_forms_emailconfigurationform",
       "community": 8,
       "norm_label": "emailconfigurationform"
     },
     {
-      "label": "Meta",
-      "file_type": "code",
-      "source_file": "src/billing/email_forms.py",
-      "source_location": "L107",
-      "id": "billing_email_forms_meta",
-      "community": 8,
-      "norm_label": "meta"
-    },
-    {
       "label": ".clean()",
       "file_type": "code",
       "source_file": "src/billing/email_forms.py",
-      "source_location": "L131",
+      "source_location": "L147",
       "id": "billing_email_forms_emailconfigurationform_clean",
       "community": 8,
       "norm_label": ".clean()"
@@ -4191,7 +4200,7 @@
       "label": ".clean_from_name()",
       "file_type": "code",
       "source_file": "src/billing/email_forms.py",
-      "source_location": "L151",
+      "source_location": "L167",
       "id": "billing_email_forms_emailconfigurationform_clean_from_name",
       "community": 8,
       "norm_label": ".clean_from_name()"
@@ -4200,35 +4209,35 @@
       "label": ".save()",
       "file_type": "code",
       "source_file": "src/billing/email_forms.py",
-      "source_location": "L157",
+      "source_location": "L173",
       "id": "billing_email_forms_emailconfigurationform_save",
-      "community": 58,
+      "community": 95,
       "norm_label": ".save()"
     },
     {
       "label": "bool",
       "file_type": "code",
       "source_file": "src/billing/email_forms.py",
-      "source_location": "L157",
+      "source_location": "L173",
       "id": "src_billing_email_forms_py_bool",
-      "community": 58,
+      "community": 95,
       "norm_label": "bool"
     },
     {
       "label": "EmailConfiguration",
       "file_type": "code",
       "source_file": "src/billing/email_forms.py",
-      "source_location": "L157",
+      "source_location": "L173",
       "id": "src_billing_email_forms_py_emailconfiguration",
-      "community": 58,
+      "community": 95,
       "norm_label": "emailconfiguration"
     },
     {
       "label": "Edit the singleton SMTP configuration without exposing its stored password.",
       "file_type": "rationale",
       "source_file": "src/billing/email_forms.py",
-      "source_location": "L90",
-      "id": "billing_email_forms_rationale_90",
+      "source_location": "L106",
+      "id": "billing_email_forms_rationale_106",
       "community": 8,
       "norm_label": "edit the singleton smtp configuration without exposing its stored password."
     },
@@ -4310,7 +4319,7 @@
       "source_file": "src/billing/email_views.py",
       "source_location": "L72",
       "id": "billing_email_views_email_settings",
-      "community": 117,
+      "community": 8,
       "norm_label": "email_settings()"
     },
     {
@@ -4319,23 +4328,41 @@
       "source_file": "src/billing/email_views.py",
       "source_location": "L130",
       "id": "billing_email_views_information_email_compose",
-      "community": 14,
+      "community": 8,
       "norm_label": "information_email_compose()"
+    },
+    {
+      "label": "announcement_edit()",
+      "file_type": "code",
+      "source_file": "src/billing/email_views.py",
+      "source_location": "L239",
+      "id": "billing_email_views_announcement_edit",
+      "community": 8,
+      "norm_label": "announcement_edit()"
+    },
+    {
+      "label": "announcement_delete()",
+      "file_type": "code",
+      "source_file": "src/billing/email_views.py",
+      "source_location": "L261",
+      "id": "billing_email_views_announcement_delete",
+      "community": 8,
+      "norm_label": "announcement_delete()"
     },
     {
       "label": "settlement_email_compose()",
       "file_type": "code",
       "source_file": "src/billing/email_views.py",
-      "source_location": "L238",
+      "source_location": "L272",
       "id": "billing_email_views_settlement_email_compose",
-      "community": 8,
+      "community": 58,
       "norm_label": "settlement_email_compose()"
     },
     {
       "label": "email_batch_detail()",
       "file_type": "code",
       "source_file": "src/billing/email_views.py",
-      "source_location": "L328",
+      "source_location": "L362",
       "id": "billing_email_views_email_batch_detail",
       "community": 119,
       "norm_label": "email_batch_detail()"
@@ -4344,7 +4371,7 @@
       "label": "email_delivery_retry()",
       "file_type": "code",
       "source_file": "src/billing/email_views.py",
-      "source_location": "L352",
+      "source_location": "L386",
       "id": "billing_email_views_email_delivery_retry",
       "community": 125,
       "norm_label": "email_delivery_retry()"
@@ -4382,7 +4409,7 @@
       "source_file": "src/billing/email_views.py",
       "source_location": "L73",
       "id": "billing_email_views_rationale_73",
-      "community": 117,
+      "community": 8,
       "norm_label": "allow administrators to manage the encrypted global smtp configuration."
     },
     {
@@ -4391,24 +4418,42 @@
       "source_file": "src/billing/email_views.py",
       "source_location": "L131",
       "id": "billing_email_views_rationale_131",
-      "community": 14,
+      "community": 8,
       "norm_label": "preview and manually confirm one informational notification batch (e-mail, push,"
+    },
+    {
+      "label": "Edit title, body, or active status of a camp announcement.",
+      "file_type": "rationale",
+      "source_file": "src/billing/email_views.py",
+      "source_location": "L240",
+      "id": "billing_email_views_rationale_240",
+      "community": 8,
+      "norm_label": "edit title, body, or active status of a camp announcement."
+    },
+    {
+      "label": "Delete a camp announcement.",
+      "file_type": "rationale",
+      "source_file": "src/billing/email_views.py",
+      "source_location": "L262",
+      "id": "billing_email_views_rationale_262",
+      "community": 8,
+      "norm_label": "delete a camp announcement."
     },
     {
       "label": "Preview and manually confirm invoice PDFs from one immutable settlement run.",
       "file_type": "rationale",
       "source_file": "src/billing/email_views.py",
-      "source_location": "L239",
-      "id": "billing_email_views_rationale_239",
-      "community": 8,
+      "source_location": "L273",
+      "id": "billing_email_views_rationale_273",
+      "community": 58,
       "norm_label": "preview and manually confirm invoice pdfs from one immutable settlement run."
     },
     {
       "label": "Show the recipient-level status of a manually confirmed batch.",
       "file_type": "rationale",
       "source_file": "src/billing/email_views.py",
-      "source_location": "L329",
-      "id": "billing_email_views_rationale_329",
+      "source_location": "L363",
+      "id": "billing_email_views_rationale_363",
       "community": 119,
       "norm_label": "show the recipient-level status of a manually confirmed batch."
     },
@@ -4416,8 +4461,8 @@
       "label": "Requeue one failed delivery after an explicit administrator action.",
       "file_type": "rationale",
       "source_file": "src/billing/email_views.py",
-      "source_location": "L353",
-      "id": "billing_email_views_rationale_353",
+      "source_location": "L387",
+      "id": "billing_email_views_rationale_387",
       "community": 125,
       "norm_label": "requeue one failed delivery after an explicit administrator action."
     },
@@ -4562,7 +4607,7 @@
       "source_file": "src/billing/exporters.py",
       "source_location": "L125",
       "id": "billing_exporters_participant_import_template_response",
-      "community": 15,
+      "community": 4,
       "norm_label": "participant_import_template_response()"
     },
     {
@@ -4580,7 +4625,7 @@
       "source_file": "src/billing/exporters.py",
       "source_location": "L274",
       "id": "billing_exporters_drink_entries_csv",
-      "community": 15,
+      "community": 4,
       "norm_label": "drink_entries_csv()"
     },
     {
@@ -5849,7 +5894,7 @@
       "source_file": "",
       "source_location": "",
       "id": "basecommand",
-      "community": 93,
+      "community": 3,
       "norm_label": "basecommand"
     },
     {
@@ -5903,7 +5948,7 @@
       "source_file": "src/billing/management/commands/run_daily_settlement_backup.py",
       "source_location": "L1",
       "id": "commands_run_daily_settlement_backup",
-      "community": 95,
+      "community": 3,
       "norm_label": "run_daily_settlement_backup.py"
     },
     {
@@ -5912,7 +5957,7 @@
       "source_file": "src/billing/management/commands/run_daily_settlement_backup.py",
       "source_location": "L10",
       "id": "commands_run_daily_settlement_backup_command",
-      "community": 95,
+      "community": 3,
       "norm_label": "command"
     },
     {
@@ -5921,7 +5966,7 @@
       "source_file": "src/billing/management/commands/run_daily_settlement_backup.py",
       "source_location": "L15",
       "id": "commands_run_daily_settlement_backup_command_add_arguments",
-      "community": 95,
+      "community": 3,
       "norm_label": ".add_arguments()"
     },
     {
@@ -5930,7 +5975,7 @@
       "source_file": "src/billing/management/commands/run_daily_settlement_backup.py",
       "source_location": "L15",
       "id": "src_billing_management_commands_run_daily_settlement_backup_py_any",
-      "community": 95,
+      "community": 3,
       "norm_label": "any"
     },
     {
@@ -5939,7 +5984,7 @@
       "source_file": "src/billing/management/commands/run_daily_settlement_backup.py",
       "source_location": "L25",
       "id": "commands_run_daily_settlement_backup_command_handle",
-      "community": 95,
+      "community": 3,
       "norm_label": ".handle()"
     },
     {
@@ -5948,7 +5993,7 @@
       "source_file": "src/billing/management/commands/run_daily_settlement_backup.py",
       "source_location": "L11",
       "id": "commands_run_daily_settlement_backup_rationale_11",
-      "community": 95,
+      "community": 3,
       "norm_label": "run or schedule the daily settlement backup check."
     },
     {
@@ -5957,7 +6002,7 @@
       "source_file": "src/billing/management/commands/run_daily_settlement_backup.py",
       "source_location": "L16",
       "id": "commands_run_daily_settlement_backup_rationale_16",
-      "community": 95,
+      "community": 3,
       "norm_label": "register command line options."
     },
     {
@@ -5966,7 +6011,7 @@
       "source_file": "src/billing/management/commands/run_daily_settlement_backup.py",
       "source_location": "L26",
       "id": "commands_run_daily_settlement_backup_rationale_26",
-      "community": 95,
+      "community": 3,
       "norm_label": "execute the backup check once or continuously."
     },
     {
@@ -5975,7 +6020,7 @@
       "source_file": "src/billing/management/commands/run_email_worker.py",
       "source_location": "L1",
       "id": "commands_run_email_worker",
-      "community": 93,
+      "community": 3,
       "norm_label": "run_email_worker.py"
     },
     {
@@ -5984,7 +6029,7 @@
       "source_file": "src/billing/management/commands/run_email_worker.py",
       "source_location": "L11",
       "id": "commands_run_email_worker_command",
-      "community": 93,
+      "community": 3,
       "norm_label": "command"
     },
     {
@@ -5993,7 +6038,7 @@
       "source_file": "src/billing/management/commands/run_email_worker.py",
       "source_location": "L16",
       "id": "commands_run_email_worker_command_add_arguments",
-      "community": 93,
+      "community": 3,
       "norm_label": ".add_arguments()"
     },
     {
@@ -6002,7 +6047,7 @@
       "source_file": "src/billing/management/commands/run_email_worker.py",
       "source_location": "L16",
       "id": "src_billing_management_commands_run_email_worker_py_any",
-      "community": 93,
+      "community": 3,
       "norm_label": "any"
     },
     {
@@ -6011,7 +6056,7 @@
       "source_file": "src/billing/management/commands/run_email_worker.py",
       "source_location": "L20",
       "id": "commands_run_email_worker_command_handle",
-      "community": 93,
+      "community": 3,
       "norm_label": ".handle()"
     },
     {
@@ -6020,7 +6065,7 @@
       "source_file": "src/billing/management/commands/run_email_worker.py",
       "source_location": "L12",
       "id": "commands_run_email_worker_rationale_12",
-      "community": 93,
+      "community": 3,
       "norm_label": "deliver only email outbox entries created by explicit administrator actions."
     },
     {
@@ -6029,7 +6074,7 @@
       "source_file": "src/billing/management/commands/run_push_worker.py",
       "source_location": "L1",
       "id": "commands_run_push_worker",
-      "community": 93,
+      "community": 3,
       "norm_label": "run_push_worker.py"
     },
     {
@@ -6038,7 +6083,7 @@
       "source_file": "src/billing/management/commands/run_push_worker.py",
       "source_location": "L9",
       "id": "commands_run_push_worker_command",
-      "community": 93,
+      "community": 3,
       "norm_label": "command"
     },
     {
@@ -6047,7 +6092,7 @@
       "source_file": "src/billing/management/commands/run_push_worker.py",
       "source_location": "L14",
       "id": "commands_run_push_worker_command_add_arguments",
-      "community": 93,
+      "community": 3,
       "norm_label": ".add_arguments()"
     },
     {
@@ -6065,7 +6110,7 @@
       "source_file": "src/billing/management/commands/run_push_worker.py",
       "source_location": "L10",
       "id": "commands_run_push_worker_rationale_10",
-      "community": 93,
+      "community": 3,
       "norm_label": "generate scheduled push messages and deliver the database outbox."
     },
     {
@@ -6272,7 +6317,7 @@
       "source_file": "src/billing/migrations/0011_camp_meal_booking_cutoff_time_mealsignup_charge_and_more.py",
       "source_location": "L1",
       "id": "migrations_0011_camp_meal_booking_cutoff_time_mealsignup_charge_and_more",
-      "community": 1,
+      "community": 117,
       "norm_label": "0011_camp_meal_booking_cutoff_time_mealsignup_charge_and_more.py"
     },
     {
@@ -6281,7 +6326,7 @@
       "source_file": "src/billing/migrations/0011_camp_meal_booking_cutoff_time_mealsignup_charge_and_more.py",
       "source_location": "L9",
       "id": "migrations_0011_camp_meal_booking_cutoff_time_mealsignup_charge_and_more_link_existing_meal_charges",
-      "community": 1,
+      "community": 117,
       "norm_label": "link_existing_meal_charges()"
     },
     {
@@ -6290,7 +6335,7 @@
       "source_file": "src/billing/migrations/0011_camp_meal_booking_cutoff_time_mealsignup_charge_and_more.py",
       "source_location": "L32",
       "id": "migrations_0011_camp_meal_booking_cutoff_time_mealsignup_charge_and_more_migration",
-      "community": 1,
+      "community": 117,
       "norm_label": "migration"
     },
     {
@@ -6956,7 +7001,7 @@
       "source_file": "src/billing/models.py",
       "source_location": "L22",
       "id": "billing_models_emailconfiguration",
-      "community": 8,
+      "community": 95,
       "norm_label": "emailconfiguration"
     },
     {
@@ -6974,7 +7019,7 @@
       "source_file": "src/billing/models.py",
       "source_location": "L60",
       "id": "billing_models_emailconfiguration_load",
-      "community": 8,
+      "community": 95,
       "norm_label": ".load()"
     },
     {
@@ -7010,7 +7055,7 @@
       "source_file": "src/billing/models.py",
       "source_location": "L74",
       "id": "billing_models_emailconfiguration_get_password",
-      "community": 26,
+      "community": 95,
       "norm_label": ".get_password()"
     },
     {
@@ -7091,7 +7136,7 @@
       "source_file": "src/billing/models.py",
       "source_location": "L196",
       "id": "billing_models_emaildelivery_str",
-      "community": 26,
+      "community": 33,
       "norm_label": ".__str__()"
     },
     {
@@ -7955,7 +8000,7 @@
       "source_file": "src/billing/models.py",
       "source_location": "L1119",
       "id": "billing_models_pushsubscription",
-      "community": 18,
+      "community": 93,
       "norm_label": "pushsubscription"
     },
     {
@@ -8000,7 +8045,7 @@
       "source_file": "src/billing/models.py",
       "source_location": "L1212",
       "id": "billing_models_campannouncement_str",
-      "community": 8,
+      "community": 26,
       "norm_label": ".__str__()"
     },
     {
@@ -8009,7 +8054,7 @@
       "source_file": "src/billing/models.py",
       "source_location": "L23",
       "id": "billing_models_rationale_23",
-      "community": 8,
+      "community": 95,
       "norm_label": "store the singleton smtp configuration managed by administrators."
     },
     {
@@ -8027,7 +8072,7 @@
       "source_file": "src/billing/models.py",
       "source_location": "L75",
       "id": "billing_models_rationale_75",
-      "community": 26,
+      "community": 95,
       "norm_label": "return the decrypted smtp password."
     },
     {
@@ -8261,7 +8306,7 @@
       "source_file": "src/billing/models.py",
       "source_location": "L1120",
       "id": "billing_models_rationale_1120",
-      "community": 18,
+      "community": 93,
       "norm_label": "store one browser push capability for an admin or participant device."
     },
     {
@@ -8315,7 +8360,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L18",
       "id": "src_billing_notification_views_py_str",
-      "community": 18,
+      "community": 66,
       "norm_label": "str"
     },
     {
@@ -8324,7 +8369,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L18",
       "id": "src_billing_notification_views_py_any",
-      "community": 18,
+      "community": 66,
       "norm_label": "any"
     },
     {
@@ -8342,7 +8387,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L26",
       "id": "src_billing_notification_views_py_participant",
-      "community": 18,
+      "community": 93,
       "norm_label": "participant"
     },
     {
@@ -8351,7 +8396,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L39",
       "id": "billing_notification_views_owner_filter",
-      "community": 18,
+      "community": 66,
       "norm_label": "_owner_filter()"
     },
     {
@@ -8360,7 +8405,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L39",
       "id": "src_billing_notification_views_py_bool",
-      "community": 18,
+      "community": 66,
       "norm_label": "bool"
     },
     {
@@ -8369,7 +8414,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L47",
       "id": "billing_notification_views_endpoint_fingerprint",
-      "community": 18,
+      "community": 66,
       "norm_label": "_endpoint_fingerprint()"
     },
     {
@@ -8378,7 +8423,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L52",
       "id": "billing_notification_views_device_payload",
-      "community": 18,
+      "community": 66,
       "norm_label": "_device_payload()"
     },
     {
@@ -8387,7 +8432,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L52",
       "id": "pushsubscription",
-      "community": 18,
+      "community": 93,
       "norm_label": "pushsubscription"
     },
     {
@@ -8396,7 +8441,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L63",
       "id": "billing_notification_views_device_name",
-      "community": 18,
+      "community": 66,
       "norm_label": "_device_name()"
     },
     {
@@ -8405,7 +8450,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L74",
       "id": "billing_notification_views_category_selection",
-      "community": 18,
+      "community": 66,
       "norm_label": "_category_selection()"
     },
     {
@@ -8414,7 +8459,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L88",
       "id": "billing_notification_views_settings_response",
-      "community": 18,
+      "community": 66,
       "norm_label": "_settings_response()"
     },
     {
@@ -8423,7 +8468,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L88",
       "id": "src_billing_notification_views_py_httpresponse",
-      "community": 18,
+      "community": 93,
       "norm_label": "httpresponse"
     },
     {
@@ -8432,7 +8477,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L114",
       "id": "billing_notification_views_notification_settings",
-      "community": 18,
+      "community": 93,
       "norm_label": "notification_settings()"
     },
     {
@@ -8441,7 +8486,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L119",
       "id": "billing_notification_views_kiosk_notification_settings",
-      "community": 18,
+      "community": 93,
       "norm_label": "kiosk_notification_settings()"
     },
     {
@@ -8450,7 +8495,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L127",
       "id": "billing_notification_views_subscribe",
-      "community": 18,
+      "community": 66,
       "norm_label": "_subscribe()"
     },
     {
@@ -8522,7 +8567,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L211",
       "id": "billing_notification_views_rename",
-      "community": 18,
+      "community": 66,
       "norm_label": "_rename()"
     },
     {
@@ -8549,7 +8594,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L247",
       "id": "billing_notification_views_update_preferences",
-      "community": 18,
+      "community": 66,
       "norm_label": "_update_preferences()"
     },
     {
@@ -8603,7 +8648,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L48",
       "id": "billing_notification_views_rationale_48",
-      "community": 18,
+      "community": 66,
       "norm_label": "return a stable, non-sensitive identifier for a push endpoint."
     },
     {
@@ -8612,7 +8657,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L53",
       "id": "billing_notification_views_rationale_53",
-      "community": 18,
+      "community": 66,
       "norm_label": "serialize device state without exposing its private push endpoint."
     },
     {
@@ -8621,7 +8666,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L64",
       "id": "billing_notification_views_rationale_64",
-      "community": 18,
+      "community": 66,
       "norm_label": "return a normalized valid device name from a json payload."
     },
     {
@@ -8630,7 +8675,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L75",
       "id": "billing_notification_views_rationale_75",
-      "community": 18,
+      "community": 66,
       "norm_label": "return a non-empty, deduplicated selection restricted to allowed categories."
     },
     {
@@ -8639,7 +8684,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L115",
       "id": "billing_notification_views_rationale_115",
-      "community": 18,
+      "community": 93,
       "norm_label": "render push-device settings for the current administrative user."
     },
     {
@@ -8648,7 +8693,7 @@
       "source_file": "src/billing/notification_views.py",
       "source_location": "L120",
       "id": "billing_notification_views_rationale_120",
-      "community": 18,
+      "community": 93,
       "norm_label": "render push-device settings for a private kiosk participant."
     },
     {
@@ -8774,7 +8819,7 @@
       "source_file": "src/billing/notifications.py",
       "source_location": "L57",
       "id": "billing_notifications_allowed_categories",
-      "community": 18,
+      "community": 66,
       "norm_label": "allowed_categories()"
     },
     {
@@ -8792,7 +8837,7 @@
       "source_file": "src/billing/notifications.py",
       "source_location": "L57",
       "id": "src_billing_notifications_py_str",
-      "community": 0,
+      "community": 11,
       "norm_label": "str"
     },
     {
@@ -8819,7 +8864,7 @@
       "source_file": "src/billing/notifications.py",
       "source_location": "L62",
       "id": "src_billing_notifications_py_any",
-      "community": 0,
+      "community": 11,
       "norm_label": "any"
     },
     {
@@ -8828,7 +8873,7 @@
       "source_file": "src/billing/notifications.py",
       "source_location": "L62",
       "id": "src_billing_notifications_py_int",
-      "community": 0,
+      "community": 11,
       "norm_label": "int"
     },
     {
@@ -8981,7 +9026,7 @@
       "source_file": "src/billing/notifications.py",
       "source_location": "L434",
       "id": "billing_notifications_queue_information_push_batch",
-      "community": 14,
+      "community": 11,
       "norm_label": "queue_information_push_batch()"
     },
     {
@@ -9008,7 +9053,7 @@
       "source_file": "src/billing/notifications.py",
       "source_location": "L58",
       "id": "billing_notifications_rationale_58",
-      "community": 18,
+      "community": 66,
       "norm_label": "return the category menu for a participant or administrative owner."
     },
     {
@@ -9107,7 +9152,7 @@
       "source_file": "src/billing/notifications.py",
       "source_location": "L442",
       "id": "billing_notifications_rationale_442",
-      "community": 14,
+      "community": 11,
       "norm_label": "enqueue pushmessages for registered devices of selected participants in a camp."
     },
     {
@@ -9602,7 +9647,7 @@
       "source_file": "src/billing/pwa_views.py",
       "source_location": "L1",
       "id": "billing_pwa_views",
-      "community": 18,
+      "community": 56,
       "norm_label": "pwa_views.py"
     },
     {
@@ -9611,7 +9656,7 @@
       "source_file": "src/billing/pwa_views.py",
       "source_location": "L34",
       "id": "billing_pwa_views_manifest",
-      "community": 18,
+      "community": 56,
       "norm_label": "manifest()"
     },
     {
@@ -9620,7 +9665,7 @@
       "source_file": "src/billing/pwa_views.py",
       "source_location": "L34",
       "id": "src_billing_pwa_views_py_httprequest",
-      "community": 18,
+      "community": 56,
       "norm_label": "httprequest"
     },
     {
@@ -9629,7 +9674,7 @@
       "source_file": "src/billing/pwa_views.py",
       "source_location": "L34",
       "id": "src_billing_pwa_views_py_str",
-      "community": 18,
+      "community": 56,
       "norm_label": "str"
     },
     {
@@ -9638,7 +9683,7 @@
       "source_file": "src/billing/pwa_views.py",
       "source_location": "L34",
       "id": "src_billing_pwa_views_py_jsonresponse",
-      "community": 18,
+      "community": 56,
       "norm_label": "jsonresponse"
     },
     {
@@ -9647,7 +9692,7 @@
       "source_file": "src/billing/pwa_views.py",
       "source_location": "L73",
       "id": "billing_pwa_views_service_worker",
-      "community": 18,
+      "community": 56,
       "norm_label": "service_worker()"
     },
     {
@@ -9656,7 +9701,7 @@
       "source_file": "src/billing/pwa_views.py",
       "source_location": "L73",
       "id": "src_billing_pwa_views_py_httpresponse",
-      "community": 18,
+      "community": 56,
       "norm_label": "httpresponse"
     },
     {
@@ -9665,7 +9710,7 @@
       "source_file": "src/billing/pwa_views.py",
       "source_location": "L100",
       "id": "billing_pwa_views_offline",
-      "community": 18,
+      "community": 56,
       "norm_label": "offline()"
     },
     {
@@ -9674,7 +9719,7 @@
       "source_file": "src/billing/pwa_views.py",
       "source_location": "L105",
       "id": "billing_pwa_views_pwa_template_context",
-      "community": 18,
+      "community": 56,
       "norm_label": "pwa_template_context()"
     },
     {
@@ -9683,7 +9728,7 @@
       "source_file": "src/billing/pwa_views.py",
       "source_location": "L105",
       "id": "src_billing_pwa_views_py_any",
-      "community": 18,
+      "community": 56,
       "norm_label": "any"
     },
     {
@@ -9692,7 +9737,7 @@
       "source_file": "src/billing/pwa_views.py",
       "source_location": "L35",
       "id": "billing_pwa_views_rationale_35",
-      "community": 18,
+      "community": 56,
       "norm_label": "return a surface-specific web app manifest."
     },
     {
@@ -9701,7 +9746,7 @@
       "source_file": "src/billing/pwa_views.py",
       "source_location": "L74",
       "id": "billing_pwa_views_rationale_74",
-      "community": 18,
+      "community": 56,
       "norm_label": "serve the service worker at a url matching its allowed scope."
     },
     {
@@ -9710,7 +9755,7 @@
       "source_file": "src/billing/pwa_views.py",
       "source_location": "L101",
       "id": "billing_pwa_views_rationale_101",
-      "community": 18,
+      "community": 56,
       "norm_label": "render a generic offline fallback without application data."
     },
     {
@@ -9719,7 +9764,7 @@
       "source_file": "src/billing/pwa_views.py",
       "source_location": "L106",
       "id": "billing_pwa_views_rationale_106",
-      "community": 18,
+      "community": 56,
       "norm_label": "return manifest and service-worker urls for a pwa surface."
     },
     {
@@ -9989,7 +10034,7 @@
       "source_file": "src/billing/services.py",
       "source_location": "L169",
       "id": "billing_services_camp_meal_dates",
-      "community": 4,
+      "community": 52,
       "norm_label": "camp_meal_dates()"
     },
     {
@@ -10079,7 +10124,7 @@
       "source_file": "src/billing/services.py",
       "source_location": "L281",
       "id": "billing_services_resolve_meal_price_rule",
-      "community": 4,
+      "community": 0,
       "norm_label": "resolve_meal_price_rule()"
     },
     {
@@ -10376,7 +10421,7 @@
       "source_file": "src/billing/services.py",
       "source_location": "L170",
       "id": "billing_services_rationale_170",
-      "community": 4,
+      "community": 52,
       "norm_label": "return the ordered meal dates that should appear in meal overviews."
     },
     {
@@ -10439,7 +10484,7 @@
       "source_file": "src/billing/services.py",
       "source_location": "L282",
       "id": "billing_services_rationale_282",
-      "community": 4,
+      "community": 0,
       "norm_label": "return the applicable meal price rule for one person and date.      args:"
     },
     {
@@ -10754,7 +10799,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L168",
       "id": "billing_views_kiosk_context",
-      "community": 18,
+      "community": 56,
       "norm_label": "_kiosk_context()"
     },
     {
@@ -10817,7 +10862,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L255",
       "id": "billing_views_deployment_update_check",
-      "community": 222,
+      "community": 9,
       "norm_label": "deployment_update_check()"
     },
     {
@@ -10826,7 +10871,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L271",
       "id": "billing_views_deployment_update_install",
-      "community": 9,
+      "community": 0,
       "norm_label": "deployment_update_install()"
     },
     {
@@ -10835,7 +10880,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L284",
       "id": "billing_views_deployment_daily_backup_settings",
-      "community": 0,
+      "community": 22,
       "norm_label": "deployment_daily_backup_settings()"
     },
     {
@@ -10925,7 +10970,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L372",
       "id": "billing_views_user_create",
-      "community": 29,
+      "community": 0,
       "norm_label": "user_create()"
     },
     {
@@ -11051,7 +11096,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L608",
       "id": "billing_views_settlement_run_export_csv",
-      "community": 15,
+      "community": 4,
       "norm_label": "settlement_run_export_csv()"
     },
     {
@@ -11060,7 +11105,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L614",
       "id": "billing_views_settlement_run_export_workbook",
-      "community": 15,
+      "community": 4,
       "norm_label": "settlement_run_export_workbook()"
     },
     {
@@ -11069,7 +11114,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L620",
       "id": "billing_views_settlement_snapshot_export_pdf",
-      "community": 15,
+      "community": 4,
       "norm_label": "settlement_snapshot_export_pdf()"
     },
     {
@@ -11312,7 +11357,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L1110",
       "id": "billing_views_participant_import_template_view",
-      "community": 15,
+      "community": 4,
       "norm_label": "participant_import_template_view()"
     },
     {
@@ -11330,7 +11375,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L1161",
       "id": "billing_views_export_settlements_csv",
-      "community": 15,
+      "community": 4,
       "norm_label": "export_settlements_csv()"
     },
     {
@@ -11339,7 +11384,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L1166",
       "id": "billing_views_export_drinks_csv",
-      "community": 15,
+      "community": 4,
       "norm_label": "export_drinks_csv()"
     },
     {
@@ -11348,7 +11393,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L1171",
       "id": "billing_views_export_workbook",
-      "community": 15,
+      "community": 4,
       "norm_label": "export_workbook()"
     },
     {
@@ -11357,7 +11402,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L1176",
       "id": "billing_views_export_participant_pdf",
-      "community": 15,
+      "community": 4,
       "norm_label": "export_participant_pdf()"
     },
     {
@@ -11636,7 +11681,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L1714",
       "id": "billing_views_meal_cutoff_edit",
-      "community": 66,
+      "community": 4,
       "norm_label": "meal_cutoff_edit()"
     },
     {
@@ -11753,7 +11798,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L169",
       "id": "billing_views_rationale_169",
-      "community": 18,
+      "community": 56,
       "norm_label": "return shared routing, session, and pwa context for kiosk templates."
     },
     {
@@ -11789,7 +11834,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L256",
       "id": "billing_views_rationale_256",
-      "community": 222,
+      "community": 9,
       "norm_label": "pull the configured latest image and compare it with the running image."
     },
     {
@@ -11798,7 +11843,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L272",
       "id": "billing_views_rationale_272",
-      "community": 9,
+      "community": 0,
       "norm_label": "ask the isolated agent to install the latest image asynchronously."
     },
     {
@@ -11807,7 +11852,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L285",
       "id": "billing_views_rationale_285",
-      "community": 0,
+      "community": 22,
       "norm_label": "persist the daily settlement backup schedule from the updates page."
     },
     {
@@ -11834,7 +11879,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L373",
       "id": "billing_views_rationale_373",
-      "community": 29,
+      "community": 0,
       "norm_label": "create a new application user and assign the selected billing role."
     },
     {
@@ -11951,7 +11996,7 @@
       "source_file": "src/billing/views.py",
       "source_location": "L1715",
       "id": "billing_views_rationale_1715",
-      "community": 66,
+      "community": 4,
       "norm_label": "edit only the meal booking cutoff for a camp."
     },
     {
@@ -12050,7 +12095,7 @@
       "source_file": "src/config/context_processors.py",
       "source_location": "L1",
       "id": "config_context_processors",
-      "community": 18,
+      "community": 56,
       "norm_label": "context_processors.py"
     },
     {
@@ -12059,7 +12104,7 @@
       "source_file": "src/config/context_processors.py",
       "source_location": "L9",
       "id": "config_context_processors_optional_authentication_features",
-      "community": 18,
+      "community": 56,
       "norm_label": "optional_authentication_features()"
     },
     {
@@ -12068,7 +12113,7 @@
       "source_file": "src/config/context_processors.py",
       "source_location": "L9",
       "id": "src_config_context_processors_py_httprequest",
-      "community": 18,
+      "community": 56,
       "norm_label": "httprequest"
     },
     {
@@ -12077,7 +12122,7 @@
       "source_file": "src/config/context_processors.py",
       "source_location": "L9",
       "id": "src_config_context_processors_py_str",
-      "community": 18,
+      "community": 56,
       "norm_label": "str"
     },
     {
@@ -12086,7 +12131,7 @@
       "source_file": "src/config/context_processors.py",
       "source_location": "L9",
       "id": "src_config_context_processors_py_any",
-      "community": 18,
+      "community": 56,
       "norm_label": "any"
     },
     {
@@ -12095,7 +12140,7 @@
       "source_file": "src/config/context_processors.py",
       "source_location": "L10",
       "id": "config_context_processors_rationale_10",
-      "community": 18,
+      "community": 56,
       "norm_label": "expose optional authentication feature flags to server-rendered templates."
     },
     {
@@ -12104,7 +12149,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L1",
       "id": "config_middleware",
-      "community": 3,
+      "community": 27,
       "norm_label": "middleware.py"
     },
     {
@@ -12113,7 +12158,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L11",
       "id": "config_middleware_autheliassomiddleware",
-      "community": 3,
+      "community": 27,
       "norm_label": "autheliassomiddleware"
     },
     {
@@ -12122,7 +12167,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L16",
       "id": "config_middleware_autheliassomiddleware_init",
-      "community": 3,
+      "community": 27,
       "norm_label": ".__init__()"
     },
     {
@@ -12131,7 +12176,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L16",
       "id": "src_config_middleware_py_httprequest",
-      "community": 3,
+      "community": 27,
       "norm_label": "httprequest"
     },
     {
@@ -12140,7 +12185,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L16",
       "id": "src_config_middleware_py_httpresponse",
-      "community": 3,
+      "community": 27,
       "norm_label": "httpresponse"
     },
     {
@@ -12149,7 +12194,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L19",
       "id": "config_middleware_autheliassomiddleware_call",
-      "community": 3,
+      "community": 27,
       "norm_label": ".__call__()"
     },
     {
@@ -12158,7 +12203,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L37",
       "id": "config_middleware_securityheadersmiddleware",
-      "community": 3,
+      "community": 27,
       "norm_label": "securityheadersmiddleware"
     },
     {
@@ -12167,7 +12212,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L42",
       "id": "config_middleware_securityheadersmiddleware_init",
-      "community": 3,
+      "community": 27,
       "norm_label": ".__init__()"
     },
     {
@@ -12176,7 +12221,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L45",
       "id": "config_middleware_securityheadersmiddleware_call",
-      "community": 3,
+      "community": 27,
       "norm_label": ".__call__()"
     },
     {
@@ -12185,7 +12230,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L55",
       "id": "config_middleware_securityheadersmiddleware_content_security_policy",
-      "community": 3,
+      "community": 27,
       "norm_label": ".content_security_policy()"
     },
     {
@@ -12194,7 +12239,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L55",
       "id": "src_config_middleware_py_str",
-      "community": 3,
+      "community": 27,
       "norm_label": "str"
     },
     {
@@ -12203,7 +12248,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L12",
       "id": "config_middleware_rationale_12",
-      "community": 3,
+      "community": 27,
       "norm_label": "create a django session from a trusted authelia email header when enabled."
     },
     {
@@ -12212,7 +12257,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L38",
       "id": "config_middleware_rationale_38",
-      "community": 3,
+      "community": 27,
       "norm_label": "attach application-wide browser security headers to dynamic and static responses"
     },
     {
@@ -12221,7 +12266,7 @@
       "source_file": "src/config/middleware.py",
       "source_location": "L56",
       "id": "config_middleware_rationale_56",
-      "community": 3,
+      "community": 27,
       "norm_label": "return the csp value for a request-scoped nonce."
     },
     {
@@ -12464,7 +12509,7 @@
       "source_file": "src/config/settings.py",
       "source_location": "L1",
       "id": "config_settings",
-      "community": 3,
+      "community": 27,
       "norm_label": "settings.py"
     },
     {
@@ -12473,7 +12518,7 @@
       "source_file": "src/config/sso.py",
       "source_location": "L1",
       "id": "config_sso",
-      "community": 3,
+      "community": 27,
       "norm_label": "sso.py"
     },
     {
@@ -12482,7 +12527,7 @@
       "source_file": "src/config/sso.py",
       "source_location": "L8",
       "id": "config_sso_validate_authelia_email_header",
-      "community": 3,
+      "community": 27,
       "norm_label": "validate_authelia_email_header()"
     },
     {
@@ -12491,7 +12536,7 @@
       "source_file": "src/config/sso.py",
       "source_location": "L8",
       "id": "src_config_sso_py_str",
-      "community": 3,
+      "community": 27,
       "norm_label": "str"
     },
     {
@@ -12500,7 +12545,7 @@
       "source_file": "src/config/sso.py",
       "source_location": "L9",
       "id": "config_sso_rationale_9",
-      "community": 3,
+      "community": 27,
       "norm_label": "return a trusted-header name after validating http field-name syntax."
     },
     {
@@ -13310,7 +13355,7 @@
       "source_file": "tests/factories.py",
       "source_location": "L77",
       "id": "tests_factories_drinkentryfactory",
-      "community": 19,
+      "community": 65,
       "norm_label": "drinkentryfactory"
     },
     {
@@ -13319,7 +13364,7 @@
       "source_file": "tests/factories.py",
       "source_location": "L90",
       "id": "tests_factories_paymentfactory",
-      "community": 19,
+      "community": 65,
       "norm_label": "paymentfactory"
     },
     {
@@ -13328,7 +13373,7 @@
       "source_file": "tests/factories.py",
       "source_location": "L99",
       "id": "tests_factories_expensefactory",
-      "community": 19,
+      "community": 65,
       "norm_label": "expensefactory"
     },
     {
@@ -13985,7 +14030,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L1",
       "id": "tests_test_deployment_updates",
-      "community": 27,
+      "community": 9,
       "norm_label": "test_deployment_updates.py"
     },
     {
@@ -13994,7 +14039,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L17",
       "id": "tests_test_deployment_updates_superuser",
-      "community": 27,
+      "community": 9,
       "norm_label": "superuser()"
     },
     {
@@ -14003,7 +14048,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L22",
       "id": "tests_test_deployment_updates_app_admin",
-      "community": 27,
+      "community": 9,
       "norm_label": "app_admin()"
     },
     {
@@ -14012,7 +14057,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L29",
       "id": "tests_test_deployment_updates_test_deployment_page_is_limited_to_superusers",
-      "community": 27,
+      "community": 9,
       "norm_label": "test_deployment_page_is_limited_to_superusers()"
     },
     {
@@ -14021,7 +14066,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L45",
       "id": "tests_test_deployment_updates_test_update_check_requires_post_and_reports_available_image",
-      "community": 27,
+      "community": 9,
       "norm_label": "test_update_check_requires_post_and_reports_available_image()"
     },
     {
@@ -14039,7 +14084,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L68",
       "id": "tests_test_deployment_updates_test_update_install_starts_agent",
-      "community": 27,
+      "community": 9,
       "norm_label": "test_update_install_starts_agent()"
     },
     {
@@ -14048,7 +14093,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L82",
       "id": "tests_test_deployment_updates_test_superuser_can_update_daily_backup_settings",
-      "community": 27,
+      "community": 9,
       "norm_label": "test_superuser_can_update_daily_backup_settings()"
     },
     {
@@ -14057,7 +14102,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L98",
       "id": "tests_test_deployment_updates_test_non_superuser_cannot_update_daily_backup_settings",
-      "community": 27,
+      "community": 9,
       "norm_label": "test_non_superuser_cannot_update_daily_backup_settings()"
     },
     {
@@ -14084,7 +14129,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L151",
       "id": "tests_test_deployment_updates_test_deployment_page_renders_update_changelog",
-      "community": 27,
+      "community": 9,
       "norm_label": "test_deployment_page_renders_update_changelog()"
     },
     {
@@ -14093,7 +14138,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L176",
       "id": "tests_test_deployment_updates_test_deployment_page_renders_update_dialog_script_as_external_asset",
-      "community": 27,
+      "community": 9,
       "norm_label": "test_deployment_page_renders_update_dialog_script_as_external_asset()"
     },
     {
@@ -14102,7 +14147,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L199",
       "id": "tests_test_deployment_updates_test_create_backup_archive_sends_staging_payload",
-      "community": 27,
+      "community": 9,
       "norm_label": "test_create_backup_archive_sends_staging_payload()"
     },
     {
@@ -14120,7 +14165,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L219",
       "id": "tests_test_deployment_updates_test_whitenoise_is_configured_for_production_static_files",
-      "community": 27,
+      "community": 9,
       "norm_label": "test_whitenoise_is_configured_for_production_static_files()"
     },
     {
@@ -14129,7 +14174,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L228",
       "id": "tests_test_deployment_updates_test_deployment_update_status_json_returns_status_for_superuser",
-      "community": 27,
+      "community": 9,
       "norm_label": "test_deployment_update_status_json_returns_status_for_superuser()"
     },
     {
@@ -14138,7 +14183,7 @@
       "source_file": "tests/test_deployment_updates.py",
       "source_location": "L242",
       "id": "tests_test_deployment_updates_test_deployment_update_status_json_requires_superuser",
-      "community": 27,
+      "community": 9,
       "norm_label": "test_deployment_update_status_json_requires_superuser()"
     },
     {
@@ -14561,7 +14606,7 @@
       "source_file": "tests/test_exporters.py",
       "source_location": "L26",
       "id": "tests_test_exporters_export_dataset",
-      "community": 19,
+      "community": 65,
       "norm_label": "export_dataset()"
     },
     {
@@ -14651,7 +14696,7 @@
       "source_file": "tests/test_exporters.py",
       "source_location": "L243",
       "id": "tests_test_exporters_test_workbook_export_compares_cost_center_income_and_expenses",
-      "community": 19,
+      "community": 65,
       "norm_label": "test_workbook_export_compares_cost_center_income_and_expenses()"
     },
     {
@@ -15623,7 +15668,7 @@
       "source_file": "tests/test_kiosk_camp_phases.py",
       "source_location": "L1",
       "id": "tests_test_kiosk_camp_phases",
-      "community": 56,
+      "community": 1,
       "norm_label": "test_kiosk_camp_phases.py"
     },
     {
@@ -15632,7 +15677,7 @@
       "source_file": "tests/test_kiosk_camp_phases.py",
       "source_location": "L14",
       "id": "tests_test_kiosk_camp_phases_test_camp_phase_model_methods",
-      "community": 56,
+      "community": 1,
       "norm_label": "test_camp_phase_model_methods()"
     },
     {
@@ -15641,7 +15686,7 @@
       "source_file": "tests/test_kiosk_camp_phases.py",
       "source_location": "L32",
       "id": "tests_test_kiosk_camp_phases_test_kiosk_pre_camp_renders_countdown_and_updates_dates",
-      "community": 56,
+      "community": 1,
       "norm_label": "test_kiosk_pre_camp_renders_countdown_and_updates_dates()"
     },
     {
@@ -15650,7 +15695,7 @@
       "source_file": "tests/test_kiosk_camp_phases.py",
       "source_location": "L66",
       "id": "tests_test_kiosk_camp_phases_test_kiosk_post_camp_renders_screen_and_settlement_archive",
-      "community": 56,
+      "community": 1,
       "norm_label": "test_kiosk_post_camp_renders_screen_and_settlement_archive()"
     },
     {
@@ -15659,7 +15704,7 @@
       "source_file": "tests/test_kiosk_camp_phases.py",
       "source_location": "L95",
       "id": "tests_test_kiosk_camp_phases_test_kiosk_settlement_pdf_download_permissions",
-      "community": 56,
+      "community": 1,
       "norm_label": "test_kiosk_settlement_pdf_download_permissions()"
     },
     {
@@ -15947,7 +15992,7 @@
       "source_file": "tests/test_notifications.py",
       "source_location": "L195",
       "id": "tests_test_notifications_test_queue_notification_honors_category_and_deduplicates",
-      "community": 11,
+      "community": 17,
       "norm_label": "test_queue_notification_honors_category_and_deduplicates()"
     },
     {
@@ -16167,10 +16212,19 @@
       "norm_label": "test_information_compose_supports_push_and_kiosk_announcement()"
     },
     {
-      "label": "test_information_compose_includes_participants_without_email_and_allows_editor()",
+      "label": "test_announcement_edit_and_delete_by_editor()",
       "file_type": "code",
       "source_file": "tests/test_notifications.py",
       "source_location": "L982",
+      "id": "tests_test_notifications_test_announcement_edit_and_delete_by_editor",
+      "community": 21,
+      "norm_label": "test_announcement_edit_and_delete_by_editor()"
+    },
+    {
+      "label": "test_information_compose_includes_participants_without_email_and_allows_editor()",
+      "file_type": "code",
+      "source_file": "tests/test_notifications.py",
+      "source_location": "L1022",
       "id": "tests_test_notifications_test_information_compose_includes_participants_without_email_and_allows_editor",
       "community": 1,
       "norm_label": "test_information_compose_includes_participants_without_email_and_allows_editor()"
@@ -16181,7 +16235,7 @@
       "source_file": "tests/test_participant_archiving.py",
       "source_location": "L1",
       "id": "tests_test_participant_archiving",
-      "community": 65,
+      "community": 6,
       "norm_label": "test_participant_archiving.py"
     },
     {
@@ -16190,7 +16244,7 @@
       "source_file": "tests/test_participant_archiving.py",
       "source_location": "L11",
       "id": "tests_test_participant_archiving_test_editor_can_edit_participant",
-      "community": 65,
+      "community": 6,
       "norm_label": "test_editor_can_edit_participant()"
     },
     {
@@ -16199,7 +16253,7 @@
       "source_file": "tests/test_participant_archiving.py",
       "source_location": "L36",
       "id": "tests_test_participant_archiving_test_admin_archives_and_restores_participant_without_deleting_financial_data",
-      "community": 65,
+      "community": 6,
       "norm_label": "test_admin_archives_and_restores_participant_without_deleting_financial_data()"
     },
     {
@@ -16208,7 +16262,7 @@
       "source_file": "tests/test_participant_archiving.py",
       "source_location": "L60",
       "id": "tests_test_participant_archiving_test_editor_cannot_archive_participant",
-      "community": 65,
+      "community": 6,
       "norm_label": "test_editor_cannot_archive_participant()"
     },
     {
@@ -16217,7 +16271,7 @@
       "source_file": "tests/test_participant_archiving.py",
       "source_location": "L74",
       "id": "tests_test_participant_archiving_test_archived_participant_is_removed_from_live_camp_settlement",
-      "community": 65,
+      "community": 6,
       "norm_label": "test_archived_participant_is_removed_from_live_camp_settlement()"
     },
     {
@@ -16802,7 +16856,7 @@
       "source_file": "tests/test_security_headers.py",
       "source_location": "L1",
       "id": "tests_test_security_headers",
-      "community": 3,
+      "community": 27,
       "norm_label": "test_security_headers.py"
     },
     {
@@ -16811,7 +16865,7 @@
       "source_file": "tests/test_security_headers.py",
       "source_location": "L14",
       "id": "tests_test_security_headers_test_common_security_headers_are_set",
-      "community": 3,
+      "community": 27,
       "norm_label": "test_common_security_headers_are_set()"
     },
     {
@@ -16820,7 +16874,7 @@
       "source_file": "tests/test_security_headers.py",
       "source_location": "L34",
       "id": "tests_test_security_headers_test_inline_script_uses_the_response_csp_nonce",
-      "community": 3,
+      "community": 27,
       "norm_label": "test_inline_script_uses_the_response_csp_nonce()"
     },
     {
@@ -16829,7 +16883,7 @@
       "source_file": "tests/test_security_headers.py",
       "source_location": "L42",
       "id": "tests_test_security_headers_test_security_headers_middleware_wraps_static_file_middleware",
-      "community": 3,
+      "community": 27,
       "norm_label": "test_security_headers_middleware_wraps_static_file_middleware()"
     },
     {
@@ -16838,7 +16892,7 @@
       "source_file": "tests/test_security_headers.py",
       "source_location": "L49",
       "id": "tests_test_security_headers_test_whitenoise_does_not_add_wildcard_cors_header",
-      "community": 3,
+      "community": 27,
       "norm_label": "test_whitenoise_does_not_add_wildcard_cors_header()"
     },
     {
@@ -16847,7 +16901,7 @@
       "source_file": "tests/test_security_headers.py",
       "source_location": "L55",
       "id": "tests_test_security_headers_test_static_responses_keep_same_origin_protection",
-      "community": 3,
+      "community": 27,
       "norm_label": "test_static_responses_keep_same_origin_protection()"
     },
     {
@@ -16937,7 +16991,7 @@
       "source_file": "tests/test_settlements.py",
       "source_location": "L1",
       "id": "tests_test_settlements",
-      "community": 19,
+      "community": 65,
       "norm_label": "test_settlements.py"
     },
     {
@@ -16946,7 +17000,7 @@
       "source_file": "tests/test_settlements.py",
       "source_location": "L21",
       "id": "tests_test_settlements_test_settlement_calculates_due_paid_advanced_and_balance",
-      "community": 19,
+      "community": 65,
       "norm_label": "test_settlement_calculates_due_paid_advanced_and_balance()"
     },
     {
@@ -16955,7 +17009,7 @@
       "source_file": "tests/test_settlements.py",
       "source_location": "L75",
       "id": "tests_test_settlements_test_settlement_allows_overpayment",
-      "community": 19,
+      "community": 65,
       "norm_label": "test_settlement_allows_overpayment()"
     },
     {
@@ -16964,7 +17018,7 @@
       "source_file": "tests/test_settlements.py",
       "source_location": "L93",
       "id": "tests_test_settlements_test_settlement_applies_price_element_subsidy_rates_for_youth_group_members",
-      "community": 19,
+      "community": 65,
       "norm_label": "test_settlement_applies_price_element_subsidy_rates_for_youth_group_members()"
     },
     {
@@ -16973,7 +17027,7 @@
       "source_file": "tests/test_settlements.py",
       "source_location": "L127",
       "id": "tests_test_settlements_test_settlement_selects_matching_camp_flat_rate_for_companion_and_duration",
-      "community": 19,
+      "community": 65,
       "norm_label": "test_settlement_selects_matching_camp_flat_rate_for_companion_and_duration()"
     },
     {
@@ -16991,7 +17045,7 @@
       "source_file": "tests/test_settlements.py",
       "source_location": "L184",
       "id": "tests_test_settlements_test_approve_shared_expense_pro_rata",
-      "community": 19,
+      "community": 65,
       "norm_label": "test_approve_shared_expense_pro_rata()"
     },
     {
@@ -17000,7 +17054,7 @@
       "source_file": "tests/test_settlements.py",
       "source_location": "L212",
       "id": "tests_test_settlements_test_approve_shared_expense_locks_current_expense_row",
-      "community": 19,
+      "community": 65,
       "norm_label": "test_approve_shared_expense_locks_current_expense_row()"
     },
     {
@@ -17009,7 +17063,7 @@
       "source_file": "tests/test_settlements.py",
       "source_location": "L234",
       "id": "tests_test_settlements_test_settlement_includes_shared_expense_allocation",
-      "community": 19,
+      "community": 65,
       "norm_label": "test_settlement_includes_shared_expense_allocation()"
     },
     {
@@ -17225,7 +17279,7 @@
       "source_file": "tests/test_ui_improvements.py",
       "source_location": "L1",
       "id": "tests_test_ui_improvements",
-      "community": 19,
+      "community": 65,
       "norm_label": "test_ui_improvements.py"
     },
     {
@@ -17234,7 +17288,7 @@
       "source_file": "tests/test_ui_improvements.py",
       "source_location": "L11",
       "id": "tests_test_ui_improvements_test_template_theme_properties_are_defined_in_the_shared_stylesheet",
-      "community": 19,
+      "community": 65,
       "norm_label": "test_template_theme_properties_are_defined_in_the_shared_stylesheet()"
     },
     {
@@ -17243,7 +17297,7 @@
       "source_file": "tests/test_ui_improvements.py",
       "source_location": "L25",
       "id": "tests_test_ui_improvements_test_participant_detail_shows_donation_prompt_for_credit",
-      "community": 19,
+      "community": 65,
       "norm_label": "test_participant_detail_shows_donation_prompt_for_credit()"
     },
     {
@@ -17252,7 +17306,7 @@
       "source_file": "tests/test_ui_improvements.py",
       "source_location": "L41",
       "id": "tests_test_ui_improvements_test_base_layout_renders_favicon",
-      "community": 19,
+      "community": 65,
       "norm_label": "test_base_layout_renders_favicon()"
     },
     {
@@ -17261,7 +17315,7 @@
       "source_file": "tests/test_ui_improvements.py",
       "source_location": "L52",
       "id": "tests_test_ui_improvements_test_pdf_links_open_directly_without_embedded_preview",
-      "community": 19,
+      "community": 65,
       "norm_label": "test_pdf_links_open_directly_without_embedded_preview()"
     },
     {
@@ -17369,7 +17423,7 @@
       "source_file": "tests/test_view_permissions.py",
       "source_location": "L23",
       "id": "tests_test_view_permissions_editor_user",
-      "community": 28,
+      "community": 21,
       "norm_label": "editor_user()"
     },
     {
@@ -17378,7 +17432,7 @@
       "source_file": "tests/test_view_permissions.py",
       "source_location": "L30",
       "id": "tests_test_view_permissions_huebers_user",
-      "community": 28,
+      "community": 21,
       "norm_label": "huebers_user()"
     },
     {
@@ -17396,7 +17450,7 @@
       "source_file": "tests/test_view_permissions.py",
       "source_location": "L42",
       "id": "tests_test_view_permissions_permission_dataset",
-      "community": 1,
+      "community": 65,
       "norm_label": "permission_dataset()"
     },
     {
@@ -18298,6 +18352,24 @@
       "id": "changelog_fix_214_push_recipients_editor_access_push_empf\u00e4nger_ohne_e_mail_adresse_und_editor_zugriff_beim_informationsversand",
       "community": 225,
       "norm_label": "push-empfanger ohne e-mail-adresse und editor-zugriff beim informationsversand"
+    },
+    {
+      "label": "fix-215-kiosk-announcement-layout-hero-alignment.md",
+      "file_type": "document",
+      "source_file": "changelog/fix-215-kiosk-announcement-layout-hero-alignment.md",
+      "source_location": "L1",
+      "id": "changelog_fix_215_kiosk_announcement_layout_hero_alignment",
+      "community": 222,
+      "norm_label": "fix-215-kiosk-announcement-layout-hero-alignment.md"
+    },
+    {
+      "label": "Kiosk-Ank\u00fcndigungen Layout-Fix & Bearbeitungsfunktion",
+      "file_type": "document",
+      "source_file": "changelog/fix-215-kiosk-announcement-layout-hero-alignment.md",
+      "source_location": "L1",
+      "id": "changelog_fix_215_kiosk_announcement_layout_hero_alignment_kiosk_ank\u00fcndigungen_layout_fix_bearbeitungsfunktion",
+      "community": 222,
+      "norm_label": "kiosk-ankundigungen layout-fix & bearbeitungsfunktion"
     },
     {
       "label": "fix-catering-overview-dinner-only.md",
@@ -19576,6 +19648,24 @@
       "id": "changelog_pr_216_push_recipients_editor_access_push_empf\u00e4nger_ohne_e_mail_adresse_und_editor_zugriff_beim_informationsversand",
       "community": 226,
       "norm_label": "push-empfanger ohne e-mail-adresse und editor-zugriff beim informationsversand"
+    },
+    {
+      "label": "pr-218-kiosk-announcement-layout-hero-alignment.md",
+      "file_type": "document",
+      "source_file": "changelog/pr-218-kiosk-announcement-layout-hero-alignment.md",
+      "source_location": "L1",
+      "id": "changelog_pr_218_kiosk_announcement_layout_hero_alignment",
+      "community": 278,
+      "norm_label": "pr-218-kiosk-announcement-layout-hero-alignment.md"
+    },
+    {
+      "label": "Kiosk-Ank\u00fcndigungen Layout-Fix & Bearbeitungsfunktion",
+      "file_type": "document",
+      "source_file": "changelog/pr-218-kiosk-announcement-layout-hero-alignment.md",
+      "source_location": "L1",
+      "id": "changelog_pr_218_kiosk_announcement_layout_hero_alignment_kiosk_ank\u00fcndigungen_layout_fix_bearbeitungsfunktion",
+      "community": 278,
+      "norm_label": "kiosk-ankundigungen layout-fix & bearbeitungsfunktion"
     },
     {
       "label": "pr-29-remove-redundant-settlement-table.md",
@@ -20910,6 +21000,42 @@
       "norm_label": "`tests/e2e`"
     },
     {
+      "label": "Edit the singleton SMTP configuration without exposing its stored password.",
+      "file_type": "rationale",
+      "source_file": "src/billing/email_forms.py",
+      "source_location": "L90",
+      "community": 8,
+      "norm_label": "edit the singleton smtp configuration without exposing its stored password.",
+      "id": "billing_email_forms_rationale_90"
+    },
+    {
+      "label": "Preview and manually confirm invoice PDFs from one immutable settlement run.",
+      "file_type": "rationale",
+      "source_file": "src/billing/email_views.py",
+      "source_location": "L239",
+      "community": 58,
+      "norm_label": "preview and manually confirm invoice pdfs from one immutable settlement run.",
+      "id": "billing_email_views_rationale_239"
+    },
+    {
+      "label": "Show the recipient-level status of a manually confirmed batch.",
+      "file_type": "rationale",
+      "source_file": "src/billing/email_views.py",
+      "source_location": "L329",
+      "community": 119,
+      "norm_label": "show the recipient-level status of a manually confirmed batch.",
+      "id": "billing_email_views_rationale_329"
+    },
+    {
+      "label": "Requeue one failed delivery after an explicit administrator action.",
+      "file_type": "rationale",
+      "source_file": "src/billing/email_views.py",
+      "source_location": "L353",
+      "community": 125,
+      "norm_label": "requeue one failed delivery after an explicit administrator action.",
+      "id": "billing_email_views_rationale_353"
+    },
+    {
       "label": "Resolve an exact settlement selection into recipient and attachment mappings.",
       "file_type": "rationale",
       "source_file": "src/billing/email_delivery.py",
@@ -20941,7 +21067,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/email_delivery.py",
       "source_location": "L294",
-      "community": 117,
+      "community": 14,
       "norm_label": "send one explicit test message for a saved smtp configuration.",
       "id": "billing_email_delivery_rationale_294"
     },
@@ -20986,7 +21112,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/email_views.py",
       "source_location": "L238",
-      "community": 8,
+      "community": 58,
       "norm_label": "preview and manually confirm invoice pdfs from one immutable settlement run.",
       "id": "billing_email_views_rationale_238"
     },
@@ -21193,7 +21319,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/models.py",
       "source_location": "L1098",
-      "community": 18,
+      "community": 93,
       "norm_label": "store one browser push capability for an admin or participant device.",
       "id": "billing_models_rationale_1098"
     },
@@ -21247,7 +21373,7 @@
       "file_type": "rationale",
       "source_file": "src/billing/views.py",
       "source_location": "L1655",
-      "community": 66,
+      "community": 4,
       "norm_label": "edit only the meal booking cutoff for a camp.",
       "id": "billing_views_rationale_1655"
     },
@@ -24567,9 +24693,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-6/test_backup_staging_contains_e0/staging/settlement-v1-x9s18typ/manifest.json",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_x9s18typ_manifest",
-      "target": "settlement_v1_x9s18typ_manifest_camp",
-      "confidence_score": 1.0
+      "target": "settlement_v1_x9s18typ_manifest_camp"
     },
     {
       "relation": "contains",
@@ -24577,9 +24703,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-6/test_backup_staging_contains_e0/staging/settlement-v1-x9s18typ/manifest.json",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_x9s18typ_manifest",
-      "target": "settlement_v1_x9s18typ_manifest_created_at",
-      "confidence_score": 1.0
+      "target": "settlement_v1_x9s18typ_manifest_created_at"
     },
     {
       "relation": "contains",
@@ -24587,9 +24713,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-6/test_backup_staging_contains_e0/staging/settlement-v1-x9s18typ/manifest.json",
       "source_location": "L15",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_x9s18typ_manifest",
-      "target": "settlement_v1_x9s18typ_manifest_files",
-      "confidence_score": 1.0
+      "target": "settlement_v1_x9s18typ_manifest_files"
     },
     {
       "relation": "contains",
@@ -24597,9 +24723,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-6/test_backup_staging_contains_e0/staging/settlement-v1-x9s18typ/manifest.json",
       "source_location": "L2",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_x9s18typ_manifest",
-      "target": "settlement_v1_x9s18typ_manifest_kind",
-      "confidence_score": 1.0
+      "target": "settlement_v1_x9s18typ_manifest_kind"
     },
     {
       "relation": "contains",
@@ -24607,9 +24733,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-6/test_backup_staging_contains_e0/staging/settlement-v1-x9s18typ/manifest.json",
       "source_location": "L14",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_x9s18typ_manifest",
-      "target": "settlement_v1_x9s18typ_manifest_participant_count",
-      "confidence_score": 1.0
+      "target": "settlement_v1_x9s18typ_manifest_participant_count"
     },
     {
       "relation": "contains",
@@ -24617,9 +24743,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-6/test_backup_staging_contains_e0/staging/settlement-v1-x9s18typ/manifest.json",
       "source_location": "L9",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_x9s18typ_manifest",
-      "target": "settlement_v1_x9s18typ_manifest_settlement_run",
-      "confidence_score": 1.0
+      "target": "settlement_v1_x9s18typ_manifest_settlement_run"
     },
     {
       "relation": "contains",
@@ -24627,9 +24753,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-6/test_backup_staging_contains_e0/staging/settlement-v1-x9s18typ/manifest.json",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_x9s18typ_manifest_camp",
-      "target": "settlement_v1_x9s18typ_manifest_camp_id",
-      "confidence_score": 1.0
+      "target": "settlement_v1_x9s18typ_manifest_camp_id"
     },
     {
       "relation": "contains",
@@ -24637,9 +24763,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-6/test_backup_staging_contains_e0/staging/settlement-v1-x9s18typ/manifest.json",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_x9s18typ_manifest_camp",
-      "target": "settlement_v1_x9s18typ_manifest_camp_name",
-      "confidence_score": 1.0
+      "target": "settlement_v1_x9s18typ_manifest_camp_name"
     },
     {
       "relation": "contains",
@@ -24647,9 +24773,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-6/test_backup_staging_contains_e0/staging/settlement-v1-x9s18typ/manifest.json",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_x9s18typ_manifest_camp",
-      "target": "settlement_v1_x9s18typ_manifest_camp_year",
-      "confidence_score": 1.0
+      "target": "settlement_v1_x9s18typ_manifest_camp_year"
     },
     {
       "relation": "contains",
@@ -24657,9 +24783,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-6/test_backup_staging_contains_e0/staging/settlement-v1-x9s18typ/manifest.json",
       "source_location": "L10",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_x9s18typ_manifest_settlement_run",
-      "target": "settlement_v1_x9s18typ_manifest_settlement_run_id",
-      "confidence_score": 1.0
+      "target": "settlement_v1_x9s18typ_manifest_settlement_run_id"
     },
     {
       "relation": "contains",
@@ -24667,9 +24793,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-6/test_backup_staging_contains_e0/staging/settlement-v1-x9s18typ/manifest.json",
       "source_location": "L12",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_x9s18typ_manifest_settlement_run",
-      "target": "settlement_v1_x9s18typ_manifest_settlement_run_run_type",
-      "confidence_score": 1.0
+      "target": "settlement_v1_x9s18typ_manifest_settlement_run_run_type"
     },
     {
       "relation": "contains",
@@ -24677,9 +24803,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-6/test_backup_staging_contains_e0/staging/settlement-v1-x9s18typ/manifest.json",
       "source_location": "L11",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_x9s18typ_manifest_settlement_run",
-      "target": "settlement_v1_x9s18typ_manifest_settlement_run_version",
-      "confidence_score": 1.0
+      "target": "settlement_v1_x9s18typ_manifest_settlement_run_version"
     },
     {
       "relation": "contains",
@@ -24687,9 +24813,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-6/test_completed_migration_is_id0/persistent/migration/v1.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_6_test_completed_migration_is_id0_persistent_migration_v1_json_migration_v1",
-      "target": "pytest_of_jansellerbeck_pytest_6_test_completed_migration_is_id0_persistent_migration_v1_json_migration_v1_copied_sources",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_6_test_completed_migration_is_id0_persistent_migration_v1_json_migration_v1_copied_sources"
     },
     {
       "relation": "contains",
@@ -24697,9 +24823,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-6/test_completed_migration_is_id0/persistent/migration/v1.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_6_test_completed_migration_is_id0_persistent_migration_v1_json_migration_v1",
-      "target": "pytest_of_jansellerbeck_pytest_6_test_completed_migration_is_id0_persistent_migration_v1_json_migration_v1_version",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_6_test_completed_migration_is_id0_persistent_migration_v1_json_migration_v1_version"
     },
     {
       "relation": "contains",
@@ -24707,9 +24833,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-6/test_create_backup_archive_con0/staging/run/manifest.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_6_test_create_backup_archive_con0_staging_run_manifest_json_run_manifest",
-      "target": "pytest_of_jansellerbeck_pytest_6_test_create_backup_archive_con0_staging_run_manifest_json_run_manifest_ok",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_6_test_create_backup_archive_con0_staging_run_manifest_json_run_manifest_ok"
     },
     {
       "relation": "contains",
@@ -24717,9 +24843,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-6/test_migration_copies_legacy_d0/legacy/updater-state/status.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_6_test_migration_copies_legacy_d0_legacy_updater_state_status_json_updater_state_status",
-      "target": "pytest_of_jansellerbeck_pytest_6_test_migration_copies_legacy_d0_legacy_updater_state_status_json_updater_state_status_state",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_6_test_migration_copies_legacy_d0_legacy_updater_state_status_json_updater_state_status_state"
     },
     {
       "relation": "contains",
@@ -24727,9 +24853,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-6/test_migration_copies_legacy_d0/persistent/migration/v1.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_6_test_migration_copies_legacy_d0_persistent_migration_v1_json_migration_v1",
-      "target": "pytest_of_jansellerbeck_pytest_6_test_migration_copies_legacy_d0_persistent_migration_v1_json_migration_v1_copied_sources",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_6_test_migration_copies_legacy_d0_persistent_migration_v1_json_migration_v1_copied_sources"
     },
     {
       "relation": "contains",
@@ -24737,9 +24863,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-6/test_migration_copies_legacy_d0/persistent/migration/v1.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_6_test_migration_copies_legacy_d0_persistent_migration_v1_json_migration_v1",
-      "target": "pytest_of_jansellerbeck_pytest_6_test_migration_copies_legacy_d0_persistent_migration_v1_json_migration_v1_version",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_6_test_migration_copies_legacy_d0_persistent_migration_v1_json_migration_v1_version"
     },
     {
       "relation": "contains",
@@ -24747,9 +24873,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-6/test_migration_copies_legacy_d0/persistent/updater-state/status.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_6_test_migration_copies_legacy_d0_persistent_updater_state_status_json_updater_state_status",
-      "target": "pytest_of_jansellerbeck_pytest_6_test_migration_copies_legacy_d0_persistent_updater_state_status_json_updater_state_status_state",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_6_test_migration_copies_legacy_d0_persistent_updater_state_status_json_updater_state_status_state"
     },
     {
       "relation": "contains",
@@ -24757,9 +24883,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-6/test_migration_creates_empty_l0/persistent/migration/v1.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_6_test_migration_creates_empty_l0_persistent_migration_v1_json_migration_v1",
-      "target": "pytest_of_jansellerbeck_pytest_6_test_migration_creates_empty_l0_persistent_migration_v1_json_migration_v1_copied_sources",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_6_test_migration_creates_empty_l0_persistent_migration_v1_json_migration_v1_copied_sources"
     },
     {
       "relation": "contains",
@@ -24767,9 +24893,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-6/test_migration_creates_empty_l0/persistent/migration/v1.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_6_test_migration_creates_empty_l0_persistent_migration_v1_json_migration_v1",
-      "target": "pytest_of_jansellerbeck_pytest_6_test_migration_creates_empty_l0_persistent_migration_v1_json_migration_v1_version",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_6_test_migration_creates_empty_l0_persistent_migration_v1_json_migration_v1_version"
     },
     {
       "relation": "contains",
@@ -24777,9 +24903,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-7/test_backup_staging_contains_e0/staging/settlement-v1-5uii9oj8/manifest.json",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_5uii9oj8_manifest",
-      "target": "settlement_v1_5uii9oj8_manifest_camp",
-      "confidence_score": 1.0
+      "target": "settlement_v1_5uii9oj8_manifest_camp"
     },
     {
       "relation": "contains",
@@ -24787,9 +24913,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-7/test_backup_staging_contains_e0/staging/settlement-v1-5uii9oj8/manifest.json",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_5uii9oj8_manifest",
-      "target": "settlement_v1_5uii9oj8_manifest_created_at",
-      "confidence_score": 1.0
+      "target": "settlement_v1_5uii9oj8_manifest_created_at"
     },
     {
       "relation": "contains",
@@ -24797,9 +24923,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-7/test_backup_staging_contains_e0/staging/settlement-v1-5uii9oj8/manifest.json",
       "source_location": "L15",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_5uii9oj8_manifest",
-      "target": "settlement_v1_5uii9oj8_manifest_files",
-      "confidence_score": 1.0
+      "target": "settlement_v1_5uii9oj8_manifest_files"
     },
     {
       "relation": "contains",
@@ -24807,9 +24933,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-7/test_backup_staging_contains_e0/staging/settlement-v1-5uii9oj8/manifest.json",
       "source_location": "L2",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_5uii9oj8_manifest",
-      "target": "settlement_v1_5uii9oj8_manifest_kind",
-      "confidence_score": 1.0
+      "target": "settlement_v1_5uii9oj8_manifest_kind"
     },
     {
       "relation": "contains",
@@ -24817,9 +24943,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-7/test_backup_staging_contains_e0/staging/settlement-v1-5uii9oj8/manifest.json",
       "source_location": "L14",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_5uii9oj8_manifest",
-      "target": "settlement_v1_5uii9oj8_manifest_participant_count",
-      "confidence_score": 1.0
+      "target": "settlement_v1_5uii9oj8_manifest_participant_count"
     },
     {
       "relation": "contains",
@@ -24827,9 +24953,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-7/test_backup_staging_contains_e0/staging/settlement-v1-5uii9oj8/manifest.json",
       "source_location": "L9",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_5uii9oj8_manifest",
-      "target": "settlement_v1_5uii9oj8_manifest_settlement_run",
-      "confidence_score": 1.0
+      "target": "settlement_v1_5uii9oj8_manifest_settlement_run"
     },
     {
       "relation": "contains",
@@ -24837,9 +24963,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-7/test_backup_staging_contains_e0/staging/settlement-v1-5uii9oj8/manifest.json",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_5uii9oj8_manifest_camp",
-      "target": "settlement_v1_5uii9oj8_manifest_camp_id",
-      "confidence_score": 1.0
+      "target": "settlement_v1_5uii9oj8_manifest_camp_id"
     },
     {
       "relation": "contains",
@@ -24847,9 +24973,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-7/test_backup_staging_contains_e0/staging/settlement-v1-5uii9oj8/manifest.json",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_5uii9oj8_manifest_camp",
-      "target": "settlement_v1_5uii9oj8_manifest_camp_name",
-      "confidence_score": 1.0
+      "target": "settlement_v1_5uii9oj8_manifest_camp_name"
     },
     {
       "relation": "contains",
@@ -24857,9 +24983,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-7/test_backup_staging_contains_e0/staging/settlement-v1-5uii9oj8/manifest.json",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_5uii9oj8_manifest_camp",
-      "target": "settlement_v1_5uii9oj8_manifest_camp_year",
-      "confidence_score": 1.0
+      "target": "settlement_v1_5uii9oj8_manifest_camp_year"
     },
     {
       "relation": "contains",
@@ -24867,9 +24993,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-7/test_backup_staging_contains_e0/staging/settlement-v1-5uii9oj8/manifest.json",
       "source_location": "L10",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_5uii9oj8_manifest_settlement_run",
-      "target": "settlement_v1_5uii9oj8_manifest_settlement_run_id",
-      "confidence_score": 1.0
+      "target": "settlement_v1_5uii9oj8_manifest_settlement_run_id"
     },
     {
       "relation": "contains",
@@ -24877,9 +25003,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-7/test_backup_staging_contains_e0/staging/settlement-v1-5uii9oj8/manifest.json",
       "source_location": "L12",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_5uii9oj8_manifest_settlement_run",
-      "target": "settlement_v1_5uii9oj8_manifest_settlement_run_run_type",
-      "confidence_score": 1.0
+      "target": "settlement_v1_5uii9oj8_manifest_settlement_run_run_type"
     },
     {
       "relation": "contains",
@@ -24887,9 +25013,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-7/test_backup_staging_contains_e0/staging/settlement-v1-5uii9oj8/manifest.json",
       "source_location": "L11",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_5uii9oj8_manifest_settlement_run",
-      "target": "settlement_v1_5uii9oj8_manifest_settlement_run_version",
-      "confidence_score": 1.0
+      "target": "settlement_v1_5uii9oj8_manifest_settlement_run_version"
     },
     {
       "relation": "contains",
@@ -24897,9 +25023,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-7/test_completed_migration_is_id0/persistent/migration/v1.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_7_test_completed_migration_is_id0_persistent_migration_v1_json_migration_v1",
-      "target": "pytest_of_jansellerbeck_pytest_7_test_completed_migration_is_id0_persistent_migration_v1_json_migration_v1_copied_sources",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_7_test_completed_migration_is_id0_persistent_migration_v1_json_migration_v1_copied_sources"
     },
     {
       "relation": "contains",
@@ -24907,9 +25033,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-7/test_completed_migration_is_id0/persistent/migration/v1.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_7_test_completed_migration_is_id0_persistent_migration_v1_json_migration_v1",
-      "target": "pytest_of_jansellerbeck_pytest_7_test_completed_migration_is_id0_persistent_migration_v1_json_migration_v1_version",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_7_test_completed_migration_is_id0_persistent_migration_v1_json_migration_v1_version"
     },
     {
       "relation": "contains",
@@ -24917,9 +25043,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-7/test_create_backup_archive_con0/staging/run/manifest.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_7_test_create_backup_archive_con0_staging_run_manifest_json_run_manifest",
-      "target": "pytest_of_jansellerbeck_pytest_7_test_create_backup_archive_con0_staging_run_manifest_json_run_manifest_ok",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_7_test_create_backup_archive_con0_staging_run_manifest_json_run_manifest_ok"
     },
     {
       "relation": "contains",
@@ -24927,9 +25053,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-7/test_migration_copies_legacy_d0/legacy/updater-state/status.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_7_test_migration_copies_legacy_d0_legacy_updater_state_status_json_updater_state_status",
-      "target": "pytest_of_jansellerbeck_pytest_7_test_migration_copies_legacy_d0_legacy_updater_state_status_json_updater_state_status_state",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_7_test_migration_copies_legacy_d0_legacy_updater_state_status_json_updater_state_status_state"
     },
     {
       "relation": "contains",
@@ -24937,9 +25063,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-7/test_migration_copies_legacy_d0/persistent/migration/v1.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_7_test_migration_copies_legacy_d0_persistent_migration_v1_json_migration_v1",
-      "target": "pytest_of_jansellerbeck_pytest_7_test_migration_copies_legacy_d0_persistent_migration_v1_json_migration_v1_copied_sources",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_7_test_migration_copies_legacy_d0_persistent_migration_v1_json_migration_v1_copied_sources"
     },
     {
       "relation": "contains",
@@ -24947,9 +25073,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-7/test_migration_copies_legacy_d0/persistent/migration/v1.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_7_test_migration_copies_legacy_d0_persistent_migration_v1_json_migration_v1",
-      "target": "pytest_of_jansellerbeck_pytest_7_test_migration_copies_legacy_d0_persistent_migration_v1_json_migration_v1_version",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_7_test_migration_copies_legacy_d0_persistent_migration_v1_json_migration_v1_version"
     },
     {
       "relation": "contains",
@@ -24957,9 +25083,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-7/test_migration_copies_legacy_d0/persistent/updater-state/status.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_7_test_migration_copies_legacy_d0_persistent_updater_state_status_json_updater_state_status",
-      "target": "pytest_of_jansellerbeck_pytest_7_test_migration_copies_legacy_d0_persistent_updater_state_status_json_updater_state_status_state",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_7_test_migration_copies_legacy_d0_persistent_updater_state_status_json_updater_state_status_state"
     },
     {
       "relation": "contains",
@@ -24967,9 +25093,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-7/test_migration_creates_empty_l0/persistent/migration/v1.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_7_test_migration_creates_empty_l0_persistent_migration_v1_json_migration_v1",
-      "target": "pytest_of_jansellerbeck_pytest_7_test_migration_creates_empty_l0_persistent_migration_v1_json_migration_v1_copied_sources",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_7_test_migration_creates_empty_l0_persistent_migration_v1_json_migration_v1_copied_sources"
     },
     {
       "relation": "contains",
@@ -24977,9 +25103,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-7/test_migration_creates_empty_l0/persistent/migration/v1.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_7_test_migration_creates_empty_l0_persistent_migration_v1_json_migration_v1",
-      "target": "pytest_of_jansellerbeck_pytest_7_test_migration_creates_empty_l0_persistent_migration_v1_json_migration_v1_version",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_7_test_migration_creates_empty_l0_persistent_migration_v1_json_migration_v1_version"
     },
     {
       "relation": "contains",
@@ -24987,9 +25113,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-8/test_backup_staging_contains_e0/staging/settlement-v1-2fr5w3g5/manifest.json",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_2fr5w3g5_manifest",
-      "target": "settlement_v1_2fr5w3g5_manifest_camp",
-      "confidence_score": 1.0
+      "target": "settlement_v1_2fr5w3g5_manifest_camp"
     },
     {
       "relation": "contains",
@@ -24997,9 +25123,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-8/test_backup_staging_contains_e0/staging/settlement-v1-2fr5w3g5/manifest.json",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_2fr5w3g5_manifest",
-      "target": "settlement_v1_2fr5w3g5_manifest_created_at",
-      "confidence_score": 1.0
+      "target": "settlement_v1_2fr5w3g5_manifest_created_at"
     },
     {
       "relation": "contains",
@@ -25007,9 +25133,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-8/test_backup_staging_contains_e0/staging/settlement-v1-2fr5w3g5/manifest.json",
       "source_location": "L15",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_2fr5w3g5_manifest",
-      "target": "settlement_v1_2fr5w3g5_manifest_files",
-      "confidence_score": 1.0
+      "target": "settlement_v1_2fr5w3g5_manifest_files"
     },
     {
       "relation": "contains",
@@ -25017,9 +25143,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-8/test_backup_staging_contains_e0/staging/settlement-v1-2fr5w3g5/manifest.json",
       "source_location": "L2",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_2fr5w3g5_manifest",
-      "target": "settlement_v1_2fr5w3g5_manifest_kind",
-      "confidence_score": 1.0
+      "target": "settlement_v1_2fr5w3g5_manifest_kind"
     },
     {
       "relation": "contains",
@@ -25027,9 +25153,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-8/test_backup_staging_contains_e0/staging/settlement-v1-2fr5w3g5/manifest.json",
       "source_location": "L14",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_2fr5w3g5_manifest",
-      "target": "settlement_v1_2fr5w3g5_manifest_participant_count",
-      "confidence_score": 1.0
+      "target": "settlement_v1_2fr5w3g5_manifest_participant_count"
     },
     {
       "relation": "contains",
@@ -25037,9 +25163,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-8/test_backup_staging_contains_e0/staging/settlement-v1-2fr5w3g5/manifest.json",
       "source_location": "L9",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_2fr5w3g5_manifest",
-      "target": "settlement_v1_2fr5w3g5_manifest_settlement_run",
-      "confidence_score": 1.0
+      "target": "settlement_v1_2fr5w3g5_manifest_settlement_run"
     },
     {
       "relation": "contains",
@@ -25047,9 +25173,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-8/test_backup_staging_contains_e0/staging/settlement-v1-2fr5w3g5/manifest.json",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_2fr5w3g5_manifest_camp",
-      "target": "settlement_v1_2fr5w3g5_manifest_camp_id",
-      "confidence_score": 1.0
+      "target": "settlement_v1_2fr5w3g5_manifest_camp_id"
     },
     {
       "relation": "contains",
@@ -25057,9 +25183,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-8/test_backup_staging_contains_e0/staging/settlement-v1-2fr5w3g5/manifest.json",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_2fr5w3g5_manifest_camp",
-      "target": "settlement_v1_2fr5w3g5_manifest_camp_name",
-      "confidence_score": 1.0
+      "target": "settlement_v1_2fr5w3g5_manifest_camp_name"
     },
     {
       "relation": "contains",
@@ -25067,9 +25193,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-8/test_backup_staging_contains_e0/staging/settlement-v1-2fr5w3g5/manifest.json",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_2fr5w3g5_manifest_camp",
-      "target": "settlement_v1_2fr5w3g5_manifest_camp_year",
-      "confidence_score": 1.0
+      "target": "settlement_v1_2fr5w3g5_manifest_camp_year"
     },
     {
       "relation": "contains",
@@ -25077,9 +25203,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-8/test_backup_staging_contains_e0/staging/settlement-v1-2fr5w3g5/manifest.json",
       "source_location": "L10",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_2fr5w3g5_manifest_settlement_run",
-      "target": "settlement_v1_2fr5w3g5_manifest_settlement_run_id",
-      "confidence_score": 1.0
+      "target": "settlement_v1_2fr5w3g5_manifest_settlement_run_id"
     },
     {
       "relation": "contains",
@@ -25087,9 +25213,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-8/test_backup_staging_contains_e0/staging/settlement-v1-2fr5w3g5/manifest.json",
       "source_location": "L12",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_2fr5w3g5_manifest_settlement_run",
-      "target": "settlement_v1_2fr5w3g5_manifest_settlement_run_run_type",
-      "confidence_score": 1.0
+      "target": "settlement_v1_2fr5w3g5_manifest_settlement_run_run_type"
     },
     {
       "relation": "contains",
@@ -25097,9 +25223,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-8/test_backup_staging_contains_e0/staging/settlement-v1-2fr5w3g5/manifest.json",
       "source_location": "L11",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "settlement_v1_2fr5w3g5_manifest_settlement_run",
-      "target": "settlement_v1_2fr5w3g5_manifest_settlement_run_version",
-      "confidence_score": 1.0
+      "target": "settlement_v1_2fr5w3g5_manifest_settlement_run_version"
     },
     {
       "relation": "contains",
@@ -25107,9 +25233,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-8/test_completed_migration_is_id0/persistent/migration/v1.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_8_test_completed_migration_is_id0_persistent_migration_v1_json_migration_v1",
-      "target": "pytest_of_jansellerbeck_pytest_8_test_completed_migration_is_id0_persistent_migration_v1_json_migration_v1_copied_sources",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_8_test_completed_migration_is_id0_persistent_migration_v1_json_migration_v1_copied_sources"
     },
     {
       "relation": "contains",
@@ -25117,9 +25243,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-8/test_completed_migration_is_id0/persistent/migration/v1.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_8_test_completed_migration_is_id0_persistent_migration_v1_json_migration_v1",
-      "target": "pytest_of_jansellerbeck_pytest_8_test_completed_migration_is_id0_persistent_migration_v1_json_migration_v1_version",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_8_test_completed_migration_is_id0_persistent_migration_v1_json_migration_v1_version"
     },
     {
       "relation": "contains",
@@ -25127,9 +25253,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-8/test_create_backup_archive_con0/staging/run/manifest.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_8_test_create_backup_archive_con0_staging_run_manifest_json_run_manifest",
-      "target": "pytest_of_jansellerbeck_pytest_8_test_create_backup_archive_con0_staging_run_manifest_json_run_manifest_ok",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_8_test_create_backup_archive_con0_staging_run_manifest_json_run_manifest_ok"
     },
     {
       "relation": "contains",
@@ -25137,9 +25263,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-8/test_migration_copies_legacy_d0/legacy/updater-state/status.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_8_test_migration_copies_legacy_d0_legacy_updater_state_status_json_updater_state_status",
-      "target": "pytest_of_jansellerbeck_pytest_8_test_migration_copies_legacy_d0_legacy_updater_state_status_json_updater_state_status_state",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_8_test_migration_copies_legacy_d0_legacy_updater_state_status_json_updater_state_status_state"
     },
     {
       "relation": "contains",
@@ -25147,9 +25273,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-8/test_migration_copies_legacy_d0/persistent/migration/v1.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_8_test_migration_copies_legacy_d0_persistent_migration_v1_json_migration_v1",
-      "target": "pytest_of_jansellerbeck_pytest_8_test_migration_copies_legacy_d0_persistent_migration_v1_json_migration_v1_copied_sources",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_8_test_migration_copies_legacy_d0_persistent_migration_v1_json_migration_v1_copied_sources"
     },
     {
       "relation": "contains",
@@ -25157,9 +25283,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-8/test_migration_copies_legacy_d0/persistent/migration/v1.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_8_test_migration_copies_legacy_d0_persistent_migration_v1_json_migration_v1",
-      "target": "pytest_of_jansellerbeck_pytest_8_test_migration_copies_legacy_d0_persistent_migration_v1_json_migration_v1_version",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_8_test_migration_copies_legacy_d0_persistent_migration_v1_json_migration_v1_version"
     },
     {
       "relation": "contains",
@@ -25167,9 +25293,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-8/test_migration_copies_legacy_d0/persistent/updater-state/status.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_8_test_migration_copies_legacy_d0_persistent_updater_state_status_json_updater_state_status",
-      "target": "pytest_of_jansellerbeck_pytest_8_test_migration_copies_legacy_d0_persistent_updater_state_status_json_updater_state_status_state",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_8_test_migration_copies_legacy_d0_persistent_updater_state_status_json_updater_state_status_state"
     },
     {
       "relation": "contains",
@@ -25177,9 +25303,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-8/test_migration_creates_empty_l0/persistent/migration/v1.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_8_test_migration_creates_empty_l0_persistent_migration_v1_json_migration_v1",
-      "target": "pytest_of_jansellerbeck_pytest_8_test_migration_creates_empty_l0_persistent_migration_v1_json_migration_v1_copied_sources",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_8_test_migration_creates_empty_l0_persistent_migration_v1_json_migration_v1_copied_sources"
     },
     {
       "relation": "contains",
@@ -25187,9 +25313,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-8/test_migration_creates_empty_l0/persistent/migration/v1.json",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_8_test_migration_creates_empty_l0_persistent_migration_v1_json_migration_v1",
-      "target": "pytest_of_jansellerbeck_pytest_8_test_migration_creates_empty_l0_persistent_migration_v1_json_migration_v1_version",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_8_test_migration_creates_empty_l0_persistent_migration_v1_json_migration_v1_version"
     },
     {
       "relation": "contains",
@@ -33950,9 +34076,9 @@
       "source_file": "src/billing/email_delivery.py",
       "source_location": "L124",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "billing_email_delivery_resolve_information_recipients",
-      "target": "billing_email_delivery_has_valid_recipient_email",
-      "confidence_score": 1.0
+      "target": "billing_email_delivery_has_valid_recipient_email"
     },
     {
       "relation": "imports",
@@ -35014,9 +35140,9 @@
       "source_file": "src/billing/email_delivery.py",
       "source_location": "L135",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "billing_email_delivery_rationale_135",
-      "target": "billing_email_delivery_resolve_settlement_recipients",
-      "confidence_score": 1.0
+      "target": "billing_email_delivery_resolve_settlement_recipients"
     },
     {
       "relation": "references",
@@ -35214,9 +35340,9 @@
       "source_file": "src/billing/email_delivery.py",
       "source_location": "L184",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "billing_email_delivery_rationale_184",
-      "target": "billing_email_delivery_queue_information_email_batch",
-      "confidence_score": 1.0
+      "target": "billing_email_delivery_queue_information_email_batch"
     },
     {
       "relation": "imports",
@@ -35627,9 +35753,9 @@
       "source_file": "src/billing/email_delivery.py",
       "source_location": "L228",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "billing_email_delivery_rationale_228",
-      "target": "billing_email_delivery_queue_settlement_email_batch",
-      "confidence_score": 1.0
+      "target": "billing_email_delivery_queue_settlement_email_batch"
     },
     {
       "relation": "imports",
@@ -35915,9 +36041,9 @@
       "source_file": "src/billing/email_delivery.py",
       "source_location": "L297",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "billing_email_delivery_rationale_297",
-      "target": "billing_email_delivery_send_configuration_test_email",
-      "confidence_score": 1.0
+      "target": "billing_email_delivery_send_configuration_test_email"
     },
     {
       "relation": "imports",
@@ -35957,9 +36083,9 @@
       "source_file": "src/billing/email_delivery.py",
       "source_location": "L315",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "billing_email_delivery_rationale_315",
-      "target": "billing_email_delivery_requeue_failed_email_delivery",
-      "confidence_score": 1.0
+      "target": "billing_email_delivery_requeue_failed_email_delivery"
     },
     {
       "relation": "references",
@@ -36297,9 +36423,9 @@
       "source_file": "src/billing/email_delivery.py",
       "source_location": "L370",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "billing_email_delivery_rationale_370",
-      "target": "billing_email_delivery_is_permanent_smtp_failure",
-      "confidence_score": 1.0
+      "target": "billing_email_delivery_is_permanent_smtp_failure"
     },
     {
       "relation": "calls",
@@ -36350,9 +36476,9 @@
       "source_file": "src/billing/email_delivery.py",
       "source_location": "L409",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "billing_email_delivery_rationale_409",
-      "target": "billing_email_delivery_send_due_email_deliveries",
-      "confidence_score": 1.0
+      "target": "billing_email_delivery_send_due_email_deliveries"
     },
     {
       "relation": "calls",
@@ -36479,6 +36605,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/billing/email_forms.py",
+      "source_location": "L69",
+      "weight": 1.0,
+      "source": "billing_email_forms",
+      "target": "billing_email_forms_campannouncementform",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/billing/email_forms.py",
       "source_location": "L85",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -36543,6 +36679,17 @@
       "source_file": "src/billing/email_forms.py",
       "source_location": "L7",
       "weight": 1.0,
+      "source": "billing_email_forms",
+      "target": "billing_models_campannouncement",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src/billing/email_forms.py",
+      "source_location": "L7",
+      "weight": 1.0,
       "confidence_score": 1.0,
       "source": "billing_email_forms",
       "target": "billing_models_emailconfiguration"
@@ -36577,6 +36724,16 @@
       "confidence_score": 1.0,
       "source": "billing_email_forms_manualemailcontentform",
       "target": "billing_email_forms_manualemailcontentform_clean_subject"
+    },
+    {
+      "relation": "uses",
+      "confidence": "INFERRED",
+      "source_file": "src/billing/email_forms.py",
+      "source_location": "L7",
+      "weight": 0.8,
+      "source": "billing_email_forms_manualemailcontentform",
+      "target": "billing_models_campannouncement",
+      "confidence_score": 0.5
     },
     {
       "relation": "uses",
@@ -36648,6 +36805,16 @@
       "source_file": "src/billing/email_forms.py",
       "source_location": "L7",
       "weight": 0.8,
+      "source": "src_billing_email_forms_py_str",
+      "target": "billing_models_campannouncement",
+      "confidence_score": 0.5
+    },
+    {
+      "relation": "uses",
+      "confidence": "INFERRED",
+      "source_file": "src/billing/email_forms.py",
+      "source_location": "L7",
+      "weight": 0.8,
       "confidence_score": 0.5,
       "source": "src_billing_email_forms_py_str",
       "target": "billing_models_emailconfiguration"
@@ -36671,6 +36838,16 @@
       "confidence_score": 1.0,
       "source": "billing_email_forms_informationemailform",
       "target": "billing_email_forms_informationemailform_init"
+    },
+    {
+      "relation": "uses",
+      "confidence": "INFERRED",
+      "source_file": "src/billing/email_forms.py",
+      "source_location": "L7",
+      "weight": 0.8,
+      "source": "billing_email_forms_informationemailform",
+      "target": "billing_models_campannouncement",
+      "confidence_score": 0.5
     },
     {
       "relation": "uses",
@@ -36805,8 +36982,120 @@
       "source_file": "src/billing/email_forms.py",
       "source_location": "L7",
       "weight": 0.8,
+      "source": "src_billing_email_forms_py_any",
+      "target": "billing_models_campannouncement",
+      "confidence_score": 0.5
+    },
+    {
+      "relation": "uses",
+      "confidence": "INFERRED",
+      "source_file": "src/billing/email_forms.py",
+      "source_location": "L7",
+      "weight": 0.8,
       "confidence_score": 0.5,
       "source": "src_billing_email_forms_py_any",
+      "target": "billing_models_emailconfiguration"
+    },
+    {
+      "relation": "uses",
+      "confidence": "INFERRED",
+      "source_file": "src/billing/email_forms.py",
+      "source_location": "L7",
+      "weight": 0.8,
+      "source": "billing_email_forms_campannouncementform",
+      "target": "billing_models_campannouncement",
+      "confidence_score": 0.5
+    },
+    {
+      "relation": "uses",
+      "confidence": "INFERRED",
+      "source_file": "src/billing/email_forms.py",
+      "source_location": "L7",
+      "weight": 0.8,
+      "source": "billing_email_forms_campannouncementform",
+      "target": "billing_models_emailconfiguration",
+      "confidence_score": 0.5
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src/billing/email_views.py",
+      "source_location": "L22",
+      "weight": 1.0,
+      "source": "billing_email_views",
+      "target": "billing_email_forms_campannouncementform",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/billing/email_views.py",
+      "source_location": "L243",
+      "weight": 1.0,
+      "source": "billing_email_views_announcement_edit",
+      "target": "billing_email_forms_campannouncementform"
+    },
+    {
+      "relation": "uses",
+      "confidence": "INFERRED",
+      "source_file": "src/billing/email_views.py",
+      "source_location": "L22",
+      "weight": 0.8,
+      "source": "src_billing_email_views_py_bool",
+      "target": "billing_email_forms_campannouncementform",
+      "confidence_score": 0.5
+    },
+    {
+      "relation": "uses",
+      "confidence": "INFERRED",
+      "source_file": "src/billing/email_views.py",
+      "source_location": "L22",
+      "weight": 0.8,
+      "source": "src_billing_email_views_py_int",
+      "target": "billing_email_forms_campannouncementform",
+      "confidence_score": 0.5
+    },
+    {
+      "relation": "uses",
+      "confidence": "INFERRED",
+      "source_file": "src/billing/email_views.py",
+      "source_location": "L22",
+      "weight": 0.8,
+      "source": "src_billing_email_views_py_object",
+      "target": "billing_email_forms_campannouncementform",
+      "confidence_score": 0.5
+    },
+    {
+      "relation": "uses",
+      "confidence": "INFERRED",
+      "source_file": "src/billing/email_views.py",
+      "source_location": "L22",
+      "weight": 0.8,
+      "source": "src_billing_email_views_py_str",
+      "target": "billing_email_forms_campannouncementform",
+      "confidence_score": 0.5
+    },
+    {
+      "relation": "uses",
+      "confidence": "INFERRED",
+      "source_file": "src/billing/email_forms.py",
+      "source_location": "L7",
+      "weight": 0.8,
+      "source": "billing_email_forms_meta",
+      "target": "billing_models_campannouncement",
+      "confidence_score": 0.5
+    },
+    {
+      "relation": "uses",
+      "confidence": "INFERRED",
+      "source_file": "src/billing/email_forms.py",
+      "source_location": "L7",
+      "weight": 0.8,
+      "confidence_score": 0.5,
+      "source": "billing_email_forms_meta",
       "target": "billing_models_emailconfiguration"
     },
     {
@@ -36818,6 +37107,16 @@
       "confidence_score": 1.0,
       "source": "billing_email_forms_settlementemailform",
       "target": "billing_email_forms_settlementemailform_init"
+    },
+    {
+      "relation": "uses",
+      "confidence": "INFERRED",
+      "source_file": "src/billing/email_forms.py",
+      "source_location": "L7",
+      "weight": 0.8,
+      "source": "billing_email_forms_settlementemailform",
+      "target": "billing_models_campannouncement",
+      "confidence_score": 0.5
     },
     {
       "relation": "uses",
@@ -36927,9 +37226,29 @@
       "source_file": "src/billing/email_forms.py",
       "source_location": "L7",
       "weight": 0.8,
+      "source": "billing_email_forms_emailconfigurationform",
+      "target": "billing_models_campannouncement",
+      "confidence_score": 0.5
+    },
+    {
+      "relation": "uses",
+      "confidence": "INFERRED",
+      "source_file": "src/billing/email_forms.py",
+      "source_location": "L7",
+      "weight": 0.8,
       "confidence_score": 0.5,
       "source": "billing_email_forms_emailconfigurationform",
       "target": "billing_models_emailconfiguration"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "src/billing/email_forms.py",
+      "source_location": "L106",
+      "weight": 1.0,
+      "source": "billing_email_forms_rationale_106",
+      "target": "billing_email_forms_emailconfigurationform",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -36947,9 +37266,9 @@
       "source_file": "src/billing/email_forms.py",
       "source_location": "L90",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "billing_email_forms_rationale_90",
-      "target": "billing_email_forms_emailconfigurationform",
-      "confidence_score": 1.0
+      "target": "billing_email_forms_emailconfigurationform"
     },
     {
       "relation": "imports",
@@ -37014,16 +37333,6 @@
       "target": "billing_email_forms_emailconfigurationform"
     },
     {
-      "relation": "uses",
-      "confidence": "INFERRED",
-      "source_file": "src/billing/email_forms.py",
-      "source_location": "L7",
-      "weight": 0.8,
-      "confidence_score": 0.5,
-      "source": "billing_email_forms_meta",
-      "target": "billing_models_emailconfiguration"
-    },
-    {
       "relation": "references",
       "context": "parameter_type",
       "confidence": "EXTRACTED",
@@ -37051,6 +37360,16 @@
       "source_file": "src/billing/email_forms.py",
       "source_location": "L7",
       "weight": 0.8,
+      "source": "src_billing_email_forms_py_bool",
+      "target": "billing_models_campannouncement",
+      "confidence_score": 0.5
+    },
+    {
+      "relation": "uses",
+      "confidence": "INFERRED",
+      "source_file": "src/billing/email_forms.py",
+      "source_location": "L7",
+      "weight": 0.8,
       "confidence_score": 0.5,
       "source": "src_billing_email_forms_py_bool",
       "target": "billing_models_emailconfiguration"
@@ -37061,9 +37380,39 @@
       "source_file": "src/billing/email_forms.py",
       "source_location": "L7",
       "weight": 0.8,
+      "source": "src_billing_email_forms_py_emailconfiguration",
+      "target": "billing_models_campannouncement",
+      "confidence_score": 0.5
+    },
+    {
+      "relation": "uses",
+      "confidence": "INFERRED",
+      "source_file": "src/billing/email_forms.py",
+      "source_location": "L7",
+      "weight": 0.8,
       "confidence_score": 0.5,
       "source": "src_billing_email_forms_py_emailconfiguration",
       "target": "billing_models_emailconfiguration"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/billing/email_views.py",
+      "source_location": "L261",
+      "weight": 1.0,
+      "source": "billing_email_views",
+      "target": "billing_email_views_announcement_delete",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/billing/email_views.py",
+      "source_location": "L239",
+      "weight": 1.0,
+      "source": "billing_email_views",
+      "target": "billing_email_views_announcement_edit",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -37273,9 +37622,9 @@
       "source_file": "src/billing/email_views.py",
       "source_location": "L25",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "billing_email_views",
-      "target": "billing_permissions_editor_required",
-      "confidence_score": 1.0
+      "target": "billing_permissions_editor_required"
     },
     {
       "relation": "calls",
@@ -37776,6 +38125,26 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/billing/email_views.py",
+      "source_location": "L240",
+      "weight": 1.0,
+      "source": "billing_email_views_rationale_240",
+      "target": "billing_email_views_announcement_edit",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "src/billing/email_views.py",
+      "source_location": "L262",
+      "weight": 1.0,
+      "source": "billing_email_views_rationale_262",
+      "target": "billing_email_views_announcement_delete",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "src/billing/email_views.py",
       "source_location": "L238",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -37788,7 +38157,17 @@
       "source_file": "src/billing/email_views.py",
       "source_location": "L239",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "billing_email_views_rationale_239",
+      "target": "billing_email_views_settlement_email_compose"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "src/billing/email_views.py",
+      "source_location": "L273",
+      "weight": 1.0,
+      "source": "billing_email_views_rationale_273",
       "target": "billing_email_views_settlement_email_compose",
       "confidence_score": 1.0
     },
@@ -37808,7 +38187,17 @@
       "source_file": "src/billing/email_views.py",
       "source_location": "L329",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "billing_email_views_rationale_329",
+      "target": "billing_email_views_email_batch_detail"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "src/billing/email_views.py",
+      "source_location": "L363",
+      "weight": 1.0,
+      "source": "billing_email_views_rationale_363",
       "target": "billing_email_views_email_batch_detail",
       "confidence_score": 1.0
     },
@@ -37828,7 +38217,17 @@
       "source_file": "src/billing/email_views.py",
       "source_location": "L353",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "billing_email_views_rationale_353",
+      "target": "billing_email_views_email_delivery_retry"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "src/billing/email_views.py",
+      "source_location": "L387",
+      "weight": 1.0,
+      "source": "billing_email_views_rationale_387",
       "target": "billing_email_views_email_delivery_retry",
       "confidence_score": 1.0
     },
@@ -77688,6 +78087,17 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_notifications.py",
+      "source_location": "L987",
+      "weight": 1.0,
+      "source": "tests_test_notifications_test_announcement_edit_and_delete_by_editor",
+      "target": "tests_factories_userfactory"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tests/test_notifications.py",
       "source_location": "L330",
       "weight": 1.0,
       "source": "tests_test_notifications_test_device_rename_keeps_csrf_token_when_push_transport_is_disabled",
@@ -79382,9 +79792,9 @@
       "source_file": "tests/test_notifications.py",
       "source_location": "L984",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_notifications",
-      "target": "tests_factories_groupfactory",
-      "confidence_score": 1.0
+      "target": "tests_factories_groupfactory"
     },
     {
       "relation": "uses",
@@ -79392,9 +79802,20 @@
       "source_file": "tests/test_notifications.py",
       "source_location": "L984",
       "weight": 0.8,
+      "confidence_score": 0.5,
       "source": "tests_test_notifications_py_str",
-      "target": "tests_factories_groupfactory",
-      "confidence_score": 0.5
+      "target": "tests_factories_groupfactory"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tests/test_notifications.py",
+      "source_location": "L988",
+      "weight": 1.0,
+      "source": "tests_test_notifications_test_announcement_edit_and_delete_by_editor",
+      "target": "tests_factories_groupfactory"
     },
     {
       "relation": "calls",
@@ -80526,6 +80947,17 @@
       "weight": 0.8,
       "confidence_score": 0.5,
       "source": "tests_test_notifications_py_str",
+      "target": "tests_factories_campfactory"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tests/test_notifications.py",
+      "source_location": "L991",
+      "weight": 1.0,
+      "source": "tests_test_notifications_test_announcement_edit_and_delete_by_editor",
       "target": "tests_factories_campfactory"
     },
     {
@@ -86953,6 +87385,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests/test_notifications.py",
+      "source_location": "L982",
+      "weight": 1.0,
+      "source": "tests_test_notifications",
+      "target": "tests_test_notifications_test_announcement_edit_and_delete_by_editor",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_notifications.py",
       "source_location": "L909",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -87025,9 +87467,9 @@
       "source_file": "tests/test_notifications.py",
       "source_location": "L982",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_notifications",
-      "target": "tests_test_notifications_test_information_compose_includes_participants_without_email_and_allows_editor",
-      "confidence_score": 1.0
+      "target": "tests_test_notifications_test_information_compose_includes_participants_without_email_and_allows_editor"
     },
     {
       "relation": "contains",
@@ -89724,9 +90166,9 @@
       "source_file": "changelog/fix-168-out-of-camp-time-handling.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "changelog_fix_168_out_of_camp_time_handling",
-      "target": "changelog_fix_168_out_of_camp_time_handling_behandlung_von_vor_und_nachlagerzeiten_im_kiosk",
-      "confidence_score": 1.0
+      "target": "changelog_fix_168_out_of_camp_time_handling_behandlung_von_vor_und_nachlagerzeiten_im_kiosk"
     },
     {
       "relation": "contains",
@@ -89734,8 +90176,18 @@
       "source_file": "changelog/fix-214-push-recipients-editor-access.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "changelog_fix_214_push_recipients_editor_access",
-      "target": "changelog_fix_214_push_recipients_editor_access_push_empf\u00e4nger_ohne_e_mail_adresse_und_editor_zugriff_beim_informationsversand",
+      "target": "changelog_fix_214_push_recipients_editor_access_push_empf\u00e4nger_ohne_e_mail_adresse_und_editor_zugriff_beim_informationsversand"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "changelog/fix-215-kiosk-announcement-layout-hero-alignment.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "changelog_fix_215_kiosk_announcement_layout_hero_alignment",
+      "target": "changelog_fix_215_kiosk_announcement_layout_hero_alignment_kiosk_ank\u00fcndigungen_layout_fix_bearbeitungsfunktion",
       "confidence_score": 1.0
     },
     {
@@ -90604,8 +91056,18 @@
       "source_file": "changelog/pr-216-push-recipients-editor-access.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "changelog_pr_216_push_recipients_editor_access",
-      "target": "changelog_pr_216_push_recipients_editor_access_push_empf\u00e4nger_ohne_e_mail_adresse_und_editor_zugriff_beim_informationsversand",
+      "target": "changelog_pr_216_push_recipients_editor_access_push_empf\u00e4nger_ohne_e_mail_adresse_und_editor_zugriff_beim_informationsversand"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "changelog/pr-218-kiosk-announcement-layout-hero-alignment.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "changelog_pr_218_kiosk_announcement_layout_hero_alignment",
+      "target": "changelog_pr_218_kiosk_announcement_layout_hero_alignment_kiosk_ank\u00fcndigungen_layout_fix_bearbeitungsfunktion",
       "confidence_score": 1.0
     },
     {
@@ -91474,9 +91936,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-6/test_build_manifest_adds_first0/changelog/pr-1-example.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_6_test_build_manifest_adds_first0_changelog_pr_1_example_md_changelog_pr_1_example",
-      "target": "pytest_of_jansellerbeck_pytest_6_test_build_manifest_adds_first0_changelog_pr_1_example_md_changelog_pr_1_example_example",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_6_test_build_manifest_adds_first0_changelog_pr_1_example_md_changelog_pr_1_example_example"
     },
     {
       "relation": "contains",
@@ -91484,9 +91946,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-7/test_build_manifest_adds_first0/changelog/pr-1-example.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_7_test_build_manifest_adds_first0_changelog_pr_1_example_md_changelog_pr_1_example",
-      "target": "pytest_of_jansellerbeck_pytest_7_test_build_manifest_adds_first0_changelog_pr_1_example_md_changelog_pr_1_example_example",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_7_test_build_manifest_adds_first0_changelog_pr_1_example_md_changelog_pr_1_example_example"
     },
     {
       "relation": "contains",
@@ -91494,9 +91956,9 @@
       "source_file": "pytest-of-jansellerbeck/pytest-8/test_build_manifest_adds_first0/changelog/pr-1-example.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "pytest_of_jansellerbeck_pytest_8_test_build_manifest_adds_first0_changelog_pr_1_example_md_changelog_pr_1_example",
-      "target": "pytest_of_jansellerbeck_pytest_8_test_build_manifest_adds_first0_changelog_pr_1_example_md_changelog_pr_1_example_example",
-      "confidence_score": 1.0
+      "target": "pytest_of_jansellerbeck_pytest_8_test_build_manifest_adds_first0_changelog_pr_1_example_md_changelog_pr_1_example_example"
     },
     {
       "relation": "contains",
@@ -91710,5 +92172,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "cf62739a3b960ebf691839efdcd0e6dadf507daf"
+  "built_at_commit": "265b5b52960d7a3c1807aa797c476f4607eec2f8"
 }

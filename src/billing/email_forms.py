@@ -4,7 +4,7 @@ from django import forms
 
 from .email_credentials import EmailCredentialError
 from .email_delivery import has_valid_recipient_email
-from .models import EmailConfiguration
+from .models import CampAnnouncement, EmailConfiguration
 
 
 class ManualEmailContentForm(forms.Form):
@@ -64,6 +64,22 @@ class InformationEmailForm(ManualEmailContentForm):
             )
             for participant in participants
         ]
+
+
+class CampAnnouncementForm(forms.ModelForm):
+    class Meta:
+        model = CampAnnouncement
+        fields = ["title", "body", "is_active"]
+        labels = {
+            "title": "Titel",
+            "body": "Inhalt",
+            "is_active": "Im Kiosk anzeigen",
+        }
+        widgets = {
+            "title": forms.TextInput(attrs={"class": "form-control"}),
+            "body": forms.Textarea(attrs={"class": "form-control", "rows": 4}),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
 
 
 class SettlementEmailForm(ManualEmailContentForm):
