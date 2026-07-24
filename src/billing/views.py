@@ -243,7 +243,10 @@ def deployment_update_status_json(request: HttpRequest) -> JsonResponse:
     try:
         status = deployment_status()
     except UpdateAgentError as error:
-        return JsonResponse({"active": False, "phase": "error", "error": str(error)}, status=503)
+        error_message = (
+            error.args[0] if error.args and isinstance(error.args[0], str) else "Der Update-Agent ist nicht verfügbar."
+        )
+        return JsonResponse({"active": False, "phase": "error", "error": error_message}, status=503)
     return JsonResponse(status)
 
 
