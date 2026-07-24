@@ -1177,12 +1177,14 @@ textarea {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 22px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .kiosk-card {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 18px;
+  justify-content: space-between;
 }
 
 .kiosk-card--accent {

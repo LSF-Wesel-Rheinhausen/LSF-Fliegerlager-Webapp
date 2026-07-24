@@ -1,6 +1,14 @@
 {% extends "billing/kiosk_base.html" %}
 {% block title %}Kiosk-Login{% endblock %}
 {% block content %}
+  {% if is_pre_camp and camp %}
+    <section class="panel kiosk-card kiosk-card--accent" style="border-left: 4px solid var(--accent); margin-bottom: 1.5rem; width: 100%; max-width: 900px; margin-left: auto; margin-right: auto;">
+      <span class="kiosk-hero__eyebrow">⏳ Vor dem Fliegerlager</span>
+      <h2 style="margin: 0.25rem 0 0.5rem; font-size: 1.4rem;">Noch {{ days_until_start }} Tage bis Lagerbeginn!</h2>
+      <p style="margin: 0;">Das Fliegerlager {{ camp.name }} beginnt am {{ camp.starts_on|date:"d.m.Y" }}.</p>
+    </section>
+  {% endif %}
+
   <section class="kiosk-login-shell">
     <div class="kiosk-login-card">
       <article class="panel kiosk-login-card__hero kiosk-card--accent">
@@ -32,6 +40,10 @@
         <div class="kiosk-note">
           <strong>Neu hier?</strong>
           <p>Beim ersten Login kannst du dir direkt eine eigene PIN ausdenken. Gib sie einfach ein, sie wird danach gespeichert.</p>
+        </div>
+        <div class="kiosk-note" style="margin-top: 0.75rem;">
+          <strong>Du fehlst in der Liste?</strong>
+          <p>Wenn du noch nicht registriert bist, kann die Lagerleitung dich direkt in der Teilnehmerliste eintragen.</p>
         </div>
       </div>
     </div>

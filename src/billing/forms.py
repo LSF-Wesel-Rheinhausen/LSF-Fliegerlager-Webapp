@@ -244,6 +244,7 @@ class CampForm(forms.ModelForm):
             "iban",
             "paypal_link",
             "notes",
+            "show_kiosk_invoices",
         ]
         labels = {
             "name": "Name",
@@ -256,6 +257,7 @@ class CampForm(forms.ModelForm):
             "iban": "IBAN",
             "paypal_link": "PayPal.me Link",
             "notes": "Notizen",
+            "show_kiosk_invoices": "Rechnungen im Kiosk anzeigen",
         }
         widgets = {
             "starts_on": forms.DateInput(attrs={"type": "date"}),

@@ -2476,3 +2476,26 @@ def test_kiosk_books_snack_successfully(client):
     assert entry.description == "Mittagssnack (Kiosk)"
     assert entry.quantity == Decimal("1.00")
     assert entry.unit_price == Decimal("4.50")
+
+
+@pytest.mark.django_db
+def test_kiosk_show_invoices_setting_toggle(client):
+    camp = CampFactory(is_active=True, show_kiosk_invoices=False)
+    participant = ParticipantFactory(camp=camp)
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.get(reverse("kiosk-home"))
+    assert response.status_code == 200
+    assert "Meine Rechnungen" not in response.content.decode("utf-8")
+
+    pdf_response = client.get(reverse("kiosk-current-settlement-pdf"))
+    assert pdf_response.status_code == 403
+
+    camp.show_kiosk_invoices = True
+    camp.save()
+
+    response_active = client.get(reverse("kiosk-home"))
+    assert response_active.status_code == 200
+    assert "Meine Rechnungen" in response_active.content.decode("utf-8")
