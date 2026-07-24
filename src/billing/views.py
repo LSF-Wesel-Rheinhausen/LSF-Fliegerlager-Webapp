@@ -982,6 +982,26 @@ def shift_delete(request, shift_id):
 
 
 @editor_required
+@require_POST
+def shift_bulk_delete(request, camp_id):
+    camp = get_object_or_404(Camp, pk=camp_id)
+    shift_ids = request.POST.getlist("shift_ids")
+    if not shift_ids:
+        messages.warning(request, "Es wurden keine Dienste zum Löschen ausgewählt.")
+        return redirect("shift-manage", camp_id=camp.pk)
+
+    with transaction.atomic():
+        deleted_count, _ = Shift.objects.filter(camp=camp, pk__in=shift_ids).delete()
+
+    if deleted_count > 0:
+        messages.success(request, f"{deleted_count} Dienst(e) wurde(n) gelöscht.")
+    else:
+        messages.warning(request, "Es wurden keine passenden Dienste gefunden.")
+
+    return redirect("shift-manage", camp_id=camp.pk)
+
+
+@editor_required
 def expense_create(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
     form = ExpenseForm(request.POST or None, request.FILES or None)
