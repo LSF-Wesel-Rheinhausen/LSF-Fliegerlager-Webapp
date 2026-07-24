@@ -154,6 +154,8 @@ def information_email_compose(request, camp_id):
                 camp=camp,
                 participant_ids=form.cleaned_data["participants"],
             )
+            if channels in {"email", "both"} and not preview:
+                form.add_error(None, "Für die ausgewählten Teilnehmer wurde keine gültige E-Mail-Adresse gefunden.")
             recipient_mapping = information_recipient_mapping(preview)
             preview_payload = _preview_payload(
                 kind=EmailBatch.Kind.INFORMATION,
