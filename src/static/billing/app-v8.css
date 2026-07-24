@@ -576,8 +576,43 @@ tbody tr:hover {
   padding-left: 14px;
 }
 
-.changelog-entry h3,
-.changelog-entry p {
+.changelog-entry[open] {
+  padding-bottom: 4px;
+}
+
+.changelog-summary {
+  cursor: pointer;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  user-select: none;
+  padding-block: 4px;
+}
+
+.changelog-summary:hover {
+  color: var(--accent);
+}
+
+.changelog-version {
+  display: inline-block;
+  background: var(--bg-surface-elevated, #f0f4f8);
+  color: var(--text-primary);
+  font-size: 0.82em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.changelog-title {
+  font-weight: 600;
+}
+
+.changelog-details {
+  margin-top: 8px;
+}
+
+.changelog-details p {
   margin-block: 0 8px;
 }
 

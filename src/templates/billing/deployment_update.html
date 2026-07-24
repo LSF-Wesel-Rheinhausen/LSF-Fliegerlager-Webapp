@@ -78,15 +78,20 @@
       <section class="panel stack">
         <div>
           <h2>{% if deployment_status.phase == "complete" %}Installierte Änderungen{% else %}Änderungen seit installierter Version{% endif %}</h2>
-          <p>Diese Einträge stammen aus den Changelog-Dateien zwischen installierter und verfügbarer Version.</p>
+          <p>Kompakte Übersicht aller Änderungen zwischen installierter und verfügbarer Version. Klicke auf einen Eintrag für Details.</p>
         </div>
         <div class="changelog-list">
           {% for entry in deployment_status.changelog %}
-            <article class="changelog-entry">
-              <h3>{{ entry.title }}</h3>
-              {% if entry.body %}<p>{{ entry.body|linebreaksbr }}</p>{% endif %}
-              {% if entry.path %}<p class="hint"><code>{{ entry.path }}</code></p>{% endif %}
-            </article>
+            <details class="changelog-entry">
+              <summary class="changelog-summary">
+                {% if entry.version %}<span class="changelog-version">v{{ entry.version }}</span>{% endif %}
+                <span class="changelog-title">{{ entry.title }}</span>
+              </summary>
+              <div class="changelog-details">
+                {% if entry.body %}<p>{{ entry.body|linebreaksbr }}</p>{% endif %}
+                {% if entry.path %}<p class="hint"><code>{{ entry.path }}</code></p>{% endif %}
+              </div>
+            </details>
           {% endfor %}
         </div>
       </section>
