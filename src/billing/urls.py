@@ -129,6 +129,7 @@ urlpatterns = [
     path("prices/<int:price_rule_id>/edit/", views.price_rule_edit, name="price-rule-edit"),
     path("prices/<int:price_rule_id>/delete/", views.price_rule_delete, name="price-rule-delete"),
     path("camps/<int:camp_id>/shifts/", views.shift_manage, name="shift-manage"),
+    path("camps/<int:camp_id>/shifts/bulk-delete/", views.shift_bulk_delete, name="shift-bulk-delete"),
     path("camps/<int:camp_id>/shifts/new/", views.shift_create, name="shift-create"),
     path("camps/<int:camp_id>/shifts/report/", views.shift_report, name="shift-report"),
     path("camps/<int:camp_id>/shift-templates/", views.shift_templates_manage, name="shift-templates-manage"),

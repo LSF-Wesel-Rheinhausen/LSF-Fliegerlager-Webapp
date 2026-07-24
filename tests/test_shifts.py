@@ -64,6 +64,43 @@ def test_admin_can_delete_shift(admin_client, shift):
 
 
 @pytest.mark.django_db
+def test_admin_can_bulk_delete_shifts(admin_client, active_camp):
+    s1 = Shift.objects.create(camp=active_camp, name="Dienst 1", date=datetime.date.today(), required_slots=1)
+    s2 = Shift.objects.create(camp=active_camp, name="Dienst 2", date=datetime.date.today(), required_slots=1)
+    s3 = Shift.objects.create(camp=active_camp, name="Dienst 3", date=datetime.date.today(), required_slots=1)
+
+    url = reverse("shift-bulk-delete", args=[active_camp.pk])
+    response = admin_client.post(url, {"shift_ids": [s1.pk, s2.pk]})
+    assert response.status_code == 302
+    assert not Shift.objects.filter(pk__in=[s1.pk, s2.pk]).exists()
+    assert Shift.objects.filter(pk=s3.pk).exists()
+
+
+@pytest.mark.django_db
+def test_bulk_delete_empty_selection_warning(admin_client, active_camp):
+    url = reverse("shift-bulk-delete", args=[active_camp.pk])
+    response = admin_client.post(url, {})
+    assert response.status_code == 302
+
+
+@pytest.mark.django_db
+def test_bulk_delete_scoped_to_camp(admin_client, active_camp, db):
+    other_camp = Camp.objects.create(
+        name="Other Camp",
+        year=2026,
+        starts_on=datetime.date.today(),
+        ends_on=datetime.date.today() + datetime.timedelta(days=5),
+        is_active=True,
+    )
+    s_other = Shift.objects.create(camp=other_camp, name="Other Shift", date=datetime.date.today(), required_slots=1)
+
+    url = reverse("shift-bulk-delete", args=[active_camp.pk])
+    response = admin_client.post(url, {"shift_ids": [s_other.pk]})
+    assert response.status_code == 302
+    assert Shift.objects.filter(pk=s_other.pk).exists()
+
+
+@pytest.mark.django_db
 def test_generate_shifts_from_templates(admin_client, active_camp):
     from billing.models import DailyShiftException, DailyShiftTemplate
 
