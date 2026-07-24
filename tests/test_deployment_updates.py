@@ -222,3 +222,34 @@ def test_whitenoise_is_configured_for_production_static_files(settings):
         "django.contrib.staticfiles.storage.StaticFilesStorage",
         "whitenoise.storage.CompressedManifestStaticFilesStorage",
     }
+
+
+@pytest.mark.django_db
+def test_deployment_update_status_json_returns_status_for_superuser(client, superuser):
+    client.force_login(superuser)
+    with patch(
+        "billing.views.deployment_status",
+        return_value={"phase": "installing", "message": "Wird installiert...", "error": ""},
+    ):
+        response = client.get(reverse("deployment-update-status-json"))
+
+    assert response.status_code == 200
+    assert response.headers["Content-Type"] == "application/json"
+    assert response.json() == {"phase": "installing", "message": "Wird installiert...", "error": ""}
+
+
+@pytest.mark.django_db
+def test_deployment_update_status_json_requires_superuser(client, app_admin):
+    client.force_login(app_admin)
+    response = client.get(reverse("deployment-update-status-json"))
+    assert response.status_code == 302
+
+
+@pytest.mark.django_db
+def test_deployment_update_status_json_handles_agent_error(client, superuser):
+    client.force_login(superuser)
+    with patch("billing.views.deployment_status", side_effect=UpdateAgentError("Agent offline")):
+        response = client.get(reverse("deployment-update-status-json"))
+
+    assert response.status_code == 503
+    assert response.json() == {"active": False, "phase": "error", "error": "Agent offline"}

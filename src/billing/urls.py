@@ -74,6 +74,11 @@ urlpatterns = [
     path("users/<int:user_id>/edit/", views.user_edit, name="user-edit"),
     path("users/<int:user_id>/password/", views.user_password_reset, name="user-password-reset"),
     path("deployment/update/", views.deployment_update, name="deployment-update"),
+    path(
+        "deployment/update/status/",
+        views.deployment_update_status_json,
+        name="deployment-update-status-json",
+    ),
     path("deployment/update/check/", views.deployment_update_check, name="deployment-update-check"),
     path("deployment/update/install/", views.deployment_update_install, name="deployment-update-install"),
     path(

@@ -47,19 +47,19 @@
   </section>
 
   {% if deployment_status %}
-    <section class="panel deployment-status">
+    <section class="panel deployment-status" data-deployment-status-panel data-deployment-status-url="{% url 'deployment-update-status-json' %}" data-deployment-phase="{{ deployment_status.phase }}">
       <div>
         <h2>Deployment-Status</h2>
-        <p>{{ deployment_status.message }}</p>
-        {% if deployment_status.backup %}<p>Backup: <code>{{ deployment_status.backup }}</code></p>{% endif %}
-        {% if deployment_status.error %}<p class="error-text">{{ deployment_status.error }}</p>{% endif %}
-        {% if deployment_status.rollback_error %}<p class="error-text">{{ deployment_status.rollback_error }}</p>{% endif %}
+        <p data-deployment-message>{{ deployment_status.message }}</p>
+        <p data-deployment-backup {% if not deployment_status.backup %}style="display:none"{% endif %}>Backup: <code data-deployment-backup-path>{{ deployment_status.backup }}</code></p>
+        <p class="error-text" data-deployment-error {% if not deployment_status.error %}style="display:none"{% endif %}>{{ deployment_status.error }}</p>
+        <p class="error-text" data-deployment-rollback-error {% if not deployment_status.rollback_error %}style="display:none"{% endif %}>{{ deployment_status.rollback_error }}</p>
         {% if deployment_status.recovery %}
           <p><strong>Recovery:</strong></p>
-          <pre><code>{{ deployment_status.recovery }}</code></pre>
+          <pre><code data-deployment-recovery>{{ deployment_status.recovery }}</code></pre>
         {% endif %}
       </div>
-      <span class="status-badge{% if deployment_status.phase == 'complete' or deployment_status.phase == 'checked' %} status-badge--ok{% endif %}">
+      <span class="status-badge{% if deployment_status.phase == 'complete' or deployment_status.phase == 'checked' %} status-badge--ok{% endif %}" data-deployment-badge>
         {{ deployment_status.phase }}
       </span>
     </section>
