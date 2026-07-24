@@ -420,7 +420,7 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/pwa_views.py": {
-    "mtime": 1784916478.1489146,
+    "mtime": 1784917264.767478,
     "ast_hash": "8566f68e135e75303d72928d06cfd25c",
     "semantic_hash": ""
   },
@@ -705,7 +705,7 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_pwa.py": {
-    "mtime": 1784916483.4760752,
+    "mtime": 1784917282.6099503,
     "ast_hash": "174bc3f3338ffa5ff7bd810de254321f",
     "semantic_hash": ""
   },
@@ -1435,7 +1435,7 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/kiosk_home.html": {
-    "mtime": 1784916449.9162638,
+    "mtime": 1784917291.5834284,
     "ast_hash": "d5de4755b0a32df49b8c72b23ed91142",
     "semantic_hash": ""
   },
@@ -1694,41 +1694,6 @@
     "ast_hash": "c1f61eceb8941a4ba9191525fdc035a7",
     "semantic_hash": ""
   },
-  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/pytest-of-jansellerbeck/pytest-7/test_backup_staging_contains_e0/staging/settlement-v1-5uii9oj8/manifest.json": {
-    "mtime": 1784913544.438887,
-    "ast_hash": "84540565c4892de4125ddda14bd8ca3b",
-    "semantic_hash": ""
-  },
-  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/pytest-of-jansellerbeck/pytest-7/test_completed_migration_is_id0/persistent/migration/v1.json": {
-    "mtime": 1784913599.8020122,
-    "ast_hash": "d1551f7db2bbc753fc1640275c83ae35",
-    "semantic_hash": ""
-  },
-  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/pytest-of-jansellerbeck/pytest-7/test_create_backup_archive_con0/staging/run/manifest.json": {
-    "mtime": 1784913599.7480469,
-    "ast_hash": "fb50bf98d7d4137b4b4604ae138bc57c",
-    "semantic_hash": ""
-  },
-  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/pytest-of-jansellerbeck/pytest-7/test_migration_copies_legacy_d0/legacy/updater-state/status.json": {
-    "mtime": 1784913599.795942,
-    "ast_hash": "285edee17c59306248531e8d18084088",
-    "semantic_hash": ""
-  },
-  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/pytest-of-jansellerbeck/pytest-7/test_migration_copies_legacy_d0/persistent/migration/v1.json": {
-    "mtime": 1784913599.7979743,
-    "ast_hash": "ab83f4911e4c34dd1909c6622d06cb40",
-    "semantic_hash": ""
-  },
-  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/pytest-of-jansellerbeck/pytest-7/test_migration_copies_legacy_d0/persistent/updater-state/status.json": {
-    "mtime": 1784913599.795942,
-    "ast_hash": "285edee17c59306248531e8d18084088",
-    "semantic_hash": ""
-  },
-  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/pytest-of-jansellerbeck/pytest-7/test_migration_creates_empty_l0/persistent/migration/v1.json": {
-    "mtime": 1784913599.8000185,
-    "ast_hash": "8f33758672e44abe9c6639dec1d81c92",
-    "semantic_hash": ""
-  },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/pytest-of-jansellerbeck/pytest-8/test_backup_staging_contains_e0/staging/settlement-v1-2fr5w3g5/manifest.json": {
     "mtime": 1784913883.535898,
     "ast_hash": "cc3d438ead4905f06a9d9bdb83ded6d7",
@@ -1779,19 +1744,9 @@
     "ast_hash": "f3ba1ea72e56dfbce2133079e05fbdc1",
     "semantic_hash": ""
   },
-  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/pytest-of-jansellerbeck/pytest-7/test_build_manifest_adds_first0/changelog/pr-1-example.md": {
-    "mtime": 1784913599.7125282,
-    "ast_hash": "366311d03f03f231c1945b34788f3139",
-    "semantic_hash": ""
-  },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/pytest-of-jansellerbeck/pytest-8/test_build_manifest_adds_first0/changelog/pr-1-example.md": {
     "mtime": 1784913939.5329583,
     "ast_hash": "366311d03f03f231c1945b34788f3139",
-    "semantic_hash": ""
-  },
-  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/pytest-of-jansellerbeck/pytest-7/test_backup_staging_contains_e0/staging/settlement-v1-5uii9oj8/pdf/abrechnung-1-v1.pdf": {
-    "mtime": 1784913544.4387572,
-    "ast_hash": "8352a8d765034c1de60428b56a38570d",
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/pytest-of-jansellerbeck/pytest-8/test_backup_staging_contains_e0/staging/settlement-v1-2fr5w3g5/pdf/abrechnung-1-v1.pdf": {
@@ -1892,6 +1847,66 @@
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/scratch/issue220/img.png": {
     "mtime": 1784915931.4272602,
     "ast_hash": "4eed7a64c8e7acede19acac8c0933ffa",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/pytest-of-jansellerbeck/pytest-10/test_backup_staging_contains_e0/staging/settlement-v1-6y0p66ye/manifest.json": {
+    "mtime": 1784917317.8822167,
+    "ast_hash": "bc967906d4730702dc3800cfdd263251",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/pytest-of-jansellerbeck/pytest-10/test_completed_migration_is_id0/persistent/migration/v1.json": {
+    "mtime": 1784917373.5431876,
+    "ast_hash": "d1551f7db2bbc753fc1640275c83ae35",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/pytest-of-jansellerbeck/pytest-10/test_create_backup_archive_con0/staging/run/manifest.json": {
+    "mtime": 1784917373.4923635,
+    "ast_hash": "fb50bf98d7d4137b4b4604ae138bc57c",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/pytest-of-jansellerbeck/pytest-10/test_migration_copies_legacy_d0/legacy/updater-state/status.json": {
+    "mtime": 1784917373.5366251,
+    "ast_hash": "285edee17c59306248531e8d18084088",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/pytest-of-jansellerbeck/pytest-10/test_migration_copies_legacy_d0/persistent/migration/v1.json": {
+    "mtime": 1784917373.5386467,
+    "ast_hash": "ab83f4911e4c34dd1909c6622d06cb40",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/pytest-of-jansellerbeck/pytest-10/test_migration_copies_legacy_d0/persistent/updater-state/status.json": {
+    "mtime": 1784917373.5366251,
+    "ast_hash": "285edee17c59306248531e8d18084088",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/pytest-of-jansellerbeck/pytest-10/test_migration_creates_empty_l0/persistent/migration/v1.json": {
+    "mtime": 1784917373.540555,
+    "ast_hash": "8f33758672e44abe9c6639dec1d81c92",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/pytest-of-jansellerbeck/pytest-10/test_build_manifest_adds_first0/changelog/pr-1-example.md": {
+    "mtime": 1784917373.4567258,
+    "ast_hash": "366311d03f03f231c1945b34788f3139",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/pytest-of-jansellerbeck/pytest-10/test_backup_staging_contains_e0/staging/settlement-v1-6y0p66ye/pdf/abrechnung-1-v1.pdf": {
+    "mtime": 1784917317.8820143,
+    "ast_hash": "f38ac5add261f90a93fcf6074835b294",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/scratch/screenshots/admin_login_page.png": {
+    "mtime": 1784916881.8732271,
+    "ast_hash": "1f33a03bec77d486d3088d0165977e7e",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/scratch/screenshots/kiosk_home_desktop.png": {
+    "mtime": 1784916947.1771815,
+    "ast_hash": "c5212bc1dd8b3285c48846f2dda3566b",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/scratch/screenshots/kiosk_login_page.png": {
+    "mtime": 1784916881.7400198,
+    "ast_hash": "c5212bc1dd8b3285c48846f2dda3566b",
     "semantic_hash": ""
   }
 }
