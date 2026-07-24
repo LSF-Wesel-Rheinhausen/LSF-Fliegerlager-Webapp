@@ -77,6 +77,50 @@
     </table>
   </section>
 
+  {% if pending_registrations %}
+    <section class="panel" style="margin-bottom: 1.5rem; border-left: 4px solid var(--accent);">
+      <h2 style="font-size: 1.25rem; margin-bottom: 0.5rem;">⏳ Offene Registrierungsanfragen ({{ pending_registrations|length }})</h2>
+      <p style="color: var(--muted); font-size: 0.9rem;">Folgende Teilnehmer haben sich selbst über den Kiosk registriert und warten auf deine Freigabe:</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>E-Mail</th>
+            <th>Telefon</th>
+            <th>Anreise / Abreise</th>
+            <th>Eingereicht am</th>
+            <th>Aktionen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in pending_registrations %}
+            <tr>
+              <td><strong>{{ p.full_name }}</strong></td>
+              <td>{{ p.email|default:"-" }}</td>
+              <td>{{ p.phone|default:"-" }}</td>
+              <td>
+                {% if p.arrival_date %}{{ p.arrival_date|date:"d.m.Y" }}{% else %}-{% endif %}
+                bis
+                {% if p.departure_date %}{{ p.departure_date|date:"d.m.Y" }}{% else %}-{% endif %}
+              </td>
+              <td>{{ p.created_at|date:"d.m.Y H:i" }}</td>
+              <td style="display: flex; gap: 0.5rem;">
+                <form method="post" action="{% url 'participant-approve-registration' camp.pk p.pk %}">
+                  {% csrf_token %}
+                  <button type="submit" class="button button-small button-success">✅ Freigeben</button>
+                </form>
+                <form method="post" action="{% url 'participant-reject-registration' camp.pk p.pk %}">
+                  {% csrf_token %}
+                  <button type="submit" class="button button-small button-danger" onclick="return confirm('Möchtest du diese Registrierungsanfrage wirklich ablehnen und löschen?');">❌ Ablehnen</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  {% endif %}
+
   {% if pending_expenses %}
   <section class="panel stack">
     <h2>Ausstehende Gemeinschaftsausgaben</h2>

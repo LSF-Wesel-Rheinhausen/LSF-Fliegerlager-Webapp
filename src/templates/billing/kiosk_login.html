@@ -43,9 +43,27 @@
         </div>
         <div class="kiosk-note" style="margin-top: 0.75rem;">
           <strong>Du fehlst in der Liste?</strong>
-          <p>Wenn du noch nicht registriert bist, kann die Lagerleitung dich direkt in der Teilnehmerliste eintragen.</p>
+          <p>Melde dich hier direkt für das Fliegerlager an. Nach der Freigabe durch die Lagerleitung kannst du dich anmelden.</p>
+          <button type="button" class="button button-secondary" style="margin-top: 0.5rem; width: 100%;" onclick="document.getElementById('self-registration-dialog').showModal();">
+            📝 Für Fliegerlager registrieren
+          </button>
         </div>
       </div>
     </div>
   </section>
+
+  <dialog id="self-registration-dialog" class="dialog" style="max-width: 500px; width: 90%; border: none; border-radius: var(--radius); padding: 1.5rem; background: var(--panel);">
+    <form method="post" action="{% if is_central %}{% url 'central-kiosk-self-register' %}{% else %}{% url 'kiosk-self-register' %}{% endif %}">
+      {% csrf_token %}
+      <h2 style="margin-top: 0; font-size: 1.25rem;">📝 Selbstregistrierung Fliegerlager</h2>
+      <p style="color: var(--muted); font-size: 0.9rem;">
+        Trage deine Daten ein. Nach dem Absenden erhält die Lagerleitung eine Benachrichtigung zur Freigabe.
+      </p>
+      {{ enrollment_form.as_p }}
+      <div class="form-actions" style="margin-top: 1rem; display: flex; justify-content: flex-end; gap: 0.5rem;">
+        <button type="button" class="button button-secondary" onclick="document.getElementById('self-registration-dialog').close();">Abbrechen</button>
+        <button type="submit" class="button">Registrierung absenden</button>
+      </div>
+    </form>
+  </dialog>
 {% endblock %}

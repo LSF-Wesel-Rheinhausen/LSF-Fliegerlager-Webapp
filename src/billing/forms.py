@@ -260,8 +260,8 @@ class CampForm(forms.ModelForm):
             "show_kiosk_invoices": "Rechnungen im Kiosk anzeigen",
         }
         widgets = {
-            "starts_on": forms.DateInput(attrs={"type": "date"}),
-            "ends_on": forms.DateInput(attrs={"type": "date"}),
+            "starts_on": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+            "ends_on": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "meal_booking_cutoff_time": forms.TimeInput(attrs={"type": "time"}),
         }
 
@@ -534,7 +534,7 @@ class ChargeForm(forms.ModelForm):
             "foerdersatz": "Fördersatz (%)",
             "occurred_on": "Datum",
         }
-        widgets = {"occurred_on": forms.DateInput(attrs={"type": "date"})}
+        widgets = {"occurred_on": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"})}
 
 
 class PaymentForm(forms.ModelForm):
@@ -547,7 +547,7 @@ class PaymentForm(forms.ModelForm):
             "method": "Zahlungsart",
             "note": "Notiz",
         }
-        widgets = {"paid_on": forms.DateInput(attrs={"type": "date"})}
+        widgets = {"paid_on": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"})}
 
 
 EXPENSE_CATEGORY_CHOICES = [
@@ -576,7 +576,7 @@ class ExpenseForm(forms.ModelForm):
             "reimbursable": "Erstattungsfähig",
         }
         widgets = {
-            "paid_on": forms.DateInput(attrs={"type": "date"}),
+            "paid_on": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "category": forms.Select(choices=EXPENSE_CATEGORY_CHOICES),
             "receipt": forms.FileInput(
                 attrs={
@@ -603,7 +603,7 @@ class SharedExpenseRequestForm(forms.ModelForm):
             "paid_on": "Zahlungsdatum",
         }
         widgets = {
-            "paid_on": forms.DateInput(attrs={"type": "date"}),
+            "paid_on": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "category": forms.Select(choices=EXPENSE_CATEGORY_CHOICES),
             "receipt": forms.FileInput(
                 attrs={
@@ -697,7 +697,11 @@ class KioskLoginForm(forms.Form):
         self.missing_pin_family_member = None
 
     def _login_targets(self) -> list[dict[str, Any]]:
-        participants = Participant.objects.filter(camp__is_active=True, archived_at__isnull=True).select_related("camp")
+        participants = (
+            Participant.objects.filter(camp__is_active=True, archived_at__isnull=True)
+            .exclude(status=Participant.Status.PENDING_APPROVAL)
+            .select_related("camp")
+        )
         targets = [
             {
                 "token": f"participant-{participant.pk}",
@@ -802,6 +806,40 @@ class KioskPinSetupForm(forms.Form):
         if pin and pin_repeat and pin != pin_repeat:
             raise forms.ValidationError("Die PINs stimmen nicht überein.", code="pin_mismatch")
         return cleaned_data
+
+
+class KioskSelfEnrollmentForm(forms.ModelForm):
+    class Meta:
+        model = Participant
+        fields = [
+            "first_name",
+            "last_name",
+            "email",
+            "phone",
+            "arrival_date",
+            "departure_date",
+            "is_child",
+            "is_youth_group",
+            "is_companion",
+            "notes",
+        ]
+        labels = {
+            "first_name": "Vorname",
+            "last_name": "Nachname",
+            "email": "E-Mail (optional)",
+            "phone": "Telefonnummer (optional)",
+            "arrival_date": "Anreisedatum (optional)",
+            "departure_date": "Abreisedatum (optional)",
+            "is_child": "Kind (ermäßigt)",
+            "is_youth_group": "Jugendgruppe",
+            "is_companion": "Begleitperson",
+            "notes": "Anmerkung (optional)",
+        }
+        widgets = {
+            "arrival_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+            "departure_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+            "notes": forms.Textarea(attrs={"rows": 2}),
+        }
 
 
 class QuickBookingForm(forms.Form):
@@ -1094,7 +1132,7 @@ class ShiftForm(forms.ModelForm):
             "required_slots": "Benötigte Helfer",
         }
         widgets = {
-            "date": forms.DateInput(attrs={"type": "date"}),
+            "date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "start_time": forms.TimeInput(attrs={"type": "time"}),
             "end_time": forms.TimeInput(attrs={"type": "time"}),
         }

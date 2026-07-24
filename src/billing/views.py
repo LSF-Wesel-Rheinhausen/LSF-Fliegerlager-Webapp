@@ -43,6 +43,7 @@ from .forms import (
     KioskFamilyMemberForm,
     KioskLoginForm,
     KioskPinSetupForm,
+    KioskSelfEnrollmentForm,
     MealBookingForm,
     MealCutoffForm,
     MealPlanForm,
@@ -462,6 +463,9 @@ def camp_detail(request, camp_id):
     }
     price_rules = camp.price_rules.all()
     pending_expenses = camp.expenses.filter(status=Expense.Status.PENDING)
+    pending_registrations = camp.participants.filter(
+        status=Participant.Status.PENDING_APPROVAL, archived_at__isnull=True
+    )
     from .services import get_cost_center_evaluation
 
     cost_centers = get_cost_center_evaluation(camp)
@@ -477,9 +481,36 @@ def camp_detail(request, camp_id):
             "archived_participants": archived_participants,
             "settlement_runs": settlement_runs,
             "pending_expenses": pending_expenses,
+            "pending_registrations": pending_registrations,
             "cost_centers": cost_centers,
         },
     )
+
+
+@editor_required
+@require_POST
+def approve_participant_registration(request, camp_id, participant_id):
+    camp = get_object_or_404(Camp, pk=camp_id)
+    participant = get_object_or_404(Participant, pk=participant_id, camp=camp)
+    participant.status = Participant.Status.REGISTERED
+    participant.save()
+    messages.success(
+        request,
+        f"Die Registrierung von {participant.full_name} wurde erfolgreich freigegeben. "
+        "Der Teilnehmer kann sich nun im Kiosk anmelden.",
+    )
+    return redirect("camp-detail", camp_id=camp.pk)
+
+
+@editor_required
+@require_POST
+def reject_participant_registration(request, camp_id, participant_id):
+    camp = get_object_or_404(Camp, pk=camp_id)
+    participant = get_object_or_404(Participant, pk=participant_id, camp=camp)
+    name = participant.full_name
+    participant.delete()
+    messages.info(request, f"Die Registrierungsanfrage von {name} wurde abgelehnt und entfernt.")
+    return redirect("camp-detail", camp_id=camp.pk)
 
 
 @editor_required
@@ -1318,12 +1349,14 @@ def kiosk_login(request, kiosk_mode="private"):
     is_pre_camp = camp.is_pre_camp() if camp else False
     is_post_camp = camp.is_post_camp() if camp else False
     days_until_start = camp.days_until_start() if camp else None
+    enrollment_form = KioskSelfEnrollmentForm()
 
     return render(
         request,
         "billing/kiosk_login.html",
         {
             "form": form,
+            "enrollment_form": enrollment_form,
             "camp": camp,
             "is_pre_camp": is_pre_camp,
             "is_post_camp": is_post_camp,
@@ -1331,6 +1364,43 @@ def kiosk_login(request, kiosk_mode="private"):
             **_kiosk_context(kiosk_mode),
         },
     )
+
+
+@require_POST
+def kiosk_self_register(request, kiosk_mode="private"):
+    """Handle self-registration submission from Kiosk login page."""
+    _activate_kiosk_mode(request, kiosk_mode)
+    camp = Camp.objects.filter(is_active=True).first()
+    if not camp:
+        messages.error(request, "Derzeit ist kein aktives Fliegerlager konfiguriert.")
+        return redirect(_kiosk_route(kiosk_mode, "login"))
+
+    form = KioskSelfEnrollmentForm(request.POST)
+    if form.is_valid():
+        first_name = form.cleaned_data["first_name"].strip()
+        last_name = form.cleaned_data["last_name"].strip()
+
+        if Participant.objects.filter(camp=camp, first_name__iexact=first_name, last_name__iexact=last_name).exists():
+            messages.error(
+                request,
+                f"Ein Teilnehmer mit dem Namen '{first_name} {last_name}' existiert bereits in diesem Fliegerlager.",
+            )
+            return redirect(_kiosk_route(kiosk_mode, "login"))
+
+        participant = form.save(commit=False)
+        participant.camp = camp
+        participant.status = Participant.Status.PENDING_APPROVAL
+        participant.save()
+
+        messages.success(
+            request,
+            f"Vielen Dank, {first_name}! Deine Registrierung wurde eingereicht. "
+            "Die Lagerleitung muss deine Registrierung noch freigeben, bevor du dich anmelden kannst.",
+        )
+        return redirect(_kiosk_route(kiosk_mode, "login"))
+
+    messages.error(request, "Fehler bei der Registrierung. Bitte überprüfe deine Eingaben.")
+    return redirect(_kiosk_route(kiosk_mode, "login"))
 
 
 def kiosk_logout(request, kiosk_mode="private"):

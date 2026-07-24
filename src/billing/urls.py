@@ -208,8 +208,19 @@ urlpatterns = [
         {"kiosk_mode": "private"},
         name="kiosk-current-settlement-pdf",
     ),
+    path(
+        "camps/<int:camp_id>/participants/<int:participant_id>/approve/",
+        views.approve_participant_registration,
+        name="participant-approve-registration",
+    ),
+    path(
+        "camps/<int:camp_id>/participants/<int:participant_id>/reject/",
+        views.reject_participant_registration,
+        name="participant-reject-registration",
+    ),
     path("kiosk/", views.kiosk_home, {"kiosk_mode": "private"}, name="kiosk-home"),
     path("kiosk/login/", views.kiosk_login, {"kiosk_mode": "private"}, name="kiosk-login"),
+    path("kiosk/register/", views.kiosk_self_register, {"kiosk_mode": "private"}, name="kiosk-self-register"),
     path("kiosk/shifts/", views.kiosk_shifts, {"kiosk_mode": "private"}, name="kiosk-shifts"),
     path(
         "kiosk/shared-expenses/request/",
@@ -237,6 +248,12 @@ urlpatterns = [
     ),
     path("central/kiosk/", views.kiosk_home, {"kiosk_mode": "central"}, name="central-kiosk-home"),
     path("central/kiosk/login/", views.kiosk_login, {"kiosk_mode": "central"}, name="central-kiosk-login"),
+    path(
+        "central/kiosk/register/",
+        views.kiosk_self_register,
+        {"kiosk_mode": "central"},
+        name="central-kiosk-self-register",
+    ),
     path("central/kiosk/shifts/", views.kiosk_shifts, {"kiosk_mode": "central"}, name="central-kiosk-shifts"),
     path(
         "central/kiosk/shared-expenses/request/",

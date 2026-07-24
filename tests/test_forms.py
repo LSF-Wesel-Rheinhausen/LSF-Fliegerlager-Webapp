@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, time
 from decimal import Decimal
 
 import pytest
@@ -28,9 +28,16 @@ def test_camp_form_saves_meal_booking_cutoff_time():
 
     assert form.is_valid(), form.errors
     saved_camp = form.save()
+    assert saved_camp.meal_booking_cutoff_time == time(11, 30)
 
-    assert saved_camp.meal_booking_cutoff_time.hour == 11
-    assert saved_camp.meal_booking_cutoff_time.minute == 30
+
+@pytest.mark.django_db
+def test_camp_form_renders_dates_in_iso_format():
+    camp = CampFactory(starts_on=date(2026, 8, 1), ends_on=date(2026, 8, 15))
+    form = CampForm(instance=camp)
+    html = str(form["starts_on"])
+    assert 'value="2026-08-01"' in html
+    assert 'value="2026-08-15"' in str(form["ends_on"])
 
 
 @pytest.mark.django_db
