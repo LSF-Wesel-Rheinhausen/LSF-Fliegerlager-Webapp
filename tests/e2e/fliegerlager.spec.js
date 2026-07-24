@@ -1,4 +1,5 @@
 const { expect, test } = require("./fixtures");
+const { isBenignPageRequestFailure, requestFailureDetails } = require("./requestFailureFilter");
 
 test.use({ serviceWorkers: "block" });
 
@@ -14,6 +15,24 @@ const VIEWPORTS = [
 
 async function isVisible(locator) {
   return locator.isVisible().catch(() => false);
+}
+
+function trackPageIssues(page) {
+  const browserErrors = [];
+  const failedRequests = [];
+
+  page.on("console", (message) => {
+    if (message.type() === "error") browserErrors.push(message.text());
+  });
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  page.on("requestfailed", (request) => {
+    const details = requestFailureDetails(request);
+    if (!isBenignPageRequestFailure(details)) {
+      failedRequests.push(`${details.method} ${details.url}${details.errorText ? ` (${details.errorText})` : ""}`);
+    }
+  });
+
+  return { browserErrors, failedRequests };
 }
 
 async function assertNoUnexpectedOverflow(page) {
@@ -211,13 +230,7 @@ test("Admin completes setup, login, camp workflow and logout", async ({ page }) 
 });
 
 test("Admin registers and signs in with a passkey", async ({ context, page }) => {
-  const browserErrors = [];
-  const failedRequests = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") browserErrors.push(message.text());
-  });
-  page.on("pageerror", (error) => browserErrors.push(error.message));
-  page.on("requestfailed", (request) => failedRequests.push(`${request.method()} ${request.url()}`));
+  const { browserErrors, failedRequests } = trackPageIssues(page);
   await context.credentials.install();
   await setupFirstAdmin(page);
 
@@ -470,13 +483,7 @@ test("Kiosk flow: login, pin setup, drink and meal booking", async ({ page }) =>
 });
 
 test("Kiosk masonry and expense cards stay responsive and accessible", async ({ page }) => {
-  const browserErrors = [];
-  const failedRequests = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") browserErrors.push(message.text());
-  });
-  page.on("pageerror", (error) => browserErrors.push(error.message));
-  page.on("requestfailed", (request) => failedRequests.push(`${request.method()} ${request.url()}`));
+  const { browserErrors, failedRequests } = trackPageIssues(page);
 
   await setupFirstAdmin(page);
   const campName = await createCamp(page, "Masonry-Lager");
@@ -638,13 +645,7 @@ test("Theme follows the system preference without a saved selection", async ({ p
 });
 
 test("Dark theme keeps contextual surfaces readable and responsive", async ({ page }) => {
-  const browserErrors = [];
-  const failedRequests = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") browserErrors.push(message.text());
-  });
-  page.on("pageerror", (error) => browserErrors.push(error.message));
-  page.on("requestfailed", (request) => failedRequests.push(`${request.method()} ${request.url()}`));
+  const { browserErrors, failedRequests } = trackPageIssues(page);
 
   await setupFirstAdmin(page);
   await createCamp(page, "Dark-Mode-Lager");
@@ -769,13 +770,7 @@ test("Role flow: editor cannot see admin functions", async ({ page }) => {
 });
 
 test("Admin configures SMTP and manually confirms exact information recipients", async ({ page }) => {
-  const browserErrors = [];
-  const failedRequests = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") browserErrors.push(message.text());
-  });
-  page.on("pageerror", (error) => browserErrors.push(error.message));
-  page.on("requestfailed", (request) => failedRequests.push(`${request.method()} ${request.url()}`));
+  const { browserErrors, failedRequests } = trackPageIssues(page);
 
   await setupFirstAdmin(page);
   await page.getByRole("link", { name: "E-Mail", exact: true }).click();

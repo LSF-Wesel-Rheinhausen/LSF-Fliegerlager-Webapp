@@ -281,6 +281,28 @@ def test_changelog_between_versions_keeps_entries_after_current_revision():
     assert [entry["title"] for entry in result] == ["Two", "Three"]
 
 
+def test_changelog_between_versions_uses_versions_when_current_revision_has_no_entry():
+    latest = {
+        "version": "13",
+        "revision": "rev13",
+        "changelog": [
+            {"version": "10", "revision": "rev10", "title": "Ten", "body": ""},
+            {"version": "12", "revision": "rev12", "title": "Twelve", "body": ""},
+            {"version": "13", "revision": "rev13", "title": "Thirteen", "body": ""},
+        ],
+    }
+
+    result = deployment_agent.changelog_between_versions(
+        latest,
+        {"version": "11", "revision": "commit-without-changelog"},
+    )
+
+    assert [(entry["version"], entry["title"]) for entry in result] == [
+        ("12", "Twelve"),
+        ("13", "Thirteen"),
+    ]
+
+
 def test_changelog_between_versions_hides_history_when_current_revision_is_unknown():
     latest = {
         "revision": "rev3",
