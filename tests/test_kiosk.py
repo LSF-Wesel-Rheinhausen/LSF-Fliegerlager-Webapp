@@ -41,7 +41,7 @@ def test_kiosk_user_guide_points_menu_only_sections_to_menu(client):
     assert response.status_code == 200
     content = response.content.decode("utf-8")
     assert "Menü → Letzte Schnellbuchungen" in content
-    assert "Menü → Essenskalender" in content
+    assert "Abendessen (Kalender)" in content
     assert "Menü → Familie" in content
     assert "Menü → Mitbuchungen" in content
     assert "scrolle auf der Startseite" not in content
@@ -691,7 +691,7 @@ def test_kiosk_home_renders_only_ordered_core_cards_and_menu_dialogs(client):
     food_card_end = content.index(b"</section>", positions[1])
     food_card = content[positions[1] : food_card_end]
     assert b"data-open-meal-dialog-new" not in food_card
-    assert "Buche hier Frühstück und Snacks.".encode() in food_card
+    assert "Buche hier Frühstück, Snacks und Abendessen.".encode() in food_card
     for dialog_id in (
         b"kiosk-menu-dialog",
         b"meal-calendar-dialog",
@@ -785,7 +785,7 @@ def test_kiosk_menu_explains_destinations_and_has_an_explicit_trigger(client):
     assert 'aria-controls="kiosk-menu-dialog"' in content
     assert 'aria-haspopup="dialog"' in content
     assert "Weitere Bereiche öffnen" in content
-    assert "Essenskalender" in content
+    assert "Abendessen (Kalender)" in content
     assert "Abendessen nach Lagertag buchen und verwalten." in content
     assert "Letzte Schnellbuchungen" in content
     assert "Getränke, Frühstück und Snacks prüfen oder stornieren." in content

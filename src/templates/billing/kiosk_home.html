@@ -75,7 +75,7 @@
     </form>
     <nav class="kiosk-menu" aria-label="Kiosk-Bereiche">
       <button type="button" class="kiosk-menu__item" data-dialog-target="meal-calendar-dialog">
-        <span>Essenskalender</span>
+        <span>Abendessen (Kalender)</span>
         <small>Abendessen nach Lagertag buchen und verwalten.</small>
       </button>
       <button type="button" class="kiosk-menu__item" data-dialog-target="quick-bookings-dialog">
@@ -154,11 +154,19 @@
             <div class="kiosk-card__header-main">
               <span class="kiosk-card__eyebrow">Aktion</span>
               <h2 class="kiosk-title">Verpflegung buchen</h2>
-              <p>Buche hier Frühstück und Snacks.</p>
+              <p>Buche hier Frühstück, Snacks und Abendessen.</p>
             </div>
           </div>
           <div class="stack kiosk-drink-form">
             <div class="drink-card-grid" role="group" aria-label="Verpflegung auswählen">
+              <button
+                type="button"
+                class="drink-card drink-card--primary"
+                data-dialog-target="meal-calendar-dialog"
+              >
+                <span class="drink-card__title">Abendessen (Kalender)</span>
+                <span class="drink-card__price">Kalender öffnen</span>
+              </button>
               {% for rule in snack_rules %}
                 <button
                   type="button"
