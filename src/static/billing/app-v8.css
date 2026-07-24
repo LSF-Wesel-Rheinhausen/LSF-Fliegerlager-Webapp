@@ -158,12 +158,25 @@ textarea:focus-visible {
   margin-bottom: 20px;
 }
 
+.toolbar > div:first-child {
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.nav-user-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
 h1 {
   margin: 0 0 8px;
   font-size: 30px;
   line-height: 1.2;
   letter-spacing: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 h2 {
@@ -519,6 +532,10 @@ tbody tr:hover {
   border-radius: var(--radius);
   padding: 24px;
   box-shadow: var(--shadow);
+}
+
+.panel + .panel {
+  margin-top: 24px;
 }
 
 .panel.info-callout {
@@ -2022,6 +2039,7 @@ textarea {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.7);
+  margin-bottom: 16px;
 }
 
 .meal-order-metrics {
@@ -2618,7 +2636,7 @@ textarea {
   border-bottom: 1px solid var(--line);
 }
 
-.device-list li > div {
+.device-list li > div:first-child {
   display: grid;
   gap: 4px;
 }
