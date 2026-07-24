@@ -14,12 +14,12 @@ from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, Validat
 from django.core.signing import BadSignature, Signer
 from django.db import transaction
 from django.db.models import Case, IntegerField, Q, Value, When
-from django.http import FileResponse, Http404, HttpRequest, HttpResponse
+from django.http import FileResponse, Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 
 from .daily_settlement_backups import update_daily_backup_settings
 from .deployment_updates import UpdateAgentError, check_for_update, deployment_status, install_update
@@ -234,6 +234,17 @@ def deployment_update(request: HttpRequest) -> HttpResponse:
             "latest_backup_log": latest_backup_log,
         },
     )
+
+
+@superuser_required
+@require_GET
+def deployment_update_status_json(request: HttpRequest) -> JsonResponse:
+    """Return live deployment status as JSON for asynchronous UI polling."""
+    try:
+        status = deployment_status()
+    except UpdateAgentError as error:
+        return JsonResponse({"active": False, "phase": "error", "error": str(error)}, status=503)
+    return JsonResponse(status)
 
 
 @superuser_required
