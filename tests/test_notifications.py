@@ -1016,3 +1016,63 @@ def test_announcement_edit_and_delete_by_editor(client):
     res_delete = client.post(delete_url)
     assert res_delete.status_code == 302
     assert not CampAnnouncement.objects.filter(pk=announcement.pk).exists()
+
+
+@pytest.mark.django_db
+def test_information_compose_includes_participants_without_email_and_allows_editor(client):
+    from billing.permissions import EDITOR_GROUP
+    from tests.factories import GroupFactory, UserFactory
+
+    editor = UserFactory(username="editor")
+    editor.groups.add(GroupFactory(name=EDITOR_GROUP))
+    client.force_login(editor)
+
+    camp = CampFactory(is_active=True)
+    ParticipantFactory(camp=camp, first_name="Anna", email="anna@example.test")
+    p_no_email = ParticipantFactory(camp=camp, first_name="Bodo", email="")
+
+    PushSubscription.objects.create(
+        participant=p_no_email,
+        endpoint="https://push.example.test/bodo",
+        p256dh="key",
+        auth="secret",
+    )
+
+    url = reverse("information-email-compose", args=[camp.pk])
+    response = client.get(url)
+    assert response.status_code == 200
+
+    form = response.context["form"]
+    choice_labels = [label for _, label in form.fields["participants"].choices]
+    assert any("anna@example.test" in label for label in choice_labels)
+    assert any("Bodo" in label and "(Keine E-Mail)" in label for label in choice_labels)
+
+    # Confirm sending Push to participant without email
+    res_preview = client.post(
+        url,
+        {
+            "subject": "Push an Alle",
+            "body": "Hallo ohne Mail",
+            "channels": "push",
+            "participants": [str(p_no_email.pk)],
+            "action": "preview",
+        },
+    )
+    assert res_preview.status_code == 200
+    token = res_preview.context["preview_token"]
+
+    res_confirm = client.post(
+        url,
+        {
+            "subject": "Push an Alle",
+            "body": "Hallo ohne Mail",
+            "channels": "push",
+            "participants": [str(p_no_email.pk)],
+            "preview_token": token,
+            "action": "confirm",
+        },
+    )
+    assert res_confirm.status_code == 302
+    assert PushMessage.objects.filter(
+        category="announcement", title="Push an Alle", subscription__participant=p_no_email
+    ).exists()

@@ -56,9 +56,13 @@ class InformationEmailForm(ManualEmailContentForm):
         ).order_by("last_name", "first_name", "pk")
         participant_field = cast(forms.MultipleChoiceField, self.fields["participants"])
         participant_field.choices = [
-            (str(participant.pk), f"{participant.full_name} · {participant.email}")
+            (
+                str(participant.pk),
+                f"{participant.full_name} · {participant.email}"
+                if has_valid_recipient_email(participant.email)
+                else f"{participant.full_name} (Keine E-Mail)",
+            )
             for participant in participants
-            if has_valid_recipient_email(participant.email)
         ]
 
 
