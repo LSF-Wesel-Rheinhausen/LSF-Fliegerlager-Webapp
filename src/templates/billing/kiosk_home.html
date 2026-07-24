@@ -52,6 +52,83 @@
     </section>
   {% endif %}
 
+  {% if is_pre_camp %}
+    <section class="panel kiosk-card kiosk-card--accent" style="border-left: 4px solid var(--accent); margin-bottom: 1.5rem;">
+      <span class="kiosk-hero__eyebrow">⏳ Vor dem Fliegerlager</span>
+      <h2 style="margin: 0.25rem 0 0.5rem; font-size: 1.5rem;">Noch {{ days_until_start }} Tage bis Lagerbeginn!</h2>
+      <p style="margin-bottom: 1rem;">Das Fliegerlager {{ participant.camp.name }} beginnt am {{ participant.camp.starts_on|date:"d.m.Y" }}.</p>
+
+      <form method="post" class="stack stack--compact" style="max-width: 450px;">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="update_attendance_dates">
+        <strong style="display: block; font-size: 0.95rem; margin-bottom: 0.25rem;">Dein geplanter Anmeldezeitraum:</strong>
+        <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+          <div style="flex: 1; min-width: 130px;">
+            <label for="id_arrival_date" style="font-size: 0.85rem;">Anreise:</label>
+            <input type="date" id="id_arrival_date" name="arrival_date" value="{{ participant.arrival_date|date:'Y-m-d' }}" required style="width: 100%;">
+          </div>
+          <div style="flex: 1; min-width: 130px;">
+            <label for="id_departure_date" style="font-size: 0.85rem;">Abreise:</label>
+            <input type="date" id="id_departure_date" name="departure_date" value="{{ participant.departure_date|date:'Y-m-d' }}" required style="width: 100%;">
+          </div>
+          <button type="submit" class="button button--secondary">Zeitraum speichern</button>
+        </div>
+      </form>
+    </section>
+  {% endif %}
+
+  {% if is_post_camp %}
+    <section class="panel kiosk-card kiosk-card--muted" style="margin-bottom: 1.5rem;">
+      <span class="kiosk-hero__eyebrow">🏁 Lager beendet</span>
+      <h2 style="margin: 0.25rem 0 0.5rem; font-size: 1.5rem;">Das Fliegerlager {{ participant.camp.name }} ist beendet</h2>
+      <p style="margin-bottom: 1rem;">Vielen Dank für deine Teilnahme! Du kannst hier deine Rechnungen herunterladen.</p>
+
+      {% if latest_settlement %}
+        <div style="margin-bottom: 1.25rem;">
+          <a href="{% url 'kiosk-settlement-pdf' latest_settlement.pk %}" class="button button--primary" target="_blank" rel="noopener">
+            📄 Letzte Abrechnung herunterladen ({{ latest_settlement.run.created_at|date:"d.m.Y" }} · {{ latest_settlement.balance|abs_value|money_eur }})
+          </a>
+        </div>
+      {% else %}
+        <div style="margin-bottom: 1.25rem;">
+          <a href="{% url 'kiosk-current-settlement-pdf' %}" class="button button--primary" target="_blank" rel="noopener">
+            📄 Aktuelle Abrechnung herunterladen (PDF)
+          </a>
+        </div>
+      {% endif %}
+
+      {% if archived_settlements %}
+        <details class="kiosk-archive-accordion" style="background: var(--panel-soft); padding: 0.75rem 1rem; border-radius: var(--radius);">
+          <summary style="cursor: pointer; font-weight: 600; color: var(--text);">
+            🗂️ Frühere Abrechnungen & Archiv ({{ archived_settlements|length }})
+          </summary>
+          <ul style="list-style: none; padding: 0.75rem 0 0; margin: 0;" class="stack stack--compact">
+            {% for item in archived_settlements %}
+              <li style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.5rem 0; border-bottom: 1px solid var(--line);">
+                <span>{{ item.run.camp.name }} · {{ item.run.created_at|date:"d.m.Y H:i" }} ({{ item.balance|abs_value|money_eur }})</span>
+                <a href="{% url 'kiosk-settlement-pdf' item.pk %}" class="button button--small button--secondary" target="_blank" rel="noopener">PDF</a>
+              </li>
+            {% endfor %}
+          </ul>
+        </details>
+      {% endif %}
+    </section>
+  {% endif %}
+
+  <section class="panel kiosk-card" style="margin-bottom: 1.5rem;">
+    <h2 style="font-size: 1.25rem; margin-bottom: 0.5rem;">📄 Meine Rechnungen & Dokumente</h2>
+    <div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
+      <a href="{% url 'kiosk-current-settlement-pdf' %}" class="button button--secondary" target="_blank" rel="noopener">
+        Aktuelle Live-Abrechnung (PDF)
+      </a>
+      {% for item in historic_settlements %}
+        <a href="{% url 'kiosk-settlement-pdf' item.pk %}" class="button button--ghost" target="_blank" rel="noopener">
+          Abrechnung {{ item.run.camp.name }} ({{ item.run.created_at|date:"d.m.Y" }})
+        </a>
+      {% endfor %}
+    </div>
+  </section>
+
   {% if pending_invites %}
     <section class="panel kiosk-card kiosk-card--muted">
       <div class="kiosk-card__header">
