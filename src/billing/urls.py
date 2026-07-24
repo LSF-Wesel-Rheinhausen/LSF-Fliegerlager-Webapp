@@ -186,6 +186,18 @@ urlpatterns = [
         notification_views.kiosk_notification_test,
         name="kiosk-notification-test",
     ),
+    path(
+        "kiosk/settlements/<int:settlement_id>/pdf/",
+        views.kiosk_settlement_pdf,
+        {"kiosk_mode": "private"},
+        name="kiosk-settlement-pdf",
+    ),
+    path(
+        "kiosk/export/settlement.pdf",
+        views.kiosk_current_settlement_pdf,
+        {"kiosk_mode": "private"},
+        name="kiosk-current-settlement-pdf",
+    ),
     path("kiosk/", views.kiosk_home, {"kiosk_mode": "private"}, name="kiosk-home"),
     path("kiosk/login/", views.kiosk_login, {"kiosk_mode": "private"}, name="kiosk-login"),
     path("kiosk/shifts/", views.kiosk_shifts, {"kiosk_mode": "private"}, name="kiosk-shifts"),
@@ -200,6 +212,18 @@ urlpatterns = [
     path("central/kiosk/manifest.webmanifest", pwa_views.manifest, {"surface": "central"}, name="pwa-manifest-central"),
     path(
         "central/kiosk/service-worker.js", pwa_views.service_worker, {"surface": "central"}, name="pwa-worker-central"
+    ),
+    path(
+        "central/kiosk/settlements/<int:settlement_id>/pdf/",
+        views.kiosk_settlement_pdf,
+        {"kiosk_mode": "central"},
+        name="central-kiosk-settlement-pdf",
+    ),
+    path(
+        "central/kiosk/export/settlement.pdf",
+        views.kiosk_current_settlement_pdf,
+        {"kiosk_mode": "central"},
+        name="central-kiosk-current-settlement-pdf",
     ),
     path("central/kiosk/", views.kiosk_home, {"kiosk_mode": "central"}, name="central-kiosk-home"),
     path("central/kiosk/login/", views.kiosk_login, {"kiosk_mode": "central"}, name="central-kiosk-login"),
