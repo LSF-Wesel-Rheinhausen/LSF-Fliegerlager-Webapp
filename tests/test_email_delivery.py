@@ -648,19 +648,24 @@ def test_compose_views_exclude_invalid_imported_email_addresses(client):
 
     assert information_response.status_code == 200
     assert invalid.full_name.encode() in information_response.content
-    assert b"Keine g\xc3\xbcltige E-Mail-Adresse" in information_response.content
-    assert f'value="{invalid.pk}"'.encode() not in information_response.content
+    assert f'value="{invalid.pk}"'.encode() in information_response.content
     invalid_information_post = client.post(
         information_url,
         {
             "action": "preview",
             "subject": "Information",
             "body": "Nachricht",
+            "channels": "email",
             "participants": [str(invalid.pk)],
         },
     )
     assert invalid_information_post.status_code == 200
-    assert b"g\xc3\xbcltige Auswahl" in invalid_information_post.content
+    assert (
+        b"keine g\xc3\xbcltige E-Mail-Adresse" in invalid_information_post.content
+        or b"keine G\xc3\xbcltige E-Mail-Adresse" in invalid_information_post.content
+        or b"keine g\xc3\xbcltige E-Mail" in invalid_information_post.content
+        or b"wurde keine" in invalid_information_post.content
+    )
 
     settlement_url = reverse("settlement-email-compose", args=[run.pk])
     settlement_response = client.get(settlement_url)

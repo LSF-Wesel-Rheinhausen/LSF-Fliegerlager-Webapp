@@ -22,7 +22,7 @@ from .email_delivery import (
 from .email_forms import EmailConfigurationForm, InformationEmailForm, SettlementEmailForm
 from .models import Camp, CampAnnouncement, EmailBatch, EmailConfiguration, EmailDelivery, EmailTestLog, SettlementRun
 from .notifications import queue_information_push_batch
-from .permissions import admin_required
+from .permissions import admin_required, editor_required
 
 EMAIL_PREVIEW_SIGNING_SALT = "billing.manual-email-preview.v1"
 EMAIL_PREVIEW_MAX_AGE_SECONDS = 60 * 60
@@ -126,18 +126,17 @@ def email_settings(request):
     )
 
 
-@admin_required
+@editor_required
 def information_email_compose(request, camp_id):
     """Preview and manually confirm one informational notification batch (E-Mail, Push, Kiosk)."""
     camp = get_object_or_404(Camp, pk=camp_id)
     configuration = EmailConfiguration.load()
     participants = list(camp.participants.filter(archived_at__isnull=True).order_by("last_name", "first_name", "pk"))
-    eligible_ids = [participant.pk for participant in participants if has_valid_recipient_email(participant.email)]
     initial = {
         "subject": f"Information zu {camp.name} {camp.year}",
         "channels": "email",
         "show_in_kiosk": False,
-        "participants": [str(participant_id) for participant_id in eligible_ids],
+        "participants": [str(participant.pk) for participant in participants],
     }
     form = InformationEmailForm(
         request.POST or None,
@@ -155,6 +154,8 @@ def information_email_compose(request, camp_id):
                 camp=camp,
                 participant_ids=form.cleaned_data["participants"],
             )
+            if channels in {"email", "both"} and not preview:
+                form.add_error(None, "Für die ausgewählten Teilnehmer wurde keine gültige E-Mail-Adresse gefunden.")
             recipient_mapping = information_recipient_mapping(preview)
             preview_payload = _preview_payload(
                 kind=EmailBatch.Kind.INFORMATION,
