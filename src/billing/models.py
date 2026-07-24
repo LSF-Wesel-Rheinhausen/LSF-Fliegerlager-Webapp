@@ -1167,3 +1167,25 @@ class PushMessage(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.category}: {self.title}"
+
+
+class CampAnnouncement(TimeStampedModel):
+    """Store explicit announcements displayed to participants in the kiosk."""
+
+    camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="announcements")
+    title = models.CharField(max_length=160)
+    body = models.TextField(max_length=10_000)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_announcements",
+    )
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.camp.name}: {self.title}"

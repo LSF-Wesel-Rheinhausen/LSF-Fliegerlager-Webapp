@@ -20,7 +20,8 @@ from .email_delivery import (
     settlement_recipient_mapping,
 )
 from .email_forms import EmailConfigurationForm, InformationEmailForm, SettlementEmailForm
-from .models import Camp, EmailBatch, EmailConfiguration, EmailDelivery, EmailTestLog, SettlementRun
+from .models import Camp, CampAnnouncement, EmailBatch, EmailConfiguration, EmailDelivery, EmailTestLog, SettlementRun
+from .notifications import queue_information_push_batch
 from .permissions import admin_required
 
 EMAIL_PREVIEW_SIGNING_SALT = "billing.manual-email-preview.v1"
@@ -127,13 +128,15 @@ def email_settings(request):
 
 @admin_required
 def information_email_compose(request, camp_id):
-    """Preview and manually confirm one informational email batch."""
+    """Preview and manually confirm one informational notification batch (E-Mail, Push, Kiosk)."""
     camp = get_object_or_404(Camp, pk=camp_id)
     configuration = EmailConfiguration.load()
     participants = list(camp.participants.filter(archived_at__isnull=True).order_by("last_name", "first_name", "pk"))
     eligible_ids = [participant.pk for participant in participants if has_valid_recipient_email(participant.email)]
     initial = {
         "subject": f"Information zu {camp.name} {camp.year}",
+        "channels": "email",
+        "show_in_kiosk": False,
         "participants": [str(participant_id) for participant_id in eligible_ids],
     }
     form = InformationEmailForm(
@@ -144,7 +147,8 @@ def information_email_compose(request, camp_id):
     preview = None
     preview_token = ""
     if request.method == "POST" and form.is_valid():
-        if not configuration.enabled:
+        channels = form.cleaned_data["channels"]
+        if channels in {"email", "both"} and not configuration.enabled:
             form.add_error(None, "Der E-Mail-Versand ist in den Einstellungen deaktiviert.")
         else:
             preview = resolve_information_recipients(
@@ -169,23 +173,49 @@ def information_email_compose(request, camp_id):
                         "Auswahl oder Inhalt wurde nach der Vorschau geändert. Bitte Vorschau erneut prüfen.",
                     )
                 else:
-                    try:
-                        batch = queue_information_email_batch(
+                    success_parts = []
+                    batch = None
+                    if channels in {"email", "both"}:
+                        try:
+                            batch = queue_information_email_batch(
+                                camp=camp,
+                                participant_ids=form.cleaned_data["participants"],
+                                subject=form.cleaned_data["subject"],
+                                body=form.cleaned_data["body"],
+                                created_by=request.user,
+                                expected_recipient_mapping=recipient_mapping,
+                            )
+                            success_parts.append(f"{batch.deliveries.count()} E-Mail(s)")
+                        except ValueError as error:
+                            form.add_error(None, str(error))
+                            batch = None
+
+                    if not form.errors and channels in {"push", "both"}:
+                        push_count = queue_information_push_batch(
                             camp=camp,
                             participant_ids=form.cleaned_data["participants"],
-                            subject=form.cleaned_data["subject"],
+                            title=form.cleaned_data["subject"],
+                            body=form.cleaned_data["body"],
+                        )
+                        success_parts.append(f"{push_count} Push-Benachrichtigung(en)")
+
+                    if not form.errors and form.cleaned_data.get("show_in_kiosk"):
+                        CampAnnouncement.objects.create(
+                            camp=camp,
+                            title=form.cleaned_data["subject"],
                             body=form.cleaned_data["body"],
                             created_by=request.user,
-                            expected_recipient_mapping=recipient_mapping,
                         )
-                    except ValueError as error:
-                        form.add_error(None, str(error))
-                    else:
+                        success_parts.append("Kiosk-Ankündigung")
+
+                    if not form.errors and success_parts:
                         messages.success(
                             request,
-                            f"{batch.deliveries.count()} E-Mail(s) wurden zum Versand vorgemerkt.",
+                            f"Versand vorgemerkt: {', '.join(success_parts)}.",
                         )
-                        return redirect("email-batch-detail", batch_id=batch.pk)
+                        if batch:
+                            return redirect("email-batch-detail", batch_id=batch.pk)
+                        return redirect("camp-detail", camp_id=camp.pk)
     missing_participants = [
         participant for participant in participants if not has_valid_recipient_email(participant.email)
     ]

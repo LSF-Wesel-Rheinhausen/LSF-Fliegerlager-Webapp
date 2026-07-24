@@ -2086,11 +2086,13 @@ def kiosk_home(request, kiosk_mode="private"):
         status=ParticipantBookingLink.Status.PENDING
     )
     accepted_links = _accepted_booking_links(participant)
+    announcements = list(participant.camp.announcements.filter(is_active=True)[:3])
     context = {
         "participant": participant,
         "kiosk_actor": default_booking_target,
         "kiosk_actor_is_family_member": active_family_member is not None,
         "default_booking_target_token": default_booking_target_token,
+        "announcements": announcements,
         "summary": participant_kiosk_summary(participant),
         "meal_form": meal_form,
         "meal_default_variant": meal_form.fields["variant"].choices[0][0],
