@@ -4,7 +4,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.templatetags.static import static
 
-PWA_CACHE_VERSION = 7
+PWA_CACHE_VERSION = 8
 
 PWA_SURFACES: dict[str, dict[str, str]] = {
     "admin": {

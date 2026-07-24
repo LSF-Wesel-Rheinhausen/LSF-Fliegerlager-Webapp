@@ -45,11 +45,13 @@
           {% if user.is_superuser %}
             <a class="button button-secondary nav-link" href="{% url 'deployment-update' %}">Updates</a>
           {% endif %}
-          <span>{{ user.email|default:user.username }}</span>
-          <form method="post" action="{% url 'logout' %}">
-            {% csrf_token %}
-            <button class="button button-secondary" type="submit">Abmelden</button>
-          </form>
+          <div class="nav-user-group">
+            <span>{{ user.email|default:user.username }}</span>
+            <form method="post" action="{% url 'logout' %}">
+              {% csrf_token %}
+              <button class="button button-secondary" type="submit">Abmelden</button>
+            </form>
+          </div>
         {% endif %}
       </nav>
     </header>
