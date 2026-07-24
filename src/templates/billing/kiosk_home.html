@@ -40,7 +40,17 @@
       </div>
       <button type="button" class="button" data-open-summary-dialog>Details öffnen</button>
     </aside>
-  </section>
+  {% if announcements %}
+    <section class="kiosk-announcements stack" style="margin-bottom: 1.5rem;">
+      {% for announcement in announcements %}
+        <article class="panel kiosk-card--accent" role="status" style="border-left: 4px solid var(--accent);">
+          <span class="kiosk-hero__eyebrow">📢 Ankündigung · {{ announcement.created_at|date:"d.m.Y H:i" }}</span>
+          <h2 style="margin: 0.25rem 0 0.5rem; font-size: 1.25rem;">{{ announcement.title }}</h2>
+          <p style="margin: 0; white-space: pre-wrap;">{{ announcement.body }}</p>
+        </article>
+      {% endfor %}
+    </section>
+  {% endif %}
 
   {% if pending_invites %}
     <section class="panel kiosk-card kiosk-card--muted">

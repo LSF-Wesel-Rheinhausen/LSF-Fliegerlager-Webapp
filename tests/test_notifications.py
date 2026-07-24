@@ -929,3 +929,50 @@ def test_booking_invitation_view_queues_after_commit(client, django_capture_on_c
 
     assert response.status_code == 302
     assert PushMessage.objects.filter(category="booking_links", subscription__participant=invitee).exists()
+
+
+@pytest.mark.django_db
+def test_information_compose_supports_push_and_kiosk_announcement(admin_client):
+    from billing.models import CampAnnouncement
+
+    participant = ParticipantFactory(email="participant@example.test")
+
+    PushSubscription.objects.create(
+        participant=participant,
+        endpoint="https://push.example.test/manual-info",
+        p256dh="key",
+        auth="secret",
+    )
+
+    url = reverse("information-email-compose", args=[participant.camp.pk])
+    # 1. Preview
+    res_preview = admin_client.post(
+        url,
+        {
+            "subject": "Wichtige Ankündigung",
+            "body": "Bitte zum Briefing kommen.",
+            "channels": "push",
+            "show_in_kiosk": "on",
+            "participants": [str(participant.pk)],
+            "action": "preview",
+        },
+    )
+    assert res_preview.status_code == 200
+    preview_token = res_preview.context["preview_token"]
+
+    # 2. Confirm
+    res_confirm = admin_client.post(
+        url,
+        {
+            "subject": "Wichtige Ankündigung",
+            "body": "Bitte zum Briefing kommen.",
+            "channels": "push",
+            "show_in_kiosk": "on",
+            "participants": [str(participant.pk)],
+            "preview_token": preview_token,
+            "action": "confirm",
+        },
+    )
+    assert res_confirm.status_code == 302
+    assert PushMessage.objects.filter(category="announcement", title="Wichtige Ankündigung").exists()
+    assert CampAnnouncement.objects.filter(camp=participant.camp, title="Wichtige Ankündigung").exists()

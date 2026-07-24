@@ -3,14 +3,14 @@
   <div class="toolbar">
     <div>
       <h1>Information versenden</h1>
-      <p>{{ camp.name }} {{ camp.year }} · Auswahl und Versand erfolgen ausschließlich manuell.</p>
+      <p>{{ camp.name }} {{ camp.year }} · Manuelle Auswahl für E-Mail, Push-Benachrichtigung & Kiosk-Ankündigungen.</p>
     </div>
     <a class="button button-secondary" href="{% url 'camp-detail' camp.pk %}">Zur Lagerübersicht</a>
   </div>
 
   {% if not configuration.enabled %}
     <section class="message warning" role="status">
-      Der E-Mail-Versand ist deaktiviert.
+      Der E-Mail-Versand ist deaktiviert. (Push-Benachrichtigungen und Kiosk-Ankündigungen können weiterhin versendet werden).
       <a href="{% url 'email-settings' %}">E-Mail-Einstellungen öffnen</a>
     </section>
   {% endif %}
@@ -18,6 +18,21 @@
   <form method="post" class="stack">
     {% csrf_token %}
     {{ form.non_field_errors }}
+
+    <section class="panel stack">
+      <h2>Versandkanäle</h2>
+      {{ form.channels.errors }}
+      <p>
+        <label><strong>Versandkanal wählen:</strong></label>
+        {{ form.channels }}
+      </p>
+      {{ form.show_in_kiosk.errors }}
+      <p class="checkbox-row">
+        {{ form.show_in_kiosk }}
+        <label for="{{ form.show_in_kiosk.id_for_label }}">Zusätzlich als Ankündigung im Kiosk anzeigen</label>
+      </p>
+    </section>
+
     <section class="panel stack">
       <h2>Inhalt</h2>
       {{ form.subject.errors }}
@@ -31,7 +46,7 @@
       {{ form.participants.errors }}
       {{ form.participants }}
       {% if missing_participants %}
-        <h3>Keine gültige E-Mail-Adresse</h3>
+        <h3>Keine gültige E-Mail-Adresse (nur Push möglich, falls registriert)</h3>
         <ul>
           {% for participant in missing_participants %}
             <li>{{ participant.full_name }} · Keine gültige E-Mail-Adresse</li>
@@ -44,7 +59,7 @@
       <input type="hidden" name="preview_token" value="{{ preview_token }}">
       <section class="panel stack" aria-labelledby="email-preview-heading">
         <h2 id="email-preview-heading">Versandvorschau</h2>
-        <p>Pro Adresse wird genau eine E-Mail versendet.</p>
+        <p>Vorschau der gewählten Empfänger und Kanäle.</p>
         <table>
           <thead><tr><th>Adresse</th><th>Ausgewählte Teilnehmer</th></tr></thead>
           <tbody>

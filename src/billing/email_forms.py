@@ -23,10 +23,31 @@ class ManualEmailContentForm(forms.Form):
 
 
 class InformationEmailForm(ManualEmailContentForm):
+    CHANNEL_CHOICES = [
+        ("email", "Nur E-Mail"),
+        ("push", "Nur Push"),
+        ("both", "E-Mail & Push"),
+    ]
+
+    channels = forms.ChoiceField(
+        label="Versandkanal",
+        choices=CHANNEL_CHOICES,
+        required=False,
+        initial="email",
+        widget=forms.RadioSelect,
+    )
+    show_in_kiosk = forms.BooleanField(
+        label="Zusätzlich als Ankündigung im Kiosk anzeigen",
+        required=False,
+        initial=False,
+    )
     participants = forms.MultipleChoiceField(
         label="Empfänger",
         widget=forms.CheckboxSelectMultiple,
     )
+
+    def clean_channels(self) -> str:
+        return self.cleaned_data.get("channels") or "email"
 
     def __init__(self, *args: Any, camp: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)

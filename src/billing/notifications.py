@@ -20,6 +20,7 @@ from .models import (
     Participant,
     ParticipantBookingLink,
     PushMessage,
+    PushSubscription,
     Shift,
     ShiftAssignment,
 )
@@ -428,3 +429,42 @@ def cleanup_push_messages(*, now: Any | None = None) -> int:
         updated_at__lt=cutoff,
     ).delete()
     return deleted
+
+
+def queue_information_push_batch(
+    *,
+    camp: Camp,
+    participant_ids: list[int | str],
+    title: str,
+    body: str,
+    target_url: str = "/kiosk/",
+) -> int:
+    """Enqueue PushMessages for registered devices of selected participants in a camp."""
+    p_ids = [int(p_id) for p_id in participant_ids]
+    if not p_ids:
+        return 0
+
+    subscriptions = PushSubscription.objects.filter(
+        participant_id__in=p_ids,
+        is_active=True,
+    )
+
+    created_count = 0
+    now = timezone.now()
+    batch_ts = int(now.timestamp())
+    for subscription in subscriptions:
+        dedupe_key = f"info:{camp.pk}:{batch_ts}:{subscription.pk}"
+        PushMessage.objects.get_or_create(
+            subscription=subscription,
+            dedupe_key=dedupe_key,
+            defaults={
+                "category": "announcement",
+                "title": title[:120],
+                "body": body[:300],
+                "target_url": target_url,
+                "scheduled_for": now,
+                "next_attempt_at": now,
+            },
+        )
+        created_count += 1
+    return created_count
