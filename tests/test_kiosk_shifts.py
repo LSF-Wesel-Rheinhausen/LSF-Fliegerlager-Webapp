@@ -28,6 +28,59 @@ def kiosk_client(client, active_camp):
     return client
 
 
+@pytest.fixture
+def pre_camp_kiosk_client(client):
+    camp = Camp.objects.create(
+        name="Future Camp",
+        year=datetime.date.today().year + 1,
+        starts_on=datetime.date.today() + datetime.timedelta(days=7),
+        ends_on=datetime.date.today() + datetime.timedelta(days=14),
+        is_active=True,
+    )
+    participant = Participant.objects.create(camp=camp, first_name="Kiosk", last_name="User")
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    client.kiosk_user = participant
+    return client
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("route_name", "home_route_name"),
+    [("kiosk-shifts", "kiosk-home"), ("central-kiosk-shifts", "central-kiosk-home")],
+)
+def test_pre_camp_kiosk_shift_pages_redirect_home(pre_camp_kiosk_client, route_name, home_route_name):
+    response = pre_camp_kiosk_client.get(reverse(route_name))
+
+    assert response.status_code == 302
+    assert response.url == reverse(home_route_name)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("route_name", "home_route_name"),
+    [("kiosk-shifts", "kiosk-home"), ("central-kiosk-shifts", "central-kiosk-home")],
+)
+def test_pre_camp_kiosk_shift_posts_cannot_create_assignments(pre_camp_kiosk_client, route_name, home_route_name):
+    participant = pre_camp_kiosk_client.kiosk_user
+    shift = Shift.objects.create(
+        camp=participant.camp,
+        name="Future Shift",
+        date=participant.camp.starts_on,
+        required_slots=1,
+    )
+
+    response = pre_camp_kiosk_client.post(
+        reverse(route_name),
+        {"action": "signup", "shift_id": shift.pk},
+    )
+
+    assert response.status_code == 302
+    assert response.url == reverse(home_route_name)
+    assert not ShiftAssignment.objects.filter(shift=shift, participant=participant).exists()
+
+
 @pytest.mark.django_db
 def test_kiosk_can_signup_for_shift(kiosk_client, active_camp):
     shift = Shift.objects.create(

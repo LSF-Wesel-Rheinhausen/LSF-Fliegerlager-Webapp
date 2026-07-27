@@ -155,6 +155,16 @@ def _kiosk_route(kiosk_mode: str, page: str) -> str:
     return f"{prefix}-{page}"
 
 
+def _pre_camp_kiosk_operation_redirect(
+    request: HttpRequest, participant: Participant, kiosk_mode: str
+) -> HttpResponse | None:
+    """Redirect pre-camp participants away from operational kiosk pages."""
+    if not participant.camp.is_pre_camp():
+        return None
+    messages.error(request, "Diese Funktion ist erst ab Lagerbeginn verfügbar.")
+    return redirect(_kiosk_route(kiosk_mode, "home"))
+
+
 def _clear_kiosk_session(request: HttpRequest) -> None:
     """Remove every participant identity and setup value from a kiosk session."""
     for key in (
@@ -2348,6 +2358,8 @@ def kiosk_shared_expense_request(request, kiosk_mode="private"):
     participant = _kiosk_participant(request)
     if not participant:
         return redirect(_kiosk_route(kiosk_mode, "login"))
+    if pre_camp_redirect := _pre_camp_kiosk_operation_redirect(request, participant, kiosk_mode):
+        return pre_camp_redirect
 
     form = SharedExpenseRequestForm(request.POST or None, request.FILES or None)
     if request.method == "POST" and form.is_valid():
@@ -2384,6 +2396,8 @@ def kiosk_shifts(request, kiosk_mode="private"):
     participant = _kiosk_participant(request)
     if not participant:
         return redirect(_kiosk_route(kiosk_mode, "login"))
+    if pre_camp_redirect := _pre_camp_kiosk_operation_redirect(request, participant, kiosk_mode):
+        return pre_camp_redirect
 
     today = timezone.localdate()
     if request.method == "POST":

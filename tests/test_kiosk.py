@@ -252,7 +252,13 @@ def test_pre_camp_kiosk_shows_only_identity_countdown_and_available_menu_areas(c
         starts_on=date(2099, 7, 31),
         ends_on=date(2099, 8, 14),
     )
+    inviter = ParticipantFactory(camp=camp, first_name="Grace", last_name="Hopper")
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    ParticipantBookingLink.objects.create(
+        inviter=inviter,
+        invitee=participant,
+        status=ParticipantBookingLink.Status.PENDING,
+    )
     session = client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session.save()
@@ -280,6 +286,13 @@ def test_pre_camp_kiosk_shows_only_identity_countdown_and_available_menu_areas(c
         "Benachrichtigungen",
     ):
         assert unavailable_area not in menu
+
+    booking_links_dialog = content.split('<dialog id="booking-links-dialog"', maxsplit=1)[1].split(
+        "</dialog>", maxsplit=1
+    )[0]
+    assert "Grace Hopper" in booking_links_dialog
+    assert 'value="booking_link_accept"' in booking_links_dialog
+    assert 'value="booking_link_decline"' in booking_links_dialog
 
 
 @pytest.mark.django_db
@@ -579,6 +592,40 @@ def test_kiosk_shared_expense_upload_shows_receipt_link_and_serves_file(client):
         assert b"".join(file_response.streaming_content) == b"test receipt"
     finally:
         expense.receipt.delete(save=False)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("route_name", "home_route_name"),
+    [
+        ("kiosk-shared-expense-request", "kiosk-home"),
+        ("central-kiosk-shared-expense-request", "central-kiosk-home"),
+    ],
+)
+def test_pre_camp_kiosk_shared_expense_posts_cannot_create_expenses(client, route_name, home_route_name):
+    camp = CampFactory(
+        year=2099,
+        starts_on=date(2099, 7, 31),
+        ends_on=date(2099, 8, 14),
+    )
+    participant = ParticipantFactory(camp=camp)
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse(route_name),
+        {
+            "category": "Verbrauchsmaterial",
+            "description": "Schrauben",
+            "amount": "12.50",
+            "paid_on": "2099-08-01",
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.url == reverse(home_route_name)
+    assert not Expense.objects.filter(participant=participant).exists()
 
 
 @pytest.mark.django_db

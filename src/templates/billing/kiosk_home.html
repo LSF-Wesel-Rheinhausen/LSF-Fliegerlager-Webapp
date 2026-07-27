@@ -148,20 +148,7 @@
           <p>Hier warten Freigaben für gegenseitiges Mitbuchen.</p>
         </div>
       </div>
-      {% for invite in pending_invites %}
-        <div class="kiosk-list-row">
-          <div class="kiosk-list-row__content">
-            <strong>{{ invite.inviter.full_name }}</strong>
-            <span>möchte gegenseitiges Mitbuchen erlauben.</span>
-          </div>
-          <form method="post" class="inline-actions kiosk-list-row__actions">
-            {% csrf_token %}
-            <input type="hidden" name="booking_link_id" value="{{ invite.pk }}">
-            <button type="submit" name="action" value="booking_link_accept">Annehmen</button>
-            <button type="submit" name="action" value="booking_link_decline" class="button-secondary">Ablehnen</button>
-          </form>
-        </div>
-      {% endfor %}
+      {% include "billing/includes/kiosk_pending_invites.html" %}
     </section>
   {% endif %}
 
@@ -533,6 +520,12 @@
             <button type="submit">Einladen</button>
           </div>
         </form>
+        {% if is_pre_camp and pending_invites %}
+          <section class="stack stack--compact" aria-labelledby="pending-booking-invites-title">
+            <h3 id="pending-booking-invites-title">Offene Einladungen</h3>
+            {% include "billing/includes/kiosk_pending_invites.html" %}
+          </section>
+        {% endif %}
         {% for invite in sent_invites %}
           <p class="hint">Offen: {{ invite.invitee.full_name }}</p>
         {% endfor %}

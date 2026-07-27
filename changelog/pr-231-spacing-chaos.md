@@ -3,7 +3,8 @@
 ## Zusammenfassung
 
 - reduziert die Kiosk-Anmeldung und Startseite vor Lagerbeginn auf Name, Countdown und vorbereitende Menüpunkte
-- sperrt operative Kiosk-Buchungen vor Lagerbeginn auch serverseitig
+- sperrt operative Kiosk-Buchungen sowie direkte Dienst- und Auslagenrouten vor Lagerbeginn serverseitig
+- hält empfangene Mitbuchungs-Einladungen im vorbereitenden Menü annehmbar oder ablehnbar
 - stabilisiert Kopfzeile, Benachrichtigungseinstellungen und Teilnehmerabrechnung bei unterschiedlichen Viewport-Größen
 - entfernt den doppelten Einstieg zur Dienstverwaltung aus der Lagerübersicht
 
