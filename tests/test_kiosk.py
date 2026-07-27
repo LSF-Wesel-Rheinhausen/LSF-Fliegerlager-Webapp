@@ -245,6 +245,106 @@ def test_kiosk_home_hides_normal_admin_header_and_renders_drink_dialog_controls(
 
 
 @pytest.mark.django_db
+def test_pre_camp_kiosk_shows_only_identity_countdown_and_available_menu_areas(client):
+    camp = CampFactory(
+        name="Leibertingen",
+        year=2099,
+        starts_on=date(2099, 7, 31),
+        ends_on=date(2099, 8, 14),
+    )
+    inviter = ParticipantFactory(camp=camp, first_name="Grace", last_name="Hopper")
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    ParticipantBookingLink.objects.create(
+        inviter=inviter,
+        invitee=participant,
+        status=ParticipantBookingLink.Status.PENDING,
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.get(reverse("kiosk-home"))
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert "data-pre-camp-overview" in content
+    assert "Ada Lovelace" in content
+    assert "bis Lagerbeginn" in content
+    assert '<div class="kiosk-masonry" data-kiosk-masonry>' not in content
+    assert "Aktuelle Abrechnung" not in content
+    assert "Dein geplanter Anmeldezeitraum" not in content
+
+    menu = content.split('<nav class="kiosk-menu" aria-label="Kiosk-Bereiche">', maxsplit=1)[1].split(
+        "</nav>", maxsplit=1
+    )[0]
+    for available_area in ("Familie", "Mitbuchungen", "Hilfe", "Kontakt Lagerleitung"):
+        assert available_area in menu
+    for unavailable_area in (
+        "Abendessen (Kalender)",
+        "Letzte Schnellbuchungen",
+        "Gemeinschaftsausgaben",
+        "Benachrichtigungen",
+    ):
+        assert unavailable_area not in menu
+
+    booking_links_dialog = content.split('<dialog id="booking-links-dialog"', maxsplit=1)[1].split(
+        "</dialog>", maxsplit=1
+    )[0]
+    assert "Grace Hopper" in booking_links_dialog
+    assert 'value="booking_link_accept"' in booking_links_dialog
+    assert 'value="booking_link_decline"' in booking_links_dialog
+
+
+@pytest.mark.django_db
+def test_pre_camp_kiosk_rejects_operational_posts(client):
+    camp = CampFactory(
+        year=2099,
+        starts_on=date(2099, 7, 31),
+        ends_on=date(2099, 8, 14),
+    )
+    participant = ParticipantFactory(camp=camp)
+    rule = PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.DRINK,
+        name="Wasser",
+        unit_price=Decimal("1.50"),
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "quick",
+            "quick-price_rule": rule.pk,
+            "quick-quantity": 1,
+        },
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    assert "Diese Funktion ist erst ab Lagerbeginn verfügbar." in response.content.decode("utf-8")
+    assert not Charge.objects.filter(participant=participant).exists()
+
+
+@pytest.mark.django_db
+def test_pre_camp_kiosk_login_uses_compact_layout(client):
+    CampFactory(
+        year=2099,
+        starts_on=date(2099, 7, 31),
+        ends_on=date(2099, 8, 14),
+    )
+
+    response = client.get(reverse("kiosk-login"))
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert 'class="kiosk-login-shell kiosk-login-shell--pre-camp"' in content
+    assert "data-pre-camp-countdown" in content
+
+
+@pytest.mark.django_db
 def test_kiosk_checkin_updates_own_and_linked_participant_dates(client):
     camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 14))
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")
@@ -492,6 +592,40 @@ def test_kiosk_shared_expense_upload_shows_receipt_link_and_serves_file(client):
         assert b"".join(file_response.streaming_content) == b"test receipt"
     finally:
         expense.receipt.delete(save=False)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("route_name", "home_route_name"),
+    [
+        ("kiosk-shared-expense-request", "kiosk-home"),
+        ("central-kiosk-shared-expense-request", "central-kiosk-home"),
+    ],
+)
+def test_pre_camp_kiosk_shared_expense_posts_cannot_create_expenses(client, route_name, home_route_name):
+    camp = CampFactory(
+        year=2099,
+        starts_on=date(2099, 7, 31),
+        ends_on=date(2099, 8, 14),
+    )
+    participant = ParticipantFactory(camp=camp)
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.post(
+        reverse(route_name),
+        {
+            "category": "Verbrauchsmaterial",
+            "description": "Schrauben",
+            "amount": "12.50",
+            "paid_on": "2099-08-01",
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.url == reverse(home_route_name)
+    assert not Expense.objects.filter(participant=participant).exists()
 
 
 @pytest.mark.django_db
@@ -1404,7 +1538,7 @@ def test_kiosk_books_multiple_meal_dates_and_targets_atomically(client, monkeypa
     _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
     first_date = date(2026, 7, 1)
     second_date = date(2026, 7, 2)
-    camp = CampFactory(starts_on=first_date, ends_on=second_date)
+    camp = CampFactory(starts_on=date(2026, 6, 30), ends_on=second_date)
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     selected = ParticipantFactory(camp=camp, first_name="Grace", last_name="Hopper")
     unselected = ParticipantFactory(camp=camp, first_name="Katherine", last_name="Johnson")
@@ -1498,7 +1632,7 @@ def test_kiosk_rejects_entire_meal_batch_when_one_date_has_no_price(client, monk
     _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
     first_date = date(2026, 7, 1)
     second_date = date(2026, 7, 2)
-    camp = CampFactory(starts_on=first_date, ends_on=second_date)
+    camp = CampFactory(starts_on=date(2026, 6, 30), ends_on=second_date)
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     PriceRuleFactory(
         camp=camp,
@@ -1577,7 +1711,7 @@ def test_kiosk_rejects_entire_meal_batch_when_one_date_is_locked(client, monkeyp
 def test_kiosk_normalizes_duplicate_meal_dates(client, monkeypatch):
     _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
     meal_date = date(2026, 7, 1)
-    camp = CampFactory(starts_on=meal_date, ends_on=meal_date)
+    camp = CampFactory(starts_on=date(2026, 6, 30), ends_on=meal_date)
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     PriceRuleFactory(
         camp=camp,
@@ -1611,7 +1745,7 @@ def test_kiosk_normalizes_duplicate_meal_dates(client, monkeypatch):
 @pytest.mark.django_db
 def test_kiosk_rejects_meal_date_outside_configured_camp(client, monkeypatch):
     _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
-    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 2))
+    camp = CampFactory(starts_on=date(2026, 6, 30), ends_on=date(2026, 7, 2))
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     session = client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
@@ -1636,7 +1770,7 @@ def test_kiosk_rejects_meal_date_outside_configured_camp(client, monkeypatch):
 def test_kiosk_rejects_unknown_meal_target_without_partial_booking(client, monkeypatch):
     _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
     meal_date = date(2026, 7, 1)
-    camp = CampFactory(starts_on=meal_date, ends_on=meal_date)
+    camp = CampFactory(starts_on=date(2026, 6, 30), ends_on=meal_date)
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     PriceRuleFactory(
         camp=camp,

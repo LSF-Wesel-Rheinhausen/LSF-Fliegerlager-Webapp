@@ -105,6 +105,14 @@ textarea:focus-visible {
   box-shadow: 0 1px 0 rgba(32, 37, 45, 0.03);
 }
 
+.topbar:not(.kiosk-topbar) {
+  column-gap: 24px;
+}
+
+.topbar:not(.kiosk-topbar) > nav {
+  justify-content: flex-end;
+}
+
 .brand {
   display: inline-flex;
   align-items: center;
@@ -939,6 +947,75 @@ textarea {
 .kiosk-page {
   display: grid;
   gap: 24px;
+}
+
+.kiosk-announcements article {
+  min-height: auto;
+  height: fit-content;
+  border-left: 4px solid var(--accent);
+  overflow-wrap: anywhere;
+}
+
+.kiosk-announcements h2 {
+  margin: 4px 0 8px;
+  font-size: 1.25rem;
+}
+
+.kiosk-announcements p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.kiosk-pre-camp-overview {
+  display: grid;
+  gap: 24px;
+  max-width: 900px;
+  width: 100%;
+  margin-inline: auto;
+  border-left: 4px solid var(--accent);
+}
+
+.kiosk-pre-camp-overview__identity p,
+.kiosk-pre-camp-countdown p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.kiosk-pre-camp-countdown {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  max-width: 900px;
+  width: 100%;
+  margin-inline: auto;
+}
+
+.kiosk-pre-camp-countdown.panel {
+  border-left: 4px solid var(--accent);
+}
+
+.kiosk-pre-camp-countdown > .kiosk-hero__eyebrow {
+  grid-column: 1 / -1;
+}
+
+.kiosk-pre-camp-countdown__value {
+  display: grid;
+  width: 72px;
+  height: 72px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  font-size: 2rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.kiosk-pre-camp-countdown h1,
+.kiosk-pre-camp-countdown h2 {
+  margin-bottom: 6px;
 }
 
 .kiosk-nav {
@@ -2083,6 +2160,11 @@ textarea {
   place-items: center;
 }
 
+.kiosk-login-shell--pre-camp {
+  min-height: auto;
+  padding-top: 8px;
+}
+
 .kiosk-login-card {
   width: min(100%, 960px);
   display: grid;
@@ -2574,7 +2656,9 @@ textarea {
 .notification-settings {
   display: grid;
   gap: 20px;
+  width: min(100%, 760px);
   max-width: 760px;
+  margin-inline: auto;
 }
 
 .notification-setup {
@@ -2992,5 +3076,31 @@ dialog::backdrop {
   .kiosk-header-actions .theme-toggle {
     align-self: flex-end;
     width: 38px;
+  }
+}
+
+@media (min-width: 781px) and (max-width: 1380px) {
+  .topbar:not(.kiosk-topbar) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    padding-block: 12px;
+  }
+
+  .topbar:not(.kiosk-topbar) > nav {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 520px) {
+  .kiosk-pre-camp-countdown {
+    grid-template-columns: 1fr;
+    justify-items: start;
+  }
+
+  .kiosk-pre-camp-countdown__value {
+    width: 60px;
+    height: 60px;
+    font-size: 1.6rem;
   }
 }

@@ -12,70 +12,62 @@
   <a class="button button-secondary" href="{{ kiosk_urls.logout }}">Abmelden</a>
 {% endblock %}
 {% block content %}
-  {% if announcements %}
-    <section class="kiosk-announcements stack" style="margin-bottom: 1.5rem;">
-      {% for announcement in announcements %}
-        <article class="panel kiosk-card--accent" role="status" style="border-left: 4px solid var(--accent); min-height: auto; height: fit-content; word-break: break-word;">
-          <span class="kiosk-hero__eyebrow">📢 Ankündigung · {{ announcement.created_at|date:"d.m.Y H:i" }}</span>
-          <h2 style="margin: 0.25rem 0 0.5rem; font-size: 1.25rem;">{{ announcement.title }}</h2>
-          <p style="margin: 0; white-space: pre-wrap; word-break: break-word;">{{ announcement.body }}</p>
-        </article>
-      {% endfor %}
-    </section>
-  {% endif %}
-
-  <section class="kiosk-hero">
-    <article class="panel kiosk-hero__intro kiosk-card--accent">
-      <span class="kiosk-hero__eyebrow">Mein Kiosk</span>
-      <div class="kiosk-hero__copy">
-        <h1>{{ kiosk_actor.full_name }}</h1>
-        <p>Buche Getränke und Essen, verwalte Mitbuchungen und behalte deine Abrechnung im Blick, ohne zwischen Seiten zu springen.</p>
-      </div>
-      <div class="kiosk-meta">
-        <span class="kiosk-meta__item">{{ participant.camp }}</span>
-        {% if kiosk_actor_is_family_member %}
-          <span class="kiosk-meta__item">Begleitperson von {{ participant.full_name }}</span>
-        {% else %}
-          <span class="kiosk-meta__item">{{ participant.get_status_display }}</span>
-        {% endif %}
-        <span class="kiosk-meta__item">{{ participant.completed_shifts }} / {{ participant.target_shifts }} Pflichtdienste</span>
-      </div>
-    </article>
-
-    <aside class="panel kiosk-summary-card">
-      <span class="kiosk-hero__eyebrow">Aktuelle Abrechnung</span>
-      <strong class="kiosk-summary-card__value {% if summary.balance > 0 %}negative{% elif summary.balance < 0 %}positive{% endif %}">
-        {% if summary.balance > 0 %}-{% elif summary.balance < 0 %}+{% endif %}{{ summary.balance|abs_value|money_eur }}
-      </strong>
-      <div class="kiosk-summary-card__meta">
-        <p>Gezahlt, Förderung und Auslagen werden im Dialog detailliert angezeigt.</p>
-      </div>
-      <button type="button" class="button" data-open-summary-dialog>Details öffnen</button>
-    </aside>
-  </section>
-
   {% if is_pre_camp %}
-    <section class="panel kiosk-card kiosk-card--accent" style="border-left: 4px solid var(--accent); margin-bottom: 1.5rem;">
-      <span class="kiosk-hero__eyebrow">⏳ Vor dem Fliegerlager</span>
-      <h2 style="margin: 0.25rem 0 0.5rem; font-size: 1.5rem;">Noch {{ days_until_start }} Tage bis Lagerbeginn!</h2>
-      <p style="margin-bottom: 1rem;">Das Fliegerlager {{ participant.camp.name }} beginnt am {{ participant.camp.starts_on|date:"d.m.Y" }}.</p>
-
-      <form method="post" class="stack stack--compact" style="max-width: 450px;">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="update_attendance_dates">
-        <strong style="display: block; font-size: 0.95rem; margin-bottom: 0.25rem;">Dein geplanter Anmeldezeitraum:</strong>
-        <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
-          <div style="flex: 1; min-width: 130px;">
-            <label for="id_arrival_date" style="font-size: 0.85rem;">Anreise:</label>
-            <input type="date" id="id_arrival_date" name="arrival_date" value="{{ participant.arrival_date|date:'Y-m-d' }}" required style="width: 100%;">
-          </div>
-          <div style="flex: 1; min-width: 130px;">
-            <label for="id_departure_date" style="font-size: 0.85rem;">Abreise:</label>
-            <input type="date" id="id_departure_date" name="departure_date" value="{{ participant.departure_date|date:'Y-m-d' }}" required style="width: 100%;">
-          </div>
-          <button type="submit" class="button button-secondary">Zeitraum speichern</button>
+    <section class="panel kiosk-pre-camp-overview" data-pre-camp-overview>
+      <span class="kiosk-hero__eyebrow">⏳ Lagerbeginn</span>
+      <div class="kiosk-pre-camp-overview__identity">
+        <h1>{{ kiosk_actor.full_name }}</h1>
+        {% if kiosk_actor_is_family_member %}<p>Begleitperson von {{ participant.full_name }}</p>{% endif %}
+      </div>
+      <div class="kiosk-pre-camp-countdown">
+        <strong class="kiosk-pre-camp-countdown__value">{{ days_until_start }}</strong>
+        <div>
+          <h2>{% if days_until_start == 1 %}Noch ein Tag bis Lagerbeginn{% else %}Noch {{ days_until_start }} Tage bis Lagerbeginn{% endif %}</h2>
+          <p>{{ participant.camp.name }} beginnt am {{ participant.camp.starts_on|date:"d.m.Y" }}.</p>
         </div>
-      </form>
+      </div>
+    </section>
+  {% else %}
+    {% if announcements %}
+      <section class="kiosk-announcements stack">
+        {% for announcement in announcements %}
+          <article class="panel kiosk-card--accent" role="status">
+            <span class="kiosk-hero__eyebrow">📢 Ankündigung · {{ announcement.created_at|date:"d.m.Y H:i" }}</span>
+            <h2>{{ announcement.title }}</h2>
+            <p>{{ announcement.body }}</p>
+          </article>
+        {% endfor %}
+      </section>
+    {% endif %}
+
+    <section class="kiosk-hero">
+      <article class="panel kiosk-hero__intro kiosk-card--accent">
+        <span class="kiosk-hero__eyebrow">Mein Kiosk</span>
+        <div class="kiosk-hero__copy">
+          <h1>{{ kiosk_actor.full_name }}</h1>
+          <p>Buche Getränke und Essen, verwalte Mitbuchungen und behalte deine Abrechnung im Blick, ohne zwischen Seiten zu springen.</p>
+        </div>
+        <div class="kiosk-meta">
+          <span class="kiosk-meta__item">{{ participant.camp }}</span>
+          {% if kiosk_actor_is_family_member %}
+            <span class="kiosk-meta__item">Begleitperson von {{ participant.full_name }}</span>
+          {% else %}
+            <span class="kiosk-meta__item">{{ participant.get_status_display }}</span>
+          {% endif %}
+          <span class="kiosk-meta__item">{{ participant.completed_shifts }} / {{ participant.target_shifts }} Pflichtdienste</span>
+        </div>
+      </article>
+
+      <aside class="panel kiosk-summary-card">
+        <span class="kiosk-hero__eyebrow">Aktuelle Abrechnung</span>
+        <strong class="kiosk-summary-card__value {% if summary.balance > 0 %}negative{% elif summary.balance < 0 %}positive{% endif %}">
+          {% if summary.balance > 0 %}-{% elif summary.balance < 0 %}+{% endif %}{{ summary.balance|abs_value|money_eur }}
+        </strong>
+        <div class="kiosk-summary-card__meta">
+          <p>Gezahlt, Förderung und Auslagen werden im Dialog detailliert angezeigt.</p>
+        </div>
+        <button type="button" class="button" data-open-summary-dialog>Details öffnen</button>
+      </aside>
     </section>
   {% endif %}
 
@@ -117,7 +109,7 @@
     </section>
   {% endif %}
 
-  {% if participant.camp.show_kiosk_invoices %}
+  {% if participant.camp.show_kiosk_invoices and not is_pre_camp %}
     <section class="panel kiosk-card" style="margin-bottom: 1.5rem;">
       <h2 style="font-size: 1.25rem; margin-bottom: 0.5rem;">📄 Meine Rechnungen & Dokumente</h2>
       <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center;">
@@ -147,7 +139,7 @@
     </section>
   {% endif %}
 
-  {% if pending_invites %}
+  {% if pending_invites and not is_pre_camp %}
     <section class="panel kiosk-card kiosk-card--muted">
       <div class="kiosk-card__header">
         <div class="kiosk-card__header-main">
@@ -156,20 +148,7 @@
           <p>Hier warten Freigaben für gegenseitiges Mitbuchen.</p>
         </div>
       </div>
-      {% for invite in pending_invites %}
-        <div class="kiosk-list-row">
-          <div class="kiosk-list-row__content">
-            <strong>{{ invite.inviter.full_name }}</strong>
-            <span>möchte gegenseitiges Mitbuchen erlauben.</span>
-          </div>
-          <form method="post" class="inline-actions kiosk-list-row__actions">
-            {% csrf_token %}
-            <input type="hidden" name="booking_link_id" value="{{ invite.pk }}">
-            <button type="submit" name="action" value="booking_link_accept">Annehmen</button>
-            <button type="submit" name="action" value="booking_link_decline" class="button-secondary">Ablehnen</button>
-          </form>
-        </div>
-      {% endfor %}
+      {% include "billing/includes/kiosk_pending_invites.html" %}
     </section>
   {% endif %}
 
@@ -179,18 +158,20 @@
       <button class="button button-secondary">Schließen</button>
     </form>
     <nav class="kiosk-menu" aria-label="Kiosk-Bereiche">
-      <button type="button" class="kiosk-menu__item" data-dialog-target="meal-calendar-dialog">
-        <span>Abendessen (Kalender)</span>
-        <small>Abendessen nach Lagertag buchen und verwalten.</small>
-      </button>
-      <button type="button" class="kiosk-menu__item" data-dialog-target="quick-bookings-dialog">
-        <span>Letzte Schnellbuchungen</span>
-        <small>Getränke, Frühstück und Snacks prüfen oder stornieren.</small>
-      </button>
-      <button type="button" class="kiosk-menu__item" data-dialog-target="shared-expenses-dialog">
-        <span>Gemeinschaftsausgaben</span>
-        <small>Vorgestreckte Ausgaben einreichen und ihren Status sehen.</small>
-      </button>
+      {% if not is_pre_camp %}
+        <button type="button" class="kiosk-menu__item" data-dialog-target="meal-calendar-dialog">
+          <span>Abendessen (Kalender)</span>
+          <small>Abendessen nach Lagertag buchen und verwalten.</small>
+        </button>
+        <button type="button" class="kiosk-menu__item" data-dialog-target="quick-bookings-dialog">
+          <span>Letzte Schnellbuchungen</span>
+          <small>Getränke, Frühstück und Snacks prüfen oder stornieren.</small>
+        </button>
+        <button type="button" class="kiosk-menu__item" data-dialog-target="shared-expenses-dialog">
+          <span>Gemeinschaftsausgaben</span>
+          <small>Vorgestreckte Ausgaben einreichen und ihren Status sehen.</small>
+        </button>
+      {% endif %}
       <button type="button" class="kiosk-menu__item" data-dialog-target="family-management-dialog">
         <span>Familie</span>
         <small>Begleitpersonen und Kinder verwalten.</small>
@@ -207,7 +188,7 @@
         <span>Kontakt Lagerleitung</span>
         <small>Ansprechpersonen und Kontaktdaten anzeigen.</small>
       </button>
-      {% if kiosk_mode == "private" and web_push_enabled %}
+      {% if kiosk_mode == "private" and web_push_enabled and not is_pre_camp %}
         <a class="kiosk-menu__item" href="{% url 'kiosk-notification-settings' %}">
           <span>Benachrichtigungen</span>
           <small>Nachrichtenauswahl und registrierte Geräte verwalten.</small>
@@ -216,7 +197,8 @@
     </nav>
   </dialog>
 
-  <div class="kiosk-masonry" data-kiosk-masonry>
+  {% if not is_pre_camp %}
+    <div class="kiosk-masonry" data-kiosk-masonry>
         <form method="post" id="quick-booking-form" class="kiosk-masonry__contents">
           {% csrf_token %}
           <input type="hidden" name="action" value="quick">
@@ -371,7 +353,8 @@
         </div>
       </section>
 
-  </div>
+    </div>
+  {% endif %}
 
       <dialog id="quick-bookings-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="quick-bookings-dialog-title">
         <div class="kiosk-table__header">
@@ -537,6 +520,12 @@
             <button type="submit">Einladen</button>
           </div>
         </form>
+        {% if is_pre_camp and pending_invites %}
+          <section class="stack stack--compact" aria-labelledby="pending-booking-invites-title">
+            <h3 id="pending-booking-invites-title">Offene Einladungen</h3>
+            {% include "billing/includes/kiosk_pending_invites.html" %}
+          </section>
+        {% endif %}
         {% for invite in sent_invites %}
           <p class="hint">Offen: {{ invite.invitee.full_name }}</p>
         {% endfor %}

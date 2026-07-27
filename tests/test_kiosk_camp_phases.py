@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import timedelta
 from decimal import Decimal
 
 import pytest
@@ -29,7 +29,7 @@ def test_camp_phase_model_methods():
 
 
 @pytest.mark.django_db
-def test_kiosk_pre_camp_renders_countdown_and_updates_dates(client):
+def test_kiosk_pre_camp_renders_countdown_and_rejects_date_updates(client):
     today = timezone.localdate()
     camp = CampFactory(is_active=True, starts_on=today + timedelta(days=7), ends_on=today + timedelta(days=14))
     participant = ParticipantFactory(camp=camp, arrival_date=camp.starts_on, departure_date=camp.ends_on)
@@ -39,13 +39,12 @@ def test_kiosk_pre_camp_renders_countdown_and_updates_dates(client):
     session[KIOSK_MODE_SESSION_KEY] = "private"
     session.save()
 
-    # 1. Render Pre-Camp home
     response = client.get(reverse("kiosk-home"))
     assert response.status_code == 200
-    assert b"Vor dem Fliegerlager" in response.content
-    assert b"Noch 7 Tage bis Lagerbeginn!" in response.content
+    assert b"Lagerbeginn" in response.content
+    assert b"Noch 7 Tage bis Lagerbeginn" in response.content
+    assert b"Dein geplanter Anmeldezeitraum" not in response.content
 
-    # 2. Update attendance dates
     new_arrival = (today + timedelta(days=8)).isoformat()
     new_departure = (today + timedelta(days=13)).isoformat()
     res_post = client.post(
@@ -55,11 +54,13 @@ def test_kiosk_pre_camp_renders_countdown_and_updates_dates(client):
             "arrival_date": new_arrival,
             "departure_date": new_departure,
         },
+        follow=True,
     )
-    assert res_post.status_code == 302
+    assert res_post.status_code == 200
+    assert "Diese Funktion ist erst ab Lagerbeginn verfügbar." in res_post.content.decode("utf-8")
     participant.refresh_from_db()
-    assert participant.arrival_date == date.fromisoformat(new_arrival)
-    assert participant.departure_date == date.fromisoformat(new_departure)
+    assert participant.arrival_date == camp.starts_on
+    assert participant.departure_date == camp.ends_on
 
 
 @pytest.mark.django_db

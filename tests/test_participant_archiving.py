@@ -82,3 +82,20 @@ def test_archived_participant_is_removed_from_live_camp_settlement(client):
     assert response.status_code == 200
     assert list(response.context["settlements"]) == []
     assert list(response.context["archived_participants"]) == [participant]
+
+
+@pytest.mark.django_db
+def test_camp_detail_groups_participant_settlements_and_avoids_duplicate_shift_action(client):
+    admin = UserFactory()
+    admin.groups.add(Group.objects.create(name=ADMIN_GROUP))
+    participant = ParticipantFactory()
+    client.force_login(admin)
+
+    response = client.get(reverse("camp-detail", args=[participant.camp_id]))
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    heading_actions = content.split('<dl class="metrics"', maxsplit=1)[0]
+    assert "Dienste verwalten" not in heading_actions
+    assert '<section class="panel stack participant-settlements">' in content
+    assert "Teilnehmerabrechnungen" in content

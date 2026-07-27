@@ -10,7 +10,6 @@
       <a class="button button-secondary" href="{% url 'camp-edit' camp.pk %}">Lager bearbeiten</a>
       <a class="button" href="{% url 'participant-create' camp.pk %}">Teilnehmer anlegen</a>
       <a class="button" href="{% url 'price-rules-manage' camp.pk %}">Preise verwalten</a>
-      <a class="button" href="{% url 'shift-manage' camp.pk %}">Dienste verwalten</a>
       <a class="button" href="{% url 'camp-meal-overview' camp.pk %}">Essensübersicht</a>
       <a class="button" href="{% url 'expense-create' camp.pk %}">Auslage erfassen</a>
       <a class="button" href="{% url 'participant-import' camp.pk %}">Teilnehmer importieren</a>
@@ -308,28 +307,33 @@
     </table>
   </section>
 
-  <table>
-    <thead>
-      <tr>
-        <th>Teilnehmer</th><th>Status</th><th>Nächte</th><th>Soll</th><th>Gezahlt</th><th>Vorgestreckt</th><th>Offen</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for result in settlements %}
-        <tr>
-          <td><a href="{% url 'participant-detail' result.participant.pk %}">{{ result.participant.full_name }}</a></td>
-          <td>{{ result.participant.get_status_display }}</td>
-          <td>{{ result.participant.actual_nights }}</td>
-          <td>{{ result.total_due }}</td>
-          <td>{{ result.total_paid }}</td>
-          <td>{{ result.total_advanced }}</td>
-          <td class="{% if result.balance > 0 %}negative{% else %}positive{% endif %}">{{ result.balance }}</td>
-        </tr>
-      {% empty %}
-        <tr><td colspan="7">Noch keine Teilnehmer vorhanden.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <section class="panel stack participant-settlements">
+    <h2>Teilnehmerabrechnungen</h2>
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>Teilnehmer</th><th>Status</th><th>Nächte</th><th>Soll</th><th>Gezahlt</th><th>Vorgestreckt</th><th>Offen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for result in settlements %}
+            <tr>
+              <td><a href="{% url 'participant-detail' result.participant.pk %}">{{ result.participant.full_name }}</a></td>
+              <td>{{ result.participant.get_status_display }}</td>
+              <td>{{ result.participant.actual_nights }}</td>
+              <td>{{ result.total_due }}</td>
+              <td>{{ result.total_paid }}</td>
+              <td>{{ result.total_advanced }}</td>
+              <td class="{% if result.balance > 0 %}negative{% else %}positive{% endif %}">{{ result.balance }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7">Noch keine Teilnehmer vorhanden.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
 
   {% if archived_participants %}
     <section class="panel stack">
@@ -353,6 +357,7 @@
           {% endfor %}
         </tbody>
       </table>
+    </section>
   {% endif %}
 
   <dialog id="reject-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="reject-dialog-title">

@@ -131,6 +131,16 @@ KIOSK_FAMILY_MEMBER_SESSION_KEY = "kiosk_family_member_id"
 KIOSK_PIN_SETUP_SESSION_KEY = "kiosk_pin_setup_participant_id"
 KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY = "kiosk_pin_setup_family_member_id"
 KIOSK_MODE_SESSION_KEY = "kiosk_mode"
+PRE_CAMP_KIOSK_ACTIONS = frozenset(
+    {
+        "family_member_create",
+        "family_member_deactivate",
+        "booking_link_invite",
+        "booking_link_accept",
+        "booking_link_decline",
+        "booking_link_revoke",
+    }
+)
 KIOSK_QUICK_BOOKING_CANCEL_WINDOW = timedelta(minutes=15)
 
 
@@ -143,6 +153,16 @@ def _kiosk_route(kiosk_mode: str, page: str) -> str:
     """Return the named route for a kiosk page in the active device mode."""
     prefix = "central-kiosk" if kiosk_mode == "central" else "kiosk"
     return f"{prefix}-{page}"
+
+
+def _pre_camp_kiosk_operation_redirect(
+    request: HttpRequest, participant: Participant, kiosk_mode: str
+) -> HttpResponse | None:
+    """Redirect pre-camp participants away from operational kiosk pages."""
+    if not participant.camp.is_pre_camp():
+        return None
+    messages.error(request, "Diese Funktion ist erst ab Lagerbeginn verfügbar.")
+    return redirect(_kiosk_route(kiosk_mode, "home"))
 
 
 def _clear_kiosk_session(request: HttpRequest) -> None:
@@ -1932,6 +1952,7 @@ def kiosk_home(request, kiosk_mode="private"):
     if participant is None:
         return redirect(_kiosk_route(kiosk_mode, "login"))
 
+    is_pre_camp = participant.camp.is_pre_camp()
     active_family_member = _kiosk_family_member(request, participant)
     default_booking_target = active_family_member or participant
     default_booking_target_token = (
@@ -1946,6 +1967,9 @@ def kiosk_home(request, kiosk_mode="private"):
     family_member_form = KioskFamilyMemberForm(prefix="family")
     booking_link_form = KioskBookingLinkInviteForm(inviter=participant, prefix="link")
     if request.method == "POST":
+        if is_pre_camp and request.POST.get("action") not in PRE_CAMP_KIOSK_ACTIONS:
+            messages.error(request, "Diese Funktion ist erst ab Lagerbeginn verfügbar.")
+            return redirect(_kiosk_route(kiosk_mode, "home"))
         if request.POST.get("action") == "quick":
             quick_form = QuickBookingForm(request.POST, participant=participant, prefix="quick")
             if quick_form.is_valid():
@@ -2272,7 +2296,6 @@ def kiosk_home(request, kiosk_mode="private"):
     historic_settlements = list(_participant_historic_settlements(participant))
     latest_settlement = historic_settlements[0] if historic_settlements else None
     archived_settlements = historic_settlements[1:] if len(historic_settlements) > 1 else []
-    is_pre_camp = participant.camp.is_pre_camp()
     is_post_camp = participant.camp.is_post_camp()
     days_until_start = participant.camp.days_until_start()
 
@@ -2335,6 +2358,8 @@ def kiosk_shared_expense_request(request, kiosk_mode="private"):
     participant = _kiosk_participant(request)
     if not participant:
         return redirect(_kiosk_route(kiosk_mode, "login"))
+    if pre_camp_redirect := _pre_camp_kiosk_operation_redirect(request, participant, kiosk_mode):
+        return pre_camp_redirect
 
     form = SharedExpenseRequestForm(request.POST or None, request.FILES or None)
     if request.method == "POST" and form.is_valid():
@@ -2371,6 +2396,8 @@ def kiosk_shifts(request, kiosk_mode="private"):
     participant = _kiosk_participant(request)
     if not participant:
         return redirect(_kiosk_route(kiosk_mode, "login"))
+    if pre_camp_redirect := _pre_camp_kiosk_operation_redirect(request, participant, kiosk_mode):
+        return pre_camp_redirect
 
     today = timezone.localdate()
     if request.method == "POST":

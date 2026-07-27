@@ -155,9 +155,9 @@ def test_pwa_surfaces_use_distinct_install_icons(client):
 @pytest.mark.parametrize(
     ("route_name", "expected_scope", "expected_cache_name"),
     [
-        ("pwa-worker-admin", "/", "fliegerlager-admin-v10"),
-        ("pwa-worker-kiosk", "/kiosk/", "fliegerlager-kiosk-v10"),
-        ("pwa-worker-central", "/central/kiosk/", "fliegerlager-central-v10"),
+        ("pwa-worker-admin", "/", "fliegerlager-admin-v11"),
+        ("pwa-worker-kiosk", "/kiosk/", "fliegerlager-kiosk-v11"),
+        ("pwa-worker-central", "/central/kiosk/", "fliegerlager-central-v11"),
     ],
 )
 def test_service_workers_have_explicit_scopes(client, route_name, expected_scope, expected_cache_name):
