@@ -1,5 +1,54 @@
 {
-  "generated_at": "2026-07-27T18:10:59.512492+00:00",
-  "nodes": {},
+  "generated_at": "2026-07-27T20:20:04.288696+00:00",
+  "nodes": {
+    "src_billing_views_kiosk_context": {
+      "code_fingerprint": "c54e2f1780d0e4d89bd4d6e361998def27c016ef848bead39530a0a609c20d41",
+      "label": "_kiosk_context()",
+      "last": "2026-07-27T19:00:55.090944+00:00",
+      "provenance": [
+        {
+          "date": "2026-07-27T19:00:55.090944+00:00",
+          "outcome": "useful",
+          "q": "timer läuft im public login screen auch"
+        }
+      ],
+      "score": 0.998730786,
+      "source_file": "src/billing/views.py",
+      "status": "tentative",
+      "uses": 1
+    },
+    "src_billing_views_kiosk_login": {
+      "code_fingerprint": "c54e2f1780d0e4d89bd4d6e361998def27c016ef848bead39530a0a609c20d41",
+      "label": "kiosk_login()",
+      "last": "2026-07-27T19:00:55.090944+00:00",
+      "provenance": [
+        {
+          "date": "2026-07-27T19:00:55.090944+00:00",
+          "outcome": "useful",
+          "q": "timer läuft im public login screen auch"
+        }
+      ],
+      "score": 0.998730786,
+      "source_file": "src/billing/views.py",
+      "status": "tentative",
+      "uses": 1
+    },
+    "tests_test_kiosk_test_private_kiosk_pin_setup_does_not_use_inactivity_logout_timer": {
+      "code_fingerprint": "06a77da3d0bfd868aa22e5537ab53aa9e54c41d8cf2a98daa2f8cc615d33c43c",
+      "label": "test_private_kiosk_pin_setup_does_not_use_inactivity_logout_timer()",
+      "last": "2026-07-27T19:00:55.090944+00:00",
+      "provenance": [
+        {
+          "date": "2026-07-27T19:00:55.090944+00:00",
+          "outcome": "useful",
+          "q": "timer läuft im public login screen auch"
+        }
+      ],
+      "score": 0.998730786,
+      "source_file": "tests/test_kiosk.py",
+      "status": "tentative",
+      "uses": 1
+    }
+  },
   "version": 1
 }

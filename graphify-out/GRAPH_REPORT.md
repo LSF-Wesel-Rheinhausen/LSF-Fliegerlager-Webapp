@@ -1,16 +1,16 @@
 # Graph Report - LSF-Fliegerlager-Webapp  (2026-07-27)
 
 ## Corpus Check
-- 272 files · ~359,648 words
+- 274 files · ~359,886 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2294 nodes · 5421 edges · 387 communities (131 shown, 256 thin omitted)
+- 2290 nodes · 5421 edges · 383 communities (131 shown, 252 thin omitted)
 - Extraction: 73% EXTRACTED · 27% INFERRED · 0% AMBIGUOUS · INFERRED: 1470 edges (avg confidence: 0.56)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `8aa1fd68`
+- Built from commit: `1b517e79`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -267,10 +267,6 @@
 - skillPath
 - source
 - sourceType
-- computedHash
-- skillPath
-- source
-- sourceType
 - skills
 - agent-browser
 - cavecrew
@@ -393,7 +389,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (387 total, 256 thin omitted)
+## Communities (383 total, 252 thin omitted)
 
 ### Community 0 - "Django Admin Integration"
 Cohesion: 0.06
@@ -772,9 +768,9 @@ Cohesion: 0.12
 Nodes (7): Dateiuebersicht, `scripts`, `src/billing`, `src/static/billing`, `src/templates`, `tests/e2e`, `tests`
 
 ## Knowledge Gaps
-- **450 isolated node(s):** `Zusammenfassung`, `Geänderte Dateien`, `Tests`, `Offene Punkte`, `app-entrypoint.sh script` (+445 more)
+- **446 isolated node(s):** `Zusammenfassung`, `Geänderte Dateien`, `Tests`, `Offene Punkte`, `app-entrypoint.sh script` (+441 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **256 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **252 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
