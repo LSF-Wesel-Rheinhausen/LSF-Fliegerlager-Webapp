@@ -1,5 +1,5 @@
 import csv
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from decimal import Decimal
 from io import BytesIO, StringIO
 from typing import Any
@@ -14,6 +14,13 @@ from .models import Charge, DrinkEntry, Participant, Settlement, SettlementRun
 from .services import calculate_camp_settlements, calculate_participant_settlement, get_cost_center_evaluation, money
 
 CSV_FORMULA_PREFIXES = ("=", "+", "-", "@")
+PDF_CONTENT_BOTTOM = 55
+PDF_LINE_HEIGHT = 18
+PDF_SUMMARY_TOP_SPACING = 10
+PDF_SUMMARY_FINAL_SPACING = 4
+PDF_PAYMENT_TOP_SPACING = 30
+PDF_PAYMENT_DEBIT_BOX_HEIGHT = 65
+PDF_PAYMENT_CREDIT_BOX_HEIGHT = 70
 
 
 def safe_csv_cell(value: Any) -> Any:
@@ -442,9 +449,25 @@ def _draw_page_framework(pdf, title, subtitle, participant_name):
     return y
 
 
+def _ensure_invoice_space(pdf, y, required_height, title, subtitle, participant_name):
+    """Start a continuation page when a complete invoice block would cross the footer."""
+    if y - required_height >= PDF_CONTENT_BOTTOM:
+        return y
+
+    pdf.showPage()
+    y = _draw_page_framework(pdf, title, subtitle, participant_name)
+    pdf.setFont("Helvetica", 10)
+    return y
+
+
+def _sum_block_height(items: Sequence[tuple[str, Decimal]]) -> int:
+    final_spacing = PDF_SUMMARY_FINAL_SPACING if any(label == "Offen" for label, _value in items) else 0
+    return PDF_SUMMARY_TOP_SPACING + (len(items) * PDF_LINE_HEIGHT) + final_spacing
+
+
 def _draw_sum_block(pdf, y, items):
     width, _ = A4
-    y -= 10
+    y -= PDF_SUMMARY_TOP_SPACING
 
     pdf.setStrokeColorRGB(0.5, 0.5, 0.5)
     pdf.line(width - 250, y + 16, width - 50, y + 16)
@@ -469,7 +492,7 @@ def _draw_sum_block(pdf, y, items):
         is_final = label == "Kontostand"
 
         if is_final:
-            y -= 4
+            y -= PDF_SUMMARY_FINAL_SPACING
             pdf.setStrokeColorRGB(0.2, 0.2, 0.2)
             pdf.line(width - 250, y + 14, width - 50, y + 14)
             pdf.setStrokeColorRGB(0, 0, 0)
@@ -479,7 +502,7 @@ def _draw_sum_block(pdf, y, items):
 
         pdf.drawString(width - 220, y, f"{label}:")
         pdf.drawRightString(width - 50, y, val_str)
-        y -= 18
+        y -= PDF_LINE_HEIGHT
 
         if is_final:
             pdf.setStrokeColorRGB(0.2, 0.2, 0.2)
@@ -489,12 +512,24 @@ def _draw_sum_block(pdf, y, items):
     return y
 
 
+def _payment_instructions_height(camp, balance) -> int:
+    if balance == 0:
+        return 0
+    if balance < 0:
+        return PDF_PAYMENT_TOP_SPACING + PDF_PAYMENT_CREDIT_BOX_HEIGHT
+
+    iban = getattr(camp, "iban", "").strip()
+    paypal = getattr(camp, "paypal_link", "").strip()
+    if not iban and not paypal:
+        return 0
+    return PDF_PAYMENT_TOP_SPACING + PDF_PAYMENT_DEBIT_BOX_HEIGHT
+
+
 def _draw_payment_instructions(pdf, y, camp, balance):
     if balance == 0:
         return y
 
     width, _ = A4
-    y -= 30
 
     if balance > 0:
         iban = getattr(camp, "iban", "").strip()
@@ -503,7 +538,8 @@ def _draw_payment_instructions(pdf, y, camp, balance):
         if not iban and not paypal:
             return y
 
-        box_height = 65
+        box_height = PDF_PAYMENT_DEBIT_BOX_HEIGHT
+        y -= PDF_PAYMENT_TOP_SPACING
         y -= box_height
 
         pdf.setFillColorRGB(0.96, 0.96, 0.96)
@@ -532,7 +568,8 @@ def _draw_payment_instructions(pdf, y, camp, balance):
 
     else:
         # balance < 0 (Guthaben)
-        box_height = 70
+        box_height = PDF_PAYMENT_CREDIT_BOX_HEIGHT
+        y -= PDF_PAYMENT_TOP_SPACING
         y -= box_height
 
         pdf.setFillColorRGB(0.96, 0.96, 0.96)
@@ -570,10 +607,14 @@ def participant_pdf_response(participant):
 
     pdf.setFont("Helvetica", 10)
     for line in result.lines:
-        if y < 80:
-            pdf.showPage()
-            y = _draw_page_framework(pdf, title, "", participant.full_name)
-            pdf.setFont("Helvetica", 10)
+        y = _ensure_invoice_space(
+            pdf,
+            y,
+            PDF_LINE_HEIGHT,
+            title,
+            "",
+            participant.full_name,
+        )
         pdf.drawString(50, y, line.label[:80])
         pdf.drawRightString(width - 120, y, str(line.quantity))
         pdf.drawRightString(width - 50, y, f"- {line.total:.2f} €")
@@ -581,20 +622,22 @@ def participant_pdf_response(participant):
         pdf.setStrokeColorRGB(0.9, 0.9, 0.9)
         pdf.line(50, y - 5, width - 50, y - 5)
         pdf.setStrokeColorRGB(0, 0, 0)
-        y -= 18
+        y -= PDF_LINE_HEIGHT
 
-    y = _draw_sum_block(
-        pdf,
-        y,
-        [
-            ("Brutto", result.total_gross),
-            ("Förderung", result.total_subsidy),
-            ("Soll", result.total_due),
-            ("Gezahlt", result.total_paid),
-            ("Vorgestreckt", result.total_advanced),
-            ("Offen", result.balance),
-        ],
+    summary_items = [
+        ("Brutto", result.total_gross),
+        ("Förderung", result.total_subsidy),
+        ("Soll", result.total_due),
+        ("Gezahlt", result.total_paid),
+        ("Vorgestreckt", result.total_advanced),
+        ("Offen", result.balance),
+    ]
+    closing_height = _sum_block_height(summary_items) + _payment_instructions_height(
+        participant.camp,
+        result.balance,
     )
+    y = _ensure_invoice_space(pdf, y, closing_height, title, "", participant.full_name)
+    y = _draw_sum_block(pdf, y, summary_items)
 
     _draw_payment_instructions(pdf, y, participant.camp, result.balance)
 
@@ -664,10 +707,14 @@ def settlement_snapshot_pdf_bytes(snapshot: Settlement) -> bytes:
 
     pdf.setFont("Helvetica", 10)
     for line in snapshot.data.get("lines", []):
-        if y < 80:
-            pdf.showPage()
-            y = _draw_page_framework(pdf, title, subtitle, snapshot.participant_name)
-            pdf.setFont("Helvetica", 10)
+        y = _ensure_invoice_space(
+            pdf,
+            y,
+            PDF_LINE_HEIGHT,
+            title,
+            subtitle,
+            snapshot.participant_name,
+        )
         pdf.drawString(50, y, str(line.get("label", ""))[:80])
         pdf.drawRightString(width - 120, y, str(line.get("quantity", "")))
 
@@ -682,20 +729,22 @@ def settlement_snapshot_pdf_bytes(snapshot: Settlement) -> bytes:
         pdf.setStrokeColorRGB(0.9, 0.9, 0.9)
         pdf.line(50, y - 5, width - 50, y - 5)
         pdf.setStrokeColorRGB(0, 0, 0)
-        y -= 18
+        y -= PDF_LINE_HEIGHT
 
-    y = _draw_sum_block(
-        pdf,
-        y,
-        [
-            ("Brutto", snapshot.total_gross),
-            ("Förderung", snapshot.total_subsidy),
-            ("Soll", snapshot.total_due),
-            ("Gezahlt", snapshot.total_paid),
-            ("Vorgestreckt", snapshot.total_advanced),
-            ("Offen", snapshot.balance),
-        ],
+    summary_items = [
+        ("Brutto", snapshot.total_gross),
+        ("Förderung", snapshot.total_subsidy),
+        ("Soll", snapshot.total_due),
+        ("Gezahlt", snapshot.total_paid),
+        ("Vorgestreckt", snapshot.total_advanced),
+        ("Offen", snapshot.balance),
+    ]
+    closing_height = _sum_block_height(summary_items) + _payment_instructions_height(
+        run.camp,
+        snapshot.balance,
     )
+    y = _ensure_invoice_space(pdf, y, closing_height, title, subtitle, snapshot.participant_name)
+    y = _draw_sum_block(pdf, y, summary_items)
 
     _draw_payment_instructions(pdf, y, run.camp, snapshot.balance)
 

@@ -1,4 +1,5 @@
 import csv
+import re
 from datetime import date
 from decimal import Decimal
 from io import BytesIO, StringIO
@@ -7,8 +8,10 @@ import pytest
 from django.urls import reverse
 from openpyxl import load_workbook
 
+from billing.exporters import participant_pdf_response, settlement_snapshot_pdf_bytes
 from billing.models import Charge, Expense, MealSignup
 from billing.permissions import EDITOR_GROUP
+from billing.services import create_settlement_run
 from tests.factories import (
     CampFactory,
     ChargeFactory,
@@ -20,6 +23,62 @@ from tests.factories import (
     SuperUserFactory,
     UserFactory,
 )
+
+
+class RecordingPdfCanvas:
+    """Capture PDF drawing positions while replacing ReportLab's output boundary."""
+
+    def __init__(self, *_args, **_kwargs):
+        self.page_number = 1
+        self.body_y_positions = []
+        self.round_rect_positions = []
+        self.text_positions = []
+
+    def drawString(self, _x, y, text):
+        self.body_y_positions.append(y)
+        self.text_positions.append((self.page_number, y, text))
+
+    def drawRightString(self, _x, y, text):
+        self.body_y_positions.append(y)
+        self.text_positions.append((self.page_number, y, text))
+
+    def drawCentredString(self, _x, y, text):
+        self.text_positions.append((self.page_number, y, text))
+
+    def drawImage(self, _path, _x, y, **_kwargs):
+        self.body_y_positions.append(y)
+
+    def rect(self, _x, y, _width, _height, **_kwargs):
+        self.body_y_positions.append(y)
+
+    def roundRect(self, _x, y, _width, _height, **_kwargs):
+        self.body_y_positions.append(y)
+        self.round_rect_positions.append((self.page_number, y))
+
+    def line(self, _x1, y1, _x2, y2):
+        self.body_y_positions.extend((y1, y2))
+
+    def showPage(self):
+        self.page_number += 1
+
+    def save(self):
+        return None
+
+    def __getattr__(self, _name):
+        return lambda *_args, **_kwargs: None
+
+
+@pytest.fixture
+def recording_pdf_canvases(monkeypatch):
+    canvases = []
+
+    def create_canvas(*args, **kwargs):
+        recording_canvas = RecordingPdfCanvas(*args, **kwargs)
+        canvases.append(recording_canvas)
+        return recording_canvas
+
+    monkeypatch.setattr("billing.exporters.canvas.Canvas", create_canvas)
+    return canvases
 
 
 @pytest.fixture
@@ -59,6 +118,10 @@ def export_dataset():
 
 def csv_rows(response):
     return list(csv.reader(StringIO(response.content.decode("utf-8"))))
+
+
+def pdf_page_count(content):
+    return len(re.findall(rb"/Type\s*/Page(?!s)", content))
 
 
 @pytest.mark.django_db
@@ -309,3 +372,85 @@ def test_participant_pdf_export_returns_pdf_preview(client, export_dataset):
     assert response["Content-Type"] == "application/pdf"
     assert response["Content-Disposition"] == f'inline; filename="abrechnung-{participant.pk}.pdf"'
     assert response.content.startswith(b"%PDF-")
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("invoice_source", ["current", "snapshot"])
+def test_long_invoice_pdf_uses_second_page_for_closing_blocks(invoice_source):
+    participant = ParticipantFactory()
+    ChargeFactory.create_batch(28, participant=participant)
+
+    if invoice_source == "snapshot":
+        run = create_settlement_run(participant.camp, SuperUserFactory())
+        content = settlement_snapshot_pdf_bytes(run.settlements.get())
+    else:
+        content = participant_pdf_response(participant).content
+
+    assert pdf_page_count(content) == 2
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("invoice_source", ["current", "snapshot"])
+def test_long_invoice_moves_summary_above_footer(invoice_source, recording_pdf_canvases):
+    participant = ParticipantFactory()
+    ChargeFactory.create_batch(28, participant=participant)
+
+    if invoice_source == "snapshot":
+        run = create_settlement_run(participant.camp, SuperUserFactory())
+        settlement_snapshot_pdf_bytes(run.settlements.get())
+    else:
+        participant_pdf_response(participant)
+
+    recording_canvas = recording_pdf_canvases[0]
+    summary_pages = [page for page, _y, text in recording_canvas.text_positions if text == "Brutto:"]
+    footer_pages = [
+        page
+        for page, _y, text in recording_canvas.text_positions
+        if text.startswith("Erstellt mit der Fliegerlagerabrechnung")
+    ]
+
+    assert summary_pages == [2]
+    assert footer_pages == [1, 2]
+    assert min(recording_canvas.body_y_positions) >= 55
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("invoice_source", ["current", "snapshot"])
+@pytest.mark.parametrize(
+    ("balance_kind", "instruction_heading"),
+    [
+        ("debit", "Zahlungsinformationen"),
+        ("credit", "Guthaben & Auszahlung"),
+    ],
+)
+def test_long_invoice_keeps_payment_box_above_footer(
+    invoice_source,
+    balance_kind,
+    instruction_heading,
+    recording_pdf_canvases,
+):
+    participant = ParticipantFactory(camp=CampFactory(iban="DE02120300000000202051"))
+    ChargeFactory.create_batch(20, participant=participant)
+    if balance_kind == "credit":
+        PaymentFactory(participant=participant, amount=Decimal("210.00"))
+
+    if invoice_source == "snapshot":
+        run = create_settlement_run(participant.camp, SuperUserFactory())
+        settlement_snapshot_pdf_bytes(run.settlements.get())
+    else:
+        participant_pdf_response(participant)
+
+    recording_canvas = recording_pdf_canvases[0]
+    instruction_pages = [page for page, _y, text in recording_canvas.text_positions if text == instruction_heading]
+    footer_pages = [
+        page
+        for page, _y, text in recording_canvas.text_positions
+        if text.startswith("Erstellt mit der Fliegerlagerabrechnung")
+    ]
+
+    assert instruction_pages == [2]
+    assert footer_pages == [1, 2]
+    assert len(recording_canvas.round_rect_positions) == 1
+    payment_page, payment_bottom = recording_canvas.round_rect_positions[0]
+    assert payment_page == 2
+    assert payment_bottom >= 55
