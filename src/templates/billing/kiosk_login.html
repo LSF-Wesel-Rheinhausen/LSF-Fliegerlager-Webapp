@@ -2,14 +2,17 @@
 {% block title %}Kiosk-Login{% endblock %}
 {% block content %}
   {% if is_pre_camp and camp %}
-    <section class="panel kiosk-card kiosk-card--accent" style="border-left: 4px solid var(--accent); margin-bottom: 1.5rem; width: 100%; max-width: 900px; margin-left: auto; margin-right: auto;">
-      <span class="kiosk-hero__eyebrow">⏳ Vor dem Fliegerlager</span>
-      <h2 style="margin: 0.25rem 0 0.5rem; font-size: 1.4rem;">Noch {{ days_until_start }} Tage bis Lagerbeginn!</h2>
-      <p style="margin: 0;">Das Fliegerlager {{ camp.name }} beginnt am {{ camp.starts_on|date:"d.m.Y" }}.</p>
+    <section class="panel kiosk-pre-camp-countdown" data-pre-camp-countdown>
+      <span class="kiosk-hero__eyebrow">⏳ Lagerbeginn</span>
+      <strong class="kiosk-pre-camp-countdown__value">{{ days_until_start }}</strong>
+      <div>
+        <h1>{% if days_until_start == 1 %}Noch ein Tag{% else %}Noch {{ days_until_start }} Tage{% endif %}</h1>
+        <p>Das Fliegerlager {{ camp.name }} beginnt am {{ camp.starts_on|date:"d.m.Y" }}.</p>
+      </div>
     </section>
   {% endif %}
 
-  <section class="kiosk-login-shell">
+  <section class="kiosk-login-shell{% if is_pre_camp %} kiosk-login-shell--pre-camp{% endif %}">
     <div class="kiosk-login-card">
       <article class="panel kiosk-login-card__hero kiosk-card--accent">
         <span class="kiosk-hero__eyebrow">Selbstbedienung</span>

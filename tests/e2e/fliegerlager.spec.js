@@ -184,13 +184,13 @@ async function loginAsAdmin(page) {
   await expect(page.getByRole("heading", { name: "Lager" })).toBeVisible();
 }
 
-async function createCamp(page, name = "Sommerlager") {
+async function createCamp(page, name = "Sommerlager", startOffsetDays = 2, durationDays = 2) {
   await page.getByRole("link", { name: "Lager anlegen" }).click();
   await expect(page.getByRole("heading", { name: "Lager anlegen" })).toBeVisible();
   const suffix = Date.now().toString();
   const campName = `${name} ${suffix}`;
-  const startDate = addDays(new Date(), 2);
-  const endDate = addDays(startDate, 2);
+  const startDate = addDays(new Date(), startOffsetDays);
+  const endDate = addDays(startDate, durationDays);
   await page.getByLabel("Name").fill(campName);
   await page.getByLabel("Jahr").fill(String(startDate.getFullYear()));
   await page.getByLabel("Beginn").fill(dateInputValue(startDate));
@@ -222,11 +222,59 @@ test("Admin completes setup, login, camp workflow and logout", async ({ page }) 
   await expect(page.getByRole("link", { name: "Abrechnung als CSV herunterladen" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Arbeitsmappe herunterladen" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Getränke als CSV herunterladen" })).toBeVisible();
+  await expect(page.locator(".participant-settlements").getByRole("table")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Dienste verwalten" })).toHaveCount(0);
 
   await assertNoUnexpectedOverflow(page);
   await logout(page);
   await expect(page).toHaveURL(/\/login\/?$/);
   await loginAsAdmin(page);
+});
+
+test("Pre-camp kiosk stays compact and exposes only preparation areas", async ({ page }) => {
+  await setupFirstAdmin(page);
+  await createCamp(page, "Vorlager", 2, 4);
+  await createParticipant(page, "Ada", "Lovelace");
+  await logout(page);
+
+  await page.goto("/kiosk/login/");
+  const countdown = page.locator("[data-pre-camp-countdown]");
+  const loginShell = page.locator(".kiosk-login-shell--pre-camp");
+  await expect(countdown).toBeVisible();
+  await expect(loginShell).toBeVisible();
+  const loginSpacing = await page.evaluate(() => {
+    const countdownRect = document.querySelector("[data-pre-camp-countdown]").getBoundingClientRect();
+    const loginRect = document.querySelector(".kiosk-login-shell--pre-camp").getBoundingClientRect();
+    return loginRect.top - countdownRect.bottom;
+  });
+  expect(loginSpacing).toBeLessThanOrEqual(32);
+
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Ada Lovelace" });
+  await page.getByLabel("PIN").fill("0000");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await page.getByLabel("Neuer PIN").fill("1234");
+  await page.getByLabel("PIN wiederholen").fill("1234");
+  await page.getByRole("button", { name: "Speichern" }).click();
+
+  await expect(page.locator("[data-pre-camp-overview]")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ada Lovelace" })).toBeVisible();
+  await expect(page.locator("[data-kiosk-card]")).toHaveCount(0);
+  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).click();
+  const menu = page.locator("dialog#kiosk-menu-dialog");
+  await expect(menu.getByRole("button", { name: /Familie/ })).toBeVisible();
+  await expect(menu.getByRole("button", { name: /Mitbuchungen/ })).toBeVisible();
+  await expect(menu.getByRole("link", { name: /Hilfe/ })).toBeVisible();
+  await expect(menu.getByRole("button", { name: /Kontakt Lagerleitung/ })).toBeVisible();
+  await expect(menu.getByRole("button", { name: /Abendessen|Gemeinschaftsausgaben/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
+  for (const viewport of [
+    { width: 1280, height: 800 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await assertNoUnexpectedOverflow(page);
+  }
 });
 
 test("Admin registers and signs in with a passkey", async ({ context, page }) => {
@@ -349,7 +397,7 @@ test("Admin can open and close price rule dialogs natively", async ({ page }) =>
 
 test("Kiosk flow: login, pin setup, drink and meal booking", async ({ page }) => {
   await setupFirstAdmin(page);
-  const campName = await createCamp(page, "Sommerlager Kiosk");
+  const campName = await createCamp(page, "Sommerlager Kiosk", 0, 4);
   await createParticipant(page, "Marie", "Curie");
 
   await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
@@ -485,7 +533,7 @@ test("Kiosk masonry and expense cards stay responsive and accessible", async ({ 
   const { browserErrors, failedRequests } = trackPageIssues(page);
 
   await setupFirstAdmin(page);
-  const campName = await createCamp(page, "Masonry-Lager");
+  const campName = await createCamp(page, "Masonry-Lager", 0, 4);
   await createParticipant(page, "Marie", "Curie");
   await logout(page);
 
@@ -827,7 +875,7 @@ test("Admin configures SMTP and manually confirms exact information recipients",
 
 test("Daily shift template and kiosk shift flow", async ({ page }) => {
   await setupFirstAdmin(page);
-  await createCamp(page, "Sommerlager Dienste");
+  await createCamp(page, "Sommerlager Dienste", 0, 2);
   await createParticipant(page, "Albert", "Einstein");
 
   // Create a daily shift template via Frontend
@@ -903,7 +951,7 @@ for (const viewport of [
   test(`Kiosk meal and drink layout has no overflow in ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await setupFirstAdmin(page);
-    const campName = await createCamp(page, "Sommerlager Kiosk Mobile");
+    const campName = await createCamp(page, "Sommerlager Kiosk Mobile", 0, 4);
     const participantFirstName = viewport.name === "mobile portrait" ? "MobilePortrait" : "MobileLandscape";
     const participantName = `${participantFirstName} ExtremLangerUngetrennterTeilnehmername`;
     await createParticipant(page, participantFirstName, "ExtremLangerUngetrennterTeilnehmername");
