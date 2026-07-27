@@ -1362,6 +1362,7 @@ def kiosk_login(request, kiosk_mode="private"):
             "is_post_camp": is_post_camp,
             "days_until_start": days_until_start,
             **_kiosk_context(kiosk_mode),
+            "kiosk_autologout": False,
         },
     )
 
