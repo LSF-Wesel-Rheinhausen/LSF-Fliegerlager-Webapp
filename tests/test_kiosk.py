@@ -212,6 +212,15 @@ def test_kiosk_home_hides_normal_admin_header_and_renders_drink_dialog_controls(
 
     camp = CampFactory()
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    for _ in range(2):
+        Charge.objects.create(
+            participant=participant,
+            kind=Charge.Kind.DRINK,
+            description="Apfelschorle",
+            quantity=Decimal("1.00"),
+            unit_price=Decimal("2.50"),
+            occurred_on=date(2026, 7, 28),
+        )
     PriceRuleFactory(
         camp=camp,
         kind=PriceRule.Kind.DRINK,
@@ -242,6 +251,8 @@ def test_kiosk_home_hides_normal_admin_header_and_renders_drink_dialog_controls(
     assert b'id="kiosk-menu-dialog"' in response.content
     assert b"Brutto:" not in response.content
     assert b"Soll:" not in response.content
+    assert b"28.07.2026" in response.content
+    assert response.content.count(b"B#") >= 2
 
 
 @pytest.mark.django_db
@@ -345,7 +356,8 @@ def test_pre_camp_kiosk_login_uses_compact_layout(client):
 
 
 @pytest.mark.django_db
-def test_kiosk_checkin_updates_own_and_linked_participant_dates(client):
+def test_kiosk_checkin_updates_own_and_linked_participant_dates(client, monkeypatch):
+    monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 7, 5))
     camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 14))
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")
     linked = ParticipantFactory(camp=camp, first_name="Grace", last_name="B")
@@ -382,7 +394,8 @@ def test_kiosk_checkin_updates_own_and_linked_participant_dates(client):
 
 
 @pytest.mark.django_db
-def test_kiosk_checkin_rejects_unlinked_participant(client):
+def test_kiosk_checkin_rejects_unlinked_participant(client, monkeypatch):
+    monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 7, 5))
     camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 14))
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")
     unlinked = ParticipantFactory(camp=camp, first_name="Grace", last_name="B")
@@ -408,7 +421,8 @@ def test_kiosk_checkin_rejects_unlinked_participant(client):
 
 
 @pytest.mark.django_db
-def test_kiosk_checkin_rejects_departure_before_arrival(client):
+def test_kiosk_checkin_rejects_departure_before_arrival(client, monkeypatch):
+    monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 7, 5))
     camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 14))
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")
     session = client.session
@@ -433,7 +447,8 @@ def test_kiosk_checkin_rejects_departure_before_arrival(client):
 
 
 @pytest.mark.django_db
-def test_kiosk_checkin_updates_companion_and_rejects_child_target(client):
+def test_kiosk_checkin_updates_companion_and_rejects_child_target(client, monkeypatch):
+    monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 7, 5))
     camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 14))
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")
     companion = ParticipantFamilyMember.objects.create(

@@ -84,7 +84,7 @@
       </div>
       <button type="button" class="button" onclick="document.getElementById('manual-charge-dialog').showModal()">Buchung hinzufügen</button>
     </div>
-    <table>
+    <table class="responsive-record-table">
       <thead>
         <tr>
           <th>Nr.</th><th>Art</th><th>Beschreibung</th><th>Menge</th><th>Einzelpreis</th><th>Fördersatz</th><th>Summe</th><th>Datum</th><th></th>
@@ -93,15 +93,15 @@
       <tbody>
         {% for charge in charges %}
           <tr>
-            <td>{{ charge.booking_reference }}</td>
-            <td>{{ charge.get_kind_display }}</td>
-            <td>{{ charge.description }}</td>
-            <td>{{ charge.quantity }}</td>
-            <td>{{ charge.unit_price|money_eur }}</td>
-            <td>{{ charge.foerdersatz|percent }}</td>
-            <td>{{ charge.total|money_eur }}</td>
-            <td>{{ charge.occurred_on|default:"-" }}</td>
-            <td>
+            <td data-label="Nr.">{{ charge.booking_reference }}</td>
+            <td data-label="Art">{{ charge.get_kind_display }}</td>
+            <td data-label="Beschreibung">{{ charge.description }}</td>
+            <td data-label="Menge">{{ charge.quantity }}</td>
+            <td data-label="Einzelpreis">{{ charge.unit_price|money_eur }}</td>
+            <td data-label="Fördersatz">{{ charge.foerdersatz|percent }}</td>
+            <td data-label="Summe">{{ charge.total|money_eur }}</td>
+            <td data-label="Datum">{{ charge.occurred_on|default:"-" }}</td>
+            <td data-label="Aktionen">
               {% if user|can_manage_users %}
                 <div class="row-actions">
                   <a href="{% url 'charge-edit' charge.pk %}">Bearbeiten</a>
@@ -151,7 +151,7 @@
 
   <section class="panel stack">
     <h2>Änderungsprotokoll</h2>
-    <table>
+    <table class="responsive-record-table">
       <thead>
         <tr>
           <th>Zeitpunkt</th><th>Bearbeiter</th><th>Buchung</th><th>Vorher</th><th>Nachher</th><th>Aktion</th>
@@ -160,16 +160,16 @@
       <tbody>
         {% for log in audit_logs %}
           <tr>
-            <td>{{ log.created_at }}</td>
-            <td>{{ log.changed_by.email|default:log.changed_by.username|default:"System" }}</td>
-            <td>
+            <td data-label="Zeitpunkt">{{ log.created_at }}</td>
+            <td data-label="Bearbeiter">{{ log.changed_by.email|default:log.changed_by.username|default:"System" }}</td>
+            <td data-label="Buchung">
               {% if log.charge %}
                 {{ log.charge.description }}
               {% else %}
                 {{ log.before.description }}
               {% endif %}
             </td>
-            <td>
+            <td data-label="Vorher">
               {% if log.action == "restored" %}
                 -
               {% else %}
@@ -179,7 +179,7 @@
                 Fördersatz {{ log.before.foerdersatz|percent }}
               {% endif %}
             </td>
-            <td>
+            <td data-label="Nachher">
               {% if log.action == "deleted" %}
                 Gelöscht
               {% elif log.action == "restored" %}
@@ -191,7 +191,7 @@
                 Fördersatz {{ log.after.foerdersatz|percent }}
               {% endif %}
             </td>
-            <td>
+            <td data-label="Aktion">
               {% if user|can_manage_users and log.action == "deleted" and log.charge.deleted_at and log.participant %}
                 <form method="post" action="{% url 'booking-audit-restore' log.pk %}">
                   {% csrf_token %}

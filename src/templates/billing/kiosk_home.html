@@ -45,7 +45,7 @@
         <span class="kiosk-hero__eyebrow">Mein Kiosk</span>
         <div class="kiosk-hero__copy">
           <h1>{{ kiosk_actor.full_name }}</h1>
-          <p>Buche Getränke und Essen, verwalte Mitbuchungen und behalte deine Abrechnung im Blick, ohne zwischen Seiten zu springen.</p>
+          <p>{% if is_post_camp %}Das Lager ist beendet. Deine bisherigen Gemeinschaftsausgaben und Unterlagen bleiben hier einsehbar.{% else %}Buche Getränke und Essen, verwalte Mitbuchungen und behalte deine Abrechnung im Blick, ohne zwischen Seiten zu springen.{% endif %}</p>
         </div>
         <div class="kiosk-meta">
           <span class="kiosk-meta__item">{{ participant.camp }}</span>
@@ -54,11 +54,11 @@
           {% else %}
             <span class="kiosk-meta__item">{{ participant.get_status_display }}</span>
           {% endif %}
-          <span class="kiosk-meta__item">{{ participant.completed_shifts }} / {{ participant.target_shifts }} Pflichtdienste</span>
+          {% if not is_post_camp %}<span class="kiosk-meta__item">{{ participant.completed_shifts }} / {{ participant.target_shifts }} Pflichtdienste</span>{% endif %}
         </div>
       </article>
 
-      <aside class="panel kiosk-summary-card">
+      {% if not is_post_camp %}<aside class="panel kiosk-summary-card">
         <span class="kiosk-hero__eyebrow">Aktuelle Abrechnung</span>
         <strong class="kiosk-summary-card__value {% if summary.balance > 0 %}negative{% elif summary.balance < 0 %}positive{% endif %}">
           {% if summary.balance > 0 %}-{% elif summary.balance < 0 %}+{% endif %}{{ summary.balance|abs_value|money_eur }}
@@ -67,7 +67,7 @@
           <p>Gezahlt, Förderung und Auslagen werden im Dialog detailliert angezeigt.</p>
         </div>
         <button type="button" class="button" data-open-summary-dialog>Details öffnen</button>
-      </aside>
+      </aside>{% endif %}
     </section>
   {% endif %}
 
@@ -75,8 +75,9 @@
     <section class="panel kiosk-card kiosk-card--muted">
       <span class="kiosk-hero__eyebrow">🏁 Lager beendet</span>
       <h2 style="margin: 0.25rem 0 0.5rem; font-size: 1.5rem;">Das Fliegerlager {{ participant.camp.name }} ist beendet</h2>
-      <p style="margin-bottom: 1rem;">Vielen Dank für deine Teilnahme! Du kannst hier deine Rechnungen herunterladen.</p>
+      <p style="margin-bottom: 1rem;">Vielen Dank für deine Teilnahme! Nach Lagerende sind keine Änderungen mehr möglich.</p>
 
+      {% if participant.camp.show_kiosk_invoices %}
       {% if latest_settlement %}
         <div style="margin-bottom: 1.25rem;">
           <a href="{% url 'kiosk-settlement-pdf' latest_settlement.pk %}" class="button button-primary" target="_blank" rel="noopener">
@@ -106,10 +107,13 @@
           </ul>
         </details>
       {% endif %}
+      {% else %}
+        <p>Die Rechnungsanzeige ist derzeit deaktiviert. Wende dich bei Fragen bitte an die Lagerleitung.</p>
+      {% endif %}
     </section>
   {% endif %}
 
-  {% if participant.camp.show_kiosk_invoices and not is_pre_camp %}
+  {% if participant.camp.show_kiosk_invoices and not is_pre_camp and not is_post_camp %}
     <section class="panel kiosk-card">
       <h2 style="font-size: 1.25rem; margin-bottom: 0.5rem;">📄 Meine Rechnungen & Dokumente</h2>
       <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center;">
@@ -139,7 +143,7 @@
     </section>
   {% endif %}
 
-  {% if pending_invites and not is_pre_camp %}
+  {% if pending_invites and not is_pre_camp and not is_post_camp %}
     <section class="panel kiosk-card kiosk-card--muted">
       <div class="kiosk-card__header">
         <div class="kiosk-card__header-main">
@@ -158,7 +162,7 @@
       <button class="button button-secondary">Schließen</button>
     </form>
     <nav class="kiosk-menu" aria-label="Kiosk-Bereiche">
-      {% if not is_pre_camp %}
+      {% if not is_pre_camp and not is_post_camp %}
         <button type="button" class="kiosk-menu__item" data-dialog-target="meal-calendar-dialog">
           <span>Abendessen (Kalender)</span>
           <small>Abendessen nach Lagertag buchen und verwalten.</small>
@@ -167,11 +171,12 @@
           <span>Letzte Schnellbuchungen</span>
           <small>Getränke, Frühstück und Snacks prüfen oder stornieren.</small>
         </button>
-        <button type="button" class="kiosk-menu__item" data-dialog-target="shared-expenses-dialog">
-          <span>Gemeinschaftsausgaben</span>
-          <small>Vorgestreckte Ausgaben einreichen und ihren Status sehen.</small>
-        </button>
       {% endif %}
+      {% if not is_pre_camp %}<button type="button" class="kiosk-menu__item" data-dialog-target="shared-expenses-dialog">
+        <span>Gemeinschaftsausgaben</span>
+        <small>{% if is_post_camp %}Bisherige Anträge ansehen.{% else %}Vorgestreckte Ausgaben einreichen und ihren Status sehen.{% endif %}</small>
+      </button>{% endif %}
+      {% if not is_post_camp %}
       <button type="button" class="kiosk-menu__item" data-dialog-target="family-management-dialog">
         <span>Familie</span>
         <small>Begleitpersonen und Kinder verwalten.</small>
@@ -180,6 +185,7 @@
         <span>Mitbuchungen</span>
         <small>Einladungen und gegenseitige Buchungsfreigaben verwalten.</small>
       </button>
+      {% endif %}
       <a class="kiosk-menu__item" href="{% url 'user-guide' %}">
         <span>Hilfe</span>
         <small>Anleitungen zu den wichtigsten Kiosk-Abläufen öffnen.</small>
@@ -197,7 +203,7 @@
     </nav>
   </dialog>
 
-  {% if not is_pre_camp %}
+  {% if not is_pre_camp and not is_post_camp %}
     <div class="kiosk-masonry" data-kiosk-masonry>
         <form method="post" id="quick-booking-form" class="kiosk-masonry__contents">
           {% csrf_token %}
@@ -356,7 +362,7 @@
     </div>
   {% endif %}
 
-      <dialog id="quick-bookings-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="quick-bookings-dialog-title">
+      {% if not is_post_camp %}<dialog id="quick-bookings-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="quick-bookings-dialog-title">
         <div class="kiosk-table__header">
           <div>
             <h2 id="quick-bookings-dialog-title">Letzte Schnellbuchungen</h2>
@@ -395,19 +401,19 @@
             <p class="kiosk-empty">Noch keine Schnellbuchungen vorhanden.</p>
           {% endfor %}
         </div>
-      </dialog>
+      </dialog>{% endif %}
 
       <dialog id="shared-expenses-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="shared-expenses-dialog-title">
         <div class="kiosk-card__header kiosk-section-heading">
           <div class="kiosk-card__header-main">
             <h2 class="kiosk-title" id="shared-expenses-dialog-title">
               Gemeinschaftsausgaben
-              <button type="button" class="kiosk-help-button" data-help-text="Hier kannst du Ausgaben einreichen, die du für die Gemeinschaft vorgestreckt hast (z.B. Grillgut). Nach Freigabe durch die Lagerleitung wird der Betrag als Umlage auf die Teilnehmer aufgeteilt und dir als Gutschrift angerechnet." aria-label="Kurzhilfe Auslagen">?</button>
+              <button type="button" class="kiosk-help-button" data-help-text="{% if is_post_camp %}Nach Lagerende kannst du deine bisherigen Anträge und deren Status weiterhin ansehen.{% else %}Hier kannst du Ausgaben einreichen, die du für die Gemeinschaft vorgestreckt hast (z.B. Grillgut). Nach Freigabe durch die Lagerleitung wird der Betrag als Umlage auf die Teilnehmer aufgeteilt und dir als Gutschrift angerechnet.{% endif %}" aria-label="Kurzhilfe Auslagen">?</button>
             </h2>
-            <p>Geld für die Gemeinschaft vorgestreckt?</p>
+            <p>{% if is_post_camp %}Bisherige Anträge im Lesemodus.{% else %}Geld für die Gemeinschaft vorgestreckt?{% endif %}</p>
           </div>
           <div class="inline-actions">
-            <a class="button button-secondary kiosk-card__action" href="{{ kiosk_urls.shared_expense_request }}">Antrag einreichen</a>
+            {% if not is_post_camp %}<a class="button button-secondary kiosk-card__action" href="{{ kiosk_urls.shared_expense_request }}">Antrag einreichen</a>{% endif %}
             <button type="button" class="button button-secondary" data-close-dialog>Schließen</button>
           </div>
         </div>
@@ -465,7 +471,7 @@
           </div>
         {% endif %}
       </dialog>
-      <dialog id="family-management-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="family-management-dialog-title">
+      {% if not is_post_camp %}<dialog id="family-management-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="family-management-dialog-title">
         <div class="kiosk-card__header kiosk-section-heading">
           <div class="kiosk-card__header-main">
             <h2 class="kiosk-title" id="family-management-dialog-title">
@@ -599,7 +605,15 @@
         <tbody>
           {% for line in summary.lines %}
             <tr>
-              <td>{{ line.label }}</td>
+              <td>
+                {{ line.label }}
+                {% if line.occurred_on or line.booking_references %}
+                  <small class="invoice-line-meta">
+                    {% if line.occurred_on %}<span>Datum: {{ line.occurred_on|date:"d.m.Y" }}</span>{% endif %}
+                    {% if line.booking_references %}<span>Buchungen: {{ line.booking_references|join:", " }}</span>{% endif %}
+                  </small>
+                {% endif %}
+              </td>
               <td style="text-align: right;">{{ line.quantity|default:"" }}</td>
               <td style="text-align: right;">{{ line.gross_total|money_eur }}</td>
               <td style="text-align: right;">{% if line.subsidy_amount %}{{ line.subsidy_amount|money_eur }}{% endif %}</td>
@@ -910,7 +924,7 @@
     </form>
   </dialog>
 
-  <dialog id="contact-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="contact-dialog-title">
+      {% endif %}<dialog id="contact-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="contact-dialog-title">
     <form method="dialog" class="dialog-heading">
       <h2 id="contact-dialog-title">Kontakt Lagerleitung</h2>
       <button class="button button-secondary">Schließen</button>
@@ -1087,7 +1101,7 @@
 
       const updateMealDateSelection = () => {
         const selected = selectedMealDates();
-        mealContinueButton.disabled = selected.length === 0;
+        if (mealContinueButton) mealContinueButton.disabled = selected.length === 0;
         document.querySelectorAll("[data-meal-date-select]").forEach((day) => {
           const checkbox = day.querySelector("[data-meal-date-checkbox]");
           day.classList.toggle("meal-booking-day--selected", Boolean(checkbox?.checked));
@@ -1118,8 +1132,8 @@
       };
 
       mealDateCheckboxes.forEach((checkbox) => checkbox.addEventListener("change", updateMealDateSelection));
-      mealContinueButton.addEventListener("click", showMealPersonStep);
-      mealBackButton.addEventListener("click", showMealDateStep);
+      mealContinueButton?.addEventListener("click", showMealPersonStep);
+      mealBackButton?.addEventListener("click", showMealDateStep);
 
       document.querySelectorAll("[data-open-meal-dialog-new]").forEach((button) => {
         button.addEventListener("click", () => {
@@ -1143,7 +1157,7 @@
           openDialog(mealDialog, button);
         });
       });
-      updateMealDateSelection();
+      if (mealContinueButton) updateMealDateSelection();
       {% if meal_dialog_open %}
         mealInput.value = mealInput.value || "dinner";
         {% if meal_dialog_step == "persons" %}showMealPersonStep();{% else %}showMealDateStep();{% endif %}
@@ -1187,7 +1201,9 @@
         const requestedMealCalendar =
           requestedDialog === "meal-calendar" || window.location.hash === "#meal-calendar";
         if (!requestedMealCalendar) return;
-        openDialog(document.getElementById("meal-calendar-dialog"));
+        const mealCalendarDialog = document.getElementById("meal-calendar-dialog");
+        if (!mealCalendarDialog) return;
+        openDialog(mealCalendarDialog);
         window.history.replaceState({}, "", window.location.pathname);
       };
       window.addEventListener("hashchange", openRequestedMealCalendar);

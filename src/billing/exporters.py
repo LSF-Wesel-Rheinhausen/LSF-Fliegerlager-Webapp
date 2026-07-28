@@ -16,6 +16,8 @@ from .services import calculate_camp_settlements, calculate_participant_settleme
 CSV_FORMULA_PREFIXES = ("=", "+", "-", "@")
 PDF_CONTENT_BOTTOM = 55
 PDF_LINE_HEIGHT = 18
+PDF_META_LINE_HEIGHT = 11
+PDF_BOOKING_REFERENCES_PER_LINE = 6
 PDF_SUMMARY_TOP_SPACING = 10
 PDF_SUMMARY_FINAL_SPACING = 4
 PDF_PAYMENT_TOP_SPACING = 30
@@ -460,6 +462,70 @@ def _ensure_invoice_space(pdf, y, required_height, title, subtitle, participant_
     return y
 
 
+def _invoice_line_height(occurred_on: Any, booking_references: Sequence[str]) -> int:
+    metadata_lines = int(bool(occurred_on))
+    if booking_references:
+        metadata_lines += (len(booking_references) + PDF_BOOKING_REFERENCES_PER_LINE - 1) // (
+            PDF_BOOKING_REFERENCES_PER_LINE
+        )
+    return PDF_LINE_HEIGHT + (metadata_lines * PDF_META_LINE_HEIGHT)
+
+
+def _format_invoice_date(value: Any) -> str:
+    if not value:
+        return ""
+    if hasattr(value, "strftime"):
+        return value.strftime("%d.%m.%Y")
+    try:
+        year, month, day = str(value).split("-", maxsplit=2)
+    except ValueError:
+        return str(value)
+    return f"{day}.{month}.{year}"
+
+
+def _draw_invoice_line(
+    pdf,
+    y: float,
+    *,
+    label: str,
+    quantity: Any,
+    total: Decimal,
+    occurred_on: Any,
+    booking_references: Sequence[str],
+) -> float:
+    width, _ = A4
+    pdf.setFont("Helvetica", 10)
+    pdf.drawString(50, y, label[:80])
+    pdf.drawRightString(width - 120, y, str(quantity))
+    total_str = f"- {total:.2f} €" if total > 0 else f"{total:.2f} €"
+    pdf.drawRightString(width - 50, y, total_str)
+
+    metadata_y = y - PDF_META_LINE_HEIGHT
+    formatted_date = _format_invoice_date(occurred_on)
+    if formatted_date:
+        pdf.setFont("Helvetica-Bold", 8)
+        pdf.drawString(55, metadata_y, "Datum:")
+        pdf.setFont("Helvetica", 8)
+        pdf.drawString(95, metadata_y, formatted_date)
+        metadata_y -= PDF_META_LINE_HEIGHT
+
+    for offset in range(0, len(booking_references), PDF_BOOKING_REFERENCES_PER_LINE):
+        references = booking_references[offset : offset + PDF_BOOKING_REFERENCES_PER_LINE]
+        pdf.setFont("Helvetica-Bold", 8)
+        pdf.drawString(55, metadata_y, "Buchungen:" if offset == 0 else "")
+        pdf.setFont("Helvetica", 8)
+        for index, reference in enumerate(references):
+            pdf.drawString(125 + (index * 62), metadata_y, reference)
+        metadata_y -= PDF_META_LINE_HEIGHT
+
+    next_y = y - _invoice_line_height(occurred_on, booking_references)
+    pdf.setStrokeColorRGB(0.9, 0.9, 0.9)
+    pdf.line(50, next_y + 5, width - 50, next_y + 5)
+    pdf.setStrokeColorRGB(0, 0, 0)
+    pdf.setFont("Helvetica", 10)
+    return next_y
+
+
 def _sum_block_height(items: Sequence[tuple[str, Decimal]]) -> int:
     final_spacing = PDF_SUMMARY_FINAL_SPACING if any(label == "Offen" for label, _value in items) else 0
     return PDF_SUMMARY_TOP_SPACING + (len(items) * PDF_LINE_HEIGHT) + final_spacing
@@ -607,22 +673,24 @@ def participant_pdf_response(participant):
 
     pdf.setFont("Helvetica", 10)
     for line in result.lines:
+        line_height = _invoice_line_height(line.occurred_on, line.booking_references)
         y = _ensure_invoice_space(
             pdf,
             y,
-            PDF_LINE_HEIGHT,
+            line_height,
             title,
             "",
             participant.full_name,
         )
-        pdf.drawString(50, y, line.label[:80])
-        pdf.drawRightString(width - 120, y, str(line.quantity))
-        pdf.drawRightString(width - 50, y, f"- {line.total:.2f} €")
-
-        pdf.setStrokeColorRGB(0.9, 0.9, 0.9)
-        pdf.line(50, y - 5, width - 50, y - 5)
-        pdf.setStrokeColorRGB(0, 0, 0)
-        y -= PDF_LINE_HEIGHT
+        y = _draw_invoice_line(
+            pdf,
+            y,
+            label=line.label,
+            quantity=line.quantity,
+            total=line.total,
+            occurred_on=line.occurred_on,
+            booking_references=line.booking_references,
+        )
 
     summary_items = [
         ("Brutto", result.total_gross),
@@ -707,29 +775,30 @@ def settlement_snapshot_pdf_bytes(snapshot: Settlement) -> bytes:
 
     pdf.setFont("Helvetica", 10)
     for line in snapshot.data.get("lines", []):
+        booking_references = tuple(line.get("booking_references") or ())
+        occurred_on = line.get("occurred_on")
+        line_height = _invoice_line_height(occurred_on, booking_references)
         y = _ensure_invoice_space(
             pdf,
             y,
-            PDF_LINE_HEIGHT,
+            line_height,
             title,
             subtitle,
             snapshot.participant_name,
         )
-        pdf.drawString(50, y, str(line.get("label", ""))[:80])
-        pdf.drawRightString(width - 120, y, str(line.get("quantity", "")))
-
         try:
-            total_val = float(line.get("total", 0.00))
-            total_str = f"- {total_val:.2f} €" if total_val > 0 else f"{total_val:.2f} €"
+            total = Decimal(str(line.get("total", "0.00")))
         except (ValueError, TypeError):
-            total_str = f"- {line.get('total', '0.00')} €"
-
-        pdf.drawRightString(width - 50, y, total_str)
-
-        pdf.setStrokeColorRGB(0.9, 0.9, 0.9)
-        pdf.line(50, y - 5, width - 50, y - 5)
-        pdf.setStrokeColorRGB(0, 0, 0)
-        y -= PDF_LINE_HEIGHT
+            total = Decimal("0.00")
+        y = _draw_invoice_line(
+            pdf,
+            y,
+            label=str(line.get("label", "")),
+            quantity=str(line.get("quantity", "")),
+            total=total,
+            occurred_on=occurred_on,
+            booking_references=booking_references,
+        )
 
     summary_items = [
         ("Brutto", snapshot.total_gross),

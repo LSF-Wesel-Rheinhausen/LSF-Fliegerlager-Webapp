@@ -376,9 +376,40 @@ def test_participant_pdf_export_returns_pdf_preview(client, export_dataset):
 
 @pytest.mark.django_db
 @pytest.mark.parametrize("invoice_source", ["current", "snapshot"])
-def test_long_invoice_pdf_uses_second_page_for_closing_blocks(invoice_source):
+def test_invoice_pdf_prints_every_grouped_booking_reference_and_date(
+    invoice_source,
+    recording_pdf_canvases,
+):
     participant = ParticipantFactory()
-    ChargeFactory.create_batch(28, participant=participant)
+    booking_date = date(2026, 7, 28)
+    bookings = [
+        ChargeFactory(
+            participant=participant,
+            kind=Charge.Kind.DRINK,
+            description="Wasser (Kiosk)",
+            occurred_on=booking_date,
+        )
+        for _index in range(12)
+    ]
+
+    if invoice_source == "snapshot":
+        run = create_settlement_run(participant.camp, SuperUserFactory())
+        settlement_snapshot_pdf_bytes(run.settlements.get())
+    else:
+        participant_pdf_response(participant)
+
+    rendered_text = [text for _page, _y, text in recording_pdf_canvases[0].text_positions]
+    assert "28.07.2026" in rendered_text
+    for booking in bookings:
+        assert booking.booking_reference in rendered_text
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("invoice_source", ["current", "snapshot"])
+def test_long_invoice_pdf_uses_continuation_pages_for_closing_blocks(invoice_source):
+    participant = ParticipantFactory()
+    for index in range(28):
+        ChargeFactory(participant=participant, description=f"Buchung {index + 1}")
 
     if invoice_source == "snapshot":
         run = create_settlement_run(participant.camp, SuperUserFactory())
@@ -386,14 +417,15 @@ def test_long_invoice_pdf_uses_second_page_for_closing_blocks(invoice_source):
     else:
         content = participant_pdf_response(participant).content
 
-    assert pdf_page_count(content) == 2
+    assert pdf_page_count(content) >= 2
 
 
 @pytest.mark.django_db
 @pytest.mark.parametrize("invoice_source", ["current", "snapshot"])
 def test_long_invoice_moves_summary_above_footer(invoice_source, recording_pdf_canvases):
     participant = ParticipantFactory()
-    ChargeFactory.create_batch(28, participant=participant)
+    for index in range(28):
+        ChargeFactory(participant=participant, description=f"Buchung {index + 1}")
 
     if invoice_source == "snapshot":
         run = create_settlement_run(participant.camp, SuperUserFactory())
@@ -409,8 +441,9 @@ def test_long_invoice_moves_summary_above_footer(invoice_source, recording_pdf_c
         if text.startswith("Erstellt mit der Fliegerlagerabrechnung")
     ]
 
-    assert summary_pages == [2]
-    assert footer_pages == [1, 2]
+    final_page = max(footer_pages)
+    assert summary_pages == [final_page]
+    assert footer_pages == list(range(1, final_page + 1))
     assert min(recording_canvas.body_y_positions) >= 55
 
 
@@ -430,7 +463,8 @@ def test_long_invoice_keeps_payment_box_above_footer(
     recording_pdf_canvases,
 ):
     participant = ParticipantFactory(camp=CampFactory(iban="DE02120300000000202051"))
-    ChargeFactory.create_batch(20, participant=participant)
+    for index in range(20):
+        ChargeFactory(participant=participant, description=f"Buchung {index + 1}")
     if balance_kind == "credit":
         PaymentFactory(participant=participant, amount=Decimal("210.00"))
 
@@ -448,9 +482,10 @@ def test_long_invoice_keeps_payment_box_above_footer(
         if text.startswith("Erstellt mit der Fliegerlagerabrechnung")
     ]
 
-    assert instruction_pages == [2]
-    assert footer_pages == [1, 2]
+    final_page = max(footer_pages)
+    assert instruction_pages == [final_page]
+    assert footer_pages == list(range(1, final_page + 1))
     assert len(recording_canvas.round_rect_positions) == 1
     payment_page, payment_bottom = recording_canvas.round_rect_positions[0]
-    assert payment_page == 2
+    assert payment_page == final_page
     assert payment_bottom >= 55

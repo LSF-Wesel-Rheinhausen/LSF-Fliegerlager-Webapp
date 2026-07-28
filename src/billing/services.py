@@ -76,6 +76,8 @@ class SettlementLine:
     subsidy_amount: Decimal
     total: Decimal
     source: str
+    occurred_on: date | None = None
+    booking_references: tuple[str, ...] = ()
 
     @property
     def is_automatic(self) -> bool:
@@ -447,7 +449,17 @@ def participant_subsidy_rate(participant, subsidy_rate):
     return min(rate(raw_rate), Decimal("1.0000"))
 
 
-def build_settlement_line(label, quantity, unit_price, source, subsidy_rate, participant):
+def build_settlement_line(
+    label,
+    quantity,
+    unit_price,
+    source,
+    subsidy_rate,
+    participant,
+    *,
+    occurred_on=None,
+    booking_references=(),
+):
     gross_total = money(quantity * unit_price)
     effective_subsidy_rate = participant_subsidy_rate(participant, subsidy_rate)
     subsidy_amount = money(gross_total * effective_subsidy_rate)
@@ -461,6 +473,8 @@ def build_settlement_line(label, quantity, unit_price, source, subsidy_rate, par
         subsidy_amount=subsidy_amount,
         total=total,
         source=source,
+        occurred_on=occurred_on,
+        booking_references=tuple(booking_references),
     )
 
 
@@ -497,17 +511,46 @@ def default_charge_lines(participant):
 
 
 def manual_charge_lines(participant):
-    return [
-        build_settlement_line(
-            label=charge.description,
-            quantity=money(charge.quantity),
-            unit_price=charge.unit_price,
-            source=f"charge:{charge.pk}",
-            subsidy_rate=charge.foerdersatz,
-            participant=participant,
+    grouped_charges: dict[tuple[Any, ...], dict[str, Any]] = {}
+    charges = Charge.objects.filter(participant=participant, deleted_at__isnull=True).order_by("created_at", "pk")
+    for charge in charges:
+        occurred_on = charge.occurred_on or timezone.localdate(charge.created_at)
+        key = (
+            occurred_on,
+            charge.kind,
+            charge.description,
+            charge.unit_price,
+            charge.foerdersatz,
         )
-        for charge in Charge.objects.filter(participant=participant, deleted_at__isnull=True)
-    ]
+        group = grouped_charges.setdefault(
+            key,
+            {
+                "quantity": ZERO,
+                "charge_ids": [],
+                "booking_references": [],
+            },
+        )
+        group["quantity"] += charge.quantity
+        group["charge_ids"].append(charge.pk)
+        group["booking_references"].append(charge.booking_reference)
+
+    lines = []
+    for key, group in grouped_charges.items():
+        occurred_on, _kind, description, unit_price, subsidy_rate = key
+        charge_ids = ",".join(str(charge_id) for charge_id in group["charge_ids"])
+        lines.append(
+            build_settlement_line(
+                label=description,
+                quantity=money(group["quantity"]),
+                unit_price=unit_price,
+                source=f"charges:{charge_ids}",
+                subsidy_rate=subsidy_rate,
+                participant=participant,
+                occurred_on=occurred_on,
+                booking_references=group["booking_references"],
+            )
+        )
+    return lines
 
 
 def drink_charge_lines(participant):
@@ -611,6 +654,8 @@ def _settlement_snapshot_data(result: SettlementResult) -> dict[str, Any]:
                 "subsidy_amount": str(line.subsidy_amount),
                 "total": str(line.total),
                 "source": line.source,
+                "occurred_on": line.occurred_on.isoformat() if line.occurred_on else None,
+                "booking_references": list(line.booking_references),
             }
             for line in result.lines
         ],
@@ -716,6 +761,8 @@ def participant_kiosk_summary(participant):
                 "gross_total": line.gross_total,
                 "subsidy_amount": line.subsidy_amount,
                 "total": line.total,
+                "occurred_on": line.occurred_on,
+                "booking_references": line.booking_references,
             }
             for line in result.lines
         ],

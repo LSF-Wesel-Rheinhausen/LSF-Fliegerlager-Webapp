@@ -37,6 +37,20 @@ def test_create_settlement_run_versions_immutable_participant_snapshots():
 
 
 @pytest.mark.django_db
+def test_settlement_snapshot_preserves_grouped_booking_metadata():
+    participant = ParticipantFactory()
+    booking_date = date(2026, 7, 28)
+    first = ChargeFactory(participant=participant, occurred_on=booking_date)
+    second = ChargeFactory(participant=participant, occurred_on=booking_date)
+
+    run = create_settlement_run(participant.camp, SuperUserFactory())
+
+    line = run.settlements.get().data["lines"][0]
+    assert line["occurred_on"] == "2026-07-28"
+    assert line["booking_references"] == [first.booking_reference, second.booking_reference]
+
+
+@pytest.mark.django_db
 def test_new_settlement_run_excludes_archived_participants():
     user = SuperUserFactory()
     active = ParticipantFactory()

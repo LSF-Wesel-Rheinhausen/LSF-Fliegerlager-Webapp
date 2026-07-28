@@ -18,6 +18,67 @@ from tests.factories import (
 
 
 @pytest.mark.django_db
+def test_settlement_groups_matching_bookings_and_keeps_all_references():
+    participant = ParticipantFactory()
+    booking_date = date(2026, 7, 28)
+    first = ChargeFactory(
+        participant=participant,
+        kind=Charge.Kind.DRINK,
+        description="Wasser (Kiosk)",
+        quantity=Decimal("2.00"),
+        unit_price=Decimal("1.50"),
+        occurred_on=booking_date,
+    )
+    second = ChargeFactory(
+        participant=participant,
+        kind=Charge.Kind.DRINK,
+        description="Wasser (Kiosk)",
+        quantity=Decimal("3.00"),
+        unit_price=Decimal("1.50"),
+        occurred_on=booking_date,
+    )
+    other_day = ChargeFactory(
+        participant=participant,
+        kind=Charge.Kind.DRINK,
+        description="Wasser (Kiosk)",
+        quantity=Decimal("1.00"),
+        unit_price=Decimal("1.50"),
+        occurred_on=date(2026, 7, 29),
+    )
+    other_price = ChargeFactory(
+        participant=participant,
+        kind=Charge.Kind.DRINK,
+        description="Wasser (Kiosk)",
+        quantity=Decimal("1.00"),
+        unit_price=Decimal("2.00"),
+        occurred_on=booking_date,
+    )
+
+    result = calculate_participant_settlement(participant)
+
+    assert len(result.lines) == 3
+    grouped = next(
+        line for line in result.lines if line.occurred_on == booking_date and line.unit_price == Decimal("1.50")
+    )
+    assert grouped.quantity == Decimal("5.00")
+    assert grouped.gross_total == Decimal("7.50")
+    assert grouped.booking_references == (first.booking_reference, second.booking_reference)
+    assert any(line.booking_references == (other_day.booking_reference,) for line in result.lines)
+    assert any(line.booking_references == (other_price.booking_reference,) for line in result.lines)
+
+
+@pytest.mark.django_db
+def test_settlement_uses_creation_date_when_booking_date_is_missing():
+    participant = ParticipantFactory()
+    charge = ChargeFactory(participant=participant, occurred_on=None)
+
+    result = calculate_participant_settlement(participant)
+
+    assert result.lines[0].occurred_on == charge.created_at.date()
+    assert result.lines[0].booking_references == (charge.booking_reference,)
+
+
+@pytest.mark.django_db
 def test_settlement_calculates_due_paid_advanced_and_balance():
     camp = CampFactory()
     participant = ParticipantFactory(
