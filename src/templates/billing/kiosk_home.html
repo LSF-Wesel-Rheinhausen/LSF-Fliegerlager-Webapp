@@ -72,7 +72,7 @@
   {% endif %}
 
   {% if is_post_camp %}
-    <section class="panel kiosk-card kiosk-card--muted" style="margin-bottom: 1.5rem;">
+    <section class="panel kiosk-card kiosk-card--muted">
       <span class="kiosk-hero__eyebrow">🏁 Lager beendet</span>
       <h2 style="margin: 0.25rem 0 0.5rem; font-size: 1.5rem;">Das Fliegerlager {{ participant.camp.name }} ist beendet</h2>
       <p style="margin-bottom: 1rem;">Vielen Dank für deine Teilnahme! Du kannst hier deine Rechnungen herunterladen.</p>
@@ -110,7 +110,7 @@
   {% endif %}
 
   {% if participant.camp.show_kiosk_invoices and not is_pre_camp %}
-    <section class="panel kiosk-card" style="margin-bottom: 1.5rem;">
+    <section class="panel kiosk-card">
       <h2 style="font-size: 1.25rem; margin-bottom: 0.5rem;">📄 Meine Rechnungen & Dokumente</h2>
       <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center;">
         <a href="{% url 'kiosk-current-settlement-pdf' %}" class="button button-secondary" target="_blank" rel="noopener">

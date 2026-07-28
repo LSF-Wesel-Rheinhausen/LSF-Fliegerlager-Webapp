@@ -15,18 +15,18 @@
     <link rel="stylesheet" href="{% static 'billing/app-v8.css' %}">
   </head>
   <body>
-    <header class="topbar">
-      <div style="display: flex; align-items: center; gap: 12px;">
-        <a class="brand" href="{% url 'camp-list' %}">
-          <img src="{% static 'billing/logo.jpg' %}" alt="Luftsportfreunde Wesel-Rheinhausen e.V.">
+    <header class="topbar admin-topbar">
+      <a class="brand admin-brand" href="{% url 'camp-list' %}">
+        <img src="{% static 'billing/logo.jpg' %}" alt="Luftsportfreunde Wesel-Rheinhausen e.V.">
+        <span class="admin-brand__copy">
           <span>Fliegerlager-Abrechnung</span>
-        </a>
         {% if camp %}
-          <span class="status-badge" style="margin: 0; background: var(--accent-soft); color: var(--accent-dark); border-color: rgba(0,92,169,0.2);">{{ camp.name }} {{ camp.year }}</span>
+            <span class="status-badge admin-brand__context">{{ camp.name }} · {{ camp.year }}</span>
         {% elif participant %}
-          <span class="status-badge" style="margin: 0; background: var(--accent-soft); color: var(--accent-dark); border-color: rgba(0,92,169,0.2);">{{ participant.camp.name }} {{ participant.camp.year }}</span>
+            <span class="status-badge admin-brand__context">{{ participant.camp.name }} · {{ participant.camp.year }}</span>
         {% endif %}
-      </div>
+        </span>
+      </a>
       <nav aria-label="Kopfzeile">
         {% include "includes/theme_toggle.html" %}
         <button class="button button-secondary nav-link" type="button" data-pwa-install hidden>Installieren</button>

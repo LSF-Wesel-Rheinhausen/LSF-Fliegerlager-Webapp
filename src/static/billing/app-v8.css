@@ -105,12 +105,42 @@ textarea:focus-visible {
   box-shadow: 0 1px 0 rgba(32, 37, 45, 0.03);
 }
 
-.topbar:not(.kiosk-topbar) {
+.admin-topbar {
   column-gap: 24px;
 }
 
-.topbar:not(.kiosk-topbar) > nav {
+.admin-topbar > nav {
+  flex: 1 1 auto;
+  min-width: 0;
   justify-content: flex-end;
+}
+
+.admin-brand {
+  flex: 0 0 auto;
+}
+
+.admin-brand__copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  max-width: 200px;
+  line-height: 1.1;
+}
+
+.admin-brand__context {
+  display: block;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .brand {
@@ -1261,6 +1291,11 @@ textarea {
   display: grid;
   gap: 18px;
   height: fit-content;
+}
+
+.kiosk-page > .kiosk-card,
+.kiosk-masonry .kiosk-card {
+  margin: 0;
 }
 
 .kiosk-card--accent {
@@ -2436,6 +2471,47 @@ textarea {
     padding: 14px 16px;
   }
 
+  .admin-topbar {
+    row-gap: 6px;
+    padding-block: 8px;
+  }
+
+  .admin-topbar > nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 10px;
+    width: 100%;
+  }
+
+  .admin-topbar > nav > .theme-toggle {
+    grid-column: 2;
+    justify-self: end;
+  }
+
+  .admin-topbar .nav-user-group {
+    min-width: 0;
+    flex-direction: row;
+    align-items: stretch;
+    text-align: center;
+  }
+
+  .admin-topbar .nav-user-group > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    clip-path: inset(50%);
+    border: 0;
+    white-space: nowrap;
+  }
+
+  .admin-topbar .nav-user-group .button {
+    width: 100%;
+  }
+
   .brand {
     justify-content: center;
     align-items: center;
@@ -3076,19 +3152,6 @@ dialog::backdrop {
   .kiosk-header-actions .theme-toggle {
     align-self: flex-end;
     width: 38px;
-  }
-}
-
-@media (min-width: 781px) and (max-width: 1380px) {
-  .topbar:not(.kiosk-topbar) {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 10px;
-    padding-block: 12px;
-  }
-
-  .topbar:not(.kiosk-topbar) > nav {
-    justify-content: flex-start;
   }
 }
 
