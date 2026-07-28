@@ -44,6 +44,7 @@ from .forms import (
     KioskLoginForm,
     KioskPinSetupForm,
     KioskSelfEnrollmentForm,
+    ManualChargeForm,
     MealBookingForm,
     MealCutoffForm,
     MealPlanForm,
@@ -113,6 +114,7 @@ from .services import (
     charge_audit_snapshot,
     create_booking_audit_log,
     create_booking_delete_audit_log,
+    create_manual_charge,
     create_settlement_run,
     is_meal_change_locked,
     meal_change_lock_message,
@@ -612,34 +614,31 @@ def participant_restore(request, participant_id):
 @editor_required
 def participant_detail(request, participant_id):
     participant = get_object_or_404(Participant.objects.select_related("camp"), pk=participant_id)
+    manual_charge_form = ManualChargeForm(camp=participant.camp)
 
     if request.method == "POST" and request.POST.get("action") == "add_manual_charge":
-        rule_id = request.POST.get("price_rule_id")
-        quantity = int(request.POST.get("quantity", 1))
-        description = request.POST.get("description", "").strip()
-
-        rule = get_object_or_404(PriceRule, pk=rule_id, camp=participant.camp)
-
-        charge = Charge.objects.create(
-            participant=participant,
-            price_rule=rule,
-            description=description,
-            unit_price=rule.unit_price,
-            quantity=quantity,
-            total_price=rule.unit_price * quantity,
-            foerdersatz=rule.foerdersatz,
-        )
-
-        BookingAuditLog.objects.create(
-            charge=charge,
-            participant=participant,
-            changed_by=request.user,
-            action=BookingAuditLog.Action.CREATE,
-            changes={"note": "Manuelle Buchung durch Admin"},
-        )
-
-        messages.success(request, f"Buchung '{rule.name}' hinzugefügt.")
-        return redirect("participant-detail", participant_id=participant.pk)
+        if participant.archived_at is not None:
+            raise Http404
+        manual_charge_form = ManualChargeForm(request.POST, camp=participant.camp)
+        if manual_charge_form.is_valid():
+            rule = manual_charge_form.cleaned_data["price_rule_id"]
+            try:
+                create_manual_charge(
+                    participant=participant,
+                    price_rule=rule,
+                    quantity=manual_charge_form.cleaned_data["quantity"],
+                    description=manual_charge_form.cleaned_data["description"],
+                )
+            except ValidationError as error:
+                participant_error_codes = {
+                    "manual_charge_participant_archived",
+                    "manual_charge_participant_unavailable",
+                }
+                error_field = None if error.code in participant_error_codes else "price_rule_id"
+                manual_charge_form.add_error(error_field, error)
+            else:
+                messages.success(request, f"Buchung '{rule.name}' hinzugefügt.")
+                return redirect("participant-detail", participant_id=participant.pk)
 
     settlement = calculate_participant_settlement(participant)
     charges = participant.charges.filter(deleted_at__isnull=True).order_by("-created_at", "-id")
@@ -647,8 +646,6 @@ def participant_detail(request, participant_id):
         Q(participant=participant) | Q(charge__participant=participant)
     ).select_related("changed_by", "charge")
     settlement_snapshots = participant.settlements.filter(run__isnull=False).select_related("run", "run__camp")
-
-    price_rules = participant.camp.price_rules.filter(is_archived=False).order_by("name")
 
     return render(
         request,
@@ -659,7 +656,7 @@ def participant_detail(request, participant_id):
             "charges": charges,
             "audit_logs": audit_logs,
             "settlement_snapshots": settlement_snapshots,
-            "price_rules": price_rules,
+            "manual_charge_form": manual_charge_form,
         },
     )
 

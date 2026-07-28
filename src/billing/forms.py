@@ -8,6 +8,7 @@ from django.contrib.auth.forms import AuthenticationForm, SetPasswordForm, UserC
 from django.core.exceptions import ValidationError
 from django.core.validators import FileExtensionValidator
 from django.db import models, transaction
+from django.utils.formats import number_format
 
 from .models import (
     Camp,
@@ -535,6 +536,53 @@ class ChargeForm(forms.ModelForm):
             "occurred_on": "Datum",
         }
         widgets = {"occurred_on": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"})}
+
+
+class _ManualPriceRuleChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, obj: PriceRule) -> str:
+        localized_price = number_format(obj.unit_price, decimal_pos=2, use_l10n=True, force_grouping=True)
+        return f"{obj.name} ({localized_price} €)"
+
+
+class ManualChargeForm(forms.Form):
+    """Validate a price-rule-backed manual charge for one camp."""
+
+    price_rule_id = _ManualPriceRuleChoiceField(
+        label="Preisregel auswählen",
+        queryset=PriceRule.objects.none(),
+        empty_label=None,
+    )
+    quantity = forms.IntegerField(
+        label="Menge",
+        min_value=1,
+        max_value=99,
+        initial=1,
+        widget=forms.NumberInput(attrs={"inputmode": "numeric", "min": "1", "max": "99", "step": "1"}),
+    )
+    description = forms.CharField(
+        label="Notiz (optional)",
+        required=False,
+        max_length=180,
+        widget=forms.TextInput(attrs={"placeholder": "Zusätzliche Info für die Abrechnung"}),
+    )
+
+    def __init__(self, *args: Any, camp: Camp, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        price_rules = PriceRule.objects.filter(camp=camp, is_archived=False).order_by("name")
+        price_rule_field = cast(_ManualPriceRuleChoiceField, self.fields["price_rule_id"])
+        price_rule_field.queryset = price_rules
+
+    def add_error(self, field: str | None, error: Any) -> None:
+        """Attach field errors to their widgets for accessible rendering."""
+        super().add_error(field, error)
+        if field is None or field not in self.fields:
+            return
+        self.fields[field].widget.attrs.update(
+            {
+                "aria-describedby": f"id_{field}_error",
+                "aria-invalid": "true",
+            }
+        )
 
 
 class PaymentForm(forms.ModelForm):
