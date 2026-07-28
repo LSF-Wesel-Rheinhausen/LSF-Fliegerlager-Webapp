@@ -82,7 +82,16 @@
         <h2>Buchungen</h2>
         <p>Manuelle Kosten sowie Kiosk-Buchungen für Getränke und Essen.</p>
       </div>
-      <button type="button" class="button" onclick="document.getElementById('manual-charge-dialog').showModal()">Buchung hinzufügen</button>
+      {% if not participant.is_archived %}
+        <button
+          type="button"
+          class="button"
+          aria-haspopup="dialog"
+          onclick="document.getElementById('manual-charge-dialog').showModal()"
+        >
+          Buchung hinzufügen
+        </button>
+      {% endif %}
     </div>
     <table>
       <thead>
@@ -215,40 +224,78 @@
     </table>
   </section>
 
-  <dialog id="manual-charge-dialog" closedby="any">
-    <div class="toolbar compact-toolbar" style="margin-bottom: 16px;">
-      <h2 style="margin: 0;">Manuelle Buchung</h2>
-      <form method="dialog">
-        <button class="button button-secondary" style="min-height: 32px; padding: 6px 10px;">Schließen</button>
-      </form>
-    </div>
-    <form method="post" class="form-grid">
-      {% csrf_token %}
-      <input type="hidden" name="action" value="add_manual_charge">
-
-      <p>
-        <label for="id_price_rule_id">Preisregel auswählen</label>
-        <select name="price_rule_id" id="id_price_rule_id" required style="width: 100%;">
-          {% for rule in price_rules %}
-            <option value="{{ rule.pk }}">{{ rule.name }} ({{ rule.unit_price }} EUR)</option>
-          {% endfor %}
-        </select>
-      </p>
-
-      <p>
-        <label for="id_quantity">Menge</label>
-        <input type="number" name="quantity" id="id_quantity" value="1" min="1" step="1" required>
-      </p>
-
-      <p>
-        <label for="id_description">Notiz (optional)</label>
-        <input type="text" name="description" id="id_description" placeholder="Zusätzliche Info für die Abrechnung">
-      </p>
-
-      <div class="form-actions" style="margin-top: 14px;">
-        <button type="submit" class="button">Buchen</button>
+  {% if not participant.is_archived %}
+    <dialog
+      id="manual-charge-dialog"
+      closedby="any"
+      aria-labelledby="manual-charge-dialog-title"
+      {% if manual_charge_form.errors %}data-auto-open-dialog{% endif %}
+    >
+      <div class="toolbar compact-toolbar" style="margin-bottom: 16px;">
+        <h2 id="manual-charge-dialog-title" style="margin: 0;">Manuelle Buchung</h2>
+        <form method="dialog">
+          <button class="button button-secondary" style="min-height: 32px; padding: 6px 10px;">Schließen</button>
+        </form>
       </div>
-    </form>
-  </dialog>
+      <form method="post" class="form-grid">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_manual_charge">
+
+        {% if manual_charge_form.non_field_errors %}
+          <div class="helptext error" role="alert" tabindex="-1">{{ manual_charge_form.non_field_errors }}</div>
+        {% endif %}
+
+        <p>
+          <label for="{{ manual_charge_form.price_rule_id.id_for_label }}">
+            {{ manual_charge_form.price_rule_id.label }}
+          </label>
+          {{ manual_charge_form.price_rule_id }}
+          {% if manual_charge_form.price_rule_id.errors %}
+            <span id="id_price_rule_id_error" class="helptext error" role="alert">
+              {% for error in manual_charge_form.price_rule_id.errors %}{{ error }}{% if not forloop.last %}<br>{% endif %}{% endfor %}
+            </span>
+          {% endif %}
+        </p>
+
+        <p>
+          <label for="{{ manual_charge_form.quantity.id_for_label }}">{{ manual_charge_form.quantity.label }}</label>
+          {{ manual_charge_form.quantity }}
+          {% if manual_charge_form.quantity.errors %}
+            <span id="id_quantity_error" class="helptext error" role="alert">
+              {% for error in manual_charge_form.quantity.errors %}{{ error }}{% if not forloop.last %}<br>{% endif %}{% endfor %}
+            </span>
+          {% endif %}
+        </p>
+
+        <p>
+          <label for="{{ manual_charge_form.description.id_for_label }}">
+            {{ manual_charge_form.description.label }}
+          </label>
+          {{ manual_charge_form.description }}
+          {% if manual_charge_form.description.errors %}
+            <span id="id_description_error" class="helptext error" role="alert">
+              {% for error in manual_charge_form.description.errors %}{{ error }}{% if not forloop.last %}<br>{% endif %}{% endfor %}
+            </span>
+          {% endif %}
+        </p>
+
+        <div class="form-actions" style="margin-top: 14px;">
+          <button type="submit" class="button">Buchen</button>
+        </div>
+      </form>
+    </dialog>
+    {% if manual_charge_form.errors %}
+      <script nonce="{{ request.csp_nonce }}">
+        (() => {
+          const manualChargeDialog = document.getElementById("manual-charge-dialog");
+          if (!manualChargeDialog?.open) {
+            manualChargeDialog?.showModal();
+            const errorTarget = manualChargeDialog?.querySelector("[aria-invalid='true'], [role='alert']");
+            errorTarget?.focus();
+          }
+        })();
+      </script>
+    {% endif %}
+  {% endif %}
 
 {% endblock %}

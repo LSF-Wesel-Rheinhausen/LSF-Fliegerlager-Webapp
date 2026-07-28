@@ -1,15 +1,36 @@
+import re
 from decimal import Decimal
 
 import pytest
 from django.contrib.admin.sites import AdminSite
+from django.contrib.messages import get_messages
+from django.core.exceptions import ValidationError
 from django.urls import reverse
 from django.utils import timezone
 
 from billing.admin import ChargeAdmin
-from billing.models import BookingAuditLog, Charge
+from billing.models import BookingAuditLog, Charge, Participant, PriceRule
 from billing.permissions import EDITOR_GROUP
-from billing.services import calculate_participant_settlement
-from tests.factories import ChargeFactory, GroupFactory, ParticipantFactory, SuperUserFactory, UserFactory
+from billing.services import calculate_participant_settlement, create_manual_charge
+from tests.factories import (
+    CampFactory,
+    ChargeFactory,
+    GroupFactory,
+    ParticipantFactory,
+    PriceRuleFactory,
+    SuperUserFactory,
+    UserFactory,
+)
+
+
+def assert_manual_charge_dialog_auto_opens(response):
+    opening_tag = re.search(
+        rb'<dialog\b(?=[^>]*\bid="manual-charge-dialog")(?=[^>]*\bdata-auto-open-dialog\b)[^>]*>',
+        response.content,
+        re.DOTALL,
+    )
+    assert opening_tag is not None
+    assert b"manualChargeDialog?.showModal()" in response.content
 
 
 @pytest.mark.django_db
@@ -25,6 +46,243 @@ def test_charge_admin_displays_booking_reference():
 
     assert "booking_reference" in admin.list_display
     assert "id" in admin.search_fields
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("price_rule_kind", "expected_charge_kind"),
+    [
+        (PriceRule.Kind.CAMP_FLAT, Charge.Kind.CAMP_FLAT),
+        (PriceRule.Kind.NIGHT, Charge.Kind.OTHER),
+        (PriceRule.Kind.MEAL, Charge.Kind.FOOD),
+        (PriceRule.Kind.DRINK, Charge.Kind.DRINK),
+        (PriceRule.Kind.OTHER, Charge.Kind.OTHER),
+    ],
+)
+def test_editor_can_add_manual_charge_from_price_rule(
+    client,
+    price_rule_kind,
+    expected_charge_kind,
+):
+    editor = UserFactory(username="editor")
+    editor.groups.add(GroupFactory(name=EDITOR_GROUP))
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    rule = PriceRuleFactory(
+        camp=participant.camp,
+        kind=price_rule_kind,
+        name="Sonderpreis",
+        unit_price=Decimal("4.25"),
+        foerdersatz=Decimal("0.2500"),
+    )
+    client.force_login(editor)
+
+    response = client.post(
+        reverse("participant-detail", args=[participant.pk]),
+        {
+            "action": "add_manual_charge",
+            "price_rule_id": str(rule.pk),
+            "quantity": "3",
+            "description": "Sonderleistung",
+        },
+    )
+
+    charge = Charge.objects.get(participant=participant)
+    response_messages = [str(message) for message in get_messages(response.wsgi_request)]
+    assert response.status_code == 302
+    assert response["Location"] == reverse("participant-detail", args=[participant.pk])
+    assert response_messages == ["Buchung 'Sonderpreis' hinzugefügt."]
+    assert charge.kind == expected_charge_kind
+    assert charge.description == "Sonderleistung"
+    assert charge.quantity == Decimal("3.00")
+    assert charge.unit_price == Decimal("4.25")
+    assert charge.foerdersatz == Decimal("0.2500")
+    assert charge.total == Decimal("12.75")
+    assert BookingAuditLog.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_manual_charge_uses_price_rule_name_without_description(client):
+    admin = SuperUserFactory(username="admin", email="admin@example.test")
+    participant = ParticipantFactory()
+    rule = PriceRuleFactory(camp=participant.camp, name="Übernachtung extra")
+    client.force_login(admin)
+
+    response = client.post(
+        reverse("participant-detail", args=[participant.pk]),
+        {
+            "action": "add_manual_charge",
+            "price_rule_id": str(rule.pk),
+            "quantity": "1",
+            "description": "   ",
+        },
+    )
+
+    assert response.status_code == 302
+    assert Charge.objects.get(participant=participant).description == "Übernachtung extra"
+
+
+@pytest.mark.django_db
+def test_manual_charge_price_rule_label_uses_localized_grouping(client):
+    admin = SuperUserFactory(username="admin", email="admin@example.test")
+    participant = ParticipantFactory()
+    PriceRuleFactory(camp=participant.camp, name="Großpreis", unit_price=Decimal("1234.50"))
+    client.force_login(admin)
+
+    response = client.get(reverse("participant-detail", args=[participant.pk]))
+
+    assert response.status_code == 200
+    assert "Großpreis (1.234,50 €)" in response.content.decode()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("quantity", [None, "abc", "0", "-1", "100"])
+def test_manual_charge_rejects_invalid_quantity_without_writing(client, quantity):
+    admin = SuperUserFactory(username="admin", email="admin@example.test")
+    participant = ParticipantFactory()
+    rule = PriceRuleFactory(camp=participant.camp)
+    payload = {
+        "action": "add_manual_charge",
+        "price_rule_id": str(rule.pk),
+        "description": "Ungültig",
+    }
+    if quantity is not None:
+        payload["quantity"] = quantity
+    client.force_login(admin)
+
+    response = client.post(reverse("participant-detail", args=[participant.pk]), payload)
+
+    assert response.status_code == 200
+    assert "quantity" in response.context["manual_charge_form"].errors
+    assert_manual_charge_dialog_auto_opens(response)
+    quantity_input = re.search(
+        rb'<input\b(?=[^>]*\bid="id_quantity")(?=[^>]*\baria-invalid="true")'
+        rb'(?=[^>]*\baria-describedby="id_quantity_error")[^>]*>',
+        response.content,
+        re.DOTALL,
+    )
+    quantity_error = re.search(
+        rb'<span\b(?=[^>]*\bid="id_quantity_error")(?=[^>]*\brole="alert")[^>]*>',
+        response.content,
+        re.DOTALL,
+    )
+    assert quantity_input is not None
+    assert quantity_error is not None
+    assert Charge.objects.filter(participant=participant).exists() is False
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("invalid_rule", ["missing", "malformed", "foreign", "archived", "invalid_kind"])
+def test_manual_charge_rejects_unavailable_price_rule_without_writing(client, invalid_rule):
+    admin = SuperUserFactory(username="admin", email="admin@example.test")
+    participant = ParticipantFactory()
+    PriceRuleFactory(camp=participant.camp, name="Verfügbar")
+    payload = {
+        "action": "add_manual_charge",
+        "quantity": "1",
+        "description": "Ungültig",
+    }
+    if invalid_rule == "malformed":
+        payload["price_rule_id"] = "not-an-id"
+    elif invalid_rule == "foreign":
+        foreign_camp = CampFactory(name="Fremdes Lager", year=2026)
+        payload["price_rule_id"] = str(PriceRuleFactory(camp=foreign_camp, name="Fremdes Lager").pk)
+    elif invalid_rule == "archived":
+        payload["price_rule_id"] = str(PriceRuleFactory(camp=participant.camp, name="Archiviert", is_archived=True).pk)
+    elif invalid_rule == "invalid_kind":
+        payload["price_rule_id"] = str(PriceRuleFactory(camp=participant.camp, name="Ungültige Art", kind="invalid").pk)
+    client.force_login(admin)
+
+    response = client.post(reverse("participant-detail", args=[participant.pk]), payload)
+
+    assert response.status_code == 200
+    assert "price_rule_id" in response.context["manual_charge_form"].errors
+    assert_manual_charge_dialog_auto_opens(response)
+    assert b'aria-describedby="id_price_rule_id_error"' in response.content
+    assert b'id="id_price_rule_id_error" class="helptext error" role="alert"' in response.content
+    assert Charge.objects.filter(participant=participant).exists() is False
+
+
+@pytest.mark.django_db
+def test_manual_charge_rejects_too_long_description_without_writing(client):
+    admin = SuperUserFactory(username="admin", email="admin@example.test")
+    participant = ParticipantFactory()
+    rule = PriceRuleFactory(camp=participant.camp)
+    client.force_login(admin)
+
+    response = client.post(
+        reverse("participant-detail", args=[participant.pk]),
+        {
+            "action": "add_manual_charge",
+            "price_rule_id": str(rule.pk),
+            "quantity": "1",
+            "description": "x" * 181,
+        },
+    )
+
+    assert response.status_code == 200
+    assert "description" in response.context["manual_charge_form"].errors
+    assert_manual_charge_dialog_auto_opens(response)
+    assert Charge.objects.filter(participant=participant).exists() is False
+
+
+@pytest.mark.django_db
+def test_archived_participant_cannot_receive_manual_charge(client):
+    admin = SuperUserFactory(username="admin", email="admin@example.test")
+    participant = ParticipantFactory(archived_at=timezone.now(), archived_by=admin)
+    rule = PriceRuleFactory(camp=participant.camp)
+    client.force_login(admin)
+
+    detail_response = client.get(reverse("participant-detail", args=[participant.pk]))
+    post_response = client.post(
+        reverse("participant-detail", args=[participant.pk]),
+        {
+            "action": "add_manual_charge",
+            "price_rule_id": str(rule.pk),
+            "quantity": "1",
+            "description": "Nicht erlaubt",
+        },
+    )
+
+    assert detail_response.status_code == 200
+    assert b"Buchung hinzuf\xc3\xbcgen" not in detail_response.content
+    assert b"manual-charge-dialog" not in detail_response.content
+    assert post_response.status_code == 404
+    assert Charge.objects.filter(participant=participant).exists() is False
+
+
+@pytest.mark.django_db
+def test_create_manual_charge_uses_fresh_locked_price_rule_values():
+    participant = ParticipantFactory()
+    rule = PriceRuleFactory(
+        camp=participant.camp,
+        name="Alter Preis",
+        unit_price=Decimal("2.50"),
+        foerdersatz=Decimal("0.1000"),
+    )
+    PriceRule.objects.filter(pk=rule.pk).update(
+        name="Aktueller Preis",
+        unit_price=Decimal("3.75"),
+        foerdersatz=Decimal("0.2000"),
+    )
+
+    charge = create_manual_charge(participant, rule, quantity=2, description="")
+
+    assert charge.description == "Aktueller Preis"
+    assert charge.unit_price == Decimal("3.75")
+    assert charge.foerdersatz == Decimal("0.2000")
+
+
+@pytest.mark.django_db
+def test_create_manual_charge_rejects_freshly_archived_participant():
+    participant = ParticipantFactory()
+    rule = PriceRuleFactory(camp=participant.camp)
+    Participant.objects.filter(pk=participant.pk).update(archived_at=timezone.now())
+
+    with pytest.raises(ValidationError, match="archivierte Teilnehmer") as error_info:
+        create_manual_charge(participant, rule, quantity=1, description="")
+
+    assert error_info.value.code == "manual_charge_participant_archived"
+    assert Charge.objects.filter(participant=participant).exists() is False
 
 
 @pytest.mark.django_db
