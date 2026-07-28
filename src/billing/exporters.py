@@ -446,6 +446,7 @@ def _draw_page_framework(pdf, title, subtitle, participant_name):
     pdf.drawCentredString(
         width / 2.0, footer_y, "Erstellt mit der Fliegerlagerabrechnung | Luftsportfreunde Wesel-Rheinhausen e.V."
     )
+    pdf.drawRightString(width - 50, footer_y, f"Seite {pdf.getPageNumber()}")
     pdf.setFillColorRGB(0, 0, 0)
 
     return y
@@ -502,25 +503,24 @@ def _draw_invoice_line(
 
     metadata_y = y - PDF_META_LINE_HEIGHT
     formatted_date = _format_invoice_date(occurred_on)
+    metadata_lines = []
     if formatted_date:
-        pdf.setFont("Helvetica-Bold", 8)
-        pdf.drawString(55, metadata_y, "Datum:")
-        pdf.setFont("Helvetica", 8)
-        pdf.drawString(95, metadata_y, formatted_date)
-        metadata_y -= PDF_META_LINE_HEIGHT
-
+        metadata_lines.append(f"Datum: {formatted_date}")
     for offset in range(0, len(booking_references), PDF_BOOKING_REFERENCES_PER_LINE):
         references = booking_references[offset : offset + PDF_BOOKING_REFERENCES_PER_LINE]
-        pdf.setFont("Helvetica-Bold", 8)
-        pdf.drawString(55, metadata_y, "Buchungen:" if offset == 0 else "")
+        prefix = "Buchungen: " if offset == 0 else ""
+        metadata_lines.append(f"{prefix}{', '.join(references)}")
+
+    pdf.setFillColorRGB(0.35, 0.35, 0.35)
+    for metadata_line in metadata_lines:
         pdf.setFont("Helvetica", 8)
-        for index, reference in enumerate(references):
-            pdf.drawString(125 + (index * 62), metadata_y, reference)
+        pdf.drawString(55, metadata_y, metadata_line)
         metadata_y -= PDF_META_LINE_HEIGHT
+    pdf.setFillColorRGB(0, 0, 0)
 
     next_y = y - _invoice_line_height(occurred_on, booking_references)
     pdf.setStrokeColorRGB(0.9, 0.9, 0.9)
-    pdf.line(50, next_y + 5, width - 50, next_y + 5)
+    pdf.line(50, next_y + 10, width - 50, next_y + 10)
     pdf.setStrokeColorRGB(0, 0, 0)
     pdf.setFont("Helvetica", 10)
     return next_y
