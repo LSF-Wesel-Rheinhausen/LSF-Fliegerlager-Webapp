@@ -363,6 +363,28 @@ class CampKioskAccess(TimeStampedModel):
         return f"Kiosk-Zugang {self.camp}"
 
 
+class CampKioskAccessAttempt(TimeStampedModel):
+    """Persist shared-PIN failures independently from a caller-controlled session."""
+
+    access = models.ForeignKey(CampKioskAccess, on_delete=models.CASCADE, related_name="attempt_states")
+    client_key = models.CharField(max_length=64)
+    failure_timestamps = models.JSONField(default=list)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["access", "client_key"],
+                name="unique_kiosk_attempt_client",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["updated_at"], name="kiosk_attempt_updated_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"Kiosk-PIN-Fehlversuche {self.access.camp}"
+
+
 class Participant(TimeStampedModel):
     class Status(models.TextChoices):
         PENDING_APPROVAL = "pending_approval", "Ausstehende Freigabe"

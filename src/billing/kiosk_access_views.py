@@ -1,4 +1,5 @@
-from typing import cast
+from datetime import timedelta
+from typing import Literal, cast
 from urllib.parse import urlsplit
 
 from django.conf import settings
@@ -9,6 +10,7 @@ from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import Resolver404, resolve, reverse
 from django.utils import timezone
+from django.utils.crypto import salted_hmac
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
@@ -21,37 +23,62 @@ from .kiosk_access import (
     kiosk_access_from_request,
     set_kiosk_access_cookie,
 )
-from .models import Camp, CampKioskAccess
+from .models import Camp, CampKioskAccess, CampKioskAccessAttempt
 from .permissions import admin_required
 from .views import _kiosk_context
 
-KIOSK_ACCESS_FAILURES_SESSION_KEY = "kiosk_access_failures"
+PinAttemptResult = Literal["accepted", "rejected", "blocked"]
 
 
-def _recent_failure_timestamps(request: HttpRequest) -> list[float]:
-    now = timezone.now().timestamp()
-    cutoff = now - settings.KIOSK_ACCESS_ATTEMPT_WINDOW
-    stored_values = request.session.get(KIOSK_ACCESS_FAILURES_SESSION_KEY, [])
-    if not isinstance(stored_values, list):
-        return []
-    return [
-        float(value)
-        for value in stored_values
-        if isinstance(value, (int, float)) and not isinstance(value, bool) and float(value) >= cutoff
-    ]
+def _kiosk_client_key(request: HttpRequest) -> str:
+    """Hash the server-observed peer address without retaining network data."""
+    remote_address = request.META.get("REMOTE_ADDR", "")
+    if not isinstance(remote_address, str):
+        remote_address = ""
+    return salted_hmac(
+        "billing.kiosk-access.client.v1",
+        remote_address,
+        algorithm="sha256",
+    ).hexdigest()
 
 
-def _is_rate_limited(request: HttpRequest) -> bool:
-    failures = _recent_failure_timestamps(request)
-    request.session[KIOSK_ACCESS_FAILURES_SESSION_KEY] = failures
-    return len(failures) >= settings.KIOSK_ACCESS_MAX_ATTEMPTS
+def _check_pin_with_server_throttle(
+    request: HttpRequest,
+    access: CampKioskAccess,
+    raw_pin: str | None,
+) -> PinAttemptResult:
+    """Validate one PIN attempt while serializing its server-side failure state."""
+    now = timezone.now()
+    cutoff = now.timestamp() - settings.KIOSK_ACCESS_ATTEMPT_WINDOW
+    CampKioskAccessAttempt.objects.filter(
+        updated_at__lt=now - timedelta(seconds=settings.KIOSK_ACCESS_ATTEMPT_WINDOW)
+    ).delete()
 
+    with transaction.atomic():
+        attempt_state, _created = CampKioskAccessAttempt.objects.select_for_update().get_or_create(
+            access=access,
+            client_key=_kiosk_client_key(request),
+        )
+        stored_values = attempt_state.failure_timestamps
+        if not isinstance(stored_values, list):
+            stored_values = []
+        recent_failures = [
+            float(value)
+            for value in stored_values
+            if isinstance(value, (int, float)) and not isinstance(value, bool) and float(value) >= cutoff
+        ]
+        if len(recent_failures) >= settings.KIOSK_ACCESS_MAX_ATTEMPTS:
+            return "blocked"
+        if raw_pin is not None and access.check_pin(raw_pin):
+            attempt_state.delete()
+            return "accepted"
 
-def _register_failed_attempt(request: HttpRequest) -> bool:
-    failures = _recent_failure_timestamps(request)
-    failures.append(timezone.now().timestamp())
-    request.session[KIOSK_ACCESS_FAILURES_SESSION_KEY] = failures
-    return len(failures) >= settings.KIOSK_ACCESS_MAX_ATTEMPTS
+        recent_failures.append(now.timestamp())
+        attempt_state.failure_timestamps = recent_failures
+        attempt_state.save(update_fields=["failure_timestamps", "updated_at"])
+        if len(recent_failures) >= settings.KIOSK_ACCESS_MAX_ATTEMPTS:
+            return "blocked"
+        return "rejected"
 
 
 def _rate_limited_response(
@@ -131,18 +158,21 @@ def kiosk_access_prompt(request: HttpRequest, kiosk_mode: str) -> HttpResponse:
             clear_kiosk_access_cookie(response)
         return response
 
-    if request.method == "POST" and _is_rate_limited(request):
-        return _rate_limited_response(request, form, context)
-
-    if request.method == "POST" and form.is_valid():
-        if access.check_pin(form.cleaned_data["pin"]):
-            request.session.pop(KIOSK_ACCESS_FAILURES_SESSION_KEY, None)
+    if request.method == "POST":
+        form_is_valid = form.is_valid()
+        attempt_result = _check_pin_with_server_throttle(
+            request,
+            access,
+            form.cleaned_data["pin"] if form_is_valid else None,
+        )
+        if attempt_result == "accepted":
             response = redirect(_safe_kiosk_next_url(request, kiosk_mode))
             set_kiosk_access_cookie(response, access)
             return response
-        form.add_error("pin", "Lager-PIN ist ungültig.")
-    if request.method == "POST" and _register_failed_attempt(request):
-        return _rate_limited_response(request, form, context)
+        if attempt_result == "blocked":
+            return _rate_limited_response(request, form, context)
+        if form_is_valid:
+            form.add_error("pin", "Lager-PIN ist ungültig.")
 
     response = render(
         request,

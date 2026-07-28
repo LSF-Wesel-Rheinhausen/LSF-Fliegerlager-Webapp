@@ -45,6 +45,21 @@ def test_camp_kiosk_access_hashes_pin_and_rotates_generation():
 
 
 @pytest.mark.django_db
+def test_camp_kiosk_access_attempt_string_does_not_expose_client_key():
+    camp = CampFactory(is_active=True)
+    access_model = apps.get_model("billing", "CampKioskAccess")
+    access = access_model.objects.create(camp=camp)
+    attempt_model = apps.get_model("billing", "CampKioskAccessAttempt")
+    attempt = attempt_model.objects.create(
+        access=access,
+        client_key="a" * 64,
+    )
+
+    assert str(attempt) == f"Kiosk-PIN-Fehlversuche {camp}"
+    assert attempt.client_key not in str(attempt)
+
+
+@pytest.mark.django_db
 def test_kiosk_access_cookie_is_persistent_hardened_and_server_validated(settings):
     try:
         kiosk_access = importlib.import_module("billing.kiosk_access")
@@ -246,6 +261,33 @@ def test_shared_pin_prompt_rate_limits_repeated_failures(client):
 
 
 @pytest.mark.django_db
+def test_shared_pin_rate_limit_survives_discarded_client_sessions():
+    camp = CampFactory(is_active=True)
+    access_model = apps.get_model("billing", "CampKioskAccess")
+    access = access_model.objects.create(camp=camp)
+    access.set_pin("246810")
+    access.save()
+
+    responses = [
+        Client().post(
+            reverse("kiosk-access"),
+            {"pin": "000000"},
+            REMOTE_ADDR="203.0.113.42",
+        )
+        for _ in range(5)
+    ]
+    blocked_response = Client().post(
+        reverse("kiosk-access"),
+        {"pin": "246810"},
+        REMOTE_ADDR="203.0.113.42",
+    )
+
+    assert [response.status_code for response in responses] == [200, 200, 200, 200, 429]
+    assert blocked_response.status_code == 429
+    assert blocked_response["Retry-After"] == "300"
+
+
+@pytest.mark.django_db
 def test_revoked_cookie_clears_participant_identity_before_redirect(client):
     camp = CampFactory(is_active=True)
     access_model = apps.get_model("billing", "CampKioskAccess")
@@ -420,6 +462,30 @@ def test_reactivating_camp_does_not_restore_previously_issued_cookie(client):
     first_camp.save()
     response = client.get(reverse("kiosk-login"))
 
+    assert response.status_code == 302
+    assert response["Location"].startswith("/kiosk/access/")
+
+
+@pytest.mark.django_db
+def test_deleting_active_camp_does_not_restore_cookie_for_reactivated_camp(client):
+    remaining_camp = CampFactory(name="Verbleibendes Lager", year=2025, is_active=True)
+    access_model = apps.get_model("billing", "CampKioskAccess")
+    access = access_model.objects.create(camp=remaining_camp)
+    access.set_pin("246810")
+    access.save()
+    kiosk_access = importlib.import_module("billing.kiosk_access")
+    cookie_response = HttpResponse()
+    kiosk_access.set_kiosk_access_cookie(cookie_response, access)
+    client.cookies[kiosk_access.KIOSK_ACCESS_COOKIE_NAME] = cookie_response.cookies[
+        kiosk_access.KIOSK_ACCESS_COOKIE_NAME
+    ].value
+    active_camp = CampFactory(name="Aktives Lager", year=2026, is_active=True)
+
+    active_camp.delete()
+    response = client.get(reverse("kiosk-login"))
+
+    remaining_camp.refresh_from_db()
+    assert remaining_camp.is_active is True
     assert response.status_code == 302
     assert response["Location"].startswith("/kiosk/access/")
 
