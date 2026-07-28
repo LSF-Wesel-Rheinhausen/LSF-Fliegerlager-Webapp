@@ -46,7 +46,7 @@ test("Private kiosk installs its scoped PWA and serves the offline fallback", as
   }
 });
 
-test("Central kiosk exposes a distinct scope and no notification settings route", async ({ page, request }) => {
+test("Central kiosk exposes a distinct scope without a public login timer", async ({ page, request }) => {
   const manifestResponse = await request.get("/central/kiosk/manifest.webmanifest");
   expect(manifestResponse.ok()).toBeTruthy();
   const manifest = await manifestResponse.json();
@@ -60,6 +60,7 @@ test("Central kiosk exposes a distinct scope and no notification settings route"
     "/central/kiosk/manifest.webmanifest",
   );
   await expect(page.locator("[data-pwa-install]")).toHaveCount(0);
+  await expect(page.locator("[data-kiosk-countdown-root]")).toHaveCount(0);
   expect((await request.get("/central/kiosk/notifications/")).status()).toBe(404);
 });
 

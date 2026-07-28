@@ -56,6 +56,18 @@ def test_central_kiosk_hides_install_guide(client):
     assert b"data-pwa-install-dialog" not in response.content
 
 
+@pytest.mark.parametrize("request_method", ["get", "post"])
+@pytest.mark.django_db
+def test_central_kiosk_login_does_not_start_autologout_timer(client, request_method):
+    response = getattr(client, request_method)(reverse("central-kiosk-login"), data={})
+
+    assert response.status_code == 200
+    assert response.context["kiosk_autologout"] is False
+    assert b"data-kiosk-countdown-root" not in response.content
+    assert b'data-timeout-ms="120000"' not in response.content
+    assert b"Abmeldung in" not in response.content
+
+
 @pytest.mark.parametrize("path", ["/apple-touch-icon.png", "/apple-touch-icon-precomposed.png", "/favicon.ico"])
 def test_platform_icon_fallbacks_redirect_to_app_icon(client, path):
     response = client.get(path)
@@ -103,6 +115,8 @@ def test_central_kiosk_login_enforces_short_autologout(client):
     assert response.status_code == 200
     assert response.context["kiosk_mode"] == "central"
     assert response.context["kiosk_autologout"] is True
+    assert b"data-kiosk-countdown-root" in response.content
+    assert b'data-timeout-ms="120000"' in response.content
     assert reverse("central-kiosk-logout").encode() in response.content
     assert client.session.get_expiry_age() == 120
 

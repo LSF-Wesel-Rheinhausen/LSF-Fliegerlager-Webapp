@@ -9,9 +9,9 @@
       "source_file": "changelog/pr-230-pdf-pagination.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "changelog_pr_230_pdf_pagination",
       "community": 30,
-      "norm_label": "pr-230-pdf-pagination.md"
+      "norm_label": "pr-230-pdf-pagination.md",
+      "id": "changelog_pr_230_pdf_pagination"
     },
     {
       "label": "Sichere Seitenumbr\u00fcche f\u00fcr Rechnungs-PDFs",
@@ -19,9 +19,9 @@
       "source_file": "changelog/pr-230-pdf-pagination.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "changelog_pr_230_pdf_pagination_sichere_seitenumbr\u00fcche_f\u00fcr_rechnungs_pdfs",
       "community": 30,
-      "norm_label": "sichere seitenumbruche fur rechnungs-pdfs"
+      "norm_label": "sichere seitenumbruche fur rechnungs-pdfs",
+      "id": "changelog_pr_230_pdf_pagination_sichere_seitenumbr\u00fcche_f\u00fcr_rechnungs_pdfs"
     },
     {
       "label": "Zusammenfassung",
@@ -29,9 +29,9 @@
       "source_file": "changelog/pr-230-pdf-pagination.md",
       "source_location": "L3",
       "_origin": "ast",
-      "id": "changelog_pr_230_pdf_pagination_zusammenfassung",
       "community": 30,
-      "norm_label": "zusammenfassung"
+      "norm_label": "zusammenfassung",
+      "id": "changelog_pr_230_pdf_pagination_zusammenfassung"
     },
     {
       "label": "Ge\u00e4nderte Dateien",
@@ -39,9 +39,9 @@
       "source_file": "changelog/pr-230-pdf-pagination.md",
       "source_location": "L9",
       "_origin": "ast",
-      "id": "changelog_pr_230_pdf_pagination_ge\u00e4nderte_dateien",
       "community": 30,
-      "norm_label": "geanderte dateien"
+      "norm_label": "geanderte dateien",
+      "id": "changelog_pr_230_pdf_pagination_ge\u00e4nderte_dateien"
     },
     {
       "label": "Tests",
@@ -49,9 +49,9 @@
       "source_file": "changelog/pr-230-pdf-pagination.md",
       "source_location": "L14",
       "_origin": "ast",
-      "id": "changelog_pr_230_pdf_pagination_tests",
       "community": 30,
-      "norm_label": "tests"
+      "norm_label": "tests",
+      "id": "changelog_pr_230_pdf_pagination_tests"
     },
     {
       "label": "Offene Punkte",
@@ -59,9 +59,9 @@
       "source_file": "changelog/pr-230-pdf-pagination.md",
       "source_location": "L19",
       "_origin": "ast",
-      "id": "changelog_pr_230_pdf_pagination_offene_punkte",
       "community": 30,
-      "norm_label": "offene punkte"
+      "norm_label": "offene punkte",
+      "id": "changelog_pr_230_pdf_pagination_offene_punkte"
     },
     {
       "label": "pre-commit",
@@ -21837,15 +21837,6 @@
       "id": "skills_lock_skills_caveman"
     },
     {
-      "label": "computedHash",
-      "file_type": "code",
-      "source_file": "skills-lock.json",
-      "source_location": "L20",
-      "community": 296,
-      "norm_label": "computedhash",
-      "id": "skills_lock_caveman_computedhash"
-    },
-    {
       "label": "caveman-commit",
       "file_type": "code",
       "source_file": "skills-lock.json",
@@ -21943,33 +21934,6 @@
       "community": 314,
       "norm_label": "caveman-help",
       "id": "skills_lock_skills_caveman_help"
-    },
-    {
-      "label": "source",
-      "file_type": "code",
-      "source_file": "skills-lock.json",
-      "source_location": "L35",
-      "community": 299,
-      "norm_label": "source",
-      "id": "skills_lock_caveman_help_source"
-    },
-    {
-      "label": "sourceType",
-      "file_type": "code",
-      "source_file": "skills-lock.json",
-      "source_location": "L36",
-      "community": 300,
-      "norm_label": "sourcetype",
-      "id": "skills_lock_caveman_help_sourcetype"
-    },
-    {
-      "label": "skillPath",
-      "file_type": "code",
-      "source_file": "skills-lock.json",
-      "source_location": "L37",
-      "community": 298,
-      "norm_label": "skillpath",
-      "id": "skills_lock_caveman_help_skillpath"
     },
     {
       "label": "caveman-review",
@@ -22933,9 +22897,9 @@
       "source_file": "changelog/pr-230-pdf-pagination.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "changelog_pr_230_pdf_pagination",
-      "target": "changelog_pr_230_pdf_pagination_sichere_seitenumbr\u00fcche_f\u00fcr_rechnungs_pdfs",
-      "confidence_score": 1.0
+      "target": "changelog_pr_230_pdf_pagination_sichere_seitenumbr\u00fcche_f\u00fcr_rechnungs_pdfs"
     },
     {
       "relation": "contains",
@@ -22943,9 +22907,9 @@
       "source_file": "changelog/pr-230-pdf-pagination.md",
       "source_location": "L9",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "changelog_pr_230_pdf_pagination_sichere_seitenumbr\u00fcche_f\u00fcr_rechnungs_pdfs",
-      "target": "changelog_pr_230_pdf_pagination_ge\u00e4nderte_dateien",
-      "confidence_score": 1.0
+      "target": "changelog_pr_230_pdf_pagination_ge\u00e4nderte_dateien"
     },
     {
       "relation": "contains",
@@ -22953,9 +22917,9 @@
       "source_file": "changelog/pr-230-pdf-pagination.md",
       "source_location": "L19",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "changelog_pr_230_pdf_pagination_sichere_seitenumbr\u00fcche_f\u00fcr_rechnungs_pdfs",
-      "target": "changelog_pr_230_pdf_pagination_offene_punkte",
-      "confidence_score": 1.0
+      "target": "changelog_pr_230_pdf_pagination_offene_punkte"
     },
     {
       "relation": "contains",
@@ -22963,9 +22927,9 @@
       "source_file": "changelog/pr-230-pdf-pagination.md",
       "source_location": "L14",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "changelog_pr_230_pdf_pagination_sichere_seitenumbr\u00fcche_f\u00fcr_rechnungs_pdfs",
-      "target": "changelog_pr_230_pdf_pagination_tests",
-      "confidence_score": 1.0
+      "target": "changelog_pr_230_pdf_pagination_tests"
     },
     {
       "relation": "contains",
@@ -22973,9 +22937,9 @@
       "source_file": "changelog/pr-230-pdf-pagination.md",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "changelog_pr_230_pdf_pagination_sichere_seitenumbr\u00fcche_f\u00fcr_rechnungs_pdfs",
-      "target": "changelog_pr_230_pdf_pagination_zusammenfassung",
-      "confidence_score": 1.0
+      "target": "changelog_pr_230_pdf_pagination_zusammenfassung"
     },
     {
       "relation": "contains",
@@ -79504,5 +79468,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "8aa1fd6816b293a0aa4bbf8fb7ff34fcbb883ea8"
+  "built_at_commit": "1b517e79a4dfc21451558e7bb0314fe8f14af82f"
 }
