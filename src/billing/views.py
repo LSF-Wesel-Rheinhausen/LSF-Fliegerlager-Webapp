@@ -368,6 +368,12 @@ def _is_application_admin_account(user: Any) -> bool:
     return user.is_superuser or user_role(user) == ROLE_ADMIN
 
 
+def _require_superuser_for_superuser_account(request: HttpRequest, managed_user: Any) -> None:
+    """Reject delegated administration of an existing superuser account."""
+    if managed_user.is_superuser and not request.user.is_superuser:
+        raise PermissionDenied
+
+
 def _would_remove_last_active_admin(
     user: Any,
     *,
@@ -423,6 +429,7 @@ def user_create(request: HttpRequest) -> HttpResponse:
 def user_edit(request: HttpRequest, user_id: int) -> HttpResponse:
     """Edit account status and billing role for an existing user."""
     managed_user = get_object_or_404(User.objects.prefetch_related("groups"), pk=user_id)
+    _require_superuser_for_superuser_account(request, managed_user)
     was_active = managed_user.is_active
     was_admin = _is_application_admin_account(managed_user)
     form = UserEditForm(request.POST or None, instance=managed_user)
@@ -448,6 +455,7 @@ def user_edit(request: HttpRequest, user_id: int) -> HttpResponse:
 def user_password_reset(request: HttpRequest, user_id: int) -> HttpResponse:
     """Set a new password for an existing application user."""
     managed_user = get_object_or_404(User, pk=user_id)
+    _require_superuser_for_superuser_account(request, managed_user)
     form = UserPasswordResetForm(managed_user, request.POST or None)
     if request.method == "POST" and form.is_valid():
         form.save()

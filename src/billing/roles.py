@@ -14,13 +14,42 @@ ROLE_CHOICES = (
     (ROLE_HUEBERS, "Huebers"),
 )
 
+APP_ADMIN_PERMISSION_MODELS = frozenset(
+    {
+        "bookingauditlog",
+        "camp",
+        "charge",
+        "dailyshiftexception",
+        "dailyshifttemplate",
+        "drinkentry",
+        "expense",
+        "mealorder",
+        "mealplanentry",
+        "mealsignup",
+        "participant",
+        "participantbookinglink",
+        "participantfamilymember",
+        "payment",
+        "pricerule",
+        "settlement",
+        "settlementrun",
+        "shift",
+        "shiftassignment",
+        "userprofile",
+    }
+)
+
 
 def bootstrap_default_roles():
     admin_group, _ = Group.objects.get_or_create(name=ADMIN_GROUP)
     editor_group, _ = Group.objects.get_or_create(name=EDITOR_GROUP)
     huebers_group, _ = Group.objects.get_or_create(name=HUEBERS_GROUP)
 
-    admin_group.permissions.set(Permission.objects.all())
+    admin_permissions = Permission.objects.filter(
+        content_type__app_label="billing",
+        content_type__model__in=APP_ADMIN_PERMISSION_MODELS,
+    )
+    admin_group.permissions.set(admin_permissions)
     editable = Permission.objects.filter(content_type__app_label="billing").filter(
         Q(codename__startswith="add_") | Q(codename__startswith="change_") | Q(codename__startswith="view_")
     )
