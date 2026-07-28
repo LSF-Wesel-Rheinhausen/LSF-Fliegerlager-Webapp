@@ -7,6 +7,7 @@ from io import BytesIO, StringIO
 import pytest
 from django.urls import reverse
 from openpyxl import load_workbook
+from reportlab.lib.pagesizes import A4
 
 from billing.exporters import participant_pdf_response, settlement_snapshot_pdf_bytes
 from billing.models import Charge, Expense, MealSignup
@@ -31,6 +32,7 @@ class RecordingPdfCanvas:
     def __init__(self, *_args, **_kwargs):
         self.page_number = 1
         self.body_y_positions = []
+        self.line_positions = []
         self.round_rect_positions = []
         self.text_positions = []
 
@@ -55,8 +57,12 @@ class RecordingPdfCanvas:
         self.body_y_positions.append(y)
         self.round_rect_positions.append((self.page_number, y))
 
-    def line(self, _x1, y1, _x2, y2):
+    def line(self, x1, y1, x2, y2):
         self.body_y_positions.extend((y1, y2))
+        self.line_positions.append((self.page_number, x1, y1, x2, y2))
+
+    def getPageNumber(self):
+        return self.page_number
 
     def showPage(self):
         self.page_number += 1
@@ -399,9 +405,54 @@ def test_invoice_pdf_prints_every_grouped_booking_reference_and_date(
         participant_pdf_response(participant)
 
     rendered_text = [text for _page, _y, text in recording_pdf_canvases[0].text_positions]
-    assert "28.07.2026" in rendered_text
+    assert "Datum: 28.07.2026" in rendered_text
+    first_booking_line = "Buchungen: " + ", ".join(booking.booking_reference for booking in bookings[:6])
+    assert first_booking_line in rendered_text
     for booking in bookings:
-        assert booking.booking_reference in rendered_text
+        assert any(booking.booking_reference in text for text in rendered_text)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("invoice_source", ["current", "snapshot"])
+def test_invoice_pdf_places_separators_clear_of_the_following_position(invoice_source, recording_pdf_canvases):
+    participant = ParticipantFactory()
+    ChargeFactory(participant=participant, description="Erste Buchung", occurred_on=date(2026, 7, 28))
+    ChargeFactory(participant=participant, description="Zweite Buchung", occurred_on=date(2026, 7, 29))
+
+    if invoice_source == "snapshot":
+        run = create_settlement_run(participant.camp, SuperUserFactory())
+        settlement_snapshot_pdf_bytes(run.settlements.get())
+    else:
+        participant_pdf_response(participant)
+
+    recording_canvas = recording_pdf_canvases[0]
+    second_position_y = next(y for _page, y, text in recording_canvas.text_positions if text == "Zweite Buchung")
+    first_separator_y = next(
+        y1 for _page, x1, y1, x2, y2 in recording_canvas.line_positions if x1 == 50 and x2 == A4[0] - 50 and y1 == y2
+    )
+
+    assert first_separator_y - second_position_y >= 8
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("invoice_source", ["current", "snapshot"])
+def test_invoice_pdf_numbers_every_page(invoice_source, recording_pdf_canvases):
+    participant = ParticipantFactory()
+    for index in range(28):
+        ChargeFactory(participant=participant, description=f"Buchung {index + 1}")
+
+    if invoice_source == "snapshot":
+        run = create_settlement_run(participant.camp, SuperUserFactory())
+        settlement_snapshot_pdf_bytes(run.settlements.get())
+    else:
+        participant_pdf_response(participant)
+
+    recording_canvas = recording_pdf_canvases[0]
+    rendered_page_numbers = [
+        (page, text) for page, _y, text in recording_canvas.text_positions if text.startswith("Seite ")
+    ]
+
+    assert rendered_page_numbers == [(page, f"Seite {page}") for page in range(1, recording_canvas.page_number)]
 
 
 @pytest.mark.django_db
@@ -444,7 +495,7 @@ def test_long_invoice_moves_summary_above_footer(invoice_source, recording_pdf_c
     final_page = max(footer_pages)
     assert summary_pages == [final_page]
     assert footer_pages == list(range(1, final_page + 1))
-    assert min(recording_canvas.body_y_positions) >= 55
+    assert all(y == 30 or y >= 55 for y in recording_canvas.body_y_positions)
 
 
 @pytest.mark.django_db
