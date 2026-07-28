@@ -2490,16 +2490,21 @@ textarea {
 
   .admin-topbar .nav-user-group {
     min-width: 0;
-    flex-direction: column;
+    flex-direction: row;
     align-items: stretch;
-    gap: 4px;
     text-align: center;
   }
 
   .admin-topbar .nav-user-group > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
     overflow: hidden;
-    font-size: 12px;
-    text-overflow: ellipsis;
+    clip: rect(0, 0, 0, 0);
+    clip-path: inset(50%);
+    border: 0;
     white-space: nowrap;
   }
 
