@@ -13,7 +13,7 @@ from billing.permissions import (
     is_huebers,
     is_meal_manager,
 )
-from tests.factories import GroupFactory, UserFactory
+from tests.factories import GroupFactory, SuperUserFactory, UserFactory
 
 
 def _admin_user():
@@ -158,6 +158,23 @@ def test_admin_can_reset_user_password(client):
     user.refresh_from_db()
     assert response.status_code == 302
     assert user.check_password("new-strong-pass-123") is True
+
+
+@pytest.mark.django_db
+def test_app_admin_cannot_edit_or_reset_superuser(client):
+    client.force_login(_admin_user())
+    superuser = SuperUserFactory(username="protected-superuser", password="original-password")
+
+    edit_response = client.get(reverse("user-edit", args=[superuser.pk]))
+    reset_response = client.post(
+        reverse("user-password-reset", args=[superuser.pk]),
+        {"new_password1": "attacker-password-123", "new_password2": "attacker-password-123"},
+    )
+
+    superuser.refresh_from_db()
+    assert edit_response.status_code == 403
+    assert reset_response.status_code == 403
+    assert superuser.check_password("original-password") is True
 
 
 @pytest.mark.django_db

@@ -1,4 +1,6 @@
 from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin
+from django.contrib.auth.models import User
 
 from .models import (
     BookingAuditLog,
@@ -26,6 +28,43 @@ from .models import (
     ShiftAssignment,
     UserProfile,
 )
+
+admin.site.unregister(User)
+
+
+@admin.register(User)
+class ProtectedUserAdmin(UserAdmin):
+    """Keep Django privilege fields exclusive to existing superusers."""
+
+    protected_fields = frozenset({"is_staff", "is_superuser", "groups", "user_permissions"})
+
+    def get_fieldsets(self, request, obj=None):
+        """Hide privilege-bearing fields from delegated user administrators."""
+        fieldsets = super().get_fieldsets(request, obj)
+        if request.user.is_superuser:
+            return fieldsets
+        return tuple(
+            (
+                name,
+                {
+                    **options,
+                    "fields": tuple(field for field in options.get("fields", ()) if field not in self.protected_fields),
+                },
+            )
+            for name, options in fieldsets
+        )
+
+    def has_change_permission(self, request, obj=None):
+        """Prevent delegated administrators from taking over superuser accounts."""
+        if obj is not None and obj.is_superuser and not request.user.is_superuser:
+            return False
+        return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        """Prevent delegated administrators from deleting superuser accounts."""
+        if obj is not None and obj.is_superuser and not request.user.is_superuser:
+            return False
+        return super().has_delete_permission(request, obj)
 
 
 @admin.register(Camp)
