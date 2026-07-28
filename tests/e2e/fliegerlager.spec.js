@@ -438,8 +438,21 @@ test("Kiosk flow: login, pin setup, drink and meal booking", async ({ page }) =>
 
   // Existing meal-deadline notifications still use the legacy hash deep link.
   await page.goto("/kiosk/#meal-calendar");
-  await expect(page.locator("dialog#meal-calendar-dialog")).toBeVisible();
+  const mealCalendarDialog = page.locator("dialog#meal-calendar-dialog");
+  await expect(mealCalendarDialog).toBeVisible();
   await expect(page).toHaveURL(/.*\/kiosk\/$/);
+  await mealCalendarDialog.locator(".meal-status-day--empty").first().click();
+  const mealDayDetail = page.locator('dialog[id^="meal-day-detail-"]:visible');
+  await expect(mealDayDetail).toBeVisible();
+  await mealDayDetail.getByRole("button", { name: "Essen für diesen Tag buchen" }).click();
+  const directMealDialog = page.locator("dialog#meal-dialog");
+  await expect(directMealDialog).toBeVisible();
+  await expect(directMealDialog.locator("[data-meal-date-checkbox]:checked")).toHaveCount(1);
+  await expect(directMealDialog.locator("#meal-step-persons")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(mealDayDetail).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(mealCalendarDialog).toBeVisible();
   await page.keyboard.press("Escape");
 
   // Check-in can be entered from the kiosk.

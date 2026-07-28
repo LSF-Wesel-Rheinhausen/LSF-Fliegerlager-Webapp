@@ -1091,6 +1091,39 @@ def test_kiosk_meal_status_calendar_shows_day_states_and_detail_dialog(client, m
 
 
 @pytest.mark.django_db
+def test_kiosk_meal_day_detail_opens_booking_for_the_selected_date(client, monkeypatch):
+    _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 7, 1, 10, 0)))
+    meal_date = date(2026, 7, 2)
+    camp = CampFactory(starts_on=meal_date, ends_on=meal_date)
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        is_default=True,
+        name="Abendessen",
+        unit_price=Decimal("7.00"),
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.get(reverse("kiosk-home"))
+
+    content = response.content.decode()
+    detail_start = content.index('id="meal-day-detail-2026-07-02"')
+    detail_end = content.index("</dialog>", detail_start)
+    day_detail = content[detail_start:detail_end]
+    assert response.status_code == 200
+    assert "Essen für diesen Tag buchen" in day_detail
+    assert "data-open-meal-dialog" in day_detail
+    assert 'data-meal-date="2026-07-02"' in day_detail
+    assert 'data-meal="dinner"' in day_detail
+    assert 'data-meal-label="Abendessen"' in day_detail
+    assert "über “Essen buchen”" not in day_detail
+
+
+@pytest.mark.django_db
 def test_kiosk_meal_booking_dialog_shows_all_camp_days_with_prices(client, monkeypatch):
     _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 7, 1, 10, 0)))
     camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 3))
