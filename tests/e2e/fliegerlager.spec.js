@@ -535,6 +535,37 @@ test("Kiosk masonry and expense cards stay responsive and accessible", async ({ 
   await setupFirstAdmin(page);
   const campName = await createCamp(page, "Masonry-Lager", 0, 4);
   await createParticipant(page, "Marie", "Curie");
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const adminHeaderLayout = await page.locator("header.topbar").evaluate((header) => {
+    const identity = header.firstElementChild.getBoundingClientRect();
+    const navigation = header.querySelector("nav").getBoundingClientRect();
+    return {
+      height: Math.round(header.getBoundingClientRect().height),
+      identityCenter: Math.round(identity.top + identity.height / 2),
+      navigationCenter: Math.round(navigation.top + navigation.height / 2),
+    };
+  });
+  expect(adminHeaderLayout.height, "Aktive Admin-Kopfzeile bleibt kompakt").toBeLessThanOrEqual(72);
+  expect(
+    Math.abs(adminHeaderLayout.identityCenter - adminHeaderLayout.navigationCenter),
+    "Lagerkontext und Navigation sind in einer Zeile ausgerichtet"
+  ).toBeLessThanOrEqual(1);
+  await assertNoUnexpectedOverflow(page);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileAdminHeader = await page.locator("header.topbar").evaluate((header) => {
+    const navigationItems = Array.from(header.querySelectorAll("nav > .nav-link, nav > .nav-user-group")).filter(
+      (item) => window.getComputedStyle(item).display !== "none"
+    );
+    return {
+      height: Math.round(header.getBoundingClientRect().height),
+      columns: new Set(navigationItems.map((item) => Math.round(item.getBoundingClientRect().left))).size,
+    };
+  });
+  expect(mobileAdminHeader.height, "Mobile Admin-Kopfzeile bleibt überschaubar").toBeLessThanOrEqual(280);
+  expect(mobileAdminHeader.columns, "Mobile Admin-Aktionen nutzen zwei Spalten").toBe(2);
+  await assertNoUnexpectedOverflow(page);
+  await page.setViewportSize({ width: 1280, height: 900 });
   await logout(page);
 
   await page.goto("/kiosk/login/");
@@ -581,9 +612,33 @@ test("Kiosk masonry and expense cards stay responsive and accessible", async ({ 
   const desktopLayout = await page.locator("[data-kiosk-card]").evaluateAll((cards) => ({
     columns: new Set(cards.map((card) => Math.round(card.getBoundingClientRect().left))).size,
     spans: cards.map((card) => card.style.gridRowEnd),
+    topByCard: Object.fromEntries(cards.map((card) => [card.dataset.kioskCard, Math.round(card.getBoundingClientRect().top)])),
+    margins: cards.map((card) => window.getComputedStyle(card).marginTop),
   }));
   expect(desktopLayout.columns).toBe(2);
   expect(desktopLayout.spans.every((span) => span.startsWith("span "))).toBe(true);
+  expect(desktopLayout.topByCard.food).toBe(desktopLayout.topByCard.drinks);
+  expect(desktopLayout.margins).toEqual(Array(desktopLayout.margins.length).fill("0px"));
+
+  const kioskSectionSpacing = await page.evaluate(() => {
+    const masonryElement = document.querySelector("[data-kiosk-masonry]");
+    const invoiceHeading = Array.from(document.querySelectorAll("main.kiosk-page > section h2")).find((heading) =>
+      heading.textContent.includes("Meine Rechnungen & Dokumente")
+    );
+    const invoiceSection = invoiceHeading?.closest("section");
+    const masonryRect = masonryElement.getBoundingClientRect();
+    const invoiceRect = invoiceSection.getBoundingClientRect();
+    const cardBottoms = Array.from(document.querySelectorAll("[data-kiosk-card]"), (card) =>
+      card.getBoundingClientRect().bottom
+    );
+    return {
+      gapBeforeMasonry: Math.round(masonryRect.top - invoiceRect.bottom),
+      masonryBottom: Math.round(masonryRect.bottom),
+      lastCardBottom: Math.round(Math.max(...cardBottoms)),
+    };
+  });
+  expect(kioskSectionSpacing.gapBeforeMasonry).toBe(24);
+  expect(kioskSectionSpacing.lastCardBottom).toBeLessThanOrEqual(kioskSectionSpacing.masonryBottom + 1);
   await assertKioskCardsDoNotOverlap(page);
   await assertNoUnexpectedOverflow(page);
 
