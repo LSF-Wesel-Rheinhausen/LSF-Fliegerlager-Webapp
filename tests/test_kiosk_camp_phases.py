@@ -5,9 +5,9 @@ import pytest
 from django.urls import reverse
 from django.utils import timezone
 
-from billing.models import Settlement, SettlementRun
+from billing.models import Charge, Expense, Settlement, SettlementRun
 from billing.views import KIOSK_MODE_SESSION_KEY, KIOSK_PARTICIPANT_SESSION_KEY
-from tests.factories import CampFactory, ParticipantFactory, SuperUserFactory
+from tests.factories import CampFactory, ExpenseFactory, ParticipantFactory, PriceRuleFactory, SuperUserFactory
 
 
 @pytest.mark.django_db
@@ -90,6 +90,138 @@ def test_kiosk_post_camp_renders_screen_and_settlement_archive(client):
     assert b"Lager beendet" in response.content
     assert b"Letzte Abrechnung herunterladen" in response.content
     assert reverse("kiosk-settlement-pdf", args=[settlement.pk]).encode() in response.content
+
+
+@pytest.mark.django_db
+def test_kiosk_post_camp_renders_one_read_only_invoice_area(client):
+    admin = SuperUserFactory()
+    today = timezone.localdate()
+    camp = CampFactory(
+        is_active=True,
+        starts_on=today - timedelta(days=20),
+        ends_on=today - timedelta(days=5),
+        show_kiosk_invoices=True,
+    )
+    participant = ParticipantFactory(camp=camp)
+    ExpenseFactory(
+        camp=camp,
+        participant=participant,
+        description="Grillgut",
+        status=Expense.Status.PENDING,
+    )
+    run = SettlementRun.objects.create(camp=camp, version=1, calculated_by=admin)
+    Settlement.objects.create(
+        run=run,
+        participant=participant,
+        total_due=Decimal("100.00"),
+        total_paid=Decimal("0.00"),
+        total_advanced=Decimal("0.00"),
+        balance=Decimal("100.00"),
+    )
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_MODE_SESSION_KEY] = "private"
+    session.save()
+
+    response = client.get(reverse("kiosk-home"))
+    content = response.content.decode("utf-8")
+
+    assert response.status_code == 200
+    assert content.count("Lager beendet") == 1
+    assert "Meine Rechnungen &amp; Dokumente" not in content
+    assert "Grillgut" in content
+    assert "Antrag einreichen" not in content
+    assert "Getränk buchen" not in content
+    assert "Verpflegung buchen" not in content
+    assert "Check-in" not in content
+    assert "Dienste" not in content
+    assert "Familie" not in content
+    assert "Mitbuchungen" not in content
+
+
+@pytest.mark.django_db
+def test_kiosk_post_camp_hides_invoice_actions_when_admin_disabled_them(client):
+    today = timezone.localdate()
+    camp = CampFactory(
+        is_active=True,
+        starts_on=today - timedelta(days=20),
+        ends_on=today - timedelta(days=5),
+        show_kiosk_invoices=False,
+    )
+    participant = ParticipantFactory(camp=camp)
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = client.get(reverse("kiosk-home"))
+    content = response.content.decode("utf-8")
+
+    assert response.status_code == 200
+    assert "Lager beendet" in content
+    assert "Abrechnung herunterladen" not in content
+    assert "Aktuelle Abrechnung" not in content
+    assert client.get(reverse("kiosk-current-settlement-pdf")).status_code == 403
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("kiosk_mode,route_name", [("private", "kiosk-home"), ("central", "central-kiosk-home")])
+@pytest.mark.parametrize(
+    "action",
+    [
+        "quick",
+        "quick_cancel",
+        "meal",
+        "meal_retract",
+        "family_member_create",
+        "family_member_deactivate",
+        "booking_link_invite",
+        "booking_link_accept",
+        "booking_link_decline",
+        "booking_link_revoke",
+        "checkin",
+        "update_attendance_dates",
+    ],
+)
+def test_kiosk_post_camp_rejects_every_home_write_action(client, kiosk_mode, route_name, action):
+    today = timezone.localdate()
+    camp = CampFactory(is_active=True, starts_on=today - timedelta(days=20), ends_on=today - timedelta(days=1))
+    participant = ParticipantFactory(camp=camp)
+    PriceRuleFactory(camp=camp)
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_MODE_SESSION_KEY] = kiosk_mode
+    session.save()
+
+    response = client.post(reverse(route_name), {"action": action}, follow=True)
+
+    assert response.status_code == 200
+    assert "Das Lager ist beendet. Änderungen sind nicht mehr möglich." in response.content.decode("utf-8")
+    assert Charge.objects.filter(participant=participant).count() == 0
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "route_name,method",
+    [
+        ("kiosk-shifts", "get"),
+        ("central-kiosk-shifts", "get"),
+        ("kiosk-shared-expense-request", "post"),
+        ("central-kiosk-shared-expense-request", "post"),
+    ],
+)
+def test_kiosk_post_camp_blocks_separate_write_workflows(client, route_name, method):
+    today = timezone.localdate()
+    camp = CampFactory(is_active=True, starts_on=today - timedelta(days=20), ends_on=today - timedelta(days=1))
+    participant = ParticipantFactory(camp=camp)
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = getattr(client, method)(reverse(route_name), follow=True)
+
+    assert response.status_code == 200
+    assert "Das Lager ist beendet. Änderungen sind nicht mehr möglich." in response.content.decode("utf-8")
+    assert Expense.objects.filter(participant=participant).count() == 0
 
 
 @pytest.mark.django_db

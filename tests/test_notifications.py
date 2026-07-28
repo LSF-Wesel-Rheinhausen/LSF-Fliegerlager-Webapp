@@ -1019,6 +1019,30 @@ def test_announcement_edit_and_delete_by_editor(client):
 
 
 @pytest.mark.django_db
+def test_information_compose_marks_announcement_table_as_mobile_cards(client):
+    from billing.models import CampAnnouncement
+    from tests.factories import SuperUserFactory
+
+    admin = SuperUserFactory()
+    camp = CampFactory(is_active=True)
+    CampAnnouncement.objects.create(
+        camp=camp,
+        title="Sehr lange Ankündigung",
+        body="Ein ausführlicher Inhalt für kleine Bildschirme",
+        created_by=admin,
+    )
+    client.force_login(admin)
+
+    response = client.get(reverse("information-email-compose", args=[camp.pk]))
+
+    assert response.status_code == 200
+    assert b'class="table responsive-record-table"' in response.content
+    assert b'data-label="Titel"' in response.content
+    assert b'data-label="Inhalt"' in response.content
+    assert b'data-label="Aktionen"' in response.content
+
+
+@pytest.mark.django_db
 def test_information_compose_includes_participants_without_email_and_allows_editor(client):
     from billing.permissions import EDITOR_GROUP
     from tests.factories import GroupFactory, UserFactory

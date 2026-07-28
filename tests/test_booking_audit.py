@@ -229,6 +229,10 @@ def test_participant_detail_renders_booking_audit_history_for_admin(client):
     assert b"Abendessen korrigiert" in response.content
     assert reverse("charge-edit", args=[charge.pk]).encode() in response.content
     assert reverse("charge-delete", args=[charge.pk]).encode() in response.content
+    assert response.content.count(b'class="responsive-record-table"') >= 2
+    assert b'data-label="Beschreibung"' in response.content
+    assert b'data-label="Vorher"' in response.content
+    assert b'data-label="Nachher"' in response.content
 
 
 @pytest.mark.django_db

@@ -165,6 +165,23 @@ def _pre_camp_kiosk_operation_redirect(
     return redirect(_kiosk_route(kiosk_mode, "home"))
 
 
+def _post_camp_kiosk_operation_redirect(
+    request: HttpRequest, participant: Participant, kiosk_mode: str
+) -> HttpResponse | None:
+    """Redirect post-camp participants away from mutating kiosk pages."""
+    if not participant.camp.is_post_camp():
+        return None
+    messages.error(request, "Das Lager ist beendet. Änderungen sind nicht mehr möglich.")
+    return redirect(_kiosk_route(kiosk_mode, "home"))
+
+
+def _kiosk_operation_redirect(request: HttpRequest, participant: Participant, kiosk_mode: str) -> HttpResponse | None:
+    """Redirect outside the camp's operational phase."""
+    return _pre_camp_kiosk_operation_redirect(request, participant, kiosk_mode) or _post_camp_kiosk_operation_redirect(
+        request, participant, kiosk_mode
+    )
+
+
 def _clear_kiosk_session(request: HttpRequest) -> None:
     """Remove every participant identity and setup value from a kiosk session."""
     for key in (
@@ -1395,6 +1412,9 @@ def kiosk_self_register(request, kiosk_mode="private"):
     if not camp:
         messages.error(request, "Derzeit ist kein aktives Fliegerlager konfiguriert.")
         return redirect(_kiosk_route(kiosk_mode, "login"))
+    if camp.is_post_camp():
+        messages.error(request, "Das Lager ist beendet. Eine Registrierung ist nicht mehr möglich.")
+        return redirect(_kiosk_route(kiosk_mode, "login"))
 
     form = KioskSelfEnrollmentForm(request.POST)
     if form.is_valid():
@@ -1954,6 +1974,7 @@ def kiosk_home(request, kiosk_mode="private"):
         return redirect(_kiosk_route(kiosk_mode, "login"))
 
     is_pre_camp = participant.camp.is_pre_camp()
+    is_post_camp = participant.camp.is_post_camp()
     active_family_member = _kiosk_family_member(request, participant)
     default_booking_target = active_family_member or participant
     default_booking_target_token = (
@@ -1968,6 +1989,9 @@ def kiosk_home(request, kiosk_mode="private"):
     family_member_form = KioskFamilyMemberForm(prefix="family")
     booking_link_form = KioskBookingLinkInviteForm(inviter=participant, prefix="link")
     if request.method == "POST":
+        if is_post_camp:
+            messages.error(request, "Das Lager ist beendet. Änderungen sind nicht mehr möglich.")
+            return redirect(_kiosk_route(kiosk_mode, "home"))
         if is_pre_camp and request.POST.get("action") not in PRE_CAMP_KIOSK_ACTIONS:
             messages.error(request, "Diese Funktion ist erst ab Lagerbeginn verfügbar.")
             return redirect(_kiosk_route(kiosk_mode, "home"))
@@ -2297,7 +2321,6 @@ def kiosk_home(request, kiosk_mode="private"):
     historic_settlements = list(_participant_historic_settlements(participant))
     latest_settlement = historic_settlements[0] if historic_settlements else None
     archived_settlements = historic_settlements[1:] if len(historic_settlements) > 1 else []
-    is_post_camp = participant.camp.is_post_camp()
     days_until_start = participant.camp.days_until_start()
 
     context = {
@@ -2359,8 +2382,8 @@ def kiosk_shared_expense_request(request, kiosk_mode="private"):
     participant = _kiosk_participant(request)
     if not participant:
         return redirect(_kiosk_route(kiosk_mode, "login"))
-    if pre_camp_redirect := _pre_camp_kiosk_operation_redirect(request, participant, kiosk_mode):
-        return pre_camp_redirect
+    if operation_redirect := _kiosk_operation_redirect(request, participant, kiosk_mode):
+        return operation_redirect
 
     form = SharedExpenseRequestForm(request.POST or None, request.FILES or None)
     if request.method == "POST" and form.is_valid():
@@ -2397,8 +2420,8 @@ def kiosk_shifts(request, kiosk_mode="private"):
     participant = _kiosk_participant(request)
     if not participant:
         return redirect(_kiosk_route(kiosk_mode, "login"))
-    if pre_camp_redirect := _pre_camp_kiosk_operation_redirect(request, participant, kiosk_mode):
-        return pre_camp_redirect
+    if operation_redirect := _kiosk_operation_redirect(request, participant, kiosk_mode):
+        return operation_redirect
 
     today = timezone.localdate()
     if request.method == "POST":

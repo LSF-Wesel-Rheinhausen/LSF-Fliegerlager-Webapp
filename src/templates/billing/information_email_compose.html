@@ -19,7 +19,7 @@
     <section class="panel stack" style="margin-bottom: 1.5rem;">
       <h2>Aktive Kiosk-Ankündigungen</h2>
       <div class="table-responsive">
-        <table class="table">
+        <table class="table responsive-record-table">
           <thead>
             <tr>
               <th>Datum</th>
@@ -32,17 +32,17 @@
           <tbody>
             {% for announcement in announcements %}
               <tr>
-                <td>{{ announcement.created_at|date:"d.m.Y H:i" }}</td>
-                <td><strong>{{ announcement.title }}</strong></td>
-                <td>{{ announcement.body|truncatewords:20 }}</td>
-                <td>
+                <td data-label="Datum">{{ announcement.created_at|date:"d.m.Y H:i" }}</td>
+                <td data-label="Titel"><strong>{{ announcement.title }}</strong></td>
+                <td data-label="Inhalt">{{ announcement.body|truncatewords:20 }}</td>
+                <td data-label="Status">
                   {% if announcement.is_active %}
                     <span class="badge badge-success">Aktiv</span>
                   {% else %}
                     <span class="badge badge-muted">Inaktiv</span>
                   {% endif %}
                 </td>
-                <td style="display: flex; gap: 0.5rem; align-items: center;">
+                <td data-label="Aktionen" class="responsive-record-table__actions">
                   <a class="button button-secondary button-small" href="{% url 'announcement-edit' camp.pk announcement.pk %}">Bearbeiten</a>
                   <form method="post" action="{% url 'announcement-delete' camp.pk announcement.pk %}" style="display: inline;" onsubmit="return confirm('Ankündigung wirklich löschen?');">
                     {% csrf_token %}
