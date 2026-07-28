@@ -34,6 +34,13 @@ MEAL_VARIANT_ORDER = [
     MealSignup.Variant.NORMAL_CHILD,
     MealSignup.Variant.VEGAN_CHILD,
 ]
+MANUAL_CHARGE_KIND_BY_PRICE_RULE_KIND = {
+    PriceRule.Kind.CAMP_FLAT: Charge.Kind.CAMP_FLAT,
+    PriceRule.Kind.NIGHT: Charge.Kind.OTHER,
+    PriceRule.Kind.MEAL: Charge.Kind.FOOD,
+    PriceRule.Kind.DRINK: Charge.Kind.DRINK,
+    PriceRule.Kind.OTHER: Charge.Kind.OTHER,
+}
 
 
 @dataclass(frozen=True)
@@ -110,6 +117,60 @@ def money(value):
 
 def rate(value):
     return (value or ZERO).quantize(Decimal("0.0001"))
+
+
+@transaction.atomic
+def create_manual_charge(
+    participant: Participant,
+    price_rule: PriceRule,
+    quantity: int,
+    description: str,
+) -> Charge:
+    """Create a manual charge from validated price-rule input.
+
+    Args:
+        participant: Active participant who receives the charge.
+        price_rule: Active rule from the participant's camp.
+        quantity: Validated whole-number quantity between 1 and 99.
+        description: Optional operator-provided description.
+
+    Returns:
+        The persisted charge containing a snapshot of the selected rule.
+
+    Raises:
+        ValidationError: If the participant or price rule is not eligible.
+    """
+    locked_participant = Participant.objects.select_for_update().filter(pk=participant.pk).first()
+    if locked_participant is None:
+        raise ValidationError(
+            "Der Teilnehmer ist nicht mehr verfügbar.",
+            code="manual_charge_participant_unavailable",
+        )
+
+    locked_price_rule = PriceRule.objects.select_for_update().filter(pk=price_rule.pk).first()
+    if locked_price_rule is None:
+        raise ValidationError("Die ausgewählte Preisregel ist nicht mehr verfügbar.")
+
+    if locked_participant.archived_at is not None:
+        raise ValidationError(
+            "Für archivierte Teilnehmer können keine Buchungen erfasst werden.",
+            code="manual_charge_participant_archived",
+        )
+    if locked_price_rule.camp_id != locked_participant.camp_id or locked_price_rule.is_archived:
+        raise ValidationError("Die ausgewählte Preisregel ist für diesen Teilnehmer nicht verfügbar.")
+    try:
+        price_rule_kind = PriceRule.Kind(locked_price_rule.kind)
+    except ValueError as error:
+        raise ValidationError("Die ausgewählte Preisregel hat eine ungültige Art.") from error
+
+    return Charge.objects.create(
+        participant=locked_participant,
+        kind=MANUAL_CHARGE_KIND_BY_PRICE_RULE_KIND[price_rule_kind],
+        description=description.strip() or locked_price_rule.name,
+        quantity=Decimal(quantity),
+        unit_price=locked_price_rule.unit_price,
+        foerdersatz=locked_price_rule.foerdersatz,
+    )
 
 
 def is_meal_change_locked(

@@ -346,24 +346,82 @@ test("Admin registers and signs in with a passkey", async ({ context, page }) =>
   expect(failedRequests).toEqual([]);
 });
 
-test("Admin edits a booking and sees the change log", async ({ page }) => {
+test("Admin creates and edits a manual booking and sees the change log", async ({ page }) => {
+  const { browserErrors, failedRequests } = trackPageIssues(page);
   await setupFirstAdmin(page);
   await createCamp(page);
+
+  await page.getByRole("link", { name: "Preise verwalten" }).first().click();
+  await page.getByRole("button", { name: "Getränk anlegen" }).click();
+  const priceDialog = page.locator("dialog#price-rule-dialog");
+  await priceDialog.getByLabel("Name / Bezeichnung").fill("Cola");
+  await priceDialog.getByLabel("Einzelpreis (EUR)").fill("2.50");
+  await priceDialog.getByRole("button", { name: "Speichern", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Preisregel wurde gespeichert.");
+  await page.getByRole("link", { name: "Zurück zum Lager" }).click();
   await createParticipant(page, "Ada", "Lovelace");
 
-  await page.getByRole("link", { name: "Kosten erfassen" }).click();
-  await expect(page.getByRole("heading", { name: "Kostenposition erfassen" })).toBeVisible();
-  await page.getByLabel("Art").selectOption("drink");
-  await page.getByLabel("Beschreibung").fill("Cola");
-  await page.getByLabel("Menge").fill("2");
-  await page.getByLabel("Einzelpreis").fill("2.50");
-  await page.getByLabel("Fördersatz (%)").fill("100");
-  await page.getByRole("button", { name: "Speichern" }).click();
+  const openButton = page.getByRole("button", { name: "Buchung hinzufügen" });
+  await openButton.click();
+
+  const manualChargeDialog = page.getByRole("dialog", { name: "Manuelle Buchung" });
+  await expect(manualChargeDialog).toBeVisible();
+  await expect(manualChargeDialog.getByLabel("Preisregel auswählen")).toBeVisible();
+  await expect(manualChargeDialog.getByLabel("Menge")).toHaveValue("1");
+  await expect(manualChargeDialog.getByLabel("Notiz (optional)")).toBeVisible();
+  expect(await manualChargeDialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+  await assertNoUnexpectedOverflow(page);
+  await page.keyboard.press("Escape");
+  await expect(manualChargeDialog).toBeHidden();
+  await expect(openButton).toBeFocused();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openButton.click();
+  const dialogBounds = await manualChargeDialog.boundingBox();
+  expect(dialogBounds).not.toBeNull();
+  expect(dialogBounds.x).toBeGreaterThanOrEqual(0);
+  expect(dialogBounds.y).toBeGreaterThanOrEqual(0);
+  expect(dialogBounds.x + dialogBounds.width).toBeLessThanOrEqual(391);
+  expect(dialogBounds.y + dialogBounds.height).toBeLessThanOrEqual(845);
+
+  await page.keyboard.press("Escape");
+  await expect(manualChargeDialog).toBeHidden();
+  await expect(openButton).toBeFocused();
+
+  await page.getByRole("switch", { name: "Dunkles Farbschema" }).click();
+  await openButton.click();
+  await assertReadableContrast(manualChargeDialog);
+  await assertNoUnexpectedOverflow(page);
+  await manualChargeDialog.getByLabel("Preisregel auswählen").selectOption({ label: "Cola (2,50 €)" });
+  const quantityInput = manualChargeDialog.getByLabel("Menge");
+  await quantityInput.evaluate((element) => element.removeAttribute("min"));
+  await quantityInput.fill("0");
+  await manualChargeDialog.getByRole("button", { name: "Buchen", exact: true }).click();
+
+  await expect(manualChargeDialog).toBeVisible();
+  expect(await manualChargeDialog.evaluate((element) => element.matches(":modal"))).toBe(true);
+  await expect(manualChargeDialog.getByRole("alert")).toContainText("1");
+  await expect(quantityInput).toBeFocused();
+
+  await quantityInput.fill("2");
+  await manualChargeDialog.getByLabel("Notiz (optional)").fill("Cola");
+  await manualChargeDialog.getByRole("button", { name: "Buchen", exact: true }).click();
 
   await expect(page.getByRole("heading", { name: "Ada Lovelace" })).toBeVisible();
+  await expect(page.getByRole("status")).toContainText("Buchung 'Cola' hinzugefügt.");
   await expect(page.getByRole("heading", { name: "Buchungen", exact: true })).toBeVisible();
-  await expect(page.getByText(/^B#\d{5}$/).first()).toBeVisible();
-  await page.getByRole("link", { name: "Bearbeiten", exact: true }).click();
+  const bookings = page.locator("section.panel").filter({
+    has: page.getByRole("heading", { name: "Buchungen", exact: true }),
+  });
+  const bookingRow = bookings.getByRole("row").filter({
+    has: page.getByRole("cell", { name: "Cola", exact: true }),
+  });
+  await expect(bookingRow.getByRole("cell", { name: /^B#\d{5}$/ })).toBeVisible();
+  await expect(bookingRow.getByRole("cell", { name: "Getränke", exact: true })).toBeVisible();
+  await expect(bookingRow.getByRole("cell", { name: "2,00", exact: true })).toBeVisible();
+  await expect(bookingRow.getByRole("cell", { name: "2,50 €", exact: true })).toBeVisible();
+  await expect(bookingRow.getByRole("cell", { name: "5,00 €", exact: true })).toBeVisible();
+  await bookingRow.getByRole("link", { name: "Bearbeiten", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Buchung bearbeiten" })).toBeVisible();
   await page.getByLabel("Beschreibung").fill("Cola korrigiert");
   await page.getByLabel("Menge").fill("3");
@@ -377,6 +435,8 @@ test("Admin edits a booking and sees the change log", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Änderungsprotokoll" })).toBeVisible();
   await expect(page.getByText("Cola · 2.00 x 2.50")).toBeVisible();
   await expect(page.getByText("Cola korrigiert · 3.00 x 2.50")).toBeVisible();
+  expect(browserErrors).toEqual([]);
+  expect(failedRequests).toEqual([]);
 });
 
 test("Admin archives a participant and creates a versioned settlement run", async ({ page }) => {
