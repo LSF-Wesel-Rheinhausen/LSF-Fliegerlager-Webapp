@@ -68,6 +68,32 @@ def test_settlement_groups_matching_bookings_and_keeps_all_references():
 
 
 @pytest.mark.django_db
+def test_settlement_grouping_preserves_per_booking_rounding():
+    participant = ParticipantFactory(is_youth_group=True)
+    booking_date = date(2026, 7, 28)
+    for _ in range(2):
+        ChargeFactory(
+            participant=participant,
+            kind=Charge.Kind.DRINK,
+            description="Kleine geförderte Buchung",
+            quantity=Decimal("1.00"),
+            unit_price=Decimal("0.03"),
+            foerdersatz=Decimal("0.5000"),
+            occurred_on=booking_date,
+        )
+
+    result = calculate_participant_settlement(participant)
+
+    assert len(result.lines) == 1
+    assert result.lines[0].quantity == Decimal("2.00")
+    assert result.lines[0].gross_total == Decimal("0.06")
+    assert result.lines[0].subsidy_amount == Decimal("0.04")
+    assert result.lines[0].total == Decimal("0.02")
+    assert result.total_subsidy == Decimal("0.04")
+    assert result.total_due == Decimal("0.02")
+
+
+@pytest.mark.django_db
 def test_settlement_uses_creation_date_when_booking_date_is_missing():
     participant = ParticipantFactory()
     charge = ChargeFactory(participant=participant, occurred_on=None)

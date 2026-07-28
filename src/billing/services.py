@@ -515,6 +515,14 @@ def manual_charge_lines(participant):
     charges = Charge.objects.filter(participant=participant, deleted_at__isnull=True).order_by("created_at", "pk")
     for charge in charges:
         occurred_on = charge.occurred_on or timezone.localdate(charge.created_at)
+        individual_line = build_settlement_line(
+            label=charge.description,
+            quantity=money(charge.quantity),
+            unit_price=charge.unit_price,
+            source=f"charge:{charge.pk}",
+            subsidy_rate=charge.foerdersatz,
+            participant=participant,
+        )
         key = (
             occurred_on,
             charge.kind,
@@ -526,28 +534,37 @@ def manual_charge_lines(participant):
             key,
             {
                 "quantity": ZERO,
+                "gross_total": ZERO,
+                "subsidy_amount": ZERO,
+                "total": ZERO,
+                "subsidy_rate": individual_line.subsidy_rate,
                 "charge_ids": [],
                 "booking_references": [],
             },
         )
         group["quantity"] += charge.quantity
+        group["gross_total"] += individual_line.gross_total
+        group["subsidy_amount"] += individual_line.subsidy_amount
+        group["total"] += individual_line.total
         group["charge_ids"].append(charge.pk)
         group["booking_references"].append(charge.booking_reference)
 
     lines = []
     for key, group in grouped_charges.items():
-        occurred_on, _kind, description, unit_price, subsidy_rate = key
+        occurred_on, _kind, description, unit_price, _subsidy_rate = key
         charge_ids = ",".join(str(charge_id) for charge_id in group["charge_ids"])
         lines.append(
-            build_settlement_line(
+            SettlementLine(
                 label=description,
                 quantity=money(group["quantity"]),
-                unit_price=unit_price,
+                unit_price=money(unit_price),
+                gross_total=money(group["gross_total"]),
+                subsidy_rate=group["subsidy_rate"],
+                subsidy_amount=money(group["subsidy_amount"]),
+                total=money(group["total"]),
                 source=f"charges:{charge_ids}",
-                subsidy_rate=subsidy_rate,
-                participant=participant,
                 occurred_on=occurred_on,
-                booking_references=group["booking_references"],
+                booking_references=tuple(group["booking_references"]),
             )
         )
     return lines
