@@ -288,6 +288,94 @@ def test_shared_pin_rate_limit_survives_discarded_client_sessions():
 
 
 @pytest.mark.django_db
+def test_shared_pin_rate_limit_distinguishes_clients_behind_trusted_proxy(settings):
+    settings.KIOSK_ACCESS_TRUSTED_PROXY_ADDRESSES = frozenset({"127.0.0.1"})
+    camp = CampFactory(is_active=True)
+    access_model = apps.get_model("billing", "CampKioskAccess")
+    access = access_model.objects.create(camp=camp)
+    access.set_pin("246810")
+    access.save()
+
+    first_client_responses = [
+        Client().post(
+            reverse("kiosk-access"),
+            {"pin": "000000"},
+            REMOTE_ADDR="127.0.0.1",
+            HTTP_X_FORWARDED_FOR="203.0.113.42",
+        )
+        for _ in range(5)
+    ]
+    second_client_response = Client().post(
+        reverse("kiosk-access"),
+        {"pin": "246810"},
+        REMOTE_ADDR="127.0.0.1",
+        HTTP_X_FORWARDED_FOR="198.51.100.17",
+    )
+
+    assert [response.status_code for response in first_client_responses] == [200, 200, 200, 200, 429]
+    assert second_client_response.status_code == 302
+    assert second_client_response["Location"] == "/kiosk/"
+
+
+@pytest.mark.django_db
+def test_shared_pin_rate_limit_ignores_forwarded_address_from_untrusted_peer(settings):
+    settings.KIOSK_ACCESS_TRUSTED_PROXY_ADDRESSES = frozenset({"127.0.0.1"})
+    camp = CampFactory(is_active=True)
+    access_model = apps.get_model("billing", "CampKioskAccess")
+    access = access_model.objects.create(camp=camp)
+    access.set_pin("246810")
+    access.save()
+
+    responses = [
+        Client().post(
+            reverse("kiosk-access"),
+            {"pin": "000000"},
+            REMOTE_ADDR="192.0.2.10",
+            HTTP_X_FORWARDED_FOR=f"198.51.100.{index}",
+        )
+        for index in range(1, 6)
+    ]
+    blocked_response = Client().post(
+        reverse("kiosk-access"),
+        {"pin": "246810"},
+        REMOTE_ADDR="192.0.2.10",
+        HTTP_X_FORWARDED_FOR="198.51.100.99",
+    )
+
+    assert [response.status_code for response in responses] == [200, 200, 200, 200, 429]
+    assert blocked_response.status_code == 429
+
+
+@pytest.mark.django_db
+def test_shared_pin_rate_limit_rejects_ambiguous_forwarded_chain(settings):
+    settings.KIOSK_ACCESS_TRUSTED_PROXY_ADDRESSES = frozenset({"127.0.0.1"})
+    camp = CampFactory(is_active=True)
+    access_model = apps.get_model("billing", "CampKioskAccess")
+    access = access_model.objects.create(camp=camp)
+    access.set_pin("246810")
+    access.save()
+
+    responses = [
+        Client().post(
+            reverse("kiosk-access"),
+            {"pin": "000000"},
+            REMOTE_ADDR="127.0.0.1",
+            HTTP_X_FORWARDED_FOR=f"198.51.100.{index}, 203.0.113.42",
+        )
+        for index in range(1, 6)
+    ]
+    blocked_response = Client().post(
+        reverse("kiosk-access"),
+        {"pin": "246810"},
+        REMOTE_ADDR="127.0.0.1",
+        HTTP_X_FORWARDED_FOR="198.51.100.99, 203.0.113.42",
+    )
+
+    assert [response.status_code for response in responses] == [200, 200, 200, 200, 429]
+    assert blocked_response.status_code == 429
+
+
+@pytest.mark.django_db
 def test_revoked_cookie_clears_participant_identity_before_redirect(client):
     camp = CampFactory(is_active=True)
     access_model = apps.get_model("billing", "CampKioskAccess")

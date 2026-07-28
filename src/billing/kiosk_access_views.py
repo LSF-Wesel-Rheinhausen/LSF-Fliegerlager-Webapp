@@ -1,4 +1,5 @@
 from datetime import timedelta
+from ipaddress import ip_address
 from typing import Literal, cast
 from urllib.parse import urlsplit
 
@@ -30,14 +31,29 @@ from .views import _kiosk_context
 PinAttemptResult = Literal["accepted", "rejected", "blocked"]
 
 
-def _kiosk_client_key(request: HttpRequest) -> str:
-    """Hash the server-observed peer address without retaining network data."""
+def _kiosk_client_address(request: HttpRequest) -> str:
+    """Resolve one rate-limit address across an explicitly trusted proxy."""
     remote_address = request.META.get("REMOTE_ADDR", "")
     if not isinstance(remote_address, str):
         remote_address = ""
+    if remote_address not in settings.KIOSK_ACCESS_TRUSTED_PROXY_ADDRESSES:
+        return remote_address
+
+    forwarded_address = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    if not isinstance(forwarded_address, str):
+        return remote_address
+    try:
+        return ip_address(forwarded_address.strip()).compressed
+    except ValueError:
+        # A trusted proxy must overwrite X-Forwarded-For with exactly one IP.
+        return remote_address
+
+
+def _kiosk_client_key(request: HttpRequest) -> str:
+    """Hash the resolved client address without retaining network data."""
     return salted_hmac(
         "billing.kiosk-access.client.v1",
-        remote_address,
+        _kiosk_client_address(request),
         algorithm="sha256",
     ).hexdigest()
 
