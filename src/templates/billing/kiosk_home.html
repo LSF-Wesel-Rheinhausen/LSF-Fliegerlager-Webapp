@@ -736,10 +736,24 @@
           <div class="kiosk-empty">
             <strong>Keine Buchung für diesen Tag.</strong>
             {% if not slot.locked %}
-              <p>Du kannst diesen Tag über “Essen buchen” auswählen.</p>
+              <p>Du kannst direkt eine Buchung für diesen Tag eintragen.</p>
             {% else %}
               <p>Dieser Tag ist für Änderungen geschlossen.</p>
             {% endif %}
+          </div>
+        {% endif %}
+        {% if not slot.locked and slot.price_rule %}
+          <div class="dialog-actions">
+            <button
+              type="button"
+              class="button"
+              data-open-meal-dialog
+              data-meal-date="{{ day.date|date:'Y-m-d' }}"
+              data-meal="{{ slot.meal }}"
+              data-meal-label="{{ slot.label }}"
+            >
+              Essen für diesen Tag buchen
+            </button>
           </div>
         {% endif %}
       {% endfor %}
