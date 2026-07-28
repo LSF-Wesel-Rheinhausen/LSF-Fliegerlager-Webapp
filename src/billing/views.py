@@ -62,6 +62,14 @@ from .forms import (
     UserPasswordResetForm,
 )
 from .importers import preview_participants, rows_from_payload, rows_to_payload, save_participants
+from .kiosk_access import (
+    KIOSK_FAMILY_MEMBER_SESSION_KEY,
+    KIOSK_MODE_SESSION_KEY,
+    KIOSK_PARTICIPANT_SESSION_KEY,
+    KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY,
+    KIOSK_PIN_SETUP_SESSION_KEY,
+    clear_kiosk_identity_session,
+)
 from .models import (
     BookingAuditLog,
     Camp,
@@ -126,11 +134,6 @@ from .services import (
 logger = logging.getLogger(__name__)
 signer = Signer()
 User = get_user_model()
-KIOSK_PARTICIPANT_SESSION_KEY = "kiosk_participant_id"
-KIOSK_FAMILY_MEMBER_SESSION_KEY = "kiosk_family_member_id"
-KIOSK_PIN_SETUP_SESSION_KEY = "kiosk_pin_setup_participant_id"
-KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY = "kiosk_pin_setup_family_member_id"
-KIOSK_MODE_SESSION_KEY = "kiosk_mode"
 PRE_CAMP_KIOSK_ACTIONS = frozenset(
     {
         "family_member_create",
@@ -184,13 +187,7 @@ def _kiosk_operation_redirect(request: HttpRequest, participant: Participant, ki
 
 def _clear_kiosk_session(request: HttpRequest) -> None:
     """Remove every participant identity and setup value from a kiosk session."""
-    for key in (
-        KIOSK_PARTICIPANT_SESSION_KEY,
-        KIOSK_FAMILY_MEMBER_SESSION_KEY,
-        KIOSK_PIN_SETUP_SESSION_KEY,
-        KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY,
-    ):
-        request.session.pop(key, None)
+    clear_kiosk_identity_session(request)
 
 
 def _activate_kiosk_mode(request: HttpRequest, kiosk_mode: str) -> None:

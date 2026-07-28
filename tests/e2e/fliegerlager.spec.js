@@ -1,4 +1,5 @@
 const { expect, test } = require("./fixtures");
+const { KIOSK_ACCESS_PIN, configureCampKioskAccess, openKiosk } = require("./kioskAccess");
 const { isBenignPageRequestFailure, requestFailureDetails } = require("./requestFailureFilter");
 
 test.use({ serviceWorkers: "block" });
@@ -198,6 +199,7 @@ async function createCamp(page, name = "Sommerlager", startOffsetDays = 2, durat
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(page.getByRole("heading", { name: "Übersicht" })).toBeVisible();
   await expect(page.getByText(campName).first()).toBeVisible();
+  await configureCampKioskAccess(page);
   return campName;
 }
 
@@ -231,13 +233,54 @@ test("Admin completes setup, login, camp workflow and logout", async ({ page }) 
   await loginAsAdmin(page);
 });
 
+test("Admin configures and centrally revokes every camp kiosk access", async ({ page }) => {
+  await setupFirstAdmin(page);
+  const campName = await createCamp(page, "Lagerzugang");
+  await logout(page);
+
+  await page.goto("/kiosk/login/");
+  await expect(page).toHaveURL(/\/kiosk\/access\/\?next=/);
+  await expect(page.getByRole("heading", { name: "Lager-PIN eingeben" })).toBeVisible();
+  await expect(page.getByLabel("Teilnehmer")).toHaveCount(0);
+  await expect(page.locator("[data-pwa-install]")).toHaveCount(0);
+
+  await page.getByLabel("Lager-PIN").fill("000000");
+  await page.getByRole("button", { name: "Weiter" }).click();
+  await expect(page.getByText("Lager-PIN ist ungültig.")).toBeVisible();
+  await page.getByLabel("Lager-PIN").fill(KIOSK_ACCESS_PIN);
+  await page.getByRole("button", { name: "Weiter" }).click();
+  await expect(page).toHaveURL(/\/kiosk\/login\/$/);
+
+  const accessCookie = (await page.context().cookies()).find(
+    (cookie) => cookie.name === "fliegerlager_kiosk_access",
+  );
+  expect(accessCookie).toBeDefined();
+  expect(accessCookie.httpOnly).toBe(true);
+  expect(accessCookie.sameSite).toBe("Lax");
+  expect(accessCookie.expires).toBeGreaterThan(Date.now() / 1000 + 29 * 24 * 60 * 60);
+
+  await page.goto("/kiosk/access/");
+  await expect(page).toHaveURL(/\/kiosk\/login\/$/);
+
+  await loginAsAdmin(page);
+  await page.getByRole("link", { name: campName, exact: true }).click();
+  await page.getByRole("link", { name: "Lager-PIN verwalten" }).click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Alle Lagerzugänge widerrufen" }).click();
+  await expect(page.getByText("Alle bestehenden Lagerzugänge wurden zentral widerrufen.")).toBeVisible();
+
+  await page.goto("/kiosk/login/");
+  await expect(page).toHaveURL(/\/kiosk\/access\/\?next=/);
+  await expect(page.getByRole("heading", { name: "Lager-PIN eingeben" })).toBeVisible();
+});
+
 test("Pre-camp kiosk stays compact and exposes only preparation areas", async ({ page }) => {
   await setupFirstAdmin(page);
   await createCamp(page, "Vorlager", 2, 4);
   await createParticipant(page, "Ada", "Lovelace");
   await logout(page);
 
-  await page.goto("/kiosk/login/");
+  await openKiosk(page, "/kiosk/login/");
   const countdown = page.locator("[data-pre-camp-countdown]");
   const loginShell = page.locator(".kiosk-login-shell--pre-camp");
   await expect(countdown).toBeVisible();
@@ -418,7 +461,7 @@ test("Kiosk flow: login, pin setup, drink and meal booking", async ({ page }) =>
   await logout(page);
 
   // Kiosk Flow
-  await page.goto("/kiosk/login/");
+  await openKiosk(page, "/kiosk/login/");
   await page.getByLabel("Teilnehmer").selectOption({ label: "Marie Curie" });
   await page.getByLabel("PIN").fill("0000");
   await page.getByRole("button", { name: "Anmelden", exact: true }).click();
@@ -581,7 +624,7 @@ test("Kiosk masonry and expense cards stay responsive and accessible", async ({ 
   await page.setViewportSize({ width: 1280, height: 900 });
   await logout(page);
 
-  await page.goto("/kiosk/login/");
+  await openKiosk(page, "/kiosk/login/");
   await page.getByLabel("Teilnehmer").selectOption({ label: "Marie Curie" });
   await page.getByLabel("PIN").fill("0000");
   await page.getByRole("button", { name: "Anmelden", exact: true }).click();
@@ -610,7 +653,7 @@ test("Kiosk masonry and expense cards stay responsive and accessible", async ({ 
   await expect(page.getByText(/Antrag abgelehnt/)).toBeVisible();
   await logout(page);
 
-  await page.goto("/kiosk/login/");
+  await openKiosk(page, "/kiosk/login/");
   await page.getByLabel("Teilnehmer").selectOption({ label: "Marie Curie" });
   await page.getByLabel("PIN").fill("1234");
   await page.getByRole("button", { name: "Anmelden", exact: true }).click();
@@ -729,7 +772,7 @@ test("Kiosk masonry and expense cards stay responsive and accessible", async ({ 
 
 test("Theme switch persists across kiosk and admin layouts", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "light" });
-  await page.goto("/kiosk/login/");
+  await openKiosk(page, "/kiosk/login/");
 
   const themeToggle = page.locator("[data-theme-toggle]");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
@@ -753,7 +796,7 @@ test("Theme switch persists across kiosk and admin layouts", async ({ page }) =>
 test("Theme follows the system preference without a saved selection", async ({ page, browserName }) => {
   test.skip(browserName === "firefox", "Firefox does not support Playwright color-scheme emulation.");
   await page.emulateMedia({ colorScheme: "dark" });
-  await page.goto("/kiosk/login/");
+  await openKiosk(page, "/kiosk/login/");
 
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(page.locator("[data-theme-toggle]")).toHaveAttribute("aria-checked", "true");
@@ -766,6 +809,7 @@ test("Dark theme keeps contextual surfaces readable and responsive", async ({ pa
   await createCamp(page, "Dark-Mode-Lager");
   const campId = new URL(page.url()).pathname.match(/\/camps\/(\d+)\//)[1];
   await page.locator("[data-theme-toggle]").click();
+  await openKiosk(page, "/kiosk/login/");
 
   const surfaces = [
     { path: "/help/admin/", selector: ".info-callout" },
@@ -965,7 +1009,7 @@ test("Daily shift template and kiosk shift flow", async ({ page }) => {
   await logout(page);
 
   // Login to kiosk
-  await page.goto("/kiosk/login/");
+  await openKiosk(page, "/kiosk/login/");
   await page.getByLabel("Teilnehmer").selectOption({ label: "Albert Einstein" });
   await page.getByLabel("PIN").fill("0000");
   await page.getByRole("button", { name: "Anmelden", exact: true }).click();
@@ -1032,7 +1076,7 @@ for (const viewport of [
     await page.getByRole("button", { name: "Standardpreise speichern" }).click();
     await logout(page);
 
-    await page.goto("/kiosk/login/");
+    await openKiosk(page, "/kiosk/login/");
     await page.getByLabel("Teilnehmer").selectOption({ label: participantName });
     await page.getByLabel("PIN").fill("0000");
     await page.getByRole("button", { name: "Anmelden", exact: true }).click();

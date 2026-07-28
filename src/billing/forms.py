@@ -6,7 +6,7 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, SetPasswordForm, UserCreationForm
 from django.core.exceptions import ValidationError
-from django.core.validators import FileExtensionValidator
+from django.core.validators import FileExtensionValidator, RegexValidator
 from django.db import models, transaction
 
 from .models import (
@@ -34,6 +34,11 @@ MAX_IMPORT_FILE_SIZE = 5 * 1024 * 1024
 MAX_RECEIPT_FILE_SIZE = 5 * 1024 * 1024
 ALLOWED_RECEIPT_EXTENSIONS = {"pdf", "jpg", "jpeg", "png", "heic"}
 ALLOWED_RECEIPT_CONTENT_TYPES = {"application/pdf", "image/jpeg", "image/png", "image/heic", "image/heif"}
+validate_kiosk_camp_pin = RegexValidator(
+    regex=r"\A[0-9]{6,12}\Z",
+    message="Die Lager-PIN muss aus 6 bis 12 Ziffern bestehen.",
+    code="invalid_kiosk_camp_pin",
+)
 
 
 def validate_receipt_upload(upload: Any) -> Any:
@@ -676,6 +681,48 @@ class ParticipantPinForm(forms.Form):
         strip=True,
         widget=forms.PasswordInput(attrs={"autocomplete": "new-password", "inputmode": "numeric"}),
     )
+
+
+class KioskCampAccessForm(forms.Form):
+    """Collect the shared PIN required before any participant kiosk flow."""
+
+    pin = forms.CharField(
+        label="Lager-PIN",
+        strip=True,
+        validators=[validate_kiosk_camp_pin],
+        widget=forms.PasswordInput(
+            attrs={"autocomplete": "current-password", "inputmode": "numeric", "minlength": "6", "maxlength": "12"}
+        ),
+    )
+
+
+class CampKioskAccessAdminForm(forms.Form):
+    """Validate a new shared kiosk PIN entered by an administrator."""
+
+    pin = forms.CharField(
+        label="Neue Lager-PIN",
+        strip=True,
+        validators=[validate_kiosk_camp_pin],
+        widget=forms.PasswordInput(
+            attrs={"autocomplete": "new-password", "inputmode": "numeric", "minlength": "6", "maxlength": "12"}
+        ),
+    )
+    pin_repeat = forms.CharField(
+        label="Lager-PIN wiederholen",
+        strip=True,
+        validators=[validate_kiosk_camp_pin],
+        widget=forms.PasswordInput(
+            attrs={"autocomplete": "new-password", "inputmode": "numeric", "minlength": "6", "maxlength": "12"}
+        ),
+    )
+
+    def clean(self) -> dict[str, Any]:
+        cleaned_data = super().clean() or {}
+        pin = cleaned_data.get("pin")
+        pin_repeat = cleaned_data.get("pin_repeat")
+        if pin and pin_repeat and pin != pin_repeat:
+            self.add_error("pin_repeat", "Die Lager-PINs stimmen nicht überein.")
+        return cleaned_data
 
 
 class KioskLoginForm(forms.Form):

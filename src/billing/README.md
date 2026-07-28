@@ -2,13 +2,14 @@
 
 Domain-App fuer die Fliegerlager-Abrechnung.
 
-- `models.py`: Datenmodell fuer Lager, Nutzerprofile, Teilnehmer, Preisregeln, Kosten, Zahlungen, Auslagen, Mahlzeiten, Kiosk-PINs, Dienstplaene und Abrechnungen.
+- `models.py`: Datenmodell fuer Lager, Nutzerprofile, Teilnehmer, Preisregeln, Kosten, Zahlungen, Auslagen, Mahlzeiten, widerrufbare Lagerzugaenge, Kiosk-PINs, Dienstplaene und Abrechnungen.
 - `services.py`: Rechenlogik fuer Teilnehmer- und Lagerabrechnungen, Foerderung, automatische Lagerpauschalen-Auswahl, Kiosk-Zusammenfassung und Buchungs-Audit-Snapshots.
 - `forms.py`: Django-Formulare mit deutschen Labels fuer Weboberflaeche, Nutzerverwaltung, Preisverwaltung, Mahlzeiten, Dienstvorlagen, Dienste, Kiosk, Login und Ersteinrichtung.
 - `email_credentials.py`: authentifizierte Verschluesselung des im Webinterface gepflegten SMTP-Passworts.
 - `email_forms.py`, `email_views.py`: Admin-Konfiguration, manuelle Empfaengerauswahl, Vorschau und Versandstatus.
 - `email_delivery.py`: manuelle E-Mail-Outbox, Snapshot-PDF-Anhaenge und begrenzte SMTP-Retries.
 - `views.py`: Servergerenderte Views fuer Setup, Nutzerverwaltung, Lager, Preisverwaltung, Mahlzeiten, Dienstplanung, Kiosk, Teilnehmer, Imports und Exports.
+- `kiosk_access.py`, `kiosk_access_views.py`: serverseitige Lager-PIN-Grenze, signiertes Geraete-Cookie, Session-Bereinigung sowie Admin-Konfiguration und zentraler Widerruf.
 - `urls.py`: URL-Routing der Billing-App.
 - `permissions.py`: Rollenpruefung fuer `Admin` und `Bearbeiter`.
 - `roles.py`: Gemeinsame Rollenanlage fuer Websetup und Management-Command.
@@ -26,6 +27,7 @@ Wichtige Modelle:
 - `Camp`, `Participant`, `PriceRule`, `Charge`, `Payment` und `Expense` bilden Lager, Personen, Preise, Kosten, Zahlungen und Auslagen ab.
 - `UserProfile` ergänzt Nutzerkonten um bearbeitbare Anwendungsdaten wie Telefonnummern.
 - `ParticipantPin` speichert gehashte Kiosk-PINs, PIN-Ersteinrichtung, Fehlversuche und zeitlich begrenzte Sperren.
+- `CampKioskAccess` speichert nur den Hash des gemeinsamen Lager-PINs und eine rotierbare Generation, mit der alle ausgestellten Geraete-Cookies gleichzeitig widerrufen werden.
 - `MealSignup` speichert Essensanmeldungen eindeutig pro Teilnehmer, Datum und Mahlzeit.
 - `DrinkEntry` ist ein historisches Getraenke-Modell; aktuelle Kiosk-Getraenkebuchungen werden als `Charge` mit Art `DRINK` gespeichert.
 - `BookingAuditLog` protokolliert Admin-Korrekturen an Buchungen.

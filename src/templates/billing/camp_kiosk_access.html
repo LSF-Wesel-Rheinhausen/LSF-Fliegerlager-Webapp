@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Lager-PIN verwalten{% endblock %}
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1>Lager-PIN verwalten</h1>
+      <p>{{ camp.name }} ({{ camp.year }})</p>
+    </div>
+    <a class="button button-secondary" href="{% url 'camp-detail' camp.pk %}">Zurück zur Übersicht</a>
+  </div>
+
+  <section class="panel stack">
+    <div>
+      <h2>Zugang für Lagerteilnehmer</h2>
+      {% if is_configured %}
+        <p>Der Lagerzugang ist eingerichtet. Letzter zentraler Wechsel oder Widerruf: {{ rotated_at }}.</p>
+      {% else %}
+        <p>Der Lagerzugang ist noch nicht eingerichtet. Bis dahin bleibt der Kiosk gesperrt.</p>
+      {% endif %}
+    </div>
+    <form method="post" class="form-grid">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="form-actions">
+        <button type="submit">{% if is_configured %}Lager-PIN ändern{% else %}Lager-PIN einrichten{% endif %}</button>
+      </div>
+    </form>
+    {% if is_configured %}
+      <div>
+        <h2>Alle Zugänge widerrufen</h2>
+        <p>Die Lager-PIN bleibt unverändert. Sämtliche bereits ausgestellten Lagerzugänge werden sofort ungültig.</p>
+        <form method="post"
+              action="{% url 'camp-kiosk-access-revoke' camp.pk %}"
+              onsubmit="return confirm('Wirklich alle bestehenden Lagerzugänge widerrufen?');">
+          {% csrf_token %}
+          <button type="submit" class="button button-danger">Alle Lagerzugänge widerrufen</button>
+        </form>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

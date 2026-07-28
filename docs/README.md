@@ -12,7 +12,7 @@ Der typische Ablauf:
 2. Teilnehmer werden manuell angelegt oder per CSV/XLSX importiert.
 3. Preisregeln werden im Adminbereich gepflegt, inklusive Lagerpauschalen für 1/2 Wochen und Teilnehmer/Begleitpersonen.
 4. Admins erzeugen Dienste aus täglichen Vorlagen oder pflegen einzelne Dienste; Teilnehmer übernehmen oder tauschen Dienste im Kiosk.
-5. Teilnehmer buchen im Kiosk Getränke und Essen per PIN.
+5. Teilnehmer entsperren den Kiosk mit dem gemeinsamen Lager-PIN und melden sich anschließend mit ihrer persönlichen PIN an.
 6. Die Abrechnung berechnet Brutto, Förderung, Soll, Zahlungen, vorgestreckte Beträge und offenen Saldo.
 7. Ergebnisse können als CSV, Excel-Arbeitsmappe oder PDF exportiert werden.
 
@@ -23,7 +23,7 @@ Der typische Ablauf:
 - Anmeldung: Verwaltungsnutzer können neben Passwort und optionalem Authelia-SSO eigene Passkeys registrieren und benutzernamenlos verwenden.
 - Preisverwaltung: eigene Admin-Route für Lagerpauschalen, Getränke, Standard-Mahlzeitenpreise, abweichende Tagespreise und sonstige Preisregeln.
 - Förderlogik: Jugendgruppenmitglieder erhalten je Position Förderung über `Element-Fördersatz * Hilfssatz * Berufssatz`.
-- Kiosk: privater PIN-Login mit Browser-Session unter `/kiosk/` und zentraler Gemeinschaftsmodus mit automatischer Abmeldung unter `/central/kiosk/`.
+- Kiosk: gemeinsamer Lager-PIN mit persistentem, zentral widerrufbarem Geräte-Cookie vor dem persönlichen PIN-Login; privater Modus unter `/kiosk/` und zentraler Gemeinschaftsmodus mit automatischer Abmeldung unter `/central/kiosk/`.
 - PWA und Push: getrennte Installationen für Verwaltung, private Geräte und zentrale Kiosks; Push ist nur auf privaten Geräten verfügbar und wird über eine Datenbank-Outbox zugestellt.
 - E-Mail: Admins konfigurieren SMTP im Webinterface und bestätigen Informations- oder Rechnungsversand erst nach einer exakten Empfängervorschau.
 - Dienstplanung: tägliche Vorlagen, automatische Generierung über den Lagerzeitraum, manuelle Dienste, Soll-Dienste anhand gebuchter Nächte, Fortschrittsanzeige, Besetzungsauswertung und Tauschangebote.
@@ -49,7 +49,7 @@ Der typische Ablauf:
 
 ## Zentrale Codebereiche
 
-`src/billing/models.py` enthält das Datenmodell für Lager, Nutzerprofile, Teilnehmer, Preisregeln, Kosten, Zahlungen, Auslagen, Kiosk-PINs, Mahlzeiten, Dienstpläne und Abrechnungsläufe.
+`src/billing/models.py` enthält das Datenmodell für Lager, Nutzerprofile, Teilnehmer, Preisregeln, Kosten, Zahlungen, Auslagen, den widerrufbaren Lagerzugang, persönliche Kiosk-PINs, Mahlzeiten, Dienstpläne und Abrechnungsläufe.
 
 `src/billing/services.py` enthält die Abrechnungslogik und Audit-Helfer. Hier werden Lagerpauschalen automatisch ausgewählt, Förderung berechnet, Kiosk-Zusammenfassungen erzeugt und Buchungsänderungen vergleichbar protokolliert.
 

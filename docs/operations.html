@@ -146,8 +146,9 @@ npm run test:local</code></pre>
           <li>Neue Python-Funktionen sollen Type Hints nutzen.</li>
           <li><code>.env</code>-Dateien und echte Secrets dürfen nicht ins Repository.</li>
           <li>Produktionsstarts schlagen ohne starken Secret Key und explizite Hostliste fehl.</li>
-          <li>Der Teilnehmer-Kiosk mit PIN-Selbstvergabe ist nur für kontrollierte Geräte beziehungsweise Netze vorgesehen.</li>
-          <li>Nach fünf falschen PIN-Eingaben wird der Teilnehmerzugang vorübergehend gesperrt.</li>
+          <li>Admins richten vor der Nutzung in der Lagerübersicht einen gemeinsamen 6- bis 12-stelligen Lager-PIN ein. Sie können alle ausgestellten Gerätezugänge zentral widerrufen, ohne persönliche Teilnehmer-PINs zu ändern.</li>
+          <li>Der Kiosk prüft Lager-Cookie und Widerrufsgeneration serverseitig vor jeder Geschäftsroute; schreibende Requests ohne gültigen Zugang werden nicht an die View weitergegeben.</li>
+          <li>Nach fünf falschen Lager- beziehungsweise persönlichen PIN-Eingaben wird der jeweilige Zugang vorübergehend gesperrt.</li>
           <li>Abrechnungs- und Kiosk-Operationen sollen transaktional und ORM-effizient umgesetzt werden.</li>
           <li>Templates sollen semantisches HTML, mobile-first CSS und barrierearme Formulare nutzen.</li>
           <li>Dynamisches Verhalten soll mit modernem Vanilla JavaScript oder bewusst ausgewählten leichten Tools umgesetzt werden.</li>

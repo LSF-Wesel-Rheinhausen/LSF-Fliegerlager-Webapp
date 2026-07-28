@@ -2,20 +2,29 @@
 
 ## Gerätemodi
 
-- `/kiosk/` ist für private Geräte. Die PIN-Anmeldung endet beim Schließen von Browser oder PWA; Push kann nach einer
-  ausdrücklichen Browserfreigabe aktiviert werden.
+- `/kiosk/` ist für private Geräte. Die persönliche PIN-Anmeldung endet beim Schließen von Browser oder PWA; Push kann
+  nach einer ausdrücklichen Browserfreigabe aktiviert werden.
 - `/central/kiosk/` ist für gemeinsam verwendete Tablets. Dieser Modus meldet nach 120 Sekunden Inaktivität ab und
   stellt keine Push-Endpunkte bereit.
 - Verwaltungsseiten, privater Kiosk und zentraler Kiosk besitzen getrennte Manifeste, Service-Worker-Scopes und Caches.
 
+Vor beiden Kiosk-Modi steht der gemeinsame Lager-PIN. Nach erfolgreicher Eingabe erhält das Gerät ein 30 Tage gültiges,
+signiertes `HttpOnly`-Cookie mit `SameSite=Lax`; es enthält weder PIN noch Teilnehmerdaten. Jede geschützte Anfrage
+prüft zusätzlich das aktive Lager und dessen aktuelle Widerrufsgeneration in der Datenbank. Ein Admin kann in der
+Lagerübersicht den PIN ändern oder alle ausgestellten Lagerzugänge gleichzeitig widerrufen. Danach erscheint auf
+jedem Gerät erneut die Lager-PIN-Abfrage, während der persönliche Teilnehmer-PIN unverändert bleibt.
+
 Zentrale Geräte müssen den vollständigen Pfad als Lesezeichen oder PWA-Startseite verwenden. Der Pfad ist kein Secret;
-PIN-Sperre und kurze Session bleiben die Sicherheitsgrenze.
+Lager-PIN, persönlicher PIN und die kurze zentrale Teilnehmer-Session bilden gemeinsam die Sicherheitsgrenze.
 
 ## Offline-Grenzen
 
 Der Service Worker speichert ausschließlich statische CSS-/JavaScript-Dateien, Icons, Logo und die generische
 Offline-Seite. Serverseitig gerenderte Geschäftsdaten, Formulare, Uploads, Exporte und Nicht-GET-Anfragen werden nicht
 gecached oder offline eingereiht. Eine Navigation ohne Netzwerk zeigt deshalb nur den Offline-Hinweis.
+
+Manifest, Service Worker und statische Assets bleiben als technische PWA-Ressourcen erreichbar. Ohne gültigen
+Lagerzugang liefern Geschäftsrouten keine Daten und nehmen keine schreibenden Requests an.
 
 ## Push-Betrieb
 

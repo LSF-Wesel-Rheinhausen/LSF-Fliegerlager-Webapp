@@ -1,3 +1,4 @@
+import uuid
 from collections.abc import Collection
 from datetime import date, time, timedelta
 from decimal import Decimal
@@ -5,6 +6,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import check_password, make_password
+from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
@@ -272,6 +274,7 @@ class Camp(TimeStampedModel):
     def save(self, *args, **kwargs):
         with transaction.atomic():
             camps = Camp.objects.select_for_update()
+            was_active = bool(self.pk and camps.filter(pk=self.pk, is_active=True).exists())
             if self._state.adding and not camps.exists():
                 self.is_active = True
             if self.is_active:
@@ -282,7 +285,16 @@ class Camp(TimeStampedModel):
                 and not camps.exclude(pk=self.pk).filter(is_active=True).exists()
             ):
                 raise ValidationError("Das einzige Lager kann nicht deaktiviert werden.")
-            return super().save(*args, **kwargs)
+            result = super().save(*args, **kwargs)
+            if self.is_active and self.pk and not was_active:
+                now = timezone.now()
+                CampKioskAccess.objects.filter(camp_id=self.pk).update(
+                    generation=uuid.uuid4(),
+                    rotated_at=now,
+                    changed_by=None,
+                    updated_at=now,
+                )
+            return result
 
     def validate_constraints(self, exclude: Collection[str] | None = None) -> None:
         """Exclude unique_active_camp from pre-save model validation since save() deactivates other camps."""
@@ -315,6 +327,40 @@ class Camp(TimeStampedModel):
 
     def __str__(self):
         return f"{self.name} ({self.year})"
+
+
+class CampKioskAccess(TimeStampedModel):
+    """Store the shared, revocable kiosk access credential for one camp."""
+
+    camp = models.OneToOneField(Camp, on_delete=models.CASCADE, related_name="kiosk_access")
+    pin_hash = models.CharField(max_length=256, blank=True)
+    generation = models.UUIDField(default=uuid.uuid4, editable=False)
+    rotated_at = models.DateTimeField(default=timezone.now)
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="changed_camp_kiosk_access",
+    )
+
+    def set_pin(self, raw_pin: str, *, changed_by: User | None = None) -> None:
+        """Hash a new shared PIN and invalidate every previously issued cookie."""
+        self.pin_hash = make_password(raw_pin)
+        self.revoke_all(changed_by=changed_by)
+
+    def check_pin(self, raw_pin: str) -> bool:
+        """Return whether raw_pin matches the configured shared PIN."""
+        return bool(self.pin_hash) and check_password(raw_pin, self.pin_hash)
+
+    def revoke_all(self, *, changed_by: User | None = None) -> None:
+        """Rotate the generation used to validate every issued access cookie."""
+        self.generation = uuid.uuid4()
+        self.rotated_at = timezone.now()
+        self.changed_by = changed_by
+
+    def __str__(self) -> str:
+        return f"Kiosk-Zugang {self.camp}"
 
 
 class Participant(TimeStampedModel):

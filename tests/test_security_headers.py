@@ -11,8 +11,8 @@ from config.middleware import SecurityHeadersMiddleware
 
 
 @pytest.mark.django_db
-def test_common_security_headers_are_set(client):
-    response = client.get(reverse("kiosk-login"))
+def test_common_security_headers_are_set(kiosk_client):
+    response = kiosk_client.get(reverse("kiosk-login"))
     csp = response["Content-Security-Policy"]
 
     assert response.status_code == 200
@@ -31,8 +31,8 @@ def test_common_security_headers_are_set(client):
 
 
 @pytest.mark.django_db
-def test_inline_script_uses_the_response_csp_nonce(client):
-    response = client.get(reverse("kiosk-login"))
+def test_inline_script_uses_the_response_csp_nonce(kiosk_client):
+    response = kiosk_client.get(reverse("kiosk-login"))
     nonce_match = re.search(r"script-src 'self' 'nonce-([^']+)'", response["Content-Security-Policy"])
 
     assert nonce_match is not None
