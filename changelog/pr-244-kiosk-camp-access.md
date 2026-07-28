@@ -5,3 +5,4 @@
 - Lets admins configure the camp PIN and invalidate all issued kiosk access cookies at once.
 - Rejects unauthorized writes before kiosk views run, clears stale participant sessions, and keeps protected responses out of caches.
 - Covers PIN validation, rate limiting, cookie hardening, central revocation, camp reactivation, permissions, responsive UI, and PWA flows.
+- Keeps keyboard focus stable when the manual-booking dialog is closed across supported browsers.
