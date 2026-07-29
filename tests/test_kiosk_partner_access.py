@@ -20,6 +20,7 @@ from billing.models import (
     Settlement,
     SettlementRun,
 )
+from billing.views import _kiosk_checkin_participants, _kiosk_meal_targets, _linked_booking_participants
 from tests.factories import CampFactory, ParticipantFactory, PriceRuleFactory, SuperUserFactory
 
 
@@ -109,6 +110,52 @@ def test_partner_activity_page_explains_scope_and_lists_link(kiosk_client):
     assert "Grace Hopper" in content
     assert "Abrechnung einschließlich Familienpositionen" in content
     assert "Anreise, Abreise und Übernachtungen" in content
+
+
+@pytest.mark.django_db
+def test_linked_households_are_prefetched_once_and_reused_by_target_builders(django_assert_num_queries):
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp)
+    own_child = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Eigenes",
+        last_name="Kind",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    expected_partner_tokens = []
+    for index in range(3):
+        partner = ParticipantFactory(camp=camp)
+        ParticipantBookingLink.objects.create(
+            inviter=participant,
+            invitee=partner,
+            status=ParticipantBookingLink.Status.ACCEPTED,
+        )
+        partner_child = ParticipantFamilyMember.objects.create(
+            guardian=partner,
+            first_name=f"Partnerkind{index}",
+            last_name="Muster",
+            role=ParticipantFamilyMember.Role.CHILD,
+        )
+        expected_partner_tokens.extend([f"participant-{partner.pk}", f"family-{partner_child.pk}"])
+
+    own_family_members = list(participant.family_members.filter(is_active=True))
+    with django_assert_num_queries(2):
+        linked_participants = _linked_booking_participants(participant)
+    with django_assert_num_queries(0):
+        meal_targets = _kiosk_meal_targets(
+            participant,
+            family_members=own_family_members,
+            linked_participants=linked_participants,
+        )
+        checkin_targets = _kiosk_checkin_participants(
+            participant,
+            family_members=own_family_members,
+            linked_participants=linked_participants,
+        )
+
+    expected_tokens = {f"participant-{participant.pk}", f"family-{own_child.pk}", *expected_partner_tokens}
+    assert {target["token"] for target in meal_targets} == expected_tokens
+    assert {target["token"] for target in checkin_targets} == expected_tokens
 
 
 @pytest.mark.django_db
@@ -210,6 +257,33 @@ def test_companion_cannot_manage_partner_authorizations(kiosk_client):
     assert f'name="booking_link_id" value="{invitation.pk}"'.encode() not in home_response.content
     assert response.status_code == 403
     assert ParticipantBookingLink.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_pending_partner_invitation_cannot_be_accepted_after_inviter_is_archived(kiosk_client):
+    camp = CampFactory(is_active=True)
+    inviter = ParticipantFactory(camp=camp, first_name="Archiviert", last_name="Muster")
+    invitee = ParticipantFactory(camp=camp)
+    invitation = ParticipantBookingLink.objects.create(inviter=inviter, invitee=invitee)
+    inviter.archived_at = timezone.now()
+    inviter.save(update_fields=["archived_at", "updated_at"])
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = invitee.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-partner-activity"),
+        {
+            "action": "booking_link_accept",
+            "booking_link_id": invitation.pk,
+        },
+    )
+
+    invitation.refresh_from_db()
+    assert response.status_code == 200
+    assert invitation.status == ParticipantBookingLink.Status.PENDING
+    assert not KioskActionAuditLog.objects.exists()
+    assert inviter.full_name.encode() not in response.content
 
 
 @pytest.mark.django_db

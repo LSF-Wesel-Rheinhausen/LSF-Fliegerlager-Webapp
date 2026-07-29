@@ -13,7 +13,7 @@ from django.contrib.auth.views import LoginView
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.core.signing import BadSignature, Signer
 from django.db import transaction
-from django.db.models import Case, IntegerField, Q, Value, When
+from django.db.models import Case, IntegerField, Prefetch, Q, Value, When
 from django.http import FileResponse, Http404, HttpRequest, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -1614,10 +1614,35 @@ def _accepted_booking_link_between(
 
 
 def _linked_booking_participants(participant):
-    linked_participants = []
-    for link in _accepted_booking_links(participant):
-        linked_participants.append(link.invitee if link.inviter_id == participant.pk else link.inviter)
-    return sorted(linked_participants, key=lambda item: (item.last_name, item.first_name, item.pk))
+    active_family_members = ParticipantFamilyMember.objects.filter(is_active=True).order_by(
+        "last_name",
+        "first_name",
+    )
+    return list(
+        Participant.objects.filter(
+            Q(
+                received_booking_links__inviter=participant,
+                received_booking_links__status=ParticipantBookingLink.Status.ACCEPTED,
+            )
+            | Q(
+                sent_booking_links__invitee=participant,
+                sent_booking_links__status=ParticipantBookingLink.Status.ACCEPTED,
+            ),
+            camp=participant.camp,
+            camp__is_active=True,
+            archived_at__isnull=True,
+        )
+        .select_related("camp")
+        .distinct()
+        .prefetch_related(
+            Prefetch(
+                "family_members",
+                queryset=active_family_members,
+                to_attr="active_kiosk_family_members",
+            )
+        )
+        .order_by("last_name", "first_name", "pk")
+    )
 
 
 def _notify_booking_link_by_id(link_id: int, event: str, actor_id: int) -> None:
@@ -1721,6 +1746,8 @@ def kiosk_partner_activity(request, kiosk_mode="private"):
                     booking_link = booking_links.filter(
                         invitee=participant,
                         inviter__camp=participant.camp,
+                        inviter__camp__is_active=True,
+                        inviter__archived_at__isnull=True,
                         pk=link_id,
                         status=ParticipantBookingLink.Status.PENDING,
                     ).first()
@@ -1770,10 +1797,14 @@ def kiosk_partner_activity(request, kiosk_mode="private"):
     pending_invites = participant.received_booking_links.select_related("inviter").filter(
         status=ParticipantBookingLink.Status.PENDING,
         inviter__camp=participant.camp,
+        inviter__camp__is_active=True,
+        inviter__archived_at__isnull=True,
     )
     sent_invites = participant.sent_booking_links.select_related("invitee").filter(
         status=ParticipantBookingLink.Status.PENDING,
         invitee__camp=participant.camp,
+        invitee__camp__is_active=True,
+        invitee__archived_at__isnull=True,
     )
     accepted_links = list(_accepted_booking_links(participant))
     partner_invoice_accounts = []
@@ -1837,7 +1868,16 @@ def kiosk_partner_activity(request, kiosk_mode="private"):
     )
 
 
-def _kiosk_checkin_participants(participant):
+def _kiosk_checkin_participants(
+    participant,
+    *,
+    family_members=None,
+    linked_participants=None,
+):
+    if family_members is None:
+        family_members = participant.family_members.filter(is_active=True).order_by("last_name", "first_name")
+    if linked_participants is None:
+        linked_participants = _linked_booking_participants(participant)
     targets = [
         {
             "token": f"participant-{participant.pk}",
@@ -1847,7 +1887,7 @@ def _kiosk_checkin_participants(participant):
             "camp": participant.camp,
         }
     ]
-    for member in participant.family_members.filter(is_active=True).order_by("last_name", "first_name"):
+    for member in family_members:
         targets.append(
             {
                 "token": f"family-{member.pk}",
@@ -1857,7 +1897,7 @@ def _kiosk_checkin_participants(participant):
                 "camp": participant.camp,
             }
         )
-    for linked_participant in _linked_booking_participants(participant):
+    for linked_participant in linked_participants:
         targets.append(
             {
                 "token": f"participant-{linked_participant.pk}",
@@ -1867,7 +1907,7 @@ def _kiosk_checkin_participants(participant):
                 "camp": linked_participant.camp,
             }
         )
-        for member in linked_participant.family_members.filter(is_active=True).order_by("last_name", "first_name"):
+        for member in linked_participant.active_kiosk_family_members:
             targets.append(
                 {
                     "token": f"family-{member.pk}",
@@ -2011,7 +2051,16 @@ def _variant_choices_for_booking_target(is_child):
     ]
 
 
-def _kiosk_meal_targets(participant):
+def _kiosk_meal_targets(
+    participant,
+    *,
+    family_members=None,
+    linked_participants=None,
+):
+    if family_members is None:
+        family_members = participant.family_members.filter(is_active=True).order_by("last_name", "first_name")
+    if linked_participants is None:
+        linked_participants = _linked_booking_participants(participant)
     targets = [
         {
             "token": f"participant-{participant.pk}",
@@ -2024,7 +2073,7 @@ def _kiosk_meal_targets(participant):
             "variant_choices": _variant_choices_for_booking_target(participant.is_child),
         }
     ]
-    for member in participant.family_members.filter(is_active=True).order_by("last_name", "first_name"):
+    for member in family_members:
         targets.append(
             {
                 "token": f"family-{member.pk}",
@@ -2037,7 +2086,7 @@ def _kiosk_meal_targets(participant):
                 "variant_choices": _variant_choices_for_booking_target(member.is_child),
             }
         )
-    for linked_participant in _linked_booking_participants(participant):
+    for linked_participant in linked_participants:
         targets.append(
             {
                 "token": f"participant-{linked_participant.pk}",
@@ -2050,7 +2099,7 @@ def _kiosk_meal_targets(participant):
                 "variant_choices": _variant_choices_for_booking_target(linked_participant.is_child),
             }
         )
-        for member in linked_participant.family_members.filter(is_active=True).order_by("last_name", "first_name"):
+        for member in linked_participant.active_kiosk_family_members:
             targets.append(
                 {
                     "token": f"family-{member.pk}",
@@ -2441,8 +2490,20 @@ def kiosk_home(request, kiosk_mode="private"):
     )
     next_order_date = next_catering_order_date()
     next_meal_order = meal_order_for_date(participant.camp, next_order_date)
-    meal_targets = _kiosk_meal_targets(participant)
-    checkin_participants = _kiosk_checkin_participants(participant)
+    family_members = list(
+        participant.family_members.select_related("pin").filter(is_active=True).order_by("last_name", "first_name")
+    )
+    linked_participants = _linked_booking_participants(participant)
+    meal_targets = _kiosk_meal_targets(
+        participant,
+        family_members=family_members,
+        linked_participants=linked_participants,
+    )
+    checkin_participants = _kiosk_checkin_participants(
+        participant,
+        family_members=family_members,
+        linked_participants=linked_participants,
+    )
     quick_form = QuickBookingForm(participant=participant, prefix="quick")
     meal_form = MealBookingForm(participant=participant, prefix="meal")
     family_member_form = KioskFamilyMemberForm(prefix="family")
@@ -2835,6 +2896,8 @@ def kiosk_home(request, kiosk_mode="private"):
     pending_invites = participant.received_booking_links.select_related("inviter").filter(
         status=ParticipantBookingLink.Status.PENDING,
         inviter__camp=participant.camp,
+        inviter__camp__is_active=True,
+        inviter__archived_at__isnull=True,
     )
     announcements = list(participant.camp.announcements.filter(is_active=True)[:3])
     historic_settlements = list(_participant_historic_settlements(participant))
@@ -2872,9 +2935,7 @@ def kiosk_home(request, kiosk_mode="private"):
         "quick_form": quick_form,
         "meal_targets": meal_targets,
         "checkin_participants": checkin_participants,
-        "family_members": participant.family_members.select_related("pin")
-        .filter(is_active=True)
-        .order_by("last_name", "first_name"),
+        "family_members": family_members,
         "pending_invites": pending_invites,
         **_kiosk_context(kiosk_mode),
         "kiosk_contacts": admin_interface_contacts(User),

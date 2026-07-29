@@ -17,6 +17,8 @@
   verwendet bei Snacks den passenden Kinder-, Begleit- oder Erwachsenenpreis.
 - Hält Audittexte frei von Personennamen und verhindert das Löschen eines
   Lagers, solange dessen Partner-Auditverlauf besteht.
+- Lädt Partnerhaushalte einmalig für Buchungs- und Check-in-Ziele und weist
+  offene Einladungen archivierter Teilnehmer ab.
 - Lässt PIN-, Sicherheits-, Identitäts- und Administrationsfunktionen
   ausdrücklich außerhalb der Partner-Vollmacht.
 
