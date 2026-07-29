@@ -18,8 +18,6 @@ from .models import (
     Participant,
     ParticipantBookingLink,
     ParticipantFamilyMember,
-    ParticipantFamilyMemberPin,
-    ParticipantPin,
     Payment,
     PriceRule,
     Settlement,
@@ -83,8 +81,6 @@ class ParticipantAdmin(admin.ModelAdmin):
         return False
 
 
-admin.site.register(ParticipantPin)
-admin.site.register(ParticipantFamilyMemberPin)
 admin.site.register(UserProfile)
 
 

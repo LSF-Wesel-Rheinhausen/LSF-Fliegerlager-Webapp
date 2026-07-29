@@ -244,7 +244,6 @@ urlpatterns = [
         {"kiosk_mode": "private"},
         name="kiosk-shared-expense-request",
     ),
-    path("kiosk/pin/", views.kiosk_pin_setup, {"kiosk_mode": "private"}, name="kiosk-pin-setup"),
     path("kiosk/logout/", views.kiosk_logout, {"kiosk_mode": "private"}, name="kiosk-logout"),
     path("central/kiosk/manifest.webmanifest", pwa_views.manifest, {"surface": "central"}, name="pwa-manifest-central"),
     path(
@@ -283,6 +282,5 @@ urlpatterns = [
         {"kiosk_mode": "central"},
         name="central-kiosk-shared-expense-request",
     ),
-    path("central/kiosk/pin/", views.kiosk_pin_setup, {"kiosk_mode": "central"}, name="central-kiosk-pin-setup"),
     path("central/kiosk/logout/", views.kiosk_logout, {"kiosk_mode": "central"}, name="central-kiosk-logout"),
 ]

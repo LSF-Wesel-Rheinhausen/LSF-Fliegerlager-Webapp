@@ -77,10 +77,10 @@
     </table>
   </section>
 
-  {% if pending_registrations %}
+  {% if pending_registration_rows %}
     <section class="panel" style="margin-bottom: 1.5rem; border-left: 4px solid var(--accent);">
-      <h2 style="font-size: 1.25rem; margin-bottom: 0.5rem;">⏳ Offene Registrierungsanfragen ({{ pending_registrations|length }})</h2>
-      <p style="color: var(--muted); font-size: 0.9rem;">Folgende Teilnehmer haben sich selbst über den Kiosk registriert und warten auf deine Freigabe:</p>
+      <h2 style="font-size: 1.25rem; margin-bottom: 0.5rem;">⏳ Offene Registrierungsanfragen ({{ pending_registration_rows|length }})</h2>
+      <p style="color: var(--muted); font-size: 0.9rem;">Prüfe vor der Freigabe die PIN-Einrichtung und alle preisrelevanten Merkmale.</p>
       <table>
         <thead>
           <tr>
@@ -89,11 +89,12 @@
             <th>Telefon</th>
             <th>Anreise / Abreise</th>
             <th>Eingereicht am</th>
-            <th>Aktionen</th>
+            <th>Prüfung und Aktionen</th>
           </tr>
         </thead>
         <tbody>
-          {% for p in pending_registrations %}
+          {% for row in pending_registration_rows %}
+            {% with p=row.participant approval_form=row.approval_form %}
             <tr>
               <td><strong>{{ p.full_name }}</strong></td>
               <td>{{ p.email|default:"-" }}</td>
@@ -104,10 +105,39 @@
                 {% if p.departure_date %}{{ p.departure_date|date:"d.m.Y" }}{% else %}-{% endif %}
               </td>
               <td>{{ p.created_at|date:"d.m.Y H:i" }}</td>
-              <td style="display: flex; gap: 0.5rem;">
+              <td>
                 <form method="post" action="{% url 'participant-approve-registration' camp.pk p.pk %}">
                   {% csrf_token %}
-                  <button type="submit" class="button button-small button-success">✅ Freigeben</button>
+                  <fieldset>
+                    <legend>Preismerkmale</legend>
+                    <label for="approval-{{ p.pk }}-is-child">
+                      <input id="approval-{{ p.pk }}-is-child" type="checkbox" name="is_child"{% if approval_form.is_child.value %} checked{% endif %}>
+                      Kind
+                    </label>
+                    <label for="approval-{{ p.pk }}-is-youth-group">
+                      <input id="approval-{{ p.pk }}-is-youth-group" type="checkbox" name="is_youth_group"{% if approval_form.is_youth_group.value %} checked{% endif %}>
+                      Jugendgruppe
+                    </label>
+                    <label for="approval-{{ p.pk }}-is-companion">
+                      <input id="approval-{{ p.pk }}-is-companion" type="checkbox" name="is_companion"{% if approval_form.is_companion.value %} checked{% endif %}>
+                      Begleitperson
+                    </label>
+                  </fieldset>
+                  <p>
+                    {% if p.pin.pin_hash and not p.pin.must_set_pin %}
+                      <strong>PIN eingerichtet</strong>
+                    {% else %}
+                      <strong>PIN fehlt – Freigabe ist gesperrt</strong>
+                    {% endif %}
+                    · <a href="{% url 'participant-detail' p.pk %}">Profil und PIN öffnen</a>
+                  </p>
+                  <label for="approval-{{ p.pk }}-confirmed">
+                    <input id="approval-{{ p.pk }}-confirmed" type="checkbox" name="price_attributes_confirmed" required>
+                    Preisrelevante Angaben geprüft
+                  </label>
+                  <div class="inline-actions">
+                    <button type="submit" class="button button-small button-success">✅ Freigeben</button>
+                  </div>
                 </form>
                 <form method="post" action="{% url 'participant-reject-registration' camp.pk p.pk %}">
                   {% csrf_token %}
@@ -115,6 +145,7 @@
                 </form>
               </td>
             </tr>
+            {% endwith %}
           {% endfor %}
         </tbody>
       </table>

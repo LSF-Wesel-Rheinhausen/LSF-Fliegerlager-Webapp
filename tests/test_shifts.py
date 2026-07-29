@@ -101,6 +101,24 @@ def test_bulk_delete_scoped_to_camp(admin_client, active_camp, db):
 
 
 @pytest.mark.django_db
+def test_bulk_delete_rejects_non_numeric_shift_id_without_deleting_valid_selection(admin_client, active_camp):
+    shift = Shift.objects.create(
+        camp=active_camp,
+        name="Dienst",
+        date=datetime.date.today(),
+        required_slots=1,
+    )
+
+    response = admin_client.post(
+        reverse("shift-bulk-delete", args=[active_camp.pk]),
+        {"shift_ids": [shift.pk, "not-an-id"]},
+    )
+
+    assert response.status_code == 302
+    assert Shift.objects.filter(pk=shift.pk).exists()
+
+
+@pytest.mark.django_db
 def test_generate_shifts_from_templates(admin_client, active_camp):
     from billing.models import DailyShiftException, DailyShiftTemplate
 

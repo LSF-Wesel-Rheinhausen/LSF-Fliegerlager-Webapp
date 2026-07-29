@@ -10,6 +10,7 @@ Domain-App fuer die Fliegerlager-Abrechnung.
 - `email_delivery.py`: manuelle E-Mail-Outbox, Snapshot-PDF-Anhaenge und begrenzte SMTP-Retries.
 - `views.py`: Servergerenderte Views fuer Setup, Nutzerverwaltung, Lager, Preisverwaltung, Mahlzeiten, Dienstplanung, Kiosk, Teilnehmer, Imports und Exports.
 - `kiosk_access.py`, `kiosk_access_views.py`: serverseitige Lager-PIN-Grenze, signiertes Geraete-Cookie, Session-Bereinigung sowie Admin-Konfiguration und zentraler Widerruf.
+- `kiosk_security.py`: datensparsame Client-Schluessel sowie persistente Drosselung von Lagerzugang und Kiosk-Selbstregistrierung.
 - `urls.py`: URL-Routing der Billing-App.
 - `permissions.py`: Rollenpruefung fuer `Admin` und `Bearbeiter`.
 - `roles.py`: Gemeinsame Rollenanlage fuer Websetup und Management-Command.
@@ -26,8 +27,9 @@ Wichtige Modelle:
 
 - `Camp`, `Participant`, `PriceRule`, `Charge`, `Payment` und `Expense` bilden Lager, Personen, Preise, Kosten, Zahlungen und Auslagen ab.
 - `UserProfile` ergänzt Nutzerkonten um bearbeitbare Anwendungsdaten wie Telefonnummern.
-- `ParticipantPin` speichert gehashte Kiosk-PINs, PIN-Ersteinrichtung, Fehlversuche und zeitlich begrenzte Sperren.
+- `ParticipantPin` und `ParticipantFamilyMemberPin` speichern gehashte persönliche Kiosk-PINs, Fehlversuche und zeitlich begrenzte Sperren. PIN-Hash-Modelle werden nicht im generischen Django-Admin angeboten.
 - `CampKioskAccess` speichert nur den Hash des gemeinsamen Lager-PINs und eine rotierbare Generation, mit der alle ausgestellten Geraete-Cookies gleichzeitig widerrufen werden.
+- `CampKioskAccessAttempt` und `CampKioskRegistrationAttempt` begrenzen PIN-Fehlversuche beziehungsweise Selbstregistrierungen persistent pro Lagerzugang und gehashtem Client-Schluessel.
 - `MealSignup` speichert Essensanmeldungen eindeutig pro Teilnehmer, Datum und Mahlzeit.
 - `DrinkEntry` ist ein historisches Getraenke-Modell; aktuelle Kiosk-Getraenkebuchungen werden als `Charge` mit Art `DRINK` gespeichert.
 - `BookingAuditLog` protokolliert Admin-Korrekturen an Buchungen.

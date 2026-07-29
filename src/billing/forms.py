@@ -788,8 +788,6 @@ class KioskLoginForm(forms.Form):
             ("", "Bitte Teilnehmer auswählen"),
             *((target["token"], target["label"]) for target in self.login_targets),
         ]
-        self.missing_pin_participant = None
-        self.missing_pin_family_member = None
 
     def _login_targets(self) -> list[dict[str, Any]]:
         participants = (
@@ -848,9 +846,10 @@ class KioskLoginForm(forms.Form):
                 except ParticipantFamilyMemberPin.DoesNotExist:
                     family_pin = None
                 if family_pin is None or family_pin.must_set_pin or not family_pin.pin_hash:
-                    self.missing_pin_participant = participant
-                    self.missing_pin_family_member = family_member
-                    raise forms.ValidationError("Für diesen Begleiter ist noch kein PIN gesetzt.", code="missing_pin")
+                    raise forms.ValidationError(
+                        "Die PIN muss zuerst durch den zugehörigen Teilnehmer gesetzt werden.",
+                        code="missing_pin",
+                    )
                 if family_pin.is_locked:
                     raise forms.ValidationError(
                         "Zu viele Fehlversuche. Bitte warte fünf Minuten und versuche es erneut.", code="pin_locked"
@@ -865,8 +864,10 @@ class KioskLoginForm(forms.Form):
             except ParticipantPin.DoesNotExist:
                 participant_pin = None
             if participant_pin is None or participant_pin.must_set_pin or not participant_pin.pin_hash:
-                self.missing_pin_participant = participant
-                raise forms.ValidationError("Für diesen Teilnehmer ist noch kein PIN gesetzt.", code="missing_pin")
+                raise forms.ValidationError(
+                    "Die PIN muss zuerst von der Lagerleitung gesetzt werden.",
+                    code="missing_pin",
+                )
             if participant_pin.is_locked:
                 raise forms.ValidationError(
                     "Zu viele Fehlversuche. Bitte warte fünf Minuten und versuche es erneut.", code="pin_locked"
@@ -878,7 +879,9 @@ class KioskLoginForm(forms.Form):
         return cleaned_data
 
 
-class KioskPinSetupForm(forms.Form):
+class KioskFamilyMemberPinForm(forms.Form):
+    """Set a raw PIN for an existing companion owned by the kiosk participant."""
+
     pin = forms.CharField(
         label="Neuer PIN",
         min_length=4,
@@ -904,6 +907,21 @@ class KioskPinSetupForm(forms.Form):
 
 
 class KioskSelfEnrollmentForm(forms.ModelForm):
+    pin = forms.CharField(
+        label="Persönliche PIN",
+        min_length=4,
+        max_length=12,
+        strip=True,
+        widget=forms.PasswordInput(attrs={"autocomplete": "new-password", "inputmode": "numeric"}),
+    )
+    pin_repeat = forms.CharField(
+        label="PIN wiederholen",
+        min_length=4,
+        max_length=12,
+        strip=True,
+        widget=forms.PasswordInput(attrs={"autocomplete": "new-password", "inputmode": "numeric"}),
+    )
+
     class Meta:
         model = Participant
         fields = [
@@ -934,6 +952,34 @@ class KioskSelfEnrollmentForm(forms.ModelForm):
             "arrival_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "departure_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "notes": forms.Textarea(attrs={"rows": 2}),
+        }
+
+    def clean(self) -> dict[str, Any]:
+        """Require matching PIN values before creating the pending participant."""
+        cleaned_data = super().clean() or {}
+        pin = cleaned_data.get("pin")
+        pin_repeat = cleaned_data.get("pin_repeat")
+        if pin and pin_repeat and pin != pin_repeat:
+            self.add_error("pin_repeat", "Die PINs stimmen nicht überein.")
+        return cleaned_data
+
+
+class ParticipantRegistrationApprovalForm(forms.ModelForm):
+    """Require an explicit administrative decision on price-relevant attributes."""
+
+    price_attributes_confirmed = forms.BooleanField(
+        label="Preisrelevante Angaben geprüft",
+        help_text="Kind, Jugendgruppe und Begleitperson wurden vor der Freigabe kontrolliert.",
+        required=True,
+    )
+
+    class Meta:
+        model = Participant
+        fields = ["is_child", "is_youth_group", "is_companion"]
+        labels = {
+            "is_child": "Kind",
+            "is_youth_group": "Jugendgruppe",
+            "is_companion": "Begleitperson",
         }
 
 
@@ -977,6 +1023,24 @@ class QuickBookingForm(forms.Form):
 class KioskFamilyMemberForm(forms.ModelForm):
     """Create a kiosk-only family member for bundled participant billing."""
 
+    pin = forms.CharField(
+        label="Persönliche PIN für Begleitperson",
+        min_length=4,
+        max_length=12,
+        strip=True,
+        required=False,
+        help_text="Nur für Begleitpersonen mit eigenem Kiosk-Login erforderlich.",
+        widget=forms.PasswordInput(attrs={"autocomplete": "new-password", "inputmode": "numeric"}),
+    )
+    pin_repeat = forms.CharField(
+        label="PIN wiederholen",
+        min_length=4,
+        max_length=12,
+        strip=True,
+        required=False,
+        widget=forms.PasswordInput(attrs={"autocomplete": "new-password", "inputmode": "numeric"}),
+    )
+
     class Meta:
         model = ParticipantFamilyMember
         fields = ["first_name", "last_name", "role"]
@@ -985,6 +1049,22 @@ class KioskFamilyMemberForm(forms.ModelForm):
             "last_name": "Nachname",
             "role": "Rolle",
         }
+
+    def clean(self) -> dict[str, Any]:
+        """Require a confirmed PIN when the family member receives a login."""
+        cleaned_data = super().clean() or {}
+        if cleaned_data.get("role") != ParticipantFamilyMember.Role.COMPANION:
+            return cleaned_data
+
+        pin = cleaned_data.get("pin")
+        pin_repeat = cleaned_data.get("pin_repeat")
+        if not pin:
+            self.add_error("pin", "Begleitpersonen benötigen eine PIN.")
+        if not pin_repeat:
+            self.add_error("pin_repeat", "Bitte wiederhole die PIN.")
+        if pin and pin_repeat and pin != pin_repeat:
+            self.add_error("pin_repeat", "Die PINs stimmen nicht überein.")
+        return cleaned_data
 
 
 class KioskBookingLinkInviteForm(forms.Form):

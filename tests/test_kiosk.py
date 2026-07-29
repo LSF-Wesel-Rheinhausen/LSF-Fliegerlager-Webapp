@@ -4,9 +4,15 @@ from pathlib import Path
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.urls import reverse
+from django.urls import resolve, reverse
 from django.utils import timezone
 
+from billing.kiosk_access import (
+    KIOSK_FAMILY_MEMBER_SESSION_KEY,
+    KIOSK_PARTICIPANT_SESSION_KEY,
+    KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY,
+    KIOSK_PIN_SETUP_SESSION_KEY,
+)
 from billing.models import (
     Charge,
     Expense,
@@ -18,15 +24,11 @@ from billing.models import (
     ParticipantFamilyMember,
     Payment,
     PriceRule,
+    Shift,
+    ShiftAssignment,
     UserProfile,
 )
 from billing.services import create_settlement_run
-from billing.views import (
-    KIOSK_FAMILY_MEMBER_SESSION_KEY,
-    KIOSK_PARTICIPANT_SESSION_KEY,
-    KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY,
-    KIOSK_PIN_SETUP_SESSION_KEY,
-)
 from tests.factories import CampFactory, ExpenseFactory, ParticipantFactory, PriceRuleFactory, UserFactory
 
 
@@ -61,43 +63,26 @@ def test_kiosk_login_rejects_empty_participant_placeholder(kiosk_client):
 
 
 @pytest.mark.django_db
-def test_kiosk_login_redirects_to_pin_setup_when_pin_is_missing(kiosk_client):
+def test_kiosk_login_rejects_participant_without_preconfigured_pin(kiosk_client):
     participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
 
     response = kiosk_client.post(
         reverse("kiosk-login"), {"participant": f"participant-{participant.pk}", "pin": "1234"}
     )
 
-    assert response.status_code == 302
-    assert response["Location"] == reverse("kiosk-pin-setup")
-    assert kiosk_client.session[KIOSK_PIN_SETUP_SESSION_KEY] == participant.pk
+    assert response.status_code == 200
+    assert b"Die PIN muss zuerst von der Lagerleitung gesetzt werden." in response.content
+    assert KIOSK_PIN_SETUP_SESSION_KEY not in kiosk_client.session
     assert KIOSK_PARTICIPANT_SESSION_KEY not in kiosk_client.session
 
 
-@pytest.mark.django_db
-def test_kiosk_pin_setup_sets_pin_and_logs_participant_in(kiosk_client, settings):
-    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
-    session = kiosk_client.session
-    session[KIOSK_PIN_SETUP_SESSION_KEY] = participant.pk
-    session.save()
-
-    response = kiosk_client.post(
-        reverse("kiosk-pin-setup"),
-        {"pin": "2468", "pin_repeat": "2468"},
-    )
-
-    assert response.status_code == 302
-    assert response["Location"] == reverse("kiosk-home")
-    participant.refresh_from_db()
-    assert participant.pin.check_pin("2468") is True
-    assert kiosk_client.session[KIOSK_PARTICIPANT_SESSION_KEY] == participant.pk
-    assert KIOSK_PIN_SETUP_SESSION_KEY not in kiosk_client.session
-    assert kiosk_client.session.get_expire_at_browser_close() is False
-    assert kiosk_client.session.get_expiry_age() == settings.SESSION_COOKIE_AGE
+def test_kiosk_pin_setup_routes_are_not_exposed():
+    assert resolve("/kiosk/pin/").url_name == "page-not-found"
+    assert resolve("/central/kiosk/pin/").url_name == "page-not-found"
 
 
 @pytest.mark.django_db
-def test_kiosk_login_redirects_companion_to_pin_setup_when_pin_is_missing(kiosk_client):
+def test_kiosk_login_rejects_companion_without_preconfigured_pin(kiosk_client):
     participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
     companion = ParticipantFamilyMember.objects.create(
         guardian=participant,
@@ -108,15 +93,61 @@ def test_kiosk_login_redirects_companion_to_pin_setup_when_pin_is_missing(kiosk_
 
     response = kiosk_client.post(reverse("kiosk-login"), {"participant": f"family-{companion.pk}", "pin": "1234"})
 
-    assert response.status_code == 302
-    assert response["Location"] == reverse("kiosk-pin-setup")
-    assert kiosk_client.session[KIOSK_PIN_SETUP_SESSION_KEY] == participant.pk
-    assert kiosk_client.session[KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY] == companion.pk
+    assert response.status_code == 200
+    assert b"Die PIN muss zuerst durch den zugeh\xc3\xb6rigen Teilnehmer gesetzt werden." in response.content
+    assert KIOSK_PIN_SETUP_SESSION_KEY not in kiosk_client.session
+    assert KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY not in kiosk_client.session
     assert KIOSK_PARTICIPANT_SESSION_KEY not in kiosk_client.session
 
 
 @pytest.mark.django_db
-def test_kiosk_pin_setup_sets_companion_pin_and_logs_guardian_in(kiosk_client):
+def test_guardian_sets_pin_when_creating_companion(kiosk_client):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "family_member_create",
+            "family-first_name": "Grace",
+            "family-last_name": "Hopper",
+            "family-role": ParticipantFamilyMember.Role.COMPANION,
+            "family-pin": "2468",
+            "family-pin_repeat": "2468",
+        },
+    )
+
+    assert response.status_code == 302
+    companion = ParticipantFamilyMember.objects.get(guardian=participant, first_name="Grace")
+    assert companion.pin.check_pin("2468") is True
+
+
+@pytest.mark.django_db
+def test_guardian_cannot_create_companion_without_pin(kiosk_client):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "family_member_create",
+            "family-first_name": "Grace",
+            "family-last_name": "Hopper",
+            "family-role": ParticipantFamilyMember.Role.COMPANION,
+        },
+    )
+
+    assert response.status_code == 200
+    assert b"Begleitpersonen ben\xc3\xb6tigen eine PIN." in response.content
+    assert not ParticipantFamilyMember.objects.filter(guardian=participant, first_name="Grace").exists()
+
+
+@pytest.mark.django_db
+def test_guardian_can_set_pin_for_existing_companion(kiosk_client):
     participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
     companion = ParticipantFamilyMember.objects.create(
         guardian=participant,
@@ -125,23 +156,186 @@ def test_kiosk_pin_setup_sets_companion_pin_and_logs_guardian_in(kiosk_client):
         role=ParticipantFamilyMember.Role.COMPANION,
     )
     session = kiosk_client.session
-    session[KIOSK_PIN_SETUP_SESSION_KEY] = participant.pk
-    session[KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session.save()
 
     response = kiosk_client.post(
-        reverse("kiosk-pin-setup"),
-        {"pin": "2468", "pin_repeat": "2468"},
+        reverse("kiosk-home"),
+        {
+            "action": "family_member_pin_set",
+            "family_member_id": companion.pk,
+            "family-pin": "8642",
+            "family-pin_repeat": "8642",
+        },
     )
 
     assert response.status_code == 302
-    assert response["Location"] == reverse("kiosk-home")
     companion.pin.refresh_from_db()
-    assert companion.pin.check_pin("2468") is True
-    assert kiosk_client.session[KIOSK_PARTICIPANT_SESSION_KEY] == participant.pk
-    assert kiosk_client.session[KIOSK_FAMILY_MEMBER_SESSION_KEY] == companion.pk
-    assert KIOSK_PIN_SETUP_SESSION_KEY not in kiosk_client.session
-    assert KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY not in kiosk_client.session
+    assert companion.pin.check_pin("8642") is True
+
+
+@pytest.mark.django_db
+def test_guardian_cannot_set_pin_for_another_participants_companion(kiosk_client):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    other_participant = ParticipantFactory(camp=participant.camp, first_name="Alan", last_name="Turing")
+    companion = ParticipantFamilyMember.objects.create(
+        guardian=other_participant,
+        first_name="Grace",
+        last_name="Hopper",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "family_member_pin_set",
+            "family_member_id": companion.pk,
+            "family-pin": "8642",
+            "family-pin_repeat": "8642",
+        },
+    )
+
+    assert response.status_code == 200
+    assert b"Begleitperson wurde nicht gefunden." in response.content
+    companion.pin.refresh_from_db()
+    assert companion.pin.pin_hash == ""
+
+
+@pytest.mark.django_db
+def test_companion_cannot_set_pin_for_another_companion_of_same_guardian(kiosk_client):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    authenticated_companion = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Grace",
+        last_name="Hopper",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    target_companion = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Katherine",
+        last_name="Johnson",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    target_companion.pin.set_pin("1357")
+    target_companion.pin.save()
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = authenticated_companion.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "family_member_pin_set",
+            "family_member_id": target_companion.pk,
+            "family-pin": "8642",
+            "family-pin_repeat": "8642",
+        },
+    )
+
+    assert response.status_code == 403
+    target_companion.pin.refresh_from_db()
+    assert target_companion.pin.check_pin("1357") is True
+    assert target_companion.pin.check_pin("8642") is False
+
+
+@pytest.mark.django_db
+def test_companion_cannot_create_another_companion_for_guardian(kiosk_client):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    authenticated_companion = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Grace",
+        last_name="Hopper",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = authenticated_companion.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "family_member_create",
+            "family-first_name": "Katherine",
+            "family-last_name": "Johnson",
+            "family-role": ParticipantFamilyMember.Role.COMPANION,
+            "family-pin": "8642",
+            "family-pin_repeat": "8642",
+        },
+    )
+
+    assert response.status_code == 403
+    assert not ParticipantFamilyMember.objects.filter(
+        guardian=participant,
+        first_name="Katherine",
+        last_name="Johnson",
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_companion_cannot_deactivate_guardians_family_member(kiosk_client):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    authenticated_companion = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Grace",
+        last_name="Hopper",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    target_family_member = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Katherine",
+        last_name="Johnson",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = authenticated_companion.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "family_member_deactivate",
+            "family_member_id": target_family_member.pk,
+        },
+    )
+
+    assert response.status_code == 403
+    target_family_member.refresh_from_db()
+    assert target_family_member.is_active is True
+
+
+@pytest.mark.django_db
+def test_companion_does_not_see_family_management(kiosk_client):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    authenticated_companion = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Grace",
+        last_name="Hopper",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Katherine",
+        last_name="Johnson",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = authenticated_companion.pk
+    session.save()
+
+    response = kiosk_client.get(reverse("kiosk-home"))
+
+    assert response.status_code == 200
+    assert b'name="action" value="family_member_pin_set"' not in response.content
+    assert b'name="action" value="family_member_create"' not in response.content
+    assert b'name="action" value="family_member_deactivate"' not in response.content
+    assert b'data-dialog-target="family-management-dialog"' not in response.content
 
 
 @pytest.mark.django_db
@@ -1196,20 +1390,6 @@ def test_kiosk_meal_booking_dialog_keeps_child_only_price_day_selectable(kiosk_c
 
 
 @pytest.mark.django_db
-def test_private_kiosk_pin_setup_does_not_use_inactivity_logout_timer(kiosk_client):
-    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
-    session = kiosk_client.session
-    session[KIOSK_PIN_SETUP_SESSION_KEY] = participant.pk
-    session.save()
-
-    response = kiosk_client.get(reverse("kiosk-pin-setup"))
-
-    assert response.status_code == 200
-    assert b'data-timeout-ms="120000"' not in response.content
-    assert reverse("kiosk-logout").encode() in response.content
-
-
-@pytest.mark.django_db
 def test_kiosk_books_drink_with_camp_drink_price_and_subsidy_flag(kiosk_client):
     camp = CampFactory()
     participant = ParticipantFactory(
@@ -2223,6 +2403,70 @@ def test_kiosk_deactivates_own_family_member(kiosk_client):
     assert family_member.is_active is False
 
 
+@pytest.mark.parametrize(
+    ("action", "id_field"),
+    [
+        ("meal_retract", "meal_signup_id"),
+        ("family_member_deactivate", "family_member_id"),
+        ("booking_link_accept", "booking_link_id"),
+        ("booking_link_decline", "booking_link_id"),
+        ("booking_link_revoke", "booking_link_id"),
+    ],
+)
+@pytest.mark.django_db
+def test_kiosk_home_rejects_non_numeric_related_object_ids(kiosk_client, action, id_field):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    before_counts = {
+        "meal_signups": MealSignup.objects.count(),
+        "family_members": ParticipantFamilyMember.objects.count(),
+        "booking_links": ParticipantBookingLink.objects.count(),
+    }
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": action,
+            id_field: "not-an-id",
+        },
+    )
+
+    assert response.status_code == 200
+    assert b"wurde nicht gefunden" in response.content
+    assert MealSignup.objects.count() == before_counts["meal_signups"]
+    assert ParticipantFamilyMember.objects.count() == before_counts["family_members"]
+    assert ParticipantBookingLink.objects.count() == before_counts["booking_links"]
+
+
+@pytest.mark.django_db
+def test_kiosk_shifts_rejects_non_numeric_shift_id_without_side_effect(kiosk_client):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp)
+    shift = Shift.objects.create(
+        camp=camp,
+        name="Küchendienst",
+        date=date(2026, 7, 1),
+        required_slots=1,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-shifts"),
+        {
+            "action": "signup",
+            "shift_id": "not-an-id",
+        },
+    )
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("kiosk-shifts")
+    assert not ShiftAssignment.objects.filter(shift=shift).exists()
+
+
 @pytest.mark.django_db
 def test_invalid_booking_link_invite_reopens_management_dialog(kiosk_client):
     participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
@@ -2585,25 +2829,6 @@ def test_kiosk_meal_signup_child_breakfast_override(kiosk_client, monkeypatch):
 
 
 @pytest.mark.django_db
-def test_kiosk_pin_setup_rejects_mismatched_pins(kiosk_client):
-    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
-    session = kiosk_client.session
-    session[KIOSK_PIN_SETUP_SESSION_KEY] = participant.pk
-    session.save()
-
-    response = kiosk_client.post(
-        reverse("kiosk-pin-setup"),
-        {"pin": "1234", "pin_repeat": "9876"},
-    )
-
-    assert response.status_code == 200
-    assert b"Die PINs stimmen nicht \xc3\xbcberein." in response.content
-    participant.refresh_from_db()
-    assert getattr(participant, "pin", None) is None or not participant.pin.pin_hash
-    assert KIOSK_PARTICIPANT_SESSION_KEY not in kiosk_client.session
-
-
-@pytest.mark.django_db
 def test_kiosk_meal_signup_without_price_rule_shows_error(kiosk_client):
     camp = CampFactory()
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
@@ -2700,6 +2925,8 @@ def test_kiosk_self_registration_creates_pending_participant(kiosk_client):
             "last_name": "Neumann",
             "email": "lukas@example.com",
             "phone": "0170123456",
+            "pin": "2468",
+            "pin_repeat": "2468",
         },
     )
     assert response.status_code == 302
@@ -2707,6 +2934,8 @@ def test_kiosk_self_registration_creates_pending_participant(kiosk_client):
 
     p = Participant.objects.get(camp=camp, first_name="Lukas", last_name="Neumann")
     assert p.status == Participant.Status.PENDING_APPROVAL
+    assert p.pin.pin_hash != "2468"
+    assert p.pin.check_pin("2468") is True
 
     # Must NOT be visible in kiosk login dropdown
     login_page = kiosk_client.get(reverse("kiosk-login"))
@@ -2714,7 +2943,68 @@ def test_kiosk_self_registration_creates_pending_participant(kiosk_client):
 
 
 @pytest.mark.django_db
-def test_admin_approves_self_registration(kiosk_client):
+def test_kiosk_self_registration_rejects_mismatched_pin(kiosk_client):
+    camp = CampFactory(is_active=True)
+
+    response = kiosk_client.post(
+        reverse("kiosk-self-register"),
+        {
+            "first_name": "Lukas",
+            "last_name": "Neumann",
+            "pin": "2468",
+            "pin_repeat": "8642",
+        },
+    )
+
+    assert response.status_code == 400
+    assert b"Die PINs stimmen nicht \xc3\xbcberein." in response.content
+    assert b'id="self-registration-dialog" open' in response.content
+    assert response.content.count(b'id="id_pin"') == 1
+    assert b'for="id_enrollment_pin"' in response.content
+    assert b'id="id_enrollment_pin"' in response.content
+    assert not Participant.objects.filter(camp=camp, first_name="Lukas", last_name="Neumann").exists()
+
+
+@pytest.mark.django_db
+def test_kiosk_self_registration_is_persistently_rate_limited(kiosk_client, settings):
+    CampFactory(is_active=True)
+    settings.KIOSK_REGISTRATION_MAX_ATTEMPTS = 2
+    settings.KIOSK_REGISTRATION_ATTEMPT_WINDOW = 900
+
+    for index in range(2):
+        response = kiosk_client.post(
+            reverse("kiosk-self-register"),
+            {
+                "first_name": f"Teilnehmer{index}",
+                "last_name": "Neumann",
+                "pin": "2468",
+                "pin_repeat": "2468",
+            },
+            REMOTE_ADDR="192.0.2.10",
+        )
+        assert response.status_code == 302
+
+    session_cookie_name = settings.SESSION_COOKIE_NAME
+    kiosk_client.cookies.pop(session_cookie_name, None)
+    blocked_response = kiosk_client.post(
+        reverse("kiosk-self-register"),
+        {
+            "first_name": "Teilnehmer2",
+            "last_name": "Neumann",
+            "pin": "2468",
+            "pin_repeat": "2468",
+        },
+        REMOTE_ADDR="192.0.2.10",
+    )
+
+    assert blocked_response.status_code == 429
+    assert blocked_response["Retry-After"] == "900"
+    assert b"Zu viele Registrierungsversuche" in blocked_response.content
+    assert Participant.objects.count() == 2
+
+
+@pytest.mark.django_db
+def test_admin_approval_requires_pin_and_explicit_price_attribute_confirmation(kiosk_client):
     admin_user = UserFactory(is_staff=True, is_superuser=True)
     kiosk_client.force_login(admin_user)
     camp = CampFactory(is_active=True)
@@ -2722,13 +3012,55 @@ def test_admin_approves_self_registration(kiosk_client):
         camp=camp, first_name="Clara", last_name="Müller", status=Participant.Status.PENDING_APPROVAL
     )
 
-    # Approve
+    detail_response = kiosk_client.get(reverse("camp-detail", kwargs={"camp_id": camp.pk}))
+    detail_content = detail_response.content.decode("utf-8")
+    assert detail_response.status_code == 200
+    assert f'id="approval-{p.pk}-confirmed"' in detail_content
+    assert "Preisrelevante Angaben geprüft" in detail_content
+    assert "PIN fehlt – Freigabe ist gesperrt" in detail_content
+
     response = kiosk_client.post(
-        reverse("participant-approve-registration", kwargs={"camp_id": camp.pk, "participant_id": p.pk})
+        reverse("participant-approve-registration", kwargs={"camp_id": camp.pk, "participant_id": p.pk}),
+        {
+            "is_child": "on",
+            "is_youth_group": "on",
+            "price_attributes_confirmed": "on",
+        },
     )
+
+    assert response.status_code == 302
+    p.refresh_from_db()
+    assert p.status == Participant.Status.PENDING_APPROVAL
+
+    p.pin.set_pin("2468")
+    p.pin.save()
+    response = kiosk_client.post(
+        reverse("participant-approve-registration", kwargs={"camp_id": camp.pk, "participant_id": p.pk}),
+        {
+            "is_child": "on",
+            "is_youth_group": "on",
+        },
+    )
+
+    assert response.status_code == 302
+    p.refresh_from_db()
+    assert p.status == Participant.Status.PENDING_APPROVAL
+
+    response = kiosk_client.post(
+        reverse("participant-approve-registration", kwargs={"camp_id": camp.pk, "participant_id": p.pk}),
+        {
+            "is_child": "on",
+            "is_youth_group": "on",
+            "price_attributes_confirmed": "on",
+        },
+    )
+
     assert response.status_code == 302
     p.refresh_from_db()
     assert p.status == Participant.Status.REGISTERED
+    assert p.is_child is True
+    assert p.is_youth_group is True
+    assert p.is_companion is False
 
     # Now visible in kiosk login dropdown
     login_page = kiosk_client.get(reverse("kiosk-login"))
@@ -2748,3 +3080,21 @@ def test_admin_rejects_self_registration(kiosk_client):
     )
     assert response.status_code == 302
     assert not Participant.objects.filter(pk=p.pk).exists()
+
+
+@pytest.mark.django_db
+def test_admin_cannot_reject_registered_participant_through_registration_action(kiosk_client):
+    admin_user = UserFactory(is_staff=True, is_superuser=True)
+    kiosk_client.force_login(admin_user)
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp, status=Participant.Status.REGISTERED)
+
+    response = kiosk_client.post(
+        reverse(
+            "participant-reject-registration",
+            kwargs={"camp_id": camp.pk, "participant_id": participant.pk},
+        )
+    )
+
+    assert response.status_code == 404
+    assert Participant.objects.filter(pk=participant.pk).exists()

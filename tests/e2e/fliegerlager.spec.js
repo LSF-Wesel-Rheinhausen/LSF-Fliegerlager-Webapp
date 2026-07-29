@@ -203,7 +203,7 @@ async function createCamp(page, name = "Sommerlager", startOffsetDays = 2, durat
   return campName;
 }
 
-async function createParticipant(page, firstName, lastName, email = "") {
+async function createParticipant(page, firstName, lastName, email = "", pin = null) {
   await page.getByRole("link", { name: "Teilnehmer anlegen" }).click();
   await expect(page.getByRole("heading", { name: "Teilnehmer anlegen" })).toBeVisible();
   await page.getByLabel("Vorname").fill(firstName);
@@ -211,6 +211,12 @@ async function createParticipant(page, firstName, lastName, email = "") {
   if (email) await page.getByLabel("E-Mail-Adresse").fill(email);
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(page.getByRole("heading", { name: `${firstName} ${lastName}` })).toBeVisible();
+  if (pin) {
+    await page.getByRole("link", { name: "PIN setzen", exact: true }).click();
+    await page.getByLabel("Neue PIN").fill(pin);
+    await page.getByRole("button", { name: "Speichern", exact: true }).click();
+    await expect(page.getByRole("heading", { name: `${firstName} ${lastName}` })).toBeVisible();
+  }
 }
 
 test("Admin completes setup, login, camp workflow and logout", async ({ page }) => {
@@ -277,7 +283,7 @@ test("Admin configures and centrally revokes every camp kiosk access", async ({ 
 test("Pre-camp kiosk stays compact and exposes only preparation areas", async ({ page }) => {
   await setupFirstAdmin(page);
   await createCamp(page, "Vorlager", 2, 4);
-  await createParticipant(page, "Ada", "Lovelace");
+  await createParticipant(page, "Ada", "Lovelace", "", "1234");
   await logout(page);
 
   await openKiosk(page, "/kiosk/login/");
@@ -293,11 +299,8 @@ test("Pre-camp kiosk stays compact and exposes only preparation areas", async ({
   expect(loginSpacing).toBeLessThanOrEqual(32);
 
   await page.getByLabel("Teilnehmer").selectOption({ label: "Ada Lovelace" });
-  await page.getByLabel("PIN").fill("0000");
+  await page.getByLabel("PIN:", { exact: true }).fill("1234");
   await page.getByRole("button", { name: "Anmelden", exact: true }).click();
-  await page.getByLabel("Neuer PIN").fill("1234");
-  await page.getByLabel("PIN wiederholen").fill("1234");
-  await page.getByRole("button", { name: "Speichern" }).click();
 
   await expect(page.locator("[data-pre-camp-overview]")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Ada Lovelace" })).toBeVisible();
@@ -498,10 +501,10 @@ test("Admin can open and close price rule dialogs natively", async ({ page }) =>
   await expect(page.locator("dialog#price-rule-dialog")).toBeHidden();
 });
 
-test("Kiosk flow: login, pin setup, drink and meal booking", async ({ page }) => {
+test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ page }) => {
   await setupFirstAdmin(page);
   const campName = await createCamp(page, "Sommerlager Kiosk", 0, 4);
-  await createParticipant(page, "Marie", "Curie");
+  await createParticipant(page, "Marie", "Curie", "", "1234");
 
   await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
   await page.getByRole("link", { name: campName, exact: true }).click();
@@ -523,18 +526,11 @@ test("Kiosk flow: login, pin setup, drink and meal booking", async ({ page }) =>
   // Kiosk Flow
   await openKiosk(page, "/kiosk/login/");
   await page.getByLabel("Teilnehmer").selectOption({ label: "Marie Curie" });
-  await page.getByLabel("PIN").fill("0000");
+  await page.getByLabel("PIN:", { exact: true }).fill("1234");
   await page.getByRole("button", { name: "Anmelden", exact: true }).click();
-
-  // Should redirect to PIN setup
-  await expect(page).toHaveURL(/.*\/kiosk\/pin\//);
-  await page.getByLabel("Neuer PIN").fill("1234");
-  await page.getByLabel("PIN wiederholen").fill("1234");
-  await page.getByRole("button", { name: "Speichern" }).click();
 
   // Now in Kiosk Home
   await expect(page).toHaveURL(/.*\/kiosk\//);
-  await expect(page.getByText("PIN wurde gesetzt.")).toBeVisible();
   const sessionCookie = (await page.context().cookies()).find((cookie) => cookie.name === "sessionid");
   expect(sessionCookie).toBeDefined();
   expect(sessionCookie.expires).toBeGreaterThan(Date.now() / 1000);
@@ -650,7 +646,7 @@ test("Kiosk masonry and expense cards stay responsive and accessible", async ({ 
 
   await setupFirstAdmin(page);
   const campName = await createCamp(page, "Masonry-Lager", 0, 4);
-  await createParticipant(page, "Marie", "Curie");
+  await createParticipant(page, "Marie", "Curie", "", "1234");
   await page.setViewportSize({ width: 1280, height: 900 });
   const adminHeaderLayout = await page.locator("header.topbar").evaluate((header) => {
     const identity = header.firstElementChild.getBoundingClientRect();
@@ -686,11 +682,8 @@ test("Kiosk masonry and expense cards stay responsive and accessible", async ({ 
 
   await openKiosk(page, "/kiosk/login/");
   await page.getByLabel("Teilnehmer").selectOption({ label: "Marie Curie" });
-  await page.getByLabel("PIN").fill("0000");
+  await page.getByLabel("PIN:", { exact: true }).fill("1234");
   await page.getByRole("button", { name: "Anmelden", exact: true }).click();
-  await page.getByLabel("Neuer PIN").fill("1234");
-  await page.getByLabel("PIN wiederholen").fill("1234");
-  await page.getByRole("button", { name: "Speichern" }).click();
 
   await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).click();
   await page.getByRole("button", { name: "Gemeinschaftsausgaben" }).click();
@@ -715,7 +708,7 @@ test("Kiosk masonry and expense cards stay responsive and accessible", async ({ 
 
   await openKiosk(page, "/kiosk/login/");
   await page.getByLabel("Teilnehmer").selectOption({ label: "Marie Curie" });
-  await page.getByLabel("PIN").fill("1234");
+  await page.getByLabel("PIN:", { exact: true }).fill("1234");
   await page.getByRole("button", { name: "Anmelden", exact: true }).click();
   await page.waitForLoadState("networkidle");
   browserErrors.length = 0;
@@ -1048,7 +1041,7 @@ test("Admin configures SMTP and manually confirms exact information recipients",
 test("Daily shift template and kiosk shift flow", async ({ page }) => {
   await setupFirstAdmin(page);
   await createCamp(page, "Sommerlager Dienste", 0, 2);
-  await createParticipant(page, "Albert", "Einstein");
+  await createParticipant(page, "Albert", "Einstein", "", "1234");
 
   // Create a daily shift template via Frontend
   await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
@@ -1071,13 +1064,8 @@ test("Daily shift template and kiosk shift flow", async ({ page }) => {
   // Login to kiosk
   await openKiosk(page, "/kiosk/login/");
   await page.getByLabel("Teilnehmer").selectOption({ label: "Albert Einstein" });
-  await page.getByLabel("PIN").fill("0000");
+  await page.getByLabel("PIN:", { exact: true }).fill("1234");
   await page.getByRole("button", { name: "Anmelden", exact: true }).click();
-
-  // Set PIN
-  await page.getByLabel("Neuer PIN").fill("1234");
-  await page.getByLabel("PIN wiederholen").fill("1234");
-  await page.getByRole("button", { name: "Speichern" }).click();
 
   // Go to Shifts
   await page.getByRole("link", { name: "Dienstplan" }).click();
@@ -1126,7 +1114,7 @@ for (const viewport of [
     const campName = await createCamp(page, "Sommerlager Kiosk Mobile", 0, 4);
     const participantFirstName = viewport.name === "mobile portrait" ? "MobilePortrait" : "MobileLandscape";
     const participantName = `${participantFirstName} ExtremLangerUngetrennterTeilnehmername`;
-    await createParticipant(page, participantFirstName, "ExtremLangerUngetrennterTeilnehmername");
+    await createParticipant(page, participantFirstName, "ExtremLangerUngetrennterTeilnehmername", "", "1234");
 
     await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
     await page.getByRole("link", { name: campName, exact: true }).click();
@@ -1138,11 +1126,8 @@ for (const viewport of [
 
     await openKiosk(page, "/kiosk/login/");
     await page.getByLabel("Teilnehmer").selectOption({ label: participantName });
-    await page.getByLabel("PIN").fill("0000");
+    await page.getByLabel("PIN:", { exact: true }).fill("1234");
     await page.getByRole("button", { name: "Anmelden", exact: true }).click();
-    await page.getByLabel("Neuer PIN").fill("1234");
-    await page.getByLabel("PIN wiederholen").fill("1234");
-    await page.getByRole("button", { name: "Speichern" }).click();
 
     await expect(page.getByRole("heading", { name: "Getränk buchen" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Verpflegung buchen" })).toBeVisible();

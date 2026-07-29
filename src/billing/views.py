@@ -41,8 +41,8 @@ from .forms import (
     FirstAdminSetupForm,
     KioskBookingLinkInviteForm,
     KioskFamilyMemberForm,
+    KioskFamilyMemberPinForm,
     KioskLoginForm,
-    KioskPinSetupForm,
     KioskSelfEnrollmentForm,
     ManualChargeForm,
     MealBookingForm,
@@ -52,6 +52,7 @@ from .forms import (
     ParticipantForm,
     ParticipantImportForm,
     ParticipantPinForm,
+    ParticipantRegistrationApprovalForm,
     PaymentForm,
     PriceRuleForm,
     QuickBookingForm,
@@ -67,10 +68,9 @@ from .kiosk_access import (
     KIOSK_FAMILY_MEMBER_SESSION_KEY,
     KIOSK_MODE_SESSION_KEY,
     KIOSK_PARTICIPANT_SESSION_KEY,
-    KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY,
-    KIOSK_PIN_SETUP_SESSION_KEY,
     clear_kiosk_identity_session,
 )
+from .kiosk_security import consume_kiosk_registration_attempt
 from .models import (
     BookingAuditLog,
     Camp,
@@ -84,8 +84,6 @@ from .models import (
     Participant,
     ParticipantBookingLink,
     ParticipantFamilyMember,
-    ParticipantFamilyMemberPin,
-    ParticipantPin,
     PriceRule,
     Settlement,
     SettlementRun,
@@ -140,13 +138,30 @@ PRE_CAMP_KIOSK_ACTIONS = frozenset(
     {
         "family_member_create",
         "family_member_deactivate",
+        "family_member_pin_set",
         "booking_link_invite",
         "booking_link_accept",
         "booking_link_decline",
         "booking_link_revoke",
     }
 )
+GUARDIAN_ONLY_KIOSK_ACTIONS = frozenset(
+    {
+        "family_member_create",
+        "family_member_deactivate",
+        "family_member_pin_set",
+    }
+)
 KIOSK_QUICK_BOOKING_CANCEL_WINDOW = timedelta(minutes=15)
+
+
+def _positive_int_or_none(value: Any) -> int | None:
+    """Return a positive integer for an untrusted form value, otherwise ``None``."""
+    try:
+        parsed_value = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed_value if parsed_value > 0 else None
 
 
 def kiosk_root(_request: HttpRequest) -> HttpResponse:
@@ -212,7 +227,6 @@ def _kiosk_context(kiosk_mode: str) -> dict[str, Any]:
             "home": reverse(_kiosk_route(kiosk_mode, "home")),
             "login": reverse(_kiosk_route(kiosk_mode, "login")),
             "logout": reverse(_kiosk_route(kiosk_mode, "logout")),
-            "pin_setup": reverse(_kiosk_route(kiosk_mode, "pin-setup")),
             "shifts": reverse(_kiosk_route(kiosk_mode, "shifts")),
             "shared_expense_request": reverse(_kiosk_route(kiosk_mode, "shared-expense-request")),
         },
@@ -507,9 +521,18 @@ def camp_detail(request, camp_id):
     }
     price_rules = camp.price_rules.all()
     pending_expenses = camp.expenses.filter(status=Expense.Status.PENDING)
-    pending_registrations = camp.participants.filter(
-        status=Participant.Status.PENDING_APPROVAL, archived_at__isnull=True
+    pending_registrations = list(
+        camp.participants.select_related("pin")
+        .filter(status=Participant.Status.PENDING_APPROVAL, archived_at__isnull=True)
+        .order_by("created_at", "pk")
     )
+    pending_registration_rows = [
+        {
+            "participant": pending_participant,
+            "approval_form": ParticipantRegistrationApprovalForm(instance=pending_participant),
+        }
+        for pending_participant in pending_registrations
+    ]
     from .services import get_cost_center_evaluation
 
     cost_centers = get_cost_center_evaluation(camp)
@@ -525,7 +548,7 @@ def camp_detail(request, camp_id):
             "archived_participants": archived_participants,
             "settlement_runs": settlement_runs,
             "pending_expenses": pending_expenses,
-            "pending_registrations": pending_registrations,
+            "pending_registration_rows": pending_registration_rows,
             "cost_centers": cost_centers,
         },
     )
@@ -535,9 +558,41 @@ def camp_detail(request, camp_id):
 @require_POST
 def approve_participant_registration(request, camp_id, participant_id):
     camp = get_object_or_404(Camp, pk=camp_id)
-    participant = get_object_or_404(Participant, pk=participant_id, camp=camp)
-    participant.status = Participant.Status.REGISTERED
-    participant.save()
+    participant = get_object_or_404(
+        Participant.objects.select_related("pin"),
+        pk=participant_id,
+        camp=camp,
+        status=Participant.Status.PENDING_APPROVAL,
+        archived_at__isnull=True,
+    )
+    pin_record = getattr(participant, "pin", None)
+    if pin_record is None or pin_record.must_set_pin or not pin_record.pin_hash:
+        messages.error(
+            request,
+            "Vor der Freigabe muss für den Teilnehmer eine PIN gesetzt sein.",
+        )
+        return redirect("camp-detail", camp_id=camp.pk)
+
+    form = ParticipantRegistrationApprovalForm(request.POST, instance=participant)
+    if not form.is_valid():
+        messages.error(
+            request,
+            "Bitte prüfe und bestätige die preisrelevanten Angaben vor der Freigabe.",
+        )
+        return redirect("camp-detail", camp_id=camp.pk)
+
+    with transaction.atomic():
+        participant = form.save(commit=False)
+        participant.status = Participant.Status.REGISTERED
+        participant.save(
+            update_fields=[
+                "is_child",
+                "is_youth_group",
+                "is_companion",
+                "status",
+                "updated_at",
+            ]
+        )
     messages.success(
         request,
         f"Die Registrierung von {participant.full_name} wurde erfolgreich freigegeben. "
@@ -550,7 +605,13 @@ def approve_participant_registration(request, camp_id, participant_id):
 @require_POST
 def reject_participant_registration(request, camp_id, participant_id):
     camp = get_object_or_404(Camp, pk=camp_id)
-    participant = get_object_or_404(Participant, pk=participant_id, camp=camp)
+    participant = get_object_or_404(
+        Participant,
+        pk=participant_id,
+        camp=camp,
+        status=Participant.Status.PENDING_APPROVAL,
+        archived_at__isnull=True,
+    )
     name = participant.full_name
     participant.delete()
     messages.info(request, f"Die Registrierungsanfrage von {name} wurde abgelehnt und entfernt.")
@@ -793,7 +854,10 @@ def pin_reset(request, participant_id):
         with transaction.atomic():
             participant.pin.reset_pin(changed_by=request.user)
             participant.pin.save()
-        messages.success(request, "Teilnehmer-PIN wurde zurückgesetzt.")
+        messages.success(
+            request,
+            "Teilnehmer-PIN wurde gesperrt. Vor der nächsten Anmeldung muss eine neue PIN gesetzt werden.",
+        )
     return redirect("participant-detail", participant_id=participant.pk)
 
 
@@ -1055,10 +1119,15 @@ def shift_delete(request, shift_id):
 @require_POST
 def shift_bulk_delete(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
-    shift_ids = request.POST.getlist("shift_ids")
-    if not shift_ids:
+    raw_shift_ids = request.POST.getlist("shift_ids")
+    if not raw_shift_ids:
         messages.warning(request, "Es wurden keine Dienste zum Löschen ausgewählt.")
         return redirect("shift-manage", camp_id=camp.pk)
+    parsed_shift_ids = [_positive_int_or_none(raw_shift_id) for raw_shift_id in raw_shift_ids]
+    if any(shift_id is None for shift_id in parsed_shift_ids):
+        messages.error(request, "Die Dienstauswahl enthält einen ungültigen Eintrag.")
+        return redirect("shift-manage", camp_id=camp.pk)
+    shift_ids = [shift_id for shift_id in parsed_shift_ids if shift_id is not None]
 
     with transaction.atomic():
         deleted_count, _ = Shift.objects.filter(camp=camp, pk__in=shift_ids).delete()
@@ -1345,15 +1414,45 @@ def kiosk_current_settlement_pdf(request, kiosk_mode="private"):
     return participant_pdf_response(participant)
 
 
+def _render_kiosk_login(
+    request: HttpRequest,
+    kiosk_mode: str,
+    *,
+    form: KioskLoginForm | None = None,
+    enrollment_form: KioskSelfEnrollmentForm | None = None,
+    status: int = 200,
+) -> HttpResponse:
+    """Render one kiosk login page with optional bound forms."""
+    camp = Camp.objects.filter(is_active=True).first()
+    is_pre_camp = camp.is_pre_camp() if camp else False
+    is_post_camp = camp.is_post_camp() if camp else False
+    days_until_start = camp.days_until_start() if camp else None
+
+    return render(
+        request,
+        "billing/kiosk_login.html",
+        {
+            "form": form or KioskLoginForm(),
+            "enrollment_form": enrollment_form or KioskSelfEnrollmentForm(auto_id="id_enrollment_%s"),
+            "camp": camp,
+            "is_pre_camp": is_pre_camp,
+            "is_post_camp": is_post_camp,
+            "days_until_start": days_until_start,
+            **_kiosk_context(kiosk_mode),
+            "kiosk_autologout": False,
+        },
+        status=status,
+    )
+
+
 def kiosk_login(request, kiosk_mode="private"):
     """Authenticate a participant in a private or central kiosk session."""
     _activate_kiosk_mode(request, kiosk_mode)
     if request.session.get(KIOSK_PARTICIPANT_SESSION_KEY):
         if _kiosk_participant(request) is not None:
             return redirect(_kiosk_route(kiosk_mode, "home"))
-        else:
-            request.session.pop(KIOSK_PARTICIPANT_SESSION_KEY, None)
-            request.session.pop(KIOSK_FAMILY_MEMBER_SESSION_KEY, None)
+        request.session.pop(KIOSK_PARTICIPANT_SESSION_KEY, None)
+        request.session.pop(KIOSK_FAMILY_MEMBER_SESSION_KEY, None)
 
     form = KioskLoginForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
@@ -1367,43 +1466,8 @@ def kiosk_login(request, kiosk_mode="private"):
             request.session.set_expiry(None)
         messages.success(request, "Du bist im Kiosk angemeldet.")
         return redirect(_kiosk_route(kiosk_mode, "home"))
-    if request.method == "POST" and getattr(form, "missing_pin_family_member", None) is not None:
-        request.session[KIOSK_PIN_SETUP_SESSION_KEY] = form.missing_pin_participant.pk
-        request.session[KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY] = form.missing_pin_family_member.pk
-        messages.info(
-            request,
-            "Für diesen Begleiter ist noch kein PIN gesetzt. Bitte lege jetzt einen neuen PIN fest.",
-        )
-        return redirect(_kiosk_route(kiosk_mode, "pin-setup"))
-    if request.method == "POST" and getattr(form, "missing_pin_participant", None) is not None:
-        request.session[KIOSK_PIN_SETUP_SESSION_KEY] = form.missing_pin_participant.pk
-        request.session.pop(KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY, None)
-        messages.info(
-            request,
-            "Für diesen Teilnehmer ist noch kein PIN gesetzt. Bitte lege jetzt einen neuen PIN fest.",
-        )
-        return redirect(_kiosk_route(kiosk_mode, "pin-setup"))
 
-    camp = Camp.objects.filter(is_active=True).first()
-    is_pre_camp = camp.is_pre_camp() if camp else False
-    is_post_camp = camp.is_post_camp() if camp else False
-    days_until_start = camp.days_until_start() if camp else None
-    enrollment_form = KioskSelfEnrollmentForm()
-
-    return render(
-        request,
-        "billing/kiosk_login.html",
-        {
-            "form": form,
-            "enrollment_form": enrollment_form,
-            "camp": camp,
-            "is_pre_camp": is_pre_camp,
-            "is_post_camp": is_post_camp,
-            "days_until_start": days_until_start,
-            **_kiosk_context(kiosk_mode),
-            "kiosk_autologout": False,
-        },
-    )
+    return _render_kiosk_login(request, kiosk_mode, form=form)
 
 
 @require_POST
@@ -1418,7 +1482,22 @@ def kiosk_self_register(request, kiosk_mode="private"):
         messages.error(request, "Das Lager ist beendet. Eine Registrierung ist nicht mehr möglich.")
         return redirect(_kiosk_route(kiosk_mode, "login"))
 
-    form = KioskSelfEnrollmentForm(request.POST)
+    form = KioskSelfEnrollmentForm(request.POST, auto_id="id_enrollment_%s")
+    access = getattr(request, "kiosk_access", None)
+    if access is None:
+        return HttpResponseForbidden("Gültiger Lagerzugang erforderlich.")
+    if not consume_kiosk_registration_attempt(request, access):
+        logger.warning("kiosk_self_registration_rate_limited", extra={"camp_id": camp.pk})
+        form.add_error(None, "Zu viele Registrierungsversuche. Bitte versuche es später erneut.")
+        response = _render_kiosk_login(
+            request,
+            kiosk_mode,
+            enrollment_form=form,
+            status=429,
+        )
+        response["Retry-After"] = str(settings.KIOSK_REGISTRATION_ATTEMPT_WINDOW)
+        return response
+
     if form.is_valid():
         first_name = form.cleaned_data["first_name"].strip()
         last_name = form.cleaned_data["last_name"].strip()
@@ -1430,10 +1509,13 @@ def kiosk_self_register(request, kiosk_mode="private"):
             )
             return redirect(_kiosk_route(kiosk_mode, "login"))
 
-        participant = form.save(commit=False)
-        participant.camp = camp
-        participant.status = Participant.Status.PENDING_APPROVAL
-        participant.save()
+        with transaction.atomic():
+            participant = form.save(commit=False)
+            participant.camp = camp
+            participant.status = Participant.Status.PENDING_APPROVAL
+            participant.save()
+            participant.pin.set_pin(form.cleaned_data["pin"])
+            participant.pin.save()
 
         messages.success(
             request,
@@ -1443,7 +1525,12 @@ def kiosk_self_register(request, kiosk_mode="private"):
         return redirect(_kiosk_route(kiosk_mode, "login"))
 
     messages.error(request, "Fehler bei der Registrierung. Bitte überprüfe deine Eingaben.")
-    return redirect(_kiosk_route(kiosk_mode, "login"))
+    return _render_kiosk_login(
+        request,
+        kiosk_mode,
+        enrollment_form=form,
+        status=400,
+    )
 
 
 def kiosk_logout(request, kiosk_mode="private"):
@@ -1912,62 +1999,6 @@ def meal_order_mark_sent(request, camp_id):
     return redirect("camp-meal-overview", camp_id=camp.pk)
 
 
-def kiosk_pin_setup(request, kiosk_mode="private"):
-    """Create the initial PIN while retaining the kiosk device mode."""
-    _activate_kiosk_mode(request, kiosk_mode)
-    participant = _kiosk_participant_from_session(request, KIOSK_PIN_SETUP_SESSION_KEY)
-    if participant is None:
-        return redirect(_kiosk_route(kiosk_mode, "login"))
-    family_member_id = request.session.get(KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY)
-    family_member = None
-    if family_member_id:
-        family_member = (
-            ParticipantFamilyMember.objects.select_related("guardian", "guardian__camp")
-            .filter(
-                pk=family_member_id,
-                guardian=participant,
-                role=ParticipantFamilyMember.Role.COMPANION,
-                is_active=True,
-            )
-            .first()
-        )
-        if family_member is None:
-            request.session.pop(KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY, None)
-            return redirect(_kiosk_route(kiosk_mode, "login"))
-
-    if family_member is not None:
-        pin_holder = family_member
-        pin_record, _created = ParticipantFamilyMemberPin.objects.get_or_create(family_member=family_member)
-    else:
-        pin_holder = participant
-        pin_record, _created = ParticipantPin.objects.get_or_create(participant=participant)
-    if not pin_record.must_set_pin and pin_record.pin_hash:
-        return redirect(_kiosk_route(kiosk_mode, "home"))
-
-    form = KioskPinSetupForm(request.POST or None)
-    if request.method == "POST" and form.is_valid():
-        with transaction.atomic():
-            pin_record.set_pin(form.cleaned_data["pin"])
-            pin_record.save()
-            request.session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
-            if family_member is not None:
-                request.session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = family_member.pk
-            else:
-                request.session.pop(KIOSK_FAMILY_MEMBER_SESSION_KEY, None)
-            request.session.pop(KIOSK_PIN_SETUP_SESSION_KEY, None)
-            request.session.pop(KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY, None)
-            if kiosk_mode == "private":
-                request.session.set_expiry(None)
-        messages.success(request, "PIN wurde gesetzt. Du bist jetzt im Kiosk angemeldet.")
-        return redirect(_kiosk_route(kiosk_mode, "home"))
-
-    return render(
-        request,
-        "billing/kiosk_pin_setup.html",
-        {"form": form, "participant": pin_holder, **_kiosk_context(kiosk_mode)},
-    )
-
-
 def kiosk_home(request, kiosk_mode="private"):
     """Render and process participant kiosk workflows for the selected device mode."""
     _activate_kiosk_mode(request, kiosk_mode)
@@ -1989,6 +2020,8 @@ def kiosk_home(request, kiosk_mode="private"):
     quick_form = QuickBookingForm(participant=participant, prefix="quick")
     meal_form = MealBookingForm(participant=participant, prefix="meal")
     family_member_form = KioskFamilyMemberForm(prefix="family")
+    family_member_pin_form = None
+    family_member_pin_member_id = None
     booking_link_form = KioskBookingLinkInviteForm(inviter=participant, prefix="link")
     if request.method == "POST":
         if is_post_camp:
@@ -1997,6 +2030,8 @@ def kiosk_home(request, kiosk_mode="private"):
         if is_pre_camp and request.POST.get("action") not in PRE_CAMP_KIOSK_ACTIONS:
             messages.error(request, "Diese Funktion ist erst ab Lagerbeginn verfügbar.")
             return redirect(_kiosk_route(kiosk_mode, "home"))
+        if active_family_member is not None and request.POST.get("action") in GUARDIAN_ONLY_KIOSK_ACTIONS:
+            return HttpResponseForbidden("Nur Hauptteilnehmer dürfen Familienmitglieder verwalten.")
         if request.POST.get("action") == "quick":
             quick_form = QuickBookingForm(request.POST, participant=participant, prefix="quick")
             if quick_form.is_valid():
@@ -2156,13 +2191,15 @@ def kiosk_home(request, kiosk_mode="private"):
                     )
                     return redirect(f"{reverse(_kiosk_route(kiosk_mode, 'home'))}?dialog=meal-calendar")
         elif request.POST.get("action") == "meal_retract":
-            signup_id = request.POST.get("meal_signup_id")
+            signup_id = _positive_int_or_none(request.POST.get("meal_signup_id"))
             targets_by_token = _target_lookup(meal_targets)
-            signup = (
-                MealSignup.objects.select_related("participant", "family_member", "charge")
-                .filter(pk=signup_id, status=MealSignup.Status.ACTIVE)
-                .first()
-            )
+            signup = None
+            if signup_id is not None:
+                signup = (
+                    MealSignup.objects.select_related("participant", "family_member", "charge")
+                    .filter(pk=signup_id, status=MealSignup.Status.ACTIVE)
+                    .first()
+                )
             if signup is None or _target_token_for_signup(signup) not in targets_by_token:
                 messages.error(request, "Essensanmeldung wurde nicht gefunden.")
             elif is_meal_change_locked(participant.camp, signup.meal_date):
@@ -2179,11 +2216,39 @@ def kiosk_home(request, kiosk_mode="private"):
                     family_member = family_member_form.save(commit=False)
                     family_member.guardian = participant
                     family_member.save()
+                    if family_member.role == ParticipantFamilyMember.Role.COMPANION:
+                        family_member.pin.set_pin(family_member_form.cleaned_data["pin"])
+                        family_member.pin.save()
                 messages.success(request, "Familienmitglied wurde angelegt.")
                 return redirect(_kiosk_route(kiosk_mode, "home"))
+        elif request.POST.get("action") == "family_member_pin_set":
+            family_member_pin_member_id = _positive_int_or_none(request.POST.get("family_member_id"))
+            family_member = None
+            if family_member_pin_member_id is not None:
+                family_member = (
+                    participant.family_members.select_related("pin")
+                    .filter(
+                        pk=family_member_pin_member_id,
+                        role=ParticipantFamilyMember.Role.COMPANION,
+                        is_active=True,
+                    )
+                    .first()
+                )
+            if family_member is None:
+                messages.error(request, "Begleitperson wurde nicht gefunden.")
+            else:
+                family_member_pin_form = KioskFamilyMemberPinForm(request.POST, prefix="family")
+                if family_member_pin_form.is_valid():
+                    with transaction.atomic():
+                        family_member.pin.set_pin(family_member_pin_form.cleaned_data["pin"])
+                        family_member.pin.save()
+                    messages.success(request, f"PIN für {family_member.full_name} wurde gespeichert.")
+                    return redirect(_kiosk_route(kiosk_mode, "home"))
         elif request.POST.get("action") == "family_member_deactivate":
-            member_id = request.POST.get("family_member_id")
-            family_member = participant.family_members.filter(pk=member_id, is_active=True).first()
+            member_id = _positive_int_or_none(request.POST.get("family_member_id"))
+            family_member = None
+            if member_id is not None:
+                family_member = participant.family_members.filter(pk=member_id, is_active=True).first()
             if family_member is not None:
                 family_member.is_active = False
                 family_member.save(update_fields=["is_active", "updated_at"])
@@ -2208,29 +2273,34 @@ def kiosk_home(request, kiosk_mode="private"):
                 messages.success(request, "Einladung wurde gesendet.")
                 return redirect(_kiosk_route(kiosk_mode, "home"))
         elif request.POST.get("action") in ["booking_link_accept", "booking_link_decline", "booking_link_revoke"]:
-            link_id = request.POST.get("booking_link_id")
-            if request.POST.get("action") == "booking_link_accept":
-                booking_link = participant.received_booking_links.filter(
-                    pk=link_id,
-                    status=ParticipantBookingLink.Status.PENDING,
-                ).first()
+            link_id = _positive_int_or_none(request.POST.get("booking_link_id"))
+            action = request.POST.get("action")
+            booking_link = None
+            if action == "booking_link_accept":
                 new_status = ParticipantBookingLink.Status.ACCEPTED
                 success_message = "Einladung wurde angenommen."
-            elif request.POST.get("action") == "booking_link_decline":
-                booking_link = participant.received_booking_links.filter(
-                    pk=link_id,
-                    status=ParticipantBookingLink.Status.PENDING,
-                ).first()
+                if link_id is not None:
+                    booking_link = participant.received_booking_links.filter(
+                        pk=link_id,
+                        status=ParticipantBookingLink.Status.PENDING,
+                    ).first()
+            elif action == "booking_link_decline":
                 new_status = ParticipantBookingLink.Status.DECLINED
                 success_message = "Einladung wurde abgelehnt."
+                if link_id is not None:
+                    booking_link = participant.received_booking_links.filter(
+                        pk=link_id,
+                        status=ParticipantBookingLink.Status.PENDING,
+                    ).first()
             else:
-                booking_link = ParticipantBookingLink.objects.filter(
-                    Q(inviter=participant) | Q(invitee=participant),
-                    pk=link_id,
-                    status=ParticipantBookingLink.Status.ACCEPTED,
-                ).first()
                 new_status = ParticipantBookingLink.Status.REVOKED
                 success_message = "Verknüpfung wurde aufgelöst."
+                if link_id is not None:
+                    booking_link = ParticipantBookingLink.objects.filter(
+                        Q(inviter=participant) | Q(invitee=participant),
+                        pk=link_id,
+                        status=ParticipantBookingLink.Status.ACCEPTED,
+                    ).first()
             if booking_link is not None:
                 booking_link.status = new_status
                 booking_link.save(update_fields=["status", "updated_at"])
@@ -2341,6 +2411,8 @@ def kiosk_home(request, kiosk_mode="private"):
         "meal_form": meal_form,
         "meal_default_variant": meal_form.fields["variant"].choices[0][0],
         "family_member_form": family_member_form,
+        "family_member_pin_form": family_member_pin_form,
+        "family_member_pin_member_id": family_member_pin_member_id,
         "booking_link_form": booking_link_form,
         "recent_quick_charges": recent_quick_charges,
         "meal_signups": meal_signups,
@@ -2354,7 +2426,9 @@ def kiosk_home(request, kiosk_mode="private"):
         "quick_form": quick_form,
         "meal_targets": meal_targets,
         "checkin_participants": checkin_participants,
-        "family_members": participant.family_members.filter(is_active=True).order_by("last_name", "first_name"),
+        "family_members": participant.family_members.select_related("pin")
+        .filter(is_active=True)
+        .order_by("last_name", "first_name"),
         "pending_invites": pending_invites,
         "sent_invites": sent_invites,
         "accepted_links": accepted_links,
@@ -2428,7 +2502,10 @@ def kiosk_shifts(request, kiosk_mode="private"):
     today = timezone.localdate()
     if request.method == "POST":
         action = request.POST.get("action")
-        shift_id = request.POST.get("shift_id")
+        shift_id = _positive_int_or_none(request.POST.get("shift_id"))
+        if shift_id is None:
+            messages.error(request, "Dienst wurde nicht gefunden.")
+            return redirect(_kiosk_route(kiosk_mode, "shifts"))
         shift = get_object_or_404(Shift, pk=shift_id, camp=participant.camp)
 
         if action == "signup":

@@ -86,7 +86,7 @@ const fs = require('fs');
     await select.selectOption({ label: 'Lara Neu' });
     await page.waitForTimeout(500);
 
-    const pinInput = page.locator('input[name="pin"]');
+    const pinInput = page.locator('#id_pin');
     await smoothMove(pinInput);
     await pinInput.click();
     await pinInput.type('4321', { delay: 200 });
@@ -95,26 +95,6 @@ const fs = require('fs');
     const submitBtn = page.locator('button[type="submit"]:has-text("Anmelden")');
     await smoothMove(submitBtn);
     await submitBtn.click();
-
-    // Redirects to PIN setup
-    await page.waitForSelector('text=PIN festlegen', { timeout: 10000 });
-    await page.waitForTimeout(500);
-
-    const newPin = page.locator('input[name="pin"]');
-    await smoothMove(newPin);
-    await newPin.click();
-    await newPin.type('4321', { delay: 150 });
-    await page.waitForTimeout(200);
-
-    const repeatPin = page.locator('input[name="pin_repeat"]');
-    await smoothMove(repeatPin);
-    await repeatPin.click();
-    await repeatPin.type('4321', { delay: 150 });
-    await page.waitForTimeout(500);
-
-    const savePinBtn = page.locator('button[type="submit"]');
-    await smoothMove(savePinBtn);
-    await savePinBtn.click();
 
     await page.waitForSelector('text=Getränk buchen', { timeout: 10000 });
   });
