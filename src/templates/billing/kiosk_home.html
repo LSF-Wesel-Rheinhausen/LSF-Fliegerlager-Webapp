@@ -496,7 +496,7 @@
               {% endif %}
             </div>
             <div class="kiosk-list-row__actions">
-              {% if member.role == "companion" %}
+              {% if member.role == "companion" and not kiosk_actor_is_family_member %}
                 <details{% if family_member_pin_member_id == member.pk and family_member_pin_form.errors %} open{% endif %}>
                   <summary>{% if member.pin.pin_hash and not member.pin.must_set_pin %}PIN ändern{% else %}PIN setzen{% endif %}</summary>
                   <form method="post" class="form-grid">

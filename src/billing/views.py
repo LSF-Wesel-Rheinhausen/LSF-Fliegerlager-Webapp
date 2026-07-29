@@ -2213,6 +2213,8 @@ def kiosk_home(request, kiosk_mode="private"):
                 messages.success(request, "Familienmitglied wurde angelegt.")
                 return redirect(_kiosk_route(kiosk_mode, "home"))
         elif request.POST.get("action") == "family_member_pin_set":
+            if active_family_member is not None:
+                return HttpResponseForbidden("Nur Hauptteilnehmer dürfen Begleitpersonen-PINs verwalten.")
             family_member_pin_member_id = _positive_int_or_none(request.POST.get("family_member_id"))
             family_member = None
             if family_member_pin_member_id is not None:

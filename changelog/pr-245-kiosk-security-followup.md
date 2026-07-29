@@ -2,6 +2,7 @@
 
 - Moves personal PIN assignment into kiosk self-registration and requires an administrator to verify price-relevant participant attributes before approval.
 - Requires guardians to assign companion PINs and removes the unauthenticated first-login PIN setup routes.
+- Prevents companion sessions from viewing or changing PINs for other companions of the same guardian.
 - Persistently rate-limits kiosk self-registration per camp access and privacy-preserving client key.
 - Removes personal PIN hash models from the generic Django admin.
 - Validates submitted object identifiers before database access so malformed kiosk and shift requests fail without side effects.

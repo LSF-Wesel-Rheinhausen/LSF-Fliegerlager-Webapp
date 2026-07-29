@@ -205,6 +205,70 @@ def test_guardian_cannot_set_pin_for_another_participants_companion(kiosk_client
 
 
 @pytest.mark.django_db
+def test_companion_cannot_set_pin_for_another_companion_of_same_guardian(kiosk_client):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    authenticated_companion = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Grace",
+        last_name="Hopper",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    target_companion = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Katherine",
+        last_name="Johnson",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    target_companion.pin.set_pin("1357")
+    target_companion.pin.save()
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = authenticated_companion.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "family_member_pin_set",
+            "family_member_id": target_companion.pk,
+            "family-pin": "8642",
+            "family-pin_repeat": "8642",
+        },
+    )
+
+    assert response.status_code == 403
+    target_companion.pin.refresh_from_db()
+    assert target_companion.pin.check_pin("1357") is True
+    assert target_companion.pin.check_pin("8642") is False
+
+
+@pytest.mark.django_db
+def test_companion_does_not_see_companion_pin_management(kiosk_client):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    authenticated_companion = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Grace",
+        last_name="Hopper",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Katherine",
+        last_name="Johnson",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = authenticated_companion.pk
+    session.save()
+
+    response = kiosk_client.get(reverse("kiosk-home"))
+
+    assert response.status_code == 200
+    assert b'name="action" value="family_member_pin_set"' not in response.content
+
+
+@pytest.mark.django_db
 def test_kiosk_login_accepts_companion_pin_and_uses_guardian_session(kiosk_client):
     participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
     companion = ParticipantFamilyMember.objects.create(
