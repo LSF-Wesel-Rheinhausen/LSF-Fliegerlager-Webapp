@@ -38,6 +38,11 @@ def _freeze_meal_lock_time(monkeypatch, fixed_now):
     monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
 
 
+def _checkin_state_tokens(kiosk_client):
+    response = kiosk_client.get(reverse("kiosk-home"))
+    return {target["token"]: target["state_token"] for target in response.context["checkin_participants"]}
+
+
 @pytest.mark.django_db
 def test_kiosk_user_guide_points_menu_only_sections_to_menu(kiosk_client):
     response = kiosk_client.get(reverse("user-guide"))
@@ -614,14 +619,17 @@ def test_kiosk_checkin_updates_linked_participant_dates(kiosk_client, monkeypatc
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session.save()
+    linked_token = f"participant-{linked.pk}"
+    checkin_state_tokens = _checkin_state_tokens(kiosk_client)
 
     response = kiosk_client.post(
         reverse("kiosk-home"),
         {
             "action": "checkin",
-            "checkin_target": [f"participant-{linked.pk}"],
-            f"arrival_date_participant-{linked.pk}": "2026-07-03",
-            f"departure_date_participant-{linked.pk}": "2026-07-09",
+            "checkin_target": [linked_token],
+            f"arrival_date_{linked_token}": "2026-07-03",
+            f"departure_date_{linked_token}": "2026-07-09",
+            f"checkin_state_{linked_token}": checkin_state_tokens[linked_token],
         },
     )
 
@@ -667,14 +675,17 @@ def test_kiosk_checkin_rejects_departure_before_arrival(kiosk_client, monkeypatc
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session.save()
+    participant_token = f"participant-{participant.pk}"
+    checkin_state_tokens = _checkin_state_tokens(kiosk_client)
 
     response = kiosk_client.post(
         reverse("kiosk-home"),
         {
             "action": "checkin",
-            "checkin_target": [f"participant-{participant.pk}"],
-            f"arrival_date_participant-{participant.pk}": "2026-07-10",
-            f"departure_date_participant-{participant.pk}": "2026-07-02",
+            "checkin_target": [participant_token],
+            f"arrival_date_{participant_token}": "2026-07-10",
+            f"departure_date_{participant_token}": "2026-07-02",
+            f"checkin_state_{participant_token}": checkin_state_tokens[participant_token],
         },
     )
 
@@ -683,6 +694,35 @@ def test_kiosk_checkin_rejects_departure_before_arrival(kiosk_client, monkeypatc
     assert participant.arrival_date is None
     assert participant.departure_date is None
     assert "Die Abreise für Ada A muss nach der Anreise liegen.".encode() in response.content
+
+
+@pytest.mark.django_db
+def test_kiosk_checkin_rejects_tampered_original_state(kiosk_client, monkeypatch):
+    monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 7, 5))
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 14))
+    participant = ParticipantFactory(camp=camp)
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    participant_token = f"participant-{participant.pk}"
+    checkin_state_tokens = _checkin_state_tokens(kiosk_client)
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "checkin",
+            "checkin_target": [participant_token],
+            f"arrival_date_{participant_token}": "2026-07-02",
+            f"departure_date_{participant_token}": "2026-07-10",
+            f"checkin_state_{participant_token}": (checkin_state_tokens[participant_token] + "tampered"),
+        },
+    )
+
+    participant.refresh_from_db()
+    assert response.status_code == 200
+    assert participant.arrival_date is None
+    assert participant.departure_date is None
+    assert "Die Check-in-Daten konnten nicht bestätigt werden." in response.content.decode("utf-8")
 
 
 @pytest.mark.django_db
@@ -705,16 +745,21 @@ def test_kiosk_checkin_updates_companion_and_child_targets(kiosk_client, monkeyp
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session.save()
+    companion_token = f"family-{companion.pk}"
+    child_token = f"family-{child.pk}"
+    checkin_state_tokens = _checkin_state_tokens(kiosk_client)
 
     response = kiosk_client.post(
         reverse("kiosk-home"),
         {
             "action": "checkin",
-            "checkin_target": [f"family-{companion.pk}", f"family-{child.pk}"],
-            f"arrival_date_family-{companion.pk}": "2026-07-02",
-            f"departure_date_family-{companion.pk}": "2026-07-10",
-            f"arrival_date_family-{child.pk}": "2026-07-03",
-            f"departure_date_family-{child.pk}": "2026-07-09",
+            "checkin_target": [companion_token, child_token],
+            f"arrival_date_{companion_token}": "2026-07-02",
+            f"departure_date_{companion_token}": "2026-07-10",
+            f"checkin_state_{companion_token}": checkin_state_tokens[companion_token],
+            f"arrival_date_{child_token}": "2026-07-03",
+            f"departure_date_{child_token}": "2026-07-09",
+            f"checkin_state_{child_token}": checkin_state_tokens[child_token],
         },
     )
 

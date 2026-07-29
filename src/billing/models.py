@@ -1064,6 +1064,7 @@ class MealSignup(TimeStampedModel):
         default=Decimal("0"),
         validators=[MinValueValidator(Decimal("0")), MaxValueValidator(Decimal("1"))],
     )
+    retraction_version = models.PositiveBigIntegerField(default=0, editable=False)
     retracted_at = models.DateTimeField(null=True, blank=True)
     charge = models.ForeignKey(
         Charge,

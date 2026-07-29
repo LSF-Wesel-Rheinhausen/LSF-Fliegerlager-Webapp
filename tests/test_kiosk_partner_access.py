@@ -509,14 +509,22 @@ def test_linked_household_checkin_records_actual_actor_and_before_after(kiosk_cl
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
     session.save()
+    page_response = kiosk_client.get(reverse("kiosk-home"))
+    partner_child_token = f"family-{partner_child.pk}"
+    state_token = next(
+        target["state_token"]
+        for target in page_response.context["checkin_participants"]
+        if target["token"] == partner_child_token
+    )
 
     response = kiosk_client.post(
         reverse("kiosk-home"),
         {
             "action": "checkin",
-            "checkin_target": [f"family-{partner_child.pk}"],
-            f"arrival_date_family-{partner_child.pk}": "2026-07-03",
-            f"departure_date_family-{partner_child.pk}": "2026-07-09",
+            "checkin_target": [partner_child_token],
+            f"arrival_date_{partner_child_token}": "2026-07-03",
+            f"departure_date_{partner_child_token}": "2026-07-09",
+            f"checkin_state_{partner_child_token}": state_token,
         },
     )
 
@@ -551,6 +559,115 @@ def test_linked_household_checkin_records_actual_actor_and_before_after(kiosk_cl
     assert "Kind Hopper" in activity_content
     assert "Anreise: – → 03.07.2026" in activity_content
     assert "Abreise: – → 09.07.2026" in activity_content
+
+
+@pytest.mark.django_db
+def test_stale_checkin_form_does_not_overwrite_unchanged_partner_row(kiosk_client, monkeypatch):
+    monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 7, 5))
+    camp = CampFactory(
+        is_active=True,
+        starts_on=date(2026, 7, 1),
+        ends_on=date(2026, 7, 14),
+    )
+    participant = ParticipantFactory(camp=camp)
+    partner = ParticipantFactory(camp=camp)
+    ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    page_response = kiosk_client.get(reverse("kiosk-home"))
+    checkin_targets = {target["token"]: target for target in page_response.context["checkin_participants"]}
+    participant_token = f"participant-{participant.pk}"
+    partner_token = f"participant-{partner.pk}"
+
+    partner.arrival_date = date(2026, 7, 3)
+    partner.departure_date = date(2026, 7, 9)
+    partner.booked_nights = 6
+    partner.save(update_fields=["arrival_date", "departure_date", "booked_nights", "updated_at"])
+    partner_updated_at = partner.updated_at
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "checkin",
+            "checkin_target": [participant_token, partner_token],
+            f"arrival_date_{participant_token}": "2026-07-02",
+            f"departure_date_{participant_token}": "2026-07-10",
+            f"checkin_state_{participant_token}": checkin_targets[participant_token]["state_token"],
+            f"arrival_date_{partner_token}": "",
+            f"departure_date_{partner_token}": "",
+            f"checkin_state_{partner_token}": checkin_targets[partner_token]["state_token"],
+        },
+    )
+
+    participant.refresh_from_db()
+    partner.refresh_from_db()
+    assert response.status_code == 302
+    assert participant.arrival_date == date(2026, 7, 2)
+    assert participant.departure_date == date(2026, 7, 10)
+    assert partner.arrival_date == date(2026, 7, 3)
+    assert partner.departure_date == date(2026, 7, 9)
+    assert partner.booked_nights == 6
+    assert partner.updated_at == partner_updated_at
+    assert not KioskActionAuditLog.objects.exists()
+
+
+@pytest.mark.django_db
+def test_stale_dirty_checkin_row_rejects_entire_update(kiosk_client, monkeypatch):
+    monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 7, 5))
+    camp = CampFactory(
+        is_active=True,
+        starts_on=date(2026, 7, 1),
+        ends_on=date(2026, 7, 14),
+    )
+    participant = ParticipantFactory(camp=camp)
+    partner = ParticipantFactory(camp=camp)
+    ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    page_response = kiosk_client.get(reverse("kiosk-home"))
+    checkin_targets = {target["token"]: target for target in page_response.context["checkin_participants"]}
+    participant_token = f"participant-{participant.pk}"
+    partner_token = f"participant-{partner.pk}"
+
+    partner.arrival_date = date(2026, 7, 3)
+    partner.departure_date = date(2026, 7, 9)
+    partner.booked_nights = 6
+    partner.save(update_fields=["arrival_date", "departure_date", "booked_nights", "updated_at"])
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "checkin",
+            "checkin_target": [participant_token, partner_token],
+            f"arrival_date_{participant_token}": "2026-07-02",
+            f"departure_date_{participant_token}": "2026-07-10",
+            f"checkin_state_{participant_token}": checkin_targets[participant_token]["state_token"],
+            f"arrival_date_{partner_token}": "2026-07-04",
+            f"departure_date_{partner_token}": "2026-07-08",
+            f"checkin_state_{partner_token}": checkin_targets[partner_token]["state_token"],
+        },
+    )
+
+    participant.refresh_from_db()
+    partner.refresh_from_db()
+    assert response.status_code == 200
+    assert participant.arrival_date is None
+    assert participant.departure_date is None
+    assert partner.arrival_date == date(2026, 7, 3)
+    assert partner.departure_date == date(2026, 7, 9)
+    assert partner.booked_nights == 6
+    assert "Die Check-in-Daten wurden zwischenzeitlich geändert." in response.content.decode("utf-8")
+    assert not KioskActionAuditLog.objects.exists()
 
 
 @pytest.mark.django_db
@@ -999,6 +1116,85 @@ def test_partner_meal_retraction_revalidates_stale_state_after_row_lock(
 
 
 @pytest.mark.django_db
+def test_partner_meal_retraction_confirmation_cannot_be_replayed_after_rebooking():
+    actor = ParticipantFactory()
+    partner = ParticipantFactory(camp=actor.camp)
+    ParticipantBookingLink.objects.create(
+        inviter=actor,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    price_rule = PriceRuleFactory(
+        camp=actor.camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        unit_price=Decimal("8.00"),
+    )
+    target = {
+        "kind": "participant",
+        "object": partner,
+    }
+    meal_date = date(2026, 7, 2)
+
+    with transaction.atomic():
+        _book_meal_for_target(
+            target,
+            meal_date,
+            MealSignup.Meal.DINNER,
+            MealSignup.Variant.NORMAL,
+            price_rule,
+            actor,
+        )
+    signup = MealSignup.objects.select_related("charge").get(participant=partner)
+    stale_confirmation_token = _sign_kiosk_meal_retraction(actor, signup)
+
+    with transaction.atomic():
+        assert (
+            _retract_meal_signup(
+                signup,
+                actor,
+                confirmation_token=stale_confirmation_token,
+            )
+            is True
+        )
+    with transaction.atomic():
+        _book_meal_for_target(
+            target,
+            meal_date,
+            MealSignup.Meal.DINNER,
+            MealSignup.Variant.NORMAL,
+            price_rule,
+            actor,
+        )
+    signup.refresh_from_db()
+    signup.charge.refresh_from_db()
+    assert signup.status == MealSignup.Status.ACTIVE
+    assert signup.charge.deleted_at is None
+
+    with transaction.atomic():
+        stale_result = _retract_meal_signup(
+            signup,
+            actor,
+            confirmation_token=stale_confirmation_token,
+        )
+
+    signup.refresh_from_db()
+    signup.charge.refresh_from_db()
+    assert stale_result is False
+    assert signup.status == MealSignup.Status.ACTIVE
+    assert signup.charge.deleted_at is None
+
+    current_confirmation_token = _sign_kiosk_meal_retraction(actor, signup)
+    with transaction.atomic():
+        current_result = _retract_meal_signup(
+            signup,
+            actor,
+            confirmation_token=current_confirmation_token,
+        )
+    assert current_result is True
+
+
+@pytest.mark.django_db
 def test_meal_signup_row_locks_exclude_nullable_postgresql_joins(monkeypatch):
     participant = ParticipantFactory()
     price_rule = PriceRuleFactory(
@@ -1106,6 +1302,86 @@ def test_partner_meal_workflows_lock_signup_before_authorization(monkeypatch):
         "book": [MealSignup, ParticipantBookingLink],
         "retract": [MealSignup, ParticipantBookingLink],
     }
+
+
+@pytest.mark.django_db
+def test_partner_meal_batch_locks_all_signups_before_authorization(kiosk_client, monkeypatch):
+    fixed_now = timezone.make_aware(datetime(2026, 6, 30, 10, 0))
+    monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
+    camp = CampFactory(
+        is_active=True,
+        starts_on=date(2026, 6, 30),
+        ends_on=date(2026, 7, 14),
+    )
+    actor = ParticipantFactory(camp=camp)
+    partner = ParticipantFactory(camp=camp)
+    ParticipantBookingLink.objects.create(
+        inviter=actor,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        applies_to_adults=True,
+        is_default=True,
+        unit_price=Decimal("8.00"),
+    )
+    signups = [
+        MealSignup.objects.create(
+            participant=partner,
+            meal_date=meal_date,
+            meal=MealSignup.Meal.DINNER,
+            variant=MealSignup.Variant.NORMAL,
+        )
+        for meal_date in (date(2026, 7, 2), date(2026, 7, 3))
+    ]
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = actor.pk
+    session.save()
+    lock_events = []
+    original_fetch_all = QuerySet._fetch_all
+
+    def capture_lock_event(queryset):
+        was_unfetched = queryset._result_cache is None
+        original_fetch_all(queryset)
+        if (
+            was_unfetched
+            and queryset.query.select_for_update
+            and queryset.model in {MealSignup, ParticipantBookingLink}
+        ):
+            lock_events.append(
+                (
+                    queryset.model,
+                    tuple(instance.pk for instance in queryset._result_cache),
+                )
+            )
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", capture_lock_event)
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-meal_dates": ["2026-07-02", "2026-07-03"],
+            "meal-meal": MealSignup.Meal.DINNER,
+            "meal-variant": MealSignup.Variant.NORMAL,
+            "meal-target": [f"participant-{partner.pk}"],
+            f"meal-variant-participant-{partner.pk}": MealSignup.Variant.NORMAL,
+        },
+    )
+
+    assert response.status_code == 302
+    first_authorization_lock = next(
+        index for index, (model, _pks) in enumerate(lock_events) if model is ParticipantBookingLink
+    )
+    locked_signup_ids = {
+        pk for model, pks in lock_events[:first_authorization_lock] if model is MealSignup for pk in pks
+    }
+    assert locked_signup_ids == {signup.pk for signup in signups}
+    assert all(model is not MealSignup for model, _pks in lock_events[first_authorization_lock:])
 
 
 @pytest.mark.django_db

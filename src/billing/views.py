@@ -168,6 +168,7 @@ KIOSK_QUICK_CONFIRMATION_SIGNING_SALT = "billing.kiosk-quick-confirmation.v1"
 KIOSK_QUICK_CONFIRMATION_MAX_AGE_SECONDS = 10 * 60
 KIOSK_MEAL_RETRACTION_SIGNING_SALT = "billing.kiosk-meal-retraction.v1"
 KIOSK_MEAL_RETRACTION_MAX_AGE_SECONDS = 10 * 60
+KIOSK_CHECKIN_STATE_SIGNING_SALT = "billing.kiosk-checkin-state.v1"
 
 
 def _positive_int_or_none(value: Any) -> int | None:
@@ -272,6 +273,7 @@ def _kiosk_meal_retraction_payload(
         "meal": signup.meal,
         "variant": signup.variant,
         "status": signup.status,
+        "retraction_version": signup.retraction_version,
         "charge": (
             None
             if charge is None
@@ -306,6 +308,74 @@ def _matches_kiosk_meal_retraction(token: str, participant: Participant, signup:
     except signing.BadSignature:
         return False
     return signed_payload == _kiosk_meal_retraction_payload(participant, signup)
+
+
+def _kiosk_checkin_state_payload(
+    participant: Participant,
+    target_token: str,
+    target: Participant | ParticipantFamilyMember,
+) -> dict[str, object]:
+    """Return the signed original attendance state rendered for one check-in row."""
+    return {
+        "participant_id": participant.pk,
+        "camp_id": participant.camp_id,
+        "target_token": target_token,
+        "arrival_date": target.arrival_date.isoformat() if target.arrival_date else None,
+        "departure_date": target.departure_date.isoformat() if target.departure_date else None,
+    }
+
+
+def _sign_kiosk_checkin_state(
+    participant: Participant,
+    target_token: str,
+    target: Participant | ParticipantFamilyMember,
+) -> str:
+    """Sign a check-in row's original state for optimistic concurrency checks."""
+    return signing.dumps(
+        _kiosk_checkin_state_payload(participant, target_token, target),
+        salt=KIOSK_CHECKIN_STATE_SIGNING_SALT,
+        compress=True,
+    )
+
+
+def _kiosk_checkin_original_state(
+    token: str,
+    participant: Participant,
+    target_token: str,
+) -> tuple[date | None, date | None] | None:
+    """Return signed original dates when token identity and values are valid."""
+    try:
+        payload = signing.loads(token, salt=KIOSK_CHECKIN_STATE_SIGNING_SALT)
+    except signing.BadSignature:
+        return None
+    if not isinstance(payload, dict) or set(payload) != {
+        "participant_id",
+        "camp_id",
+        "target_token",
+        "arrival_date",
+        "departure_date",
+    }:
+        return None
+    if (
+        payload["participant_id"] != participant.pk
+        or payload["camp_id"] != participant.camp_id
+        or payload["target_token"] != target_token
+    ):
+        return None
+
+    parsed_dates: list[date | None] = []
+    for field_name in ("arrival_date", "departure_date"):
+        raw_value = payload[field_name]
+        if raw_value is None:
+            parsed_dates.append(None)
+            continue
+        if not isinstance(raw_value, str):
+            return None
+        parsed_value = parse_date(raw_value)
+        if parsed_value is None:
+            return None
+        parsed_dates.append(parsed_value)
+    return parsed_dates[0], parsed_dates[1]
 
 
 def kiosk_root(_request: HttpRequest) -> HttpResponse:
@@ -2068,6 +2138,12 @@ def _kiosk_checkin_participants(
                     "camp": linked_participant.camp,
                 }
             )
+    for target in targets:
+        target["state_token"] = _sign_kiosk_checkin_state(
+            participant,
+            target["token"],
+            target["object"],
+        )
     return targets
 
 
@@ -2096,7 +2172,7 @@ def _validate_kiosk_checkin_dates(target, camp, arrival_date, departure_date, er
 
 def _update_kiosk_checkin_dates(request, participant, checkin_participants):
     targets_by_token = {target["token"]: target for target in checkin_participants}
-    submitted_tokens = request.POST.getlist("checkin_target")
+    submitted_tokens = list(dict.fromkeys(request.POST.getlist("checkin_target")))
     updates = []
     errors = []
 
@@ -2106,6 +2182,14 @@ def _update_kiosk_checkin_dates(request, participant, checkin_participants):
             errors.append("Ein Teilnehmer darf über diesen Kiosk nicht bearbeitet werden.")
             continue
         target_object = target["object"]
+        original_state = _kiosk_checkin_original_state(
+            request.POST.get(f"checkin_state_{token}", ""),
+            participant,
+            token,
+        )
+        if original_state is None:
+            errors.append("Die Check-in-Daten konnten nicht bestätigt werden. Bitte lade die Seite neu.")
+            continue
         arrival_date = _parse_kiosk_checkin_date(
             request.POST.get(f"arrival_date_{token}"),
             "Anreise",
@@ -2119,7 +2203,15 @@ def _update_kiosk_checkin_dates(request, participant, checkin_participants):
             errors,
         )
         _validate_kiosk_checkin_dates(target_object, target["camp"], arrival_date, departure_date, errors)
-        updates.append((target_object, arrival_date, departure_date))
+        if (arrival_date, departure_date) != original_state:
+            updates.append(
+                {
+                    "target": target_object,
+                    "arrival_date": arrival_date,
+                    "departure_date": departure_date,
+                    "original_state": original_state,
+                }
+            )
 
     if errors:
         for error in errors:
@@ -2128,30 +2220,65 @@ def _update_kiosk_checkin_dates(request, participant, checkin_participants):
 
     actor_family_member = _kiosk_family_member(request, participant)
     with transaction.atomic():
-        for submitted_target, arrival_date, departure_date in updates:
+        participant_ids = sorted(
+            {update["target"].pk for update in updates if isinstance(update["target"], Participant)}
+        )
+        family_member_ids = sorted(
+            {update["target"].pk for update in updates if isinstance(update["target"], ParticipantFamilyMember)}
+        )
+        locked_participants = {
+            target.pk: target
+            for target in Participant.objects.select_for_update(of=("self",))
+            .filter(pk__in=participant_ids)
+            .order_by("pk")
+        }
+        locked_family_members = {
+            target.pk: target
+            for target in ParticipantFamilyMember.objects.select_for_update(of=("self",))
+            .select_related("guardian")
+            .filter(pk__in=family_member_ids)
+            .order_by("pk")
+        }
+
+        partner_participants = {}
+        for update in updates:
+            submitted_target = update["target"]
             if isinstance(submitted_target, Participant):
-                target = Participant.objects.select_for_update().get(pk=submitted_target.pk)
-                target_participant = target
-                target_family_member = None
+                target = locked_participants.get(submitted_target.pk)
             else:
-                target = (
-                    ParticipantFamilyMember.objects.select_for_update()
-                    .select_related("guardian")
-                    .get(pk=submitted_target.pk)
+                target = locked_family_members.get(submitted_target.pk)
+            if target is None:
+                raise PermissionDenied("Der Check-in-Eintrag ist nicht mehr verfügbar.")
+            update["locked_target"] = target
+            current_state = (target.arrival_date, target.departure_date)
+            if current_state != update["original_state"]:
+                messages.error(
+                    request,
+                    "Die Check-in-Daten wurden zwischenzeitlich geändert. Bitte lade die Seite neu.",
                 )
-                target_participant = target.guardian
-                target_family_member = target
-
-            booking_link = None
+                return False
+            target_participant = target if isinstance(target, Participant) else target.guardian
             if target_participant.pk != participant.pk:
-                booking_link = _accepted_booking_link_between(
-                    participant,
-                    target_participant,
-                    for_update=True,
-                )
-                if booking_link is None:
-                    raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
+                partner_participants[target_participant.pk] = target_participant
 
+        booking_links = {}
+        for partner_id in sorted(partner_participants):
+            booking_link = _accepted_booking_link_between(
+                participant,
+                partner_participants[partner_id],
+                for_update=True,
+            )
+            if booking_link is None:
+                raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
+            booking_links[partner_id] = booking_link
+
+        for update in updates:
+            target = update["locked_target"]
+            arrival_date = update["arrival_date"]
+            departure_date = update["departure_date"]
+            target_participant = target if isinstance(target, Participant) else target.guardian
+            target_family_member = target if isinstance(target, ParticipantFamilyMember) else None
+            booking_link = booking_links.get(target_participant.pk)
             before = {
                 "arrival_date": target.arrival_date.isoformat() if target.arrival_date else None,
                 "departure_date": target.departure_date.isoformat() if target.departure_date else None,
@@ -2276,6 +2403,77 @@ def _target_token_for_signup(signup):
     return f"participant-{signup.participant_id}"
 
 
+def _meal_signup_key(
+    target: dict[str, Any],
+    meal_date: date,
+    meal: str,
+) -> tuple[int, int | None, date, str]:
+    """Return the unique database identity of a target's meal signup."""
+    target_object = target["object"]
+    participant = target_object if target["kind"] == "participant" else target_object.guardian
+    family_member_id = target_object.pk if target["kind"] == "family" else None
+    return participant.pk, family_member_id, meal_date, meal
+
+
+def _lock_meal_signups_for_bookings(
+    bookings: list[tuple[dict[str, Any], date, str, PriceRule]],
+    meal: str,
+) -> tuple[
+    dict[tuple[int, int | None, date, str], MealSignup],
+    set[tuple[int, int | None, date, str]],
+]:
+    """Ensure and lock every batch signup in stable order before authorization rows."""
+    bookings_by_key = {
+        _meal_signup_key(target, meal_date, meal): (variant, price_rule)
+        for target, meal_date, variant, price_rule in bookings
+    }
+    if not bookings_by_key:
+        return {}, set()
+
+    created_keys = set()
+    signup_ids = []
+    for signup_key in sorted(
+        bookings_by_key,
+        key=lambda key: (key[0], key[1] or 0, key[2], key[3]),
+    ):
+        participant_id, family_member_id, meal_date, meal_name = signup_key
+        variant, price_rule = bookings_by_key[signup_key]
+        signup, created = MealSignup.objects.get_or_create(
+            participant_id=participant_id,
+            family_member_id=family_member_id,
+            meal_date=meal_date,
+            meal=meal_name,
+            defaults={
+                "variant": variant,
+                "status": MealSignup.Status.ACTIVE,
+                "foerdersatz": price_rule.foerdersatz,
+                "retracted_at": None,
+            },
+        )
+        signup_ids.append(signup.pk)
+        if created:
+            created_keys.add(signup_key)
+
+    locked_signups = list(
+        MealSignup.objects.select_for_update(of=("self",))
+        .select_related("charge")
+        .filter(pk__in=signup_ids)
+        .order_by("pk")
+    )
+    if len(locked_signups) != len(signup_ids):
+        raise MealSignup.DoesNotExist("Eine Essensanmeldung wurde während der Buchung entfernt.")
+    signups_by_key = {
+        (
+            signup.participant_id,
+            signup.family_member_id,
+            signup.meal_date,
+            signup.meal,
+        ): signup
+        for signup in locked_signups
+    }
+    return signups_by_key, created_keys
+
+
 def _notify_linked_booking_by_id(charge_id: int, actor_id: int, *, cancelled: bool) -> None:
     charge = Charge.objects.select_related("participant", "kiosk_booked_by").get(pk=charge_id)
     actor = Participant.objects.get(pk=actor_id)
@@ -2290,28 +2488,42 @@ def _book_meal_for_target(
     price_rule,
     booked_by,
     actor_family_member=None,
+    *,
+    prelocked_signup: MealSignup | None = None,
+    signup_lock_acquired: bool = False,
+    signup_was_created: bool = False,
 ):
     meal_display = dict(MealSignup.Meal.choices).get(meal, meal)
     target_object = target["object"]
     participant = target_object if target["kind"] == "participant" else target_object.guardian
     family_member = target_object if target["kind"] == "family" else None
-    existing_signup = (
-        MealSignup.objects.select_for_update(of=("self",))
-        .select_related("charge")
-        .filter(
-            participant=participant,
-            family_member=family_member,
-            meal_date=meal_date,
-            meal=meal,
+    existing_signup: MealSignup | None
+    if signup_lock_acquired:
+        if prelocked_signup is None:
+            raise MealSignup.DoesNotExist("Die vorbereitete Essensanmeldung fehlt.")
+        existing_signup = prelocked_signup
+    else:
+        existing_signup = (
+            MealSignup.objects.select_for_update(of=("self",))
+            .select_related("charge")
+            .filter(
+                participant=participant,
+                family_member=family_member,
+                meal_date=meal_date,
+                meal=meal,
+            )
+            .first()
         )
-        .first()
-    )
     booking_link = None
     if participant.pk != booked_by.pk:
         booking_link = _accepted_booking_link_between(booked_by, participant, for_update=True)
         if booking_link is None:
             raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
-    before = kiosk_meal_signup_audit_snapshot(existing_signup) if existing_signup is not None else {}
+    before = (
+        kiosk_meal_signup_audit_snapshot(existing_signup)
+        if existing_signup is not None and not signup_was_created
+        else {}
+    )
     signup_defaults = {
         "variant": variant,
         "status": MealSignup.Status.ACTIVE,
@@ -2321,13 +2533,27 @@ def _book_meal_for_target(
     charge_description = f"{price_rule.name} {meal_display}"
     if family_member is not None:
         charge_description = f"{charge_description} für {family_member.full_name}"
-    signup, _created = MealSignup.objects.update_or_create(
-        participant=participant,
-        family_member=family_member,
-        meal_date=meal_date,
-        meal=meal,
-        defaults=signup_defaults,
-    )
+    if existing_signup is None:
+        signup = MealSignup.objects.create(
+            participant=participant,
+            family_member=family_member,
+            meal_date=meal_date,
+            meal=meal,
+            **signup_defaults,
+        )
+    else:
+        signup = existing_signup
+        for field_name, value in signup_defaults.items():
+            setattr(signup, field_name, value)
+        signup.save(
+            update_fields=[
+                "variant",
+                "status",
+                "foerdersatz",
+                "retracted_at",
+                "updated_at",
+            ]
+        )
     charge = signup.charge
     if charge is None:
         charge = Charge(participant=participant, kind=Charge.Kind.FOOD)
@@ -2400,8 +2626,9 @@ def _retract_meal_signup(
         booking_link = creation_audit.booking_link if creation_audit is not None else None
     before = kiosk_meal_signup_audit_snapshot(locked_signup)
     locked_signup.status = MealSignup.Status.RETRACTED
+    locked_signup.retraction_version += 1
     locked_signup.retracted_at = timezone.now()
-    locked_signup.save(update_fields=["status", "retracted_at", "updated_at"])
+    locked_signup.save(update_fields=["status", "retraction_version", "retracted_at", "updated_at"])
     charge = locked_signup.charge
     if charge is not None:
         charge.deleted_at = timezone.now()
@@ -3029,7 +3256,9 @@ def kiosk_home(request, kiosk_mode="private"):
                     )
                 if not meal_form.errors:
                     with transaction.atomic():
+                        locked_signups, created_signup_keys = _lock_meal_signups_for_bookings(bookings, meal)
                         for target, meal_date, variant, price_rule in bookings:
+                            signup_key = _meal_signup_key(target, meal_date, meal)
                             _book_meal_for_target(
                                 target,
                                 meal_date,
@@ -3038,6 +3267,9 @@ def kiosk_home(request, kiosk_mode="private"):
                                 price_rule,
                                 participant,
                                 active_family_member,
+                                prelocked_signup=locked_signups.get(signup_key),
+                                signup_lock_acquired=True,
+                                signup_was_created=signup_key in created_signup_keys,
                             )
                     day_label = "Tag" if len(meal_dates) == 1 else "Tage"
                     person_label = "Person" if len(selected_targets) == 1 else "Personen"

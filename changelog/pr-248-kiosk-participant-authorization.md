@@ -36,8 +36,14 @@
   noch doppelte Audit- oder Benachrichtigungseinträge erzeugen. Der Lock
   beschränkt sich auf die Essensanmeldung selbst, sodass PostgreSQL nullable
   vorgeladene Charge- und Familienrelationen nicht unzulässig mitsperrt.
-  Buchung und Rücknahme sperren dabei zuerst die Essensanmeldung und danach die
-  Partner-Vollmacht, damit parallele Gegenoperationen keinen Lock-Zyklus bilden.
+  Jede erfolgreiche Rücknahme erhöht zusätzlich eine persistente Version,
+  sodass ihr Bestätigungstoken auch nach einer identischen Neubuchung nicht
+  erneut verwendet werden kann. Buchungs-Batches sperren alle betroffenen
+  Essensanmeldungen in stabiler Reihenfolge, bevor sie Partner-Vollmachten
+  sperren, damit parallele Gegenoperationen keinen Lock-Zyklus bilden.
+- Bindet jede Check-in-Zeile an ihren signierten Ausgangszustand, schreibt nur
+  tatsächlich geänderte Zeilen und weist konkurrierend veränderte Daten ohne
+  Teilaktualisierung zurück.
 - Zeigt bei Schnellbuchungen für mehrere Konten vor dem Schreiben eine
   verbindliche Übersicht über Personen, Mengen, Einzelpreise und Gesamtsumme
   und verlangt eine ausdrückliche kostenpflichtige Bestätigung. Ein

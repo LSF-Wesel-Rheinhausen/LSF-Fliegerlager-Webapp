@@ -968,6 +968,11 @@
               {% endif %}
             </div>
             <input type="hidden" name="checkin_target" value="{{ checkin_target.token }}">
+            <input
+              type="hidden"
+              name="checkin_state_{{ checkin_target.token }}"
+              value="{{ checkin_target.state_token }}"
+            >
             <p class="dialog-field">
               <label for="arrival-date-{{ checkin_target.token }}">Anreise</label>
               <input

@@ -963,15 +963,23 @@ def test_linked_checkin_change_notifies_affected_partner(
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = actor.pk
     session.save()
+    page_response = kiosk_client.get(reverse("kiosk-home"))
+    partner_token = f"participant-{partner.pk}"
+    state_token = next(
+        target["state_token"]
+        for target in page_response.context["checkin_participants"]
+        if target["token"] == partner_token
+    )
 
     with django_capture_on_commit_callbacks(execute=True):
         response = kiosk_client.post(
             reverse("kiosk-home"),
             {
                 "action": "checkin",
-                "checkin_target": [f"participant-{partner.pk}"],
-                f"arrival_date_participant-{partner.pk}": "2026-07-03",
-                f"departure_date_participant-{partner.pk}": "2026-07-09",
+                "checkin_target": [partner_token],
+                f"arrival_date_{partner_token}": "2026-07-03",
+                f"departure_date_{partner_token}": "2026-07-09",
+                f"checkin_state_{partner_token}": state_token,
             },
         )
 
