@@ -471,12 +471,12 @@
           </div>
         {% endif %}
       </dialog>
-      {% if not is_post_camp %}<dialog id="family-management-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="family-management-dialog-title">
+      {% if not is_post_camp %}<dialog id="family-management-dialog"{% if family_member_pin_form.errors %} data-auto-open-dialog{% endif %} class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="family-management-dialog-title">
         <div class="kiosk-card__header kiosk-section-heading">
           <div class="kiosk-card__header-main">
             <h2 class="kiosk-title" id="family-management-dialog-title">
               Familie
-              <button type="button" class="kiosk-help-button" data-help-text="Hier legst du Familienmitglieder (z.B. Partner, Kinder) an. Ihre Kosten werden auf deine finale Abrechnung gebucht. Sie tauchen beim Essen als auswählbare Personen auf, haben aber keinen eigenen Kiosk-Login." aria-label="Kurzhilfe Familie">?</button>
+              <button type="button" class="kiosk-help-button" data-help-text="Hier legst du Kinder und Begleitpersonen an. Ihre Kosten werden auf deine finale Abrechnung gebucht. Kinder haben keinen eigenen Kiosk-Login; für Begleitpersonen vergibst du eine persönliche PIN." aria-label="Kurzhilfe Familie">?</button>
             </h2>
             <p>Diese Personen werden über dein Konto abgerechnet.</p>
           </div>
@@ -491,13 +491,42 @@
             <div class="kiosk-list-row__content">
               <strong>{{ member.full_name }}</strong>
               <span>{{ member.get_role_display }}</span>
+              {% if member.role == "companion" %}
+                <span>{% if member.pin.pin_hash and not member.pin.must_set_pin %}PIN eingerichtet{% else %}PIN fehlt{% endif %}</span>
+              {% endif %}
             </div>
-            <form method="post" class="kiosk-list-row__actions">
-              {% csrf_token %}
-              <input type="hidden" name="action" value="family_member_deactivate">
-              <input type="hidden" name="family_member_id" value="{{ member.pk }}">
-              <button type="submit" class="button-secondary">Entfernen</button>
-            </form>
+            <div class="kiosk-list-row__actions">
+              {% if member.role == "companion" %}
+                <details{% if family_member_pin_member_id == member.pk and family_member_pin_form.errors %} open{% endif %}>
+                  <summary>{% if member.pin.pin_hash and not member.pin.must_set_pin %}PIN ändern{% else %}PIN setzen{% endif %}</summary>
+                  <form method="post" class="form-grid">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="family_member_pin_set">
+                    <input type="hidden" name="family_member_id" value="{{ member.pk }}">
+                    {% if family_member_pin_member_id == member.pk and family_member_pin_form.errors %}
+                      {{ family_member_pin_form.non_field_errors }}
+                      {{ family_member_pin_form.pin.errors }}
+                      {{ family_member_pin_form.pin_repeat.errors }}
+                    {% endif %}
+                    <p>
+                      <label for="family-pin-{{ member.pk }}">Neue PIN</label>
+                      <input id="family-pin-{{ member.pk }}" type="password" name="family-pin" minlength="4" maxlength="12" inputmode="numeric" autocomplete="new-password" required>
+                    </p>
+                    <p>
+                      <label for="family-pin-repeat-{{ member.pk }}">PIN wiederholen</label>
+                      <input id="family-pin-repeat-{{ member.pk }}" type="password" name="family-pin_repeat" minlength="4" maxlength="12" inputmode="numeric" autocomplete="new-password" required>
+                    </p>
+                    <button type="submit">PIN speichern</button>
+                  </form>
+                </details>
+              {% endif %}
+              <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="family_member_deactivate">
+                <input type="hidden" name="family_member_id" value="{{ member.pk }}">
+                <button type="submit" class="button-secondary">Entfernen</button>
+              </form>
+            </div>
           </div>
         {% empty %}
           <div class="kiosk-empty">

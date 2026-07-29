@@ -31,6 +31,8 @@ MESSAGE_STORAGE = "django.contrib.messages.storage.session.SessionStorage"
 KIOSK_ACCESS_COOKIE_AGE = 30 * 24 * 60 * 60
 KIOSK_ACCESS_MAX_ATTEMPTS = 5
 KIOSK_ACCESS_ATTEMPT_WINDOW = 5 * 60
+KIOSK_REGISTRATION_MAX_ATTEMPTS = 10
+KIOSK_REGISTRATION_ATTEMPT_WINDOW = 15 * 60
 KIOSK_ACCESS_TRUSTED_PROXY_ADDRESSES = frozenset(
     address.strip() for address in os.getenv("KIOSK_ACCESS_TRUSTED_PROXY_ADDRESSES", "").split(",") if address.strip()
 )

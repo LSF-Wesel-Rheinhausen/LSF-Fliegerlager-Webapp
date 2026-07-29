@@ -1,7 +1,9 @@
 import pytest
+from django.contrib import admin
 from django.contrib.auth.models import Permission
 from django.urls import reverse
 
+from billing.models import ParticipantFamilyMemberPin, ParticipantPin
 from billing.roles import bootstrap_default_roles
 from tests.factories import GroupFactory, SuperUserFactory, UserFactory
 
@@ -26,8 +28,13 @@ def test_app_admin_only_accesses_non_sensitive_billing_models(client):
 
     assert client.get(reverse("admin:billing_camp_changelist")).status_code == 200
     assert client.get(reverse("admin:auth_user_changelist")).status_code == 403
-    assert client.get(reverse("admin:billing_participantpin_changelist")).status_code == 403
+    assert client.get("/admin/billing/participantpin/").status_code == 404
     assert client.get(reverse("admin:billing_dailysettlementbackupsettings_changelist")).status_code == 403
+
+
+def test_pin_hash_models_are_not_registered_in_django_admin():
+    assert admin.site.is_registered(ParticipantPin) is False
+    assert admin.site.is_registered(ParticipantFamilyMemberPin) is False
 
 
 @pytest.mark.django_db

@@ -1,5 +1,4 @@
 from datetime import timedelta
-from ipaddress import ip_address
 from typing import Literal, cast
 from urllib.parse import urlsplit
 
@@ -11,7 +10,6 @@ from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import Resolver404, resolve, reverse
 from django.utils import timezone
-from django.utils.crypto import salted_hmac
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
@@ -24,38 +22,12 @@ from .kiosk_access import (
     kiosk_access_from_request,
     set_kiosk_access_cookie,
 )
+from .kiosk_security import kiosk_client_key
 from .models import Camp, CampKioskAccess, CampKioskAccessAttempt
 from .permissions import admin_required
 from .views import _kiosk_context
 
 PinAttemptResult = Literal["accepted", "rejected", "blocked"]
-
-
-def _kiosk_client_address(request: HttpRequest) -> str:
-    """Resolve one rate-limit address across an explicitly trusted proxy."""
-    remote_address = request.META.get("REMOTE_ADDR", "")
-    if not isinstance(remote_address, str):
-        remote_address = ""
-    if remote_address not in settings.KIOSK_ACCESS_TRUSTED_PROXY_ADDRESSES:
-        return remote_address
-
-    forwarded_address = request.META.get("HTTP_X_FORWARDED_FOR", "")
-    if not isinstance(forwarded_address, str):
-        return remote_address
-    try:
-        return ip_address(forwarded_address.strip()).compressed
-    except ValueError:
-        # A trusted proxy must overwrite X-Forwarded-For with exactly one IP.
-        return remote_address
-
-
-def _kiosk_client_key(request: HttpRequest) -> str:
-    """Hash the resolved client address without retaining network data."""
-    return salted_hmac(
-        "billing.kiosk-access.client.v1",
-        _kiosk_client_address(request),
-        algorithm="sha256",
-    ).hexdigest()
 
 
 def _check_pin_with_server_throttle(
@@ -73,7 +45,7 @@ def _check_pin_with_server_throttle(
     with transaction.atomic():
         attempt_state, _created = CampKioskAccessAttempt.objects.select_for_update().get_or_create(
             access=access,
-            client_key=_kiosk_client_key(request),
+            client_key=kiosk_client_key(request),
         )
         stored_values = attempt_state.failure_timestamps
         if not isinstance(stored_values, list):

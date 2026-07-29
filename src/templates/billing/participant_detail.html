@@ -25,9 +25,9 @@
         <a class="button" href="{% url 'charge-create' participant.pk %}">Kosten erfassen</a>
         <a class="button" href="{% url 'payment-create' participant.pk %}">Zahlung erfassen</a>
         <a class="button" href="{% url 'pin-set' participant.pk %}">PIN setzen</a>
-        <form method="post" action="{% url 'pin-reset' participant.pk %}">
+        <form method="post" action="{% url 'pin-reset' participant.pk %}" onsubmit="return confirm('PIN sperren? Danach muss die Lagerleitung vor der nächsten Anmeldung eine neue PIN setzen.');">
           {% csrf_token %}
-          <button type="submit">PIN zurücksetzen</button>
+          <button type="submit">PIN sperren</button>
         </form>
       {% endif %}
       <a class="button" href="{% url 'export-participant-pdf' participant.pk %}" target="_blank" rel="noopener">Einzelabrechnung als PDF öffnen</a>

@@ -42,7 +42,7 @@
       <div class="kiosk-login-card__tips">
         <div class="kiosk-note">
           <strong>Neu hier?</strong>
-          <p>Beim ersten Login kannst du dir direkt eine eigene PIN ausdenken. Gib sie einfach ein, sie wird danach gespeichert.</p>
+          <p>Bei der Selbstregistrierung vergibst du direkt deine persönliche PIN. Für durch die Lagerleitung angelegte Konten setzt die Lagerleitung die PIN vor der ersten Anmeldung.</p>
         </div>
         {% if not is_post_camp %}<div class="kiosk-note" style="margin-top: 0.75rem;">
           <strong>Du fehlst in der Liste?</strong>
@@ -55,12 +55,12 @@
     </div>
   </section>
 
-  {% if not is_post_camp %}<dialog id="self-registration-dialog" class="dialog" style="max-width: 500px; width: 90%; border: none; border-radius: var(--radius); padding: 1.5rem; background: var(--panel);">
+  {% if not is_post_camp %}<dialog id="self-registration-dialog"{% if enrollment_form.errors %} open{% endif %} class="dialog" style="max-width: 500px; width: 90%; border: none; border-radius: var(--radius); padding: 1.5rem; background: var(--panel);">
     <form method="post" action="{% if kiosk_mode == 'central' %}{% url 'central-kiosk-self-register' %}{% else %}{% url 'kiosk-self-register' %}{% endif %}">
       {% csrf_token %}
       <h2 style="margin-top: 0; font-size: 1.25rem;">📝 Selbstregistrierung Fliegerlager</h2>
       <p style="color: var(--muted); font-size: 0.9rem;">
-        Trage deine Daten ein. Nach dem Absenden erhält die Lagerleitung eine Benachrichtigung zur Freigabe.
+        Trage deine Daten ein und wähle deine persönliche PIN. Nach dem Absenden prüft die Lagerleitung deine preisrelevanten Angaben und gibt die Registrierung frei.
       </p>
       {{ enrollment_form.as_p }}
       <div class="form-actions" style="margin-top: 1rem; display: flex; justify-content: flex-end; gap: 0.5rem;">

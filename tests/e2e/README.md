@@ -13,7 +13,7 @@ Die Tests pruefen:
 - Admin-Bearbeitung einer Buchung inklusive sichtbarem Änderungsprotokoll.
 - Native Dialoge fuer das Anlegen und Bearbeiten von Preisregeln.
 - Dienstvorlagen, Dienstgenerierung sowie Uebernahme und Tausch im Teilnehmer-Kiosk.
-- Kiosk-Buchungen fuer Getraenke und Mahlzeiten inklusive PIN-Ersteinrichtung.
+- Kiosk-Buchungen fuer Getraenke und Mahlzeiten mit vorab vergebener persoenlicher PIN.
 - Sichtbares Vereinslogo und geladenes CSS.
 - Desktop- und iPhone-Viewports ohne unerwarteten horizontalen Overflow.
 

@@ -385,6 +385,28 @@ class CampKioskAccessAttempt(TimeStampedModel):
         return f"Kiosk-PIN-Fehlversuche {self.access.camp}"
 
 
+class CampKioskRegistrationAttempt(TimeStampedModel):
+    """Persist self-registration attempts without retaining client network data."""
+
+    access = models.ForeignKey(CampKioskAccess, on_delete=models.CASCADE, related_name="registration_attempt_states")
+    client_key = models.CharField(max_length=64)
+    attempt_timestamps = models.JSONField(default=list)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["access", "client_key"],
+                name="unique_kiosk_reg_attempt_client",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["updated_at"], name="kiosk_reg_attempt_updated_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"Kiosk-Registrierungsversuche {self.access.camp}"
+
+
 class Participant(TimeStampedModel):
     class Status(models.TextChoices):
         PENDING_APPROVAL = "pending_approval", "Ausstehende Freigabe"
