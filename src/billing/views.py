@@ -145,6 +145,13 @@ PRE_CAMP_KIOSK_ACTIONS = frozenset(
         "booking_link_revoke",
     }
 )
+GUARDIAN_ONLY_KIOSK_ACTIONS = frozenset(
+    {
+        "family_member_create",
+        "family_member_deactivate",
+        "family_member_pin_set",
+    }
+)
 KIOSK_QUICK_BOOKING_CANCEL_WINDOW = timedelta(minutes=15)
 
 
@@ -2023,6 +2030,8 @@ def kiosk_home(request, kiosk_mode="private"):
         if is_pre_camp and request.POST.get("action") not in PRE_CAMP_KIOSK_ACTIONS:
             messages.error(request, "Diese Funktion ist erst ab Lagerbeginn verfügbar.")
             return redirect(_kiosk_route(kiosk_mode, "home"))
+        if active_family_member is not None and request.POST.get("action") in GUARDIAN_ONLY_KIOSK_ACTIONS:
+            return HttpResponseForbidden("Nur Hauptteilnehmer dürfen Familienmitglieder verwalten.")
         if request.POST.get("action") == "quick":
             quick_form = QuickBookingForm(request.POST, participant=participant, prefix="quick")
             if quick_form.is_valid():
@@ -2213,8 +2222,6 @@ def kiosk_home(request, kiosk_mode="private"):
                 messages.success(request, "Familienmitglied wurde angelegt.")
                 return redirect(_kiosk_route(kiosk_mode, "home"))
         elif request.POST.get("action") == "family_member_pin_set":
-            if active_family_member is not None:
-                return HttpResponseForbidden("Nur Hauptteilnehmer dürfen Begleitpersonen-PINs verwalten.")
             family_member_pin_member_id = _positive_int_or_none(request.POST.get("family_member_id"))
             family_member = None
             if family_member_pin_member_id is not None:

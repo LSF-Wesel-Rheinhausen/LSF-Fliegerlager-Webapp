@@ -177,10 +177,12 @@
         <small>{% if is_post_camp %}Bisherige Anträge ansehen.{% else %}Vorgestreckte Ausgaben einreichen und ihren Status sehen.{% endif %}</small>
       </button>{% endif %}
       {% if not is_post_camp %}
+      {% if not kiosk_actor_is_family_member %}
       <button type="button" class="kiosk-menu__item" data-dialog-target="family-management-dialog">
         <span>Familie</span>
         <small>Begleitpersonen und Kinder verwalten.</small>
       </button>
+      {% endif %}
       <button type="button" class="kiosk-menu__item" data-dialog-target="booking-links-dialog">
         <span>Mitbuchungen</span>
         <small>Einladungen und gegenseitige Buchungsfreigaben verwalten.</small>
@@ -471,7 +473,7 @@
           </div>
         {% endif %}
       </dialog>
-      {% if not is_post_camp %}<dialog id="family-management-dialog"{% if family_member_pin_form.errors %} data-auto-open-dialog{% endif %} class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="family-management-dialog-title">
+      {% if not is_post_camp %}{% if not kiosk_actor_is_family_member %}<dialog id="family-management-dialog"{% if family_member_pin_form.errors %} data-auto-open-dialog{% endif %} class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="family-management-dialog-title">
         <div class="kiosk-card__header kiosk-section-heading">
           <div class="kiosk-card__header-main">
             <h2 class="kiosk-title" id="family-management-dialog-title">
@@ -496,7 +498,7 @@
               {% endif %}
             </div>
             <div class="kiosk-list-row__actions">
-              {% if member.role == "companion" and not kiosk_actor_is_family_member %}
+              {% if member.role == "companion" %}
                 <details{% if family_member_pin_member_id == member.pk and family_member_pin_form.errors %} open{% endif %}>
                   <summary>{% if member.pin.pin_hash and not member.pin.must_set_pin %}PIN ändern{% else %}PIN setzen{% endif %}</summary>
                   <form method="post" class="form-grid">
@@ -534,7 +536,7 @@
             <p>Lege Personen an, die über dein Konto mit Essen buchen oder mitgerechnet werden sollen.</p>
           </div>
         {% endfor %}
-      </dialog>
+      </dialog>{% endif %}
 
       <dialog id="booking-links-dialog"{% if booking_link_form.errors %} data-auto-open-dialog{% endif %} class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="booking-links-dialog-title">
         <div class="kiosk-card__header kiosk-section-heading">
@@ -888,7 +890,7 @@
     </div>
   </dialog>
 
-  <dialog id="family-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="family-dialog-title">
+  {% if not kiosk_actor_is_family_member %}<dialog id="family-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="family-dialog-title">
     <form method="dialog" class="dialog-heading">
       <h2 id="family-dialog-title">Familienmitglied anlegen</h2>
       <button class="button button-secondary">Schließen</button>
@@ -901,7 +903,7 @@
         <button type="submit">Speichern</button>
       </div>
     </form>
-  </dialog>
+  </dialog>{% endif %}
 
   <dialog id="checkin-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="checkin-dialog-title">
     <form method="dialog" class="dialog-heading">
