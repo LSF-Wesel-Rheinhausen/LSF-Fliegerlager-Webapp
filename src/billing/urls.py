@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import email_views, notification_views, passkey_views, pwa_views, views
+from . import email_views, kiosk_access_views, notification_views, passkey_views, pwa_views, views
 
 urlpatterns = [
     path("settings/email/", email_views.email_settings, name="email-settings"),
@@ -106,6 +106,16 @@ urlpatterns = [
     path("camps/new/", views.camp_create, name="camp-create"),
     path("camps/<int:camp_id>/", views.camp_detail, name="camp-detail"),
     path("camps/<int:camp_id>/edit/", views.camp_edit, name="camp-edit"),
+    path(
+        "camps/<int:camp_id>/kiosk-access/",
+        kiosk_access_views.camp_kiosk_access_settings,
+        name="camp-kiosk-access-settings",
+    ),
+    path(
+        "camps/<int:camp_id>/kiosk-access/revoke/",
+        kiosk_access_views.camp_kiosk_access_revoke,
+        name="camp-kiosk-access-revoke",
+    ),
     path("camps/<int:camp_id>/meals/", views.camp_meal_overview, name="camp-meal-overview"),
     path("camps/<int:camp_id>/meals/cutoff/", views.meal_cutoff_edit, name="meal-cutoff-edit"),
     path("camps/<int:camp_id>/meals/order-sent/", views.meal_order_mark_sent, name="meal-order-mark-sent"),
@@ -170,6 +180,12 @@ urlpatterns = [
     ),
     path("kiosk/manifest.webmanifest", pwa_views.manifest, {"surface": "kiosk"}, name="pwa-manifest-kiosk"),
     path("kiosk/service-worker.js", pwa_views.service_worker, {"surface": "kiosk"}, name="pwa-worker-kiosk"),
+    path(
+        "kiosk/access/",
+        kiosk_access_views.kiosk_access_prompt,
+        {"kiosk_mode": "private"},
+        name="kiosk-access",
+    ),
     path("kiosk/notifications/", notification_views.kiosk_notification_settings, name="kiosk-notification-settings"),
     path(
         "kiosk/notifications/subscriptions/",
@@ -233,6 +249,12 @@ urlpatterns = [
     path("central/kiosk/manifest.webmanifest", pwa_views.manifest, {"surface": "central"}, name="pwa-manifest-central"),
     path(
         "central/kiosk/service-worker.js", pwa_views.service_worker, {"surface": "central"}, name="pwa-worker-central"
+    ),
+    path(
+        "central/kiosk/access/",
+        kiosk_access_views.kiosk_access_prompt,
+        {"kiosk_mode": "central"},
+        name="central-kiosk-access",
     ),
     path(
         "central/kiosk/settlements/<int:settlement_id>/pdf/",

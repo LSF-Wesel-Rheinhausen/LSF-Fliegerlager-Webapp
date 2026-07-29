@@ -32,4 +32,14 @@ else
 fi
 
 $PYTHON src/manage.py migrate --noinput
+$PYTHON src/manage.py shell -c '
+from billing.models import Camp, CampKioskAccess
+
+camp, _ = Camp.objects.get_or_create(name="E2E-Lagerzugang", year=2099)
+camp.is_active = True
+camp.save()
+access, _ = CampKioskAccess.objects.get_or_create(camp=camp)
+access.set_pin("864208")
+access.save()
+'
 exec $PYTHON src/manage.py runserver "127.0.0.1:${port}" --noreload > "/tmp/django-e2e-${port}.log" 2>&1

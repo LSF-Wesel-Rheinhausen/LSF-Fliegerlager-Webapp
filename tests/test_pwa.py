@@ -9,24 +9,24 @@ from tests.factories import CampFactory, ParticipantFactory, UserFactory
 
 
 @pytest.mark.django_db
-def test_root_redirects_to_private_kiosk(client):
-    response = client.get("/")
+def test_root_redirects_to_private_kiosk(kiosk_client):
+    response = kiosk_client.get("/")
 
     assert response.status_code == 302
     assert response["Location"] == reverse("kiosk-home")
 
 
 @pytest.mark.django_db
-def test_central_kiosk_keeps_central_route_prefix(client):
-    response = client.get(reverse("central-kiosk-home"))
+def test_central_kiosk_keeps_central_route_prefix(kiosk_client):
+    response = kiosk_client.get(reverse("central-kiosk-home"))
 
     assert response.status_code == 302
     assert response["Location"] == reverse("central-kiosk-login")
 
 
 @pytest.mark.django_db
-def test_private_kiosk_exposes_install_guide_and_apple_touch_icon(client):
-    response = client.get(reverse("kiosk-login"))
+def test_private_kiosk_exposes_install_guide_and_apple_touch_icon(kiosk_client):
+    response = kiosk_client.get(reverse("kiosk-login"))
 
     assert response.status_code == 200
     assert b"/static/billing/app-v8.css" in response.content
@@ -48,8 +48,8 @@ def test_admin_login_busts_stylesheet_cache(client):
 
 
 @pytest.mark.django_db
-def test_central_kiosk_hides_install_guide(client):
-    response = client.get(reverse("central-kiosk-login"))
+def test_central_kiosk_hides_install_guide(kiosk_client):
+    response = kiosk_client.get(reverse("central-kiosk-login"))
 
     assert response.status_code == 200
     assert b"data-pwa-install" not in response.content
@@ -58,8 +58,8 @@ def test_central_kiosk_hides_install_guide(client):
 
 @pytest.mark.parametrize("request_method", ["get", "post"])
 @pytest.mark.django_db
-def test_central_kiosk_login_does_not_start_autologout_timer(client, request_method):
-    response = getattr(client, request_method)(reverse("central-kiosk-login"), data={})
+def test_central_kiosk_login_does_not_start_autologout_timer(kiosk_client, request_method):
+    response = getattr(kiosk_client, request_method)(reverse("central-kiosk-login"), data={})
 
     assert response.status_code == 200
     assert response.context["kiosk_autologout"] is False
@@ -77,16 +77,16 @@ def test_platform_icon_fallbacks_redirect_to_app_icon(client, path):
 
 
 @pytest.mark.django_db
-def test_private_kiosk_login_uses_persistent_session_without_autologout(client, settings):
+def test_private_kiosk_login_uses_persistent_session_without_autologout(kiosk_client, settings):
     participant = ParticipantFactory(camp=CampFactory(is_active=True))
     participant.pin.set_pin("1234")
     participant.pin.save()
-    session = client.session
+    session = kiosk_client.session
     session["kiosk_mode"] = "central"
     session.set_expiry(120)
     session.save()
 
-    response = client.post(
+    response = kiosk_client.post(
         reverse("kiosk-login"),
         {"participant": f"participant-{participant.pk}", "pin": "1234"},
         follow=True,
@@ -95,18 +95,18 @@ def test_private_kiosk_login_uses_persistent_session_without_autologout(client, 
     assert response.status_code == 200
     assert response.context["kiosk_mode"] == "private"
     assert response.context["kiosk_autologout"] is False
-    assert client.session.get_expire_at_browser_close() is False
-    assert client.session.get_expiry_age() == settings.SESSION_COOKIE_AGE
-    assert client.session[KIOSK_PARTICIPANT_SESSION_KEY] == participant.pk
+    assert kiosk_client.session.get_expire_at_browser_close() is False
+    assert kiosk_client.session.get_expiry_age() == settings.SESSION_COOKIE_AGE
+    assert kiosk_client.session[KIOSK_PARTICIPANT_SESSION_KEY] == participant.pk
 
 
 @pytest.mark.django_db
-def test_central_kiosk_login_enforces_short_autologout(client):
+def test_central_kiosk_login_enforces_short_autologout(kiosk_client):
     participant = ParticipantFactory(camp=CampFactory(is_active=True))
     participant.pin.set_pin("1234")
     participant.pin.save()
 
-    response = client.post(
+    response = kiosk_client.post(
         reverse("central-kiosk-login"),
         {"participant": f"participant-{participant.pk}", "pin": "1234"},
         follow=True,
@@ -118,22 +118,22 @@ def test_central_kiosk_login_enforces_short_autologout(client):
     assert b"data-kiosk-countdown-root" in response.content
     assert b'data-timeout-ms="120000"' in response.content
     assert reverse("central-kiosk-logout").encode() in response.content
-    assert client.session.get_expiry_age() == 120
+    assert kiosk_client.session.get_expiry_age() == 120
 
 
 @pytest.mark.django_db
-def test_switching_kiosk_modes_clears_participant_session(client):
+def test_switching_kiosk_modes_clears_participant_session(kiosk_client):
     participant = ParticipantFactory(camp=CampFactory(is_active=True))
-    session = client.session
+    session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session["kiosk_mode"] = "private"
     session.save()
 
-    response = client.get(reverse("central-kiosk-home"))
+    response = kiosk_client.get(reverse("central-kiosk-home"))
 
     assert response.status_code == 302
     assert response["Location"] == reverse("central-kiosk-login")
-    assert KIOSK_PARTICIPANT_SESSION_KEY not in client.session
+    assert KIOSK_PARTICIPANT_SESSION_KEY not in kiosk_client.session
 
 
 @pytest.mark.parametrize(
@@ -198,8 +198,8 @@ def test_offline_page_contains_no_business_data(client):
 
 
 @pytest.mark.django_db
-def test_security_policy_allows_same_origin_manifests_and_workers(client):
-    response = client.get(reverse("kiosk-login"))
+def test_security_policy_allows_same_origin_manifests_and_workers(kiosk_client):
+    response = kiosk_client.get(reverse("kiosk-login"))
 
     policy = response["Content-Security-Policy"]
     assert "manifest-src 'self'" in policy

@@ -1,0 +1,36 @@
+{% extends "billing/kiosk_base.html" %}
+{% block title %}Lagerzugang{% endblock %}
+{% block content %}
+  <section class="kiosk-login-shell">
+    <div class="kiosk-login-card">
+      <article class="panel kiosk-login-card__hero kiosk-card--accent">
+        <span class="kiosk-hero__eyebrow">Geschützter Bereich</span>
+        <div class="kiosk-hero__copy">
+          <h1>Fliegerlager</h1>
+          <p>Der Kiosk ist ausschließlich für Teilnehmer des aktiven Lagers verfügbar.</p>
+        </div>
+      </article>
+      <section class="panel kiosk-login-card__form">
+        <div class="kiosk-card__header-main">
+          <span class="kiosk-card__eyebrow">Lagerzugang</span>
+          {% if access_unavailable %}
+            <h2>Lagerzugang nicht verfügbar</h2>
+            <p>Der Lagerzugang wurde von der Lagerleitung noch nicht eingerichtet.</p>
+          {% else %}
+            <h2>Lager-PIN eingeben</h2>
+            <p>Gib den gemeinsamen Lager-PIN ein, bevor du dich persönlich anmeldest.</p>
+          {% endif %}
+        </div>
+        {% if not access_unavailable %}
+          <form method="post" class="form-grid">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <div class="form-actions">
+              <button type="submit">Weiter</button>
+            </div>
+          </form>
+        {% endif %}
+      </section>
+    </div>
+  </section>
+{% endblock %}

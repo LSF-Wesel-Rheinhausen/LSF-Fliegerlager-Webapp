@@ -19,6 +19,7 @@ Unterstuetzte Umgebungsvariablen:
 - `DJANGO_ALLOWED_HOSTS`: kommaseparierte Hostliste; bei `DJANGO_DEBUG=0` ist ein Wert Pflicht.
 - `DJANGO_HTTPS`: `1` aktiviert HTTPS-Redirect sowie sichere Session- und CSRF-Cookies.
 - `DJANGO_TRUST_PROXY_SSL_HEADER`: nur auf `1` setzen, wenn ein kontrollierter Reverse Proxy `X-Forwarded-Proto` bereinigt und setzt.
+- `KIOSK_ACCESS_TRUSTED_PROXY_ADDRESSES`: exakte direkte Proxy-IP-Adressen, die `X-Forwarded-For` mit genau einer Client-IP ersetzen dürfen.
 - `AUTHELIA_SSO_ENABLED`: `1` aktiviert Trusted-Header-SSO fuer bereits bestehende aktive Django-Konten; Default `0`.
 - `AUTHELIA_SSO_EMAIL_HEADER`: vom kontrollierten Proxy gesetzter E-Mail-Header; Default `Remote-Email`.
 - `PASSKEY_ENABLED`: `1` aktiviert WebAuthn-Registrierung und Passkey-Login; Default `0`.

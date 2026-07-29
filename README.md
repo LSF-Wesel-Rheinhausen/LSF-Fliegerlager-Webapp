@@ -24,7 +24,7 @@ Web-App zur Verwaltung und Abrechnung eines Vereins-Fliegerlagers. Die Anwendung
 - Übersichtliche Preisverwaltung mit Lagerpauschalen für 1/2 Wochen und Teilnehmer/Begleitpersonen, Getränke, Standardpreise für Mahlzeiten und abweichende Tagespreise
 - Native Dialoge für Preisregelanlage und -bearbeitung, damit Admins im Kontext der Preisübersicht bleiben
 - Installierbare PWA für Verwaltung, private Teilnehmergeräte und zentrale Kiosk-Tablets mit explizitem Offline-Hinweis ohne Caching sensibler Anwendungsdaten
-- Teilnehmer-Kiosk: privater PIN-Login unter `/kiosk/`, zentraler 120-Sekunden-Kiosk unter `/central/kiosk/`, große Schnellbuchungen für Getränke, Frühstück und Snacks, 15-Minuten-Storno sowie Essensanmeldungen mit Tablet-/Mobilbedienung
+- Teilnehmer-Kiosk: gemeinsamer, zentral widerrufbarer Lager-PIN vor allen Kiosk-Seiten; danach persönlicher PIN-Login unter `/kiosk/` beziehungsweise zentraler 120-Sekunden-Kiosk unter `/central/kiosk/`
 - Optionale Push-Benachrichtigungen für private Teilnehmer- und Verwaltungsgeräte zu Diensten, Buchungen, Essensfristen, Auslagen und offenen Verwaltungsaufgaben
 - Manueller E-Mail-Versand mit verschlüsselter SMTP-Konfiguration im Webinterface, expliziter Empfängervorschau sowie versionsgebundenen Rechnungs-PDFs
 - Dienstpläne: Anlage täglicher Vorlagen durch Admins, selbstständige Übernahme und Tausch von Diensten durch Teilnehmer im Kiosk sowie Tracking von Pflichtdiensten per Fortschrittsbalken
@@ -133,6 +133,7 @@ Die wichtigsten Umgebungsvariablen stehen mit sicheren Platzhaltern in [`.env.ex
 - `CSRF_TRUSTED_ORIGINS`: kommaseparierte vertrauenswürdige Origins mit Schema.
 - `DATABASE_URL`: Datenbank-URL; lokal kann SQLite genutzt werden, Docker nutzt PostgreSQL.
 - `DJANGO_HTTPS`: aktiviert in Produktion HTTPS-Redirect sowie sichere Session- und CSRF-Cookies.
+- `KIOSK_ACCESS_TRUSTED_PROXY_ADDRESSES`: exakte direkte Proxy-IP-Adressen für die gerätegetrennte Lager-PIN-Drosselung.
 - `AUTHELIA_SSO_ENABLED`: aktiviert optional Trusted-Header-SSO fuer vorhandene aktive Konten.
 - `AUTHELIA_SSO_EMAIL_HEADER`: vom kontrollierten Proxy neu gesetzter E-Mail-Header, standardmaessig `Remote-Email`.
 - `PASSKEY_ENABLED`: aktiviert die Passkey-Registrierung und den benutzernamenlosen Verwaltungslogin.
@@ -167,7 +168,7 @@ Bei `DJANGO_DEBUG=0` startet die Anwendung nur mit einem mindestens 50 Zeichen l
 
 Die Rollen werden über Django-Gruppen abgebildet:
 
-- `Admin`: Nutzer, Lager, Preise, Kategorien und Teilnehmer-PINs verwalten
+- `Admin`: Nutzer, Lager, Preise, Kategorien, Teilnehmer-PINs und den gemeinsamen Lager-PIN verwalten
 - `Bearbeiter`: Teilnehmer, Zahlungen, Kosten und Abrechnungen bearbeiten
 
 Superuser haben automatisch vollen Zugriff.

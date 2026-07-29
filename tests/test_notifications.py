@@ -115,14 +115,14 @@ def test_admin_can_create_and_update_own_push_subscription(client):
 
 
 @pytest.mark.django_db
-def test_private_participant_can_subscribe_but_central_endpoint_does_not_exist(client):
+def test_private_participant_can_subscribe_but_central_endpoint_does_not_exist(kiosk_client):
     participant = ParticipantFactory()
-    session = client.session
+    session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session[KIOSK_MODE_SESSION_KEY] = "private"
     session.save()
 
-    response = client.post(
+    response = kiosk_client.post(
         reverse("kiosk-notification-subscribe"),
         data=json.dumps(subscription_payload()),
         content_type="application/json",
@@ -130,7 +130,7 @@ def test_private_participant_can_subscribe_but_central_endpoint_does_not_exist(c
 
     assert response.status_code == 201
     assert PushSubscription.objects.filter(participant=participant, user__isnull=True).exists()
-    assert client.get("/central/kiosk/notifications/").status_code == 404
+    assert kiosk_client.get("/central/kiosk/notifications/").status_code == 404
 
 
 @pytest.mark.django_db
@@ -374,7 +374,7 @@ def test_admin_can_rename_own_push_subscription(client):
 
 
 @pytest.mark.django_db
-def test_private_participant_can_rename_own_push_subscription(client):
+def test_private_participant_can_rename_own_push_subscription(kiosk_client):
     participant = ParticipantFactory()
     subscription = PushSubscription.objects.create(
         participant=participant,
@@ -384,12 +384,12 @@ def test_private_participant_can_rename_own_push_subscription(client):
         device_name="Altes Telefon",
         categories=["shifts"],
     )
-    session = client.session
+    session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session[KIOSK_MODE_SESSION_KEY] = "private"
     session.save()
 
-    response = client.post(
+    response = kiosk_client.post(
         reverse("kiosk-notification-rename", kwargs={"subscription_id": subscription.pk}),
         data=json.dumps({"device_name": "  Mein iPhone  "}),
         content_type="application/json",
@@ -435,7 +435,7 @@ def test_admin_can_update_own_push_subscription_categories(client):
 
 
 @pytest.mark.django_db
-def test_private_participant_can_update_own_push_subscription_categories(client):
+def test_private_participant_can_update_own_push_subscription_categories(kiosk_client):
     participant = ParticipantFactory()
     subscription = PushSubscription.objects.create(
         participant=participant,
@@ -445,12 +445,12 @@ def test_private_participant_can_update_own_push_subscription_categories(client)
         device_name="Privates Telefon",
         categories=["shifts"],
     )
-    session = client.session
+    session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session[KIOSK_MODE_SESSION_KEY] = "private"
     session.save()
 
-    response = client.post(
+    response = kiosk_client.post(
         f"/kiosk/notifications/subscriptions/{subscription.pk}/preferences/",
         data=json.dumps({"categories": ["booking_links", "meal_deadlines"]}),
         content_type="application/json",
@@ -559,7 +559,7 @@ def test_admin_cannot_rename_foreign_or_missing_push_subscription(client):
 
 
 @pytest.mark.django_db
-def test_private_participant_cannot_rename_foreign_push_subscription(client):
+def test_private_participant_cannot_rename_foreign_push_subscription(kiosk_client):
     participant = ParticipantFactory()
     other = ParticipantFactory(camp=participant.camp)
     foreign_subscription = PushSubscription.objects.create(
@@ -570,12 +570,12 @@ def test_private_participant_cannot_rename_foreign_push_subscription(client):
         device_name="Fremdes Telefon",
         categories=["shifts"],
     )
-    session = client.session
+    session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session[KIOSK_MODE_SESSION_KEY] = "private"
     session.save()
 
-    response = client.post(
+    response = kiosk_client.post(
         reverse("kiosk-notification-rename", kwargs={"subscription_id": foreign_subscription.pk}),
         data=json.dumps({"device_name": "Manipuliert"}),
         content_type="application/json",
@@ -788,7 +788,7 @@ def test_linked_booking_cancellation_notifies_original_booker_with_actual_actor(
 
 @pytest.mark.django_db
 def test_linked_participant_quick_cancellation_passes_current_actor(
-    client,
+    kiosk_client,
     django_capture_on_commit_callbacks,
 ):
     camp = CampFactory()
@@ -813,12 +813,12 @@ def test_linked_participant_quick_cancellation_passes_current_actor(
         quantity=1,
         unit_price=Decimal("1.50"),
     )
-    session = client.session
+    session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = cancelling_participant.pk
     session.save()
 
     with django_capture_on_commit_callbacks(execute=True):
-        response = client.post(reverse("kiosk-home"), {"action": "quick_cancel", "charge_id": charge.pk})
+        response = kiosk_client.post(reverse("kiosk-home"), {"action": "quick_cancel", "charge_id": charge.pk})
 
     assert response.status_code == 302
     message = PushMessage.objects.get()
@@ -828,7 +828,7 @@ def test_linked_participant_quick_cancellation_passes_current_actor(
 
 @pytest.mark.django_db
 def test_linked_participant_meal_retraction_passes_current_actor(
-    client,
+    kiosk_client,
     django_capture_on_commit_callbacks,
 ):
     camp = CampFactory()
@@ -862,12 +862,12 @@ def test_linked_participant_meal_retraction_passes_current_actor(
         variant=MealSignup.Variant.NORMAL,
         charge=charge,
     )
-    session = client.session
+    session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = cancelling_participant.pk
     session.save()
 
     with django_capture_on_commit_callbacks(execute=True):
-        response = client.post(
+        response = kiosk_client.post(
             reverse("kiosk-home"),
             {"action": "meal_retract", "meal_signup_id": signup.pk},
         )
@@ -906,7 +906,7 @@ def test_expense_approval_queues_after_transaction_commit(django_capture_on_comm
 
 
 @pytest.mark.django_db
-def test_booking_invitation_view_queues_after_commit(client, django_capture_on_commit_callbacks):
+def test_booking_invitation_view_queues_after_commit(kiosk_client, django_capture_on_commit_callbacks):
     inviter = ParticipantFactory()
     invitee = ParticipantFactory(camp=inviter.camp)
     PushSubscription.objects.create(
@@ -916,13 +916,13 @@ def test_booking_invitation_view_queues_after_commit(client, django_capture_on_c
         auth="secret",
         categories=["booking_links"],
     )
-    session = client.session
+    session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = inviter.pk
     session[KIOSK_MODE_SESSION_KEY] = "private"
     session.save()
 
     with django_capture_on_commit_callbacks(execute=True):
-        response = client.post(
+        response = kiosk_client.post(
             reverse("kiosk-home"),
             {"action": "booking_link_invite", "link-participant": invitee.pk},
         )

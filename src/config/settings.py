@@ -27,6 +27,13 @@ SESSION_COOKIE_SECURE = HTTPS_ENABLED
 CSRF_COOKIE_SECURE = HTTPS_ENABLED
 SESSION_COOKIE_HTTPONLY = True
 CSRF_COOKIE_HTTPONLY = True
+MESSAGE_STORAGE = "django.contrib.messages.storage.session.SessionStorage"
+KIOSK_ACCESS_COOKIE_AGE = 30 * 24 * 60 * 60
+KIOSK_ACCESS_MAX_ATTEMPTS = 5
+KIOSK_ACCESS_ATTEMPT_WINDOW = 5 * 60
+KIOSK_ACCESS_TRUSTED_PROXY_ADDRESSES = frozenset(
+    address.strip() for address in os.getenv("KIOSK_ACCESS_TRUSTED_PROXY_ADDRESSES", "").split(",") if address.strip()
+)
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
 SECURE_HSTS_SECONDS = int(os.getenv("DJANGO_HSTS_SECONDS", "0")) if HTTPS_ENABLED else 0
@@ -86,6 +93,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "config.middleware.AutheliaSSOMiddleware",
+    "billing.kiosk_access.KioskAccessMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]

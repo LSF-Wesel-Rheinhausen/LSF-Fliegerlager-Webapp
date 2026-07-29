@@ -81,6 +81,19 @@ Standardmäßig bindet die App nur an `127.0.0.1:8000`, passend für einen Rever
 direkten Zugriff im lokalen Netz kann `APP_BIND_ADDRESS=0.0.0.0` gesetzt werden. Bei HTTPS hinter einem kontrollierten
 Proxy bleiben `DJANGO_HTTPS=1` und `DJANGO_TRUST_PROXY_SSL_HEADER=1` aktiv.
 
+Damit fehlgeschlagene Lager-PIN-Eingaben pro Kiosk statt gemeinsam für alle Proxy-Clients begrenzt werden, muss
+`KIOSK_ACCESS_TRUSTED_PROXY_ADDRESSES` die kommaseparierten, exakten Quell-IP-Adressen der direkten Proxys enthalten.
+Maßgeblich ist die im App-Container als `REMOTE_ADDR` sichtbare Adresse; sie kann bei Docker von `127.0.0.1` abweichen.
+Ohne diese Einstellung ignoriert Django `X-Forwarded-For`. Jeder eingetragene Proxy muss einen eingehenden
+`X-Forwarded-For`-Header entfernen und ihn mit genau einer tatsächlichen Client-IP ersetzen, beispielsweise in Nginx:
+
+```nginx
+proxy_set_header X-Forwarded-For $remote_addr;
+```
+
+Angehängte Weiterleitungsketten wie bei `$proxy_add_x_forwarded_for` werden absichtlich nicht vertraut. Der App-Port
+darf für Clients nicht unter Umgehung des konfigurierten Proxys erreichbar sein.
+
 ## Authelia Trusted-Header-SSO
 
 Optional kann Authelia bereits vorhandene Django-Benutzer ueber deren eindeutige E-Mail-Adresse anmelden:
