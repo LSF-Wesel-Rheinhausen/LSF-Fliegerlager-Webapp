@@ -984,6 +984,8 @@ def test_multi_account_quick_booking_requires_exact_cost_confirmation(kiosk_clie
     assert confirmation["quantity"] == 2
     assert confirmation["target_tokens"] == target_tokens
     assert confirmation["total"] == Decimal("12.00")
+    assert confirmation["token"]
+    assert confirmation["changed"] is False
     assert [(item["name"], item["unit_price"], item["total"]) for item in confirmation["items"]] == [
         (participant.full_name, Decimal("4.00"), Decimal("8.00")),
         (partner_child.full_name, Decimal("2.00"), Decimal("4.00")),
@@ -994,11 +996,65 @@ def test_multi_account_quick_booking_requires_exact_cost_confirmation(kiosk_clie
     assert partner_child.full_name in content
     assert "12,00 €" in content
 
+    reduced_target_response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            **request_data,
+            "quick-target": [target_tokens[0]],
+            "quick-confirmed": "1",
+            "quick-confirmation-token": confirmation["token"],
+        },
+    )
+
+    assert reduced_target_response.status_code == 200
+    assert not Charge.objects.exists()
+    reduced_target_confirmation = reduced_target_response.context["quick_confirmation"]
+    assert reduced_target_confirmation["changed"] is True
+    assert reduced_target_confirmation["target_tokens"] == [target_tokens[0]]
+    assert reduced_target_confirmation["total"] == Decimal("8.00")
+
+    tampered_response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            **request_data,
+            "quick-quantity": 3,
+            "quick-confirmed": "1",
+            "quick-confirmation-token": confirmation["token"],
+        },
+    )
+
+    assert tampered_response.status_code == 200
+    assert not Charge.objects.exists()
+    tampered_confirmation = tampered_response.context["quick_confirmation"]
+    assert tampered_confirmation["changed"] is True
+    assert tampered_confirmation["quantity"] == 3
+    assert tampered_confirmation["total"] == Decimal("18.00")
+    assert "Buchungsdaten wurden aktualisiert" in tampered_response.content.decode("utf-8")
+
+    adult_rule.unit_price = Decimal("5.00")
+    adult_rule.save(update_fields=["unit_price", "updated_at"])
+    stale_price_response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            **request_data,
+            "quick-confirmed": "1",
+            "quick-confirmation-token": confirmation["token"],
+        },
+    )
+
+    assert stale_price_response.status_code == 200
+    assert not Charge.objects.exists()
+    updated_confirmation = stale_price_response.context["quick_confirmation"]
+    assert updated_confirmation["changed"] is True
+    assert updated_confirmation["total"] == Decimal("14.00")
+    assert updated_confirmation["token"] != confirmation["token"]
+
     confirmation_response = kiosk_client.post(
         reverse("kiosk-home"),
         {
             **request_data,
             "quick-confirmed": "1",
+            "quick-confirmation-token": updated_confirmation["token"],
         },
     )
 
@@ -1007,7 +1063,7 @@ def test_multi_account_quick_booking_requires_exact_cost_confirmation(kiosk_clie
     assert len(charges) == 2
     assert [(charge.participant, charge.quantity, charge.unit_price) for charge in charges] == [
         (partner, Decimal("2.00"), Decimal("2.00")),
-        (participant, Decimal("2.00"), Decimal("4.00")),
+        (participant, Decimal("2.00"), Decimal("5.00")),
     ]
 
 

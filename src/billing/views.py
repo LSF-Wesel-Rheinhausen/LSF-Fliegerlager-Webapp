@@ -1,7 +1,7 @@
 import base64
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from functools import partial
 from typing import Any
@@ -11,6 +11,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
+from django.core import signing
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.core.signing import BadSignature, Signer
 from django.db import transaction
@@ -162,6 +163,8 @@ GUARDIAN_ONLY_KIOSK_ACTIONS = frozenset(
     }
 )
 KIOSK_QUICK_BOOKING_CANCEL_WINDOW = timedelta(minutes=15)
+KIOSK_QUICK_CONFIRMATION_SIGNING_SALT = "billing.kiosk-quick-confirmation.v1"
+KIOSK_QUICK_CONFIRMATION_MAX_AGE_SECONDS = 10 * 60
 
 
 def _positive_int_or_none(value: Any) -> int | None:
@@ -171,6 +174,71 @@ def _positive_int_or_none(value: Any) -> int | None:
     except (TypeError, ValueError):
         return None
     return parsed_value if parsed_value > 0 else None
+
+
+def _kiosk_quick_confirmation_payload(
+    *,
+    participant: Participant,
+    selected_rule: PriceRule,
+    quantity: int,
+    occurred_on: date,
+    target_ids: list[str],
+    resolved_bookings: list[
+        tuple[
+            Participant | ParticipantFamilyMember,
+            Participant,
+            ParticipantFamilyMember | None,
+            PriceRule,
+        ]
+    ],
+) -> dict[str, object]:
+    """Return the exact JSON-safe charge set shown in a quick-booking preview."""
+    return {
+        "participant_id": participant.pk,
+        "camp_id": participant.camp_id,
+        "selected_price_rule_id": selected_rule.pk,
+        "quantity": quantity,
+        "occurred_on": occurred_on.isoformat(),
+        "bookings": [
+            {
+                "target_token": target_id,
+                "charge_participant_id": charge_participant.pk,
+                "family_member_id": target_family_member.pk if target_family_member is not None else None,
+                "effective_price_rule_id": effective_rule.pk,
+                "effective_price_rule_name": effective_rule.name,
+                "kind": effective_rule.kind,
+                "unit_price": str(effective_rule.unit_price),
+                "foerdersatz": str(effective_rule.foerdersatz),
+            }
+            for target_id, (_, charge_participant, target_family_member, effective_rule) in zip(
+                target_ids,
+                resolved_bookings,
+                strict=True,
+            )
+        ],
+    }
+
+
+def _sign_kiosk_quick_confirmation(payload: dict[str, object]) -> str:
+    """Sign a timestamped quick-booking preview without server-side session state."""
+    return signing.dumps(
+        payload,
+        salt=KIOSK_QUICK_CONFIRMATION_SIGNING_SALT,
+        compress=True,
+    )
+
+
+def _matches_kiosk_quick_confirmation(token: str, payload: dict[str, object]) -> bool:
+    """Return whether a non-expired token represents exactly the current charge set."""
+    try:
+        signed_payload = signing.loads(
+            token,
+            salt=KIOSK_QUICK_CONFIRMATION_SIGNING_SALT,
+            max_age=KIOSK_QUICK_CONFIRMATION_MAX_AGE_SECONDS,
+        )
+    except signing.BadSignature:
+        return False
+    return signed_payload == payload
 
 
 def kiosk_root(_request: HttpRequest) -> HttpResponse:
@@ -2602,7 +2670,9 @@ def kiosk_home(request, kiosk_mode="private"):
                         )
                     )
 
-                requires_confirmation = len(resolved_bookings) > 1 and request.POST.get("quick-confirmed") != "1"
+                confirmation_requested = request.POST.get("quick-confirmed") == "1"
+                requires_confirmation = len(resolved_bookings) > 1 or confirmation_requested
+                confirmation_matches = False
                 if not quick_form.errors and requires_confirmation:
                     quantity = quick_form.cleaned_data["quantity"]
                     confirmation_items = [
@@ -2615,17 +2685,32 @@ def kiosk_home(request, kiosk_mode="private"):
                         }
                         for target, _, _, effective_rule in resolved_bookings
                     ]
-                    quick_confirmation = {
-                        "price_rule_id": rule.pk,
-                        "quantity": quantity,
-                        "target_tokens": target_ids,
-                        "items": confirmation_items,
-                        "total": sum(
-                            (item["total"] for item in confirmation_items),
-                            Decimal("0.00"),
-                        ),
-                    }
-                elif not quick_form.errors:
+                    confirmation_payload = _kiosk_quick_confirmation_payload(
+                        participant=participant,
+                        selected_rule=rule,
+                        quantity=quantity,
+                        occurred_on=occurred_on,
+                        target_ids=target_ids,
+                        resolved_bookings=resolved_bookings,
+                    )
+                    confirmation_matches = confirmation_requested and _matches_kiosk_quick_confirmation(
+                        request.POST.get("quick-confirmation-token", ""),
+                        confirmation_payload,
+                    )
+                    if not confirmation_matches:
+                        quick_confirmation = {
+                            "price_rule_id": rule.pk,
+                            "quantity": quantity,
+                            "target_tokens": target_ids,
+                            "items": confirmation_items,
+                            "total": sum(
+                                (item["total"] for item in confirmation_items),
+                                Decimal("0.00"),
+                            ),
+                            "token": _sign_kiosk_quick_confirmation(confirmation_payload),
+                            "changed": confirmation_requested,
+                        }
+                if not quick_form.errors and (not requires_confirmation or confirmation_matches):
                     with transaction.atomic():
                         for target, charge_participant, target_family_member, effective_rule in resolved_bookings:
                             booking_link = None

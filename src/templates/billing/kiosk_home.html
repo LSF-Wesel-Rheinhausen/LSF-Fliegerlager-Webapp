@@ -673,6 +673,12 @@
         <button class="button button-secondary">Abbrechen</button>
       </form>
       <p>Bitte prüfe Personen, Mengen und Preise, bevor du die Buchungen kostenpflichtig bestätigst.</p>
+      {% if quick_confirmation.changed %}
+        <div class="kiosk-note" role="alert">
+          <strong>Buchungsdaten wurden aktualisiert</strong>
+          <span>Auswahl oder Preise stimmen nicht mehr mit der vorherigen Übersicht überein. Bitte erneut prüfen.</span>
+        </div>
+      {% endif %}
       <div class="kiosk-dialog-summary">
         {% for item in quick_confirmation.items %}
           <div class="kiosk-dialog-summary__row">
@@ -692,6 +698,7 @@
         {% csrf_token %}
         <input type="hidden" name="action" value="quick">
         <input type="hidden" name="quick-confirmed" value="1">
+        <input type="hidden" name="quick-confirmation-token" value="{{ quick_confirmation.token }}">
         <input type="hidden" name="quick-price_rule" value="{{ quick_confirmation.price_rule_id }}">
         <input type="hidden" name="quick-quantity" value="{{ quick_confirmation.quantity }}">
         <input type="hidden" name="quick-targets-submitted" value="1">

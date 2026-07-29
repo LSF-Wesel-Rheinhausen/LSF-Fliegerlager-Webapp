@@ -31,7 +31,10 @@
   Partner-Eigenbuchungen innerhalb des bestehenden Zeitfensters.
 - Zeigt bei Schnellbuchungen für mehrere Konten vor dem Schreiben eine
   verbindliche Übersicht über Personen, Mengen, Einzelpreise und Gesamtsumme
-  und verlangt eine ausdrückliche kostenpflichtige Bestätigung.
+  und verlangt eine ausdrückliche kostenpflichtige Bestätigung. Ein
+  zeitlich begrenzter signierter Token bindet diese Bestätigung an den exakt
+  gezeigten Buchungssatz; geänderte Ziele oder Preise erzwingen eine neue
+  Übersicht.
 - Lässt PIN-, Sicherheits-, Identitäts- und Administrationsfunktionen
   ausdrücklich außerhalb der Partner-Vollmacht.
 
