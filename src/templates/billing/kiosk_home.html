@@ -396,6 +396,7 @@
                 {% endif %}
               </div>
               <dl class="quick-booking-row__meta">
+                <div><dt>Konto</dt><dd>{{ entry.participant.full_name }}</dd></div>
                 <div><dt>Menge</dt><dd>{{ entry.quantity }}</dd></div>
                 <div><dt>Einzelpreis</dt><dd>{{ entry.unit_price|money_eur }}</dd></div>
                 <div><dt>Summe</dt><dd>{{ entry.total|money_eur }}</dd></div>

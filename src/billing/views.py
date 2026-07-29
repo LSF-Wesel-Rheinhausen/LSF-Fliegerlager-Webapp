@@ -2259,13 +2259,18 @@ def _retract_meal_signup(
     signup.retracted_at = timezone.now()
     signup.save(update_fields=["status", "retracted_at", "updated_at"])
     charge = signup.charge
-    if charge is None:
-        return
-    charge.deleted_at = timezone.now()
-    charge.deleted_by = None
-    charge.save(update_fields=["deleted_at", "deleted_by"])
-    if affected_participant.pk != actor.pk or charge.kiosk_booked_by_id != affected_participant.pk:
-        create_kiosk_action_audit_log(
+    if charge is not None:
+        charge.deleted_at = timezone.now()
+        charge.deleted_by = None
+        charge.save(update_fields=["deleted_at", "deleted_by"])
+    audit_log = None
+    partner_action = affected_participant.pk != actor.pk
+    linked_booking_action = charge is not None and charge.kiosk_booked_by_id != affected_participant.pk
+    if partner_action or linked_booking_action:
+        description = "Essensanmeldung zurückgenommen."
+        if charge is not None:
+            description = f"{charge.booking_reference}: {description}"
+        audit_log = create_kiosk_action_audit_log(
             camp=actor.camp,
             actor_participant=actor,
             actor_family_member=actor_family_member,
@@ -2274,20 +2279,30 @@ def _retract_meal_signup(
             booking_link=booking_link,
             charge=charge,
             action=KioskActionAuditLog.Action.MEAL_RETRACTED,
-            description=f"{charge.booking_reference}: Essensanmeldung zurückgenommen.",
+            description=description,
             before=before,
             after=kiosk_meal_signup_audit_snapshot(signup),
         )
-    transaction.on_commit(partial(_notify_linked_booking_by_id, charge.pk, actor.pk, cancelled=True))
+    if audit_log is not None and partner_action:
+        transaction.on_commit(partial(_notify_kiosk_partner_action_by_id, audit_log.pk))
+    elif charge is not None:
+        transaction.on_commit(partial(_notify_linked_booking_by_id, charge.pk, actor.pk, cancelled=True))
 
 
-def _is_kiosk_quick_charge_cancelable(charge: Charge, participant: Participant, now=None) -> bool:
+def _is_kiosk_quick_charge_cancelable(
+    charge: Charge,
+    participant: Participant,
+    now=None,
+    *,
+    authorized_participant_ids: set[int] | None = None,
+) -> bool:
     """Return whether a kiosk participant may cancel a quick charge."""
     current_time = now or timezone.now()
-    account_authorized = charge.participant_id == participant.pk or (
-        charge.kiosk_booked_by_id == participant.pk
-        and _accepted_booking_link_between(participant, charge.participant) is not None
-    )
+    account_authorized = charge.participant_id == participant.pk
+    if not account_authorized and authorized_participant_ids is not None:
+        account_authorized = charge.participant_id in authorized_participant_ids
+    elif not account_authorized:
+        account_authorized = _accepted_booking_link_between(participant, charge.participant) is not None
     return (
         charge.deleted_at is None
         and charge.kiosk_booked_by_id is not None
@@ -2509,6 +2524,8 @@ def kiosk_home(request, kiosk_mode="private"):
         participant.family_members.select_related("pin").filter(is_active=True).order_by("last_name", "first_name")
     )
     linked_participants = _linked_booking_participants(participant)
+    linked_participant_ids = [linked_participant.pk for linked_participant in linked_participants]
+    linked_participant_id_set = set(linked_participant_ids)
     meal_targets = _kiosk_meal_targets(
         participant,
         family_members=family_members,
@@ -2642,15 +2659,22 @@ def kiosk_home(request, kiosk_mode="private"):
             with transaction.atomic():
                 charge = (
                     Charge.objects.select_for_update()
+                    .select_related("participant")
                     .filter(
-                        Q(participant=participant) | Q(kiosk_booked_by=participant),
+                        Q(participant=participant)
+                        | Q(kiosk_booked_by=participant)
+                        | Q(participant_id__in=linked_participant_ids),
                         pk=charge_id,
                         kind__in=[Charge.Kind.DRINK, Charge.Kind.FOOD],
                         deleted_at__isnull=True,
                     )
                     .first()
                 )
-                if charge is None or not _is_kiosk_quick_charge_cancelable(charge, participant):
+                if charge is None or not _is_kiosk_quick_charge_cancelable(
+                    charge,
+                    participant,
+                    authorized_participant_ids=linked_participant_id_set,
+                ):
                     messages.error(request, "Diese Buchung kann nicht mehr storniert werden.")
                 else:
                     creation_audit = (
@@ -2680,8 +2704,10 @@ def kiosk_home(request, kiosk_mode="private"):
                     charge.deleted_at = timezone.now()
                     charge.deleted_by = None
                     charge.save(update_fields=["deleted_at", "deleted_by"])
-                    if charge.kiosk_booked_by_id != charge.participant_id:
-                        create_kiosk_action_audit_log(
+                    audit_log = None
+                    partner_action = charge.participant_id != participant.pk
+                    if partner_action or charge.kiosk_booked_by_id != charge.participant_id:
+                        audit_log = create_kiosk_action_audit_log(
                             camp=participant.camp,
                             actor_participant=participant,
                             actor_family_member=active_family_member,
@@ -2696,9 +2722,12 @@ def kiosk_home(request, kiosk_mode="private"):
                             before=before,
                             after=kiosk_charge_audit_snapshot(charge),
                         )
-                    transaction.on_commit(
-                        partial(_notify_linked_booking_by_id, charge.pk, participant.pk, cancelled=True)
-                    )
+                    if audit_log is not None and partner_action:
+                        transaction.on_commit(partial(_notify_kiosk_partner_action_by_id, audit_log.pk))
+                    else:
+                        transaction.on_commit(
+                            partial(_notify_linked_booking_by_id, charge.pk, participant.pk, cancelled=True)
+                        )
                     messages.success(request, "Buchung wurde storniert.")
                     return redirect(_kiosk_route(kiosk_mode, "home"))
         elif request.POST.get("action") == "meal":
@@ -2864,7 +2893,7 @@ def kiosk_home(request, kiosk_mode="private"):
     recent_quick_charges = list(
         Charge.objects.select_related("participant", "kiosk_booked_by")
         .filter(
-            Q(participant=participant) | Q(kiosk_booked_by=participant),
+            Q(participant=participant) | Q(kiosk_booked_by=participant) | Q(participant_id__in=linked_participant_ids),
             kind__in=[Charge.Kind.DRINK, Charge.Kind.FOOD],
             deleted_at__isnull=True,
             kiosk_booked_by__isnull=False,
@@ -2874,12 +2903,12 @@ def kiosk_home(request, kiosk_mode="private"):
     )
     quick_cancel_now = timezone.now()
     for charge in recent_quick_charges:
-        charge.is_kiosk_cancelable = _is_kiosk_quick_charge_cancelable(charge, participant, quick_cancel_now)
-    linked_participant_ids = [
-        target["object"].pk
-        for target in meal_targets
-        if target["kind"] == "participant" and target["object"].pk != participant.pk
-    ]
+        charge.is_kiosk_cancelable = _is_kiosk_quick_charge_cancelable(
+            charge,
+            participant,
+            quick_cancel_now,
+            authorized_participant_ids=linked_participant_id_set,
+        )
     meal_signups = (
         MealSignup.objects.select_related("participant", "family_member")
         .filter(Q(participant=participant) | Q(participant_id__in=linked_participant_ids))

@@ -26,6 +26,9 @@
   statt kontenabhängigen Query-Anzahl.
 - Verhindert Schnellbuchungen ohne ausgewählte Zielperson, statt sie
   stillschweigend dem angemeldeten Konto zuzuordnen.
+- Protokolliert und meldet auch Partner-Rücknahmen alter Essensanmeldungen
+  ohne Kostenposition und erlaubt die Stornierung aktueller
+  Partner-Eigenbuchungen innerhalb des bestehenden Zeitfensters.
 - Lässt PIN-, Sicherheits-, Identitäts- und Administrationsfunktionen
   ausdrücklich außerhalb der Partner-Vollmacht.
 

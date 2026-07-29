@@ -17,6 +17,8 @@ from billing.models import (
     ParticipantBookingLink,
     ParticipantFamilyMember,
     PriceRule,
+    PushMessage,
+    PushSubscription,
     Settlement,
     SettlementRun,
 )
@@ -594,6 +596,69 @@ def test_linked_family_quick_booking_and_cancellation_are_audited(kiosk_client):
 
 
 @pytest.mark.django_db
+def test_partner_can_cancel_partners_own_recent_quick_booking(
+    kiosk_client,
+    django_capture_on_commit_callbacks,
+    settings,
+):
+    settings.WEB_PUSH_ENABLED = True
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    partner = ParticipantFactory(camp=camp, first_name="Grace", last_name="Hopper")
+    booking_link = ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    charge = Charge.objects.create(
+        participant=partner,
+        kiosk_booked_by=partner,
+        kind=Charge.Kind.DRINK,
+        description="Wasser (Kiosk)",
+        quantity=Decimal("1.00"),
+        unit_price=Decimal("1.50"),
+    )
+    PushSubscription.objects.create(
+        participant=partner,
+        endpoint="https://push.example.test/partner-quick-cancel",
+        p256dh="key",
+        auth="secret",
+        categories=["booking_links"],
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    page_response = kiosk_client.get(reverse("kiosk-home"))
+
+    visible_charge = next(item for item in page_response.context["recent_quick_charges"] if item.pk == charge.pk)
+    assert visible_charge.is_kiosk_cancelable is True
+    assert partner.full_name in page_response.content.decode("utf-8")
+
+    with django_capture_on_commit_callbacks(execute=True):
+        cancellation_response = kiosk_client.post(
+            reverse("kiosk-home"),
+            {
+                "action": "quick_cancel",
+                "charge_id": charge.pk,
+            },
+        )
+
+    charge.refresh_from_db()
+    assert cancellation_response.status_code == 302
+    assert charge.deleted_at is not None
+    audit_log = KioskActionAuditLog.objects.get(action=KioskActionAuditLog.Action.QUICK_CANCELLED)
+    assert audit_log.actor_participant == participant
+    assert audit_log.target_participant == partner
+    assert audit_log.booking_link == booking_link
+    assert audit_log.before["deleted_at"] is None
+    assert audit_log.after["deleted_at"] is not None
+    message = PushMessage.objects.get()
+    assert message.subscription.participant == partner
+    assert message.title == "Partnerkonto geändert"
+
+
+@pytest.mark.django_db
 def test_linked_family_meal_booking_and_retraction_are_audited(kiosk_client, monkeypatch):
     fixed_now = timezone.make_aware(datetime(2026, 6, 30, 10, 0))
     monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
@@ -674,6 +739,71 @@ def test_linked_family_meal_booking_and_retraction_are_audited(kiosk_client, mon
     assert partner_child.full_name not in retracted_log.description
     assert partner_child.full_name not in str(retracted_log.before)
     assert partner_child.full_name not in str(retracted_log.after)
+
+
+@pytest.mark.django_db
+def test_charge_less_partner_meal_retraction_is_audited_and_notified(
+    kiosk_client,
+    django_capture_on_commit_callbacks,
+    monkeypatch,
+    settings,
+):
+    settings.WEB_PUSH_ENABLED = True
+    fixed_now = timezone.make_aware(datetime(2026, 6, 30, 10, 0))
+    monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
+    camp = CampFactory(
+        is_active=True,
+        starts_on=date(2026, 6, 30),
+        ends_on=date(2026, 7, 14),
+    )
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    partner = ParticipantFactory(camp=camp, first_name="Grace", last_name="Hopper")
+    booking_link = ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    signup = MealSignup.objects.create(
+        participant=partner,
+        meal_date=date(2026, 7, 2),
+        meal=MealSignup.Meal.DINNER,
+        variant=MealSignup.Variant.NORMAL,
+    )
+    PushSubscription.objects.create(
+        participant=partner,
+        endpoint="https://push.example.test/partner-meal-retract",
+        p256dh="key",
+        auth="secret",
+        categories=["booking_links"],
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    with django_capture_on_commit_callbacks(execute=True):
+        response = kiosk_client.post(
+            reverse("kiosk-home"),
+            {
+                "action": "meal_retract",
+                "meal_signup_id": signup.pk,
+            },
+        )
+
+    signup.refresh_from_db()
+    assert response.status_code == 302
+    assert signup.status == MealSignup.Status.RETRACTED
+    audit_log = KioskActionAuditLog.objects.get(action=KioskActionAuditLog.Action.MEAL_RETRACTED)
+    assert audit_log.actor_participant == participant
+    assert audit_log.target_participant == partner
+    assert audit_log.booking_link == booking_link
+    assert audit_log.charge is None
+    assert audit_log.before["status"] == MealSignup.Status.ACTIVE
+    assert audit_log.after["status"] == MealSignup.Status.RETRACTED
+    assert audit_log.description == "Essensanmeldung zurückgenommen."
+    message = PushMessage.objects.get()
+    assert message.subscription.participant == partner
+    assert message.title == "Partnerkonto geändert"
 
 
 @pytest.mark.django_db
