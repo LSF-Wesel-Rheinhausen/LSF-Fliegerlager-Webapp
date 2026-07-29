@@ -50,6 +50,15 @@ def test_whitenoise_does_not_add_wildcard_cors_header():
     assert settings.WHITENOISE_ALLOW_ALL_ORIGINS is False
 
 
+@pytest.mark.django_db
+def test_flash_messages_remain_server_side(kiosk_client):
+    response = kiosk_client.get(reverse("kiosk-logout"))
+
+    assert response.status_code == 302
+    assert "messages" not in response.cookies
+    assert "Du wurdest vom Kiosk abgemeldet." in kiosk_client.session["_messages"]
+
+
 @override_settings(DEBUG=False)
 @pytest.mark.django_db
 def test_static_responses_keep_same_origin_protection(tmp_path):
