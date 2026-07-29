@@ -1349,18 +1349,9 @@ def _kiosk_family_member_from_session(request, participant):
 
 
 def _participant_historic_settlements(participant: Participant):
-    """Retrieve all finalized settlements for this participant and matching participant entries across camps."""
-    query = Q(participant=participant)
-    if participant.email:
-        query |= Q(participant__email__iexact=participant.email)
-    else:
-        query |= Q(
-            participant__first_name__iexact=participant.first_name,
-            participant__last_name__iexact=participant.last_name,
-        )
-
+    """Retrieve finalized settlements owned by this exact participant record."""
     return (
-        Settlement.objects.filter(query, run__isnull=False)
+        Settlement.objects.filter(participant=participant, run__isnull=False)
         .select_related("run", "run__camp", "participant", "participant__camp")
         .order_by("-created_at")
     )
@@ -1382,20 +1373,7 @@ def kiosk_settlement_pdf(request, settlement_id, kiosk_mode="private"):
         run__isnull=False,
     )
 
-    allowed = (
-        snapshot.participant_id == participant.pk
-        or (participant.email and snapshot.participant.email.lower() == participant.email.lower())
-        or (
-            snapshot.participant.first_name.lower() == participant.first_name.lower()
-            and snapshot.participant.last_name.lower() == participant.last_name.lower()
-        )
-        or ParticipantFamilyMember.objects.filter(
-            guardian=participant,
-            first_name__iexact=snapshot.participant.first_name,
-            last_name__iexact=snapshot.participant.last_name,
-        ).exists()
-    )
-    if not allowed:
+    if snapshot.participant_id != participant.pk:
         return HttpResponseForbidden("Zugriff verweigert.")
 
     return settlement_snapshot_pdf_response(snapshot)
@@ -1586,16 +1564,6 @@ def _kiosk_checkin_participants(participant):
                 "name": member.full_name,
                 "role": member.get_role_display(),
                 "camp": participant.camp,
-            }
-        )
-    for linked_participant in _linked_booking_participants(participant):
-        targets.append(
-            {
-                "token": f"participant-{linked_participant.pk}",
-                "object": linked_participant,
-                "name": linked_participant.full_name,
-                "role": "Verknüpft",
-                "camp": linked_participant.camp,
             }
         )
     return targets

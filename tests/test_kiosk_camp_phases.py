@@ -5,7 +5,7 @@ import pytest
 from django.urls import reverse
 from django.utils import timezone
 
-from billing.models import Charge, Expense, Settlement, SettlementRun
+from billing.models import Charge, Expense, ParticipantFamilyMember, Settlement, SettlementRun
 from billing.views import KIOSK_MODE_SESSION_KEY, KIOSK_PARTICIPANT_SESSION_KEY
 from tests.factories import CampFactory, ExpenseFactory, ParticipantFactory, PriceRuleFactory, SuperUserFactory
 
@@ -267,3 +267,113 @@ def test_kiosk_settlement_pdf_download_permissions(kiosk_client):
     res_live = kiosk_client.get(reverse("kiosk-current-settlement-pdf"))
     assert res_live.status_code == 200
     assert res_live["Content-Type"] == "application/pdf"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("identity_collision", ["email", "name", "family_member"])
+def test_kiosk_settlement_pdf_rejects_attribute_based_identity_matches(kiosk_client, identity_collision):
+    admin = SuperUserFactory()
+    active_camp = CampFactory(name="Aktuelles Lager", year=2026, is_active=True)
+    historic_camp = CampFactory(name="Früheres Lager", year=2025, is_active=False)
+    participant = ParticipantFactory(
+        camp=active_camp,
+        first_name="Ada",
+        last_name="Lovelace",
+        email="ada@example.test",
+    )
+    settlement_owner = ParticipantFactory(
+        camp=historic_camp,
+        first_name="Grace",
+        last_name="Hopper",
+        email="grace@example.test",
+    )
+    if identity_collision == "email":
+        settlement_owner.email = participant.email
+        settlement_owner.save(update_fields=["email", "updated_at"])
+    elif identity_collision == "name":
+        settlement_owner.first_name = participant.first_name
+        settlement_owner.last_name = participant.last_name
+        settlement_owner.save(update_fields=["first_name", "last_name", "updated_at"])
+    else:
+        ParticipantFamilyMember.objects.create(
+            guardian=participant,
+            first_name=settlement_owner.first_name,
+            last_name=settlement_owner.last_name,
+            role=ParticipantFamilyMember.Role.COMPANION,
+        )
+
+    run = SettlementRun.objects.create(camp=historic_camp, version=1, calculated_by=admin)
+    foreign_settlement = Settlement.objects.create(
+        run=run,
+        participant=settlement_owner,
+        total_due=Decimal("75.00"),
+        total_paid=Decimal("0.00"),
+        total_advanced=Decimal("0.00"),
+        balance=Decimal("75.00"),
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_MODE_SESSION_KEY] = "private"
+    session.save()
+
+    response = kiosk_client.get(reverse("kiosk-settlement-pdf", args=[foreign_settlement.pk]))
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("identity_collision", ["email", "name"])
+def test_kiosk_home_lists_only_exact_participant_settlements(kiosk_client, identity_collision):
+    admin = SuperUserFactory()
+    active_camp = CampFactory(name="Aktuelles Lager", year=2026, is_active=True)
+    historic_camp = CampFactory(name="Früheres Lager", year=2025, is_active=False)
+    participant = ParticipantFactory(
+        camp=active_camp,
+        first_name="Ada",
+        last_name="Lovelace",
+        email="ada@example.test",
+    )
+    settlement_owner = ParticipantFactory(
+        camp=historic_camp,
+        first_name="Grace",
+        last_name="Hopper",
+        email="grace@example.test",
+    )
+    if identity_collision == "email":
+        settlement_owner.email = participant.email
+        settlement_owner.save(update_fields=["email", "updated_at"])
+    else:
+        participant.email = ""
+        participant.save(update_fields=["email", "updated_at"])
+        settlement_owner.first_name = participant.first_name
+        settlement_owner.last_name = participant.last_name
+        settlement_owner.email = ""
+        settlement_owner.save(update_fields=["first_name", "last_name", "email", "updated_at"])
+
+    current_run = SettlementRun.objects.create(camp=active_camp, version=1, calculated_by=admin)
+    own_settlement = Settlement.objects.create(
+        run=current_run,
+        participant=participant,
+        total_due=Decimal("50.00"),
+        total_paid=Decimal("0.00"),
+        total_advanced=Decimal("0.00"),
+        balance=Decimal("50.00"),
+    )
+    historic_run = SettlementRun.objects.create(camp=historic_camp, version=1, calculated_by=admin)
+    Settlement.objects.create(
+        run=historic_run,
+        participant=settlement_owner,
+        total_due=Decimal("75.00"),
+        total_paid=Decimal("0.00"),
+        total_advanced=Decimal("0.00"),
+        balance=Decimal("75.00"),
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_MODE_SESSION_KEY] = "private"
+    session.save()
+
+    response = kiosk_client.get(reverse("kiosk-home"))
+
+    assert response.status_code == 200
+    assert [settlement.pk for settlement in response.context["historic_settlements"]] == [own_settlement.pk]

@@ -556,7 +556,28 @@ def test_pre_camp_kiosk_login_uses_compact_layout(kiosk_client):
 
 
 @pytest.mark.django_db
-def test_kiosk_checkin_updates_own_and_linked_participant_dates(kiosk_client, monkeypatch):
+def test_kiosk_checkin_targets_exclude_booking_link_participants(kiosk_client, monkeypatch):
+    monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 7, 5))
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 14))
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")
+    linked = ParticipantFactory(camp=camp, first_name="Grace", last_name="B")
+    ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=linked,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.get(reverse("kiosk-home"))
+
+    assert response.status_code == 200
+    assert [target["token"] for target in response.context["checkin_participants"]] == [f"participant-{participant.pk}"]
+
+
+@pytest.mark.django_db
+def test_kiosk_checkin_rejects_booking_link_participant(kiosk_client, monkeypatch):
     monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 7, 5))
     camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 14))
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")
@@ -574,23 +595,18 @@ def test_kiosk_checkin_updates_own_and_linked_participant_dates(kiosk_client, mo
         reverse("kiosk-home"),
         {
             "action": "checkin",
-            "checkin_target": [f"participant-{participant.pk}", f"participant-{linked.pk}"],
-            f"arrival_date_participant-{participant.pk}": "2026-07-02",
-            f"departure_date_participant-{participant.pk}": "2026-07-10",
+            "checkin_target": [f"participant-{linked.pk}"],
             f"arrival_date_participant-{linked.pk}": "2026-07-03",
             f"departure_date_participant-{linked.pk}": "2026-07-09",
         },
     )
 
-    assert response.status_code == 302
-    participant.refresh_from_db()
+    assert response.status_code == 200
     linked.refresh_from_db()
-    assert participant.arrival_date == date(2026, 7, 2)
-    assert participant.departure_date == date(2026, 7, 10)
-    assert participant.booked_nights == 8
-    assert linked.arrival_date == date(2026, 7, 3)
-    assert linked.departure_date == date(2026, 7, 9)
-    assert linked.booked_nights == 6
+    assert linked.arrival_date is None
+    assert linked.departure_date is None
+    assert linked.booked_nights == 0
+    assert "Ein Teilnehmer darf über diesen Kiosk nicht bearbeitet werden.".encode() in response.content
 
 
 @pytest.mark.django_db
