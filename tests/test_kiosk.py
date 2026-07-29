@@ -51,6 +51,8 @@ def test_kiosk_user_guide_points_menu_only_sections_to_menu(kiosk_client):
     assert "gegenseitige Partner-Vollmacht" in content
     assert "Abrechnung und PDF" in content
     assert "Anreise und Abreise" in content
+    assert "aktive Begleitpersonen beider Hauptkonten" in content
+    assert "mit ihrer eigenen PIN ausüben" in content
     assert "strikt getrennt" not in content
     assert "scrolle auf der Startseite" not in content
     for animation in ("login", "drinks", "meals", "family", "shifts"):

@@ -32,6 +32,7 @@ from billing.views import (
     _kiosk_meal_targets,
     _linked_booking_participants,
     _retract_meal_signup,
+    _sign_kiosk_meal_retraction,
 )
 from tests.factories import CampFactory, ParticipantFactory, PriceRuleFactory, SuperUserFactory
 
@@ -197,12 +198,14 @@ def test_kiosk_home_discloses_full_partner_scope_before_invitation_acceptance(ki
     response = kiosk_client.get(reverse("kiosk-home"))
 
     assert response.status_code == 200
-    content = response.content.decode("utf-8")
+    content = " ".join(response.content.decode("utf-8").split())
     accept_button_index = content.index('value="booking_link_accept"')
     disclosed_scope = (
         "Abrechnung einschließlich Familienpositionen und PDF einsehen",
         "Getränke und Essen für das Partnerkonto buchen oder stornieren",
         "Anreise, Abreise und Übernachtungen des Partnerhaushalts verwalten",
+        "Auch aktive Begleitpersonen beider Hauptkonten können diese Rechte mit ihrer eigenen PIN ausüben.",
+        "Im Aktivitätsprotokoll wird die handelnde Begleitperson als Akteur genannt.",
         "PINs, Stammdaten, weitere Partnerfreigaben und Adminfunktionen bleiben ausgeschlossen.",
     )
     assert "Grace Hopper" in content
@@ -1044,6 +1047,65 @@ def test_meal_signup_row_locks_exclude_nullable_postgresql_joins(monkeypatch):
     assert len(locked_meal_signup_sql) == 2
     assert all(" LEFT OUTER JOIN " in sql for sql in locked_meal_signup_sql)
     assert all(' FOR UPDATE OF "billing_mealsignup"' in sql for sql in locked_meal_signup_sql)
+
+
+@pytest.mark.django_db
+def test_partner_meal_workflows_lock_signup_before_authorization(monkeypatch):
+    actor = ParticipantFactory()
+    partner = ParticipantFactory(camp=actor.camp)
+    ParticipantBookingLink.objects.create(
+        inviter=actor,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    price_rule = PriceRuleFactory(
+        camp=actor.camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+    )
+    target = {
+        "kind": "participant",
+        "object": partner,
+    }
+    lock_order_by_workflow = {
+        "book": [],
+        "retract": [],
+    }
+    active_workflow = "book"
+    original_first = QuerySet.first
+
+    def capture_lock_order(queryset):
+        if queryset.query.select_for_update and queryset.model in {MealSignup, ParticipantBookingLink}:
+            lock_order_by_workflow[active_workflow].append(queryset.model)
+        return original_first(queryset)
+
+    monkeypatch.setattr(QuerySet, "first", capture_lock_order)
+
+    with transaction.atomic():
+        _book_meal_for_target(
+            target,
+            date(2026, 7, 2),
+            MealSignup.Meal.DINNER,
+            MealSignup.Variant.NORMAL,
+            price_rule,
+            actor,
+        )
+    signup = MealSignup.objects.select_related("charge").get(participant=partner)
+    confirmation_token = _sign_kiosk_meal_retraction(actor, signup)
+
+    active_workflow = "retract"
+    with transaction.atomic():
+        retracted = _retract_meal_signup(
+            signup,
+            actor,
+            confirmation_token=confirmation_token,
+        )
+
+    assert retracted is True
+    assert lock_order_by_workflow == {
+        "book": [MealSignup, ParticipantBookingLink],
+        "retract": [MealSignup, ParticipantBookingLink],
+    }
 
 
 @pytest.mark.django_db

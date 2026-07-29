@@ -2295,11 +2295,6 @@ def _book_meal_for_target(
     target_object = target["object"]
     participant = target_object if target["kind"] == "participant" else target_object.guardian
     family_member = target_object if target["kind"] == "family" else None
-    booking_link = None
-    if participant.pk != booked_by.pk:
-        booking_link = _accepted_booking_link_between(booked_by, participant, for_update=True)
-        if booking_link is None:
-            raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
     existing_signup = (
         MealSignup.objects.select_for_update(of=("self",))
         .select_related("charge")
@@ -2311,6 +2306,11 @@ def _book_meal_for_target(
         )
         .first()
     )
+    booking_link = None
+    if participant.pk != booked_by.pk:
+        booking_link = _accepted_booking_link_between(booked_by, participant, for_update=True)
+        if booking_link is None:
+            raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
     before = kiosk_meal_signup_audit_snapshot(existing_signup) if existing_signup is not None else {}
     signup_defaults = {
         "variant": variant,

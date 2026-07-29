@@ -36,6 +36,8 @@
   noch doppelte Audit- oder Benachrichtigungseinträge erzeugen. Der Lock
   beschränkt sich auf die Essensanmeldung selbst, sodass PostgreSQL nullable
   vorgeladene Charge- und Familienrelationen nicht unzulässig mitsperrt.
+  Buchung und Rücknahme sperren dabei zuerst die Essensanmeldung und danach die
+  Partner-Vollmacht, damit parallele Gegenoperationen keinen Lock-Zyklus bilden.
 - Zeigt bei Schnellbuchungen für mehrere Konten vor dem Schreiben eine
   verbindliche Übersicht über Personen, Mengen, Einzelpreise und Gesamtsumme
   und verlangt eine ausdrückliche kostenpflichtige Bestätigung. Ein
@@ -52,7 +54,10 @@
 - Lässt PIN-, Sicherheits-, Identitäts- und Administrationsfunktionen
   ausdrücklich außerhalb der Partner-Vollmacht.
 - Zeigt den vollständigen Umfang und die Ausschlüsse der Partner-Vollmacht
-  unmittelbar vor jeder Annahme, auch auf der Kiosk-Startseite.
+  unmittelbar vor jeder Annahme, auch auf der Kiosk-Startseite. Dazu gehört
+  ausdrücklich, dass aktive Begleitpersonen beider Hauptkonten die Vollmacht
+  mit eigener PIN ausüben können und als tatsächliche Akteure protokolliert
+  werden.
 
 ## Geänderte Dateien
 
