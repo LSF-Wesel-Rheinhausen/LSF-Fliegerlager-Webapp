@@ -606,6 +606,32 @@ def test_shared_pin_rejects_external_and_cross_mode_redirect_targets(client):
     assert traversal_response["Location"] == reverse("kiosk-home")
 
 
+@pytest.mark.parametrize("authorization_method", ["cookie", "pin"])
+@pytest.mark.django_db
+def test_malformed_shared_pin_next_falls_back_to_kiosk_home(client, authorization_method):
+    camp = CampFactory(is_active=True)
+    access_model = apps.get_model("billing", "CampKioskAccess")
+    access = access_model.objects.create(camp=camp)
+    access.set_pin("246810")
+    access.save()
+    kiosk_access = importlib.import_module("billing.kiosk_access")
+    client.raise_request_exception = False
+    access_url = f"{reverse('kiosk-access')}?next=%2F%2F%5B"
+
+    if authorization_method == "cookie":
+        cookie_response = HttpResponse()
+        kiosk_access.set_kiosk_access_cookie(cookie_response, access)
+        client.cookies[kiosk_access.KIOSK_ACCESS_COOKIE_NAME] = cookie_response.cookies[
+            kiosk_access.KIOSK_ACCESS_COOKIE_NAME
+        ].value
+        response = client.get(access_url)
+    else:
+        response = client.post(access_url, {"pin": "246810"})
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("kiosk-home")
+
+
 @pytest.mark.django_db
 def test_central_kiosk_redirects_to_matching_shared_pin_prompt(client):
     camp = CampFactory(is_active=True)

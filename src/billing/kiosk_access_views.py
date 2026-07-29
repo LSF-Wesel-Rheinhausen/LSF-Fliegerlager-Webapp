@@ -122,7 +122,10 @@ def _safe_kiosk_next_url(request: HttpRequest, kiosk_mode: str) -> str:
     default_route = "central-kiosk-home" if kiosk_mode == "central" else "kiosk-home"
     default_url = reverse(default_route)
     requested_url = request.GET.get("next", "")
-    requested_path = urlsplit(requested_url).path
+    try:
+        requested_path = urlsplit(requested_url).path
+    except ValueError:
+        return default_url
     try:
         route_name = resolve(requested_path).url_name
     except Resolver404:
