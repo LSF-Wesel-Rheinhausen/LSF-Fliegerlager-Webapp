@@ -29,6 +29,9 @@
 - Protokolliert und meldet auch Partner-Rücknahmen alter Essensanmeldungen
   ohne Kostenposition und erlaubt die Stornierung aktueller
   Partner-Eigenbuchungen innerhalb des bestehenden Zeitfensters.
+  Rücknahmen aus einem fremden Partnerhaushalt erfordern zuvor einen
+  expliziten Dialog mit einem signierten, zustandsgebundenen
+  Bestätigungstoken.
 - Zeigt bei Schnellbuchungen für mehrere Konten vor dem Schreiben eine
   verbindliche Übersicht über Personen, Mengen, Einzelpreise und Gesamtsumme
   und verlangt eine ausdrückliche kostenpflichtige Bestätigung. Ein

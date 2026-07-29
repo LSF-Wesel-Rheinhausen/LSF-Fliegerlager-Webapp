@@ -564,6 +564,31 @@
     </form>
   </dialog>
 
+  <dialog id="meal-retract-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="meal-retract-dialog-title">
+    <form method="dialog" class="dialog-heading">
+      <div>
+        <h2 id="meal-retract-dialog-title">Partner-Essensanmeldung zurücknehmen?</h2>
+        <p class="dialog-heading__meta">Die Anmeldung und ihre Abrechnungsposition werden zurückgenommen.</p>
+      </div>
+      <button class="button button-secondary">Schließen</button>
+    </form>
+    <div class="kiosk-note">
+      <strong id="meal-retract-target"></strong>
+      <span id="meal-retract-details"></span>
+      <span id="meal-retract-cost"></span>
+    </div>
+    <form method="post" id="meal-retract-form">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="meal_retract">
+      <input type="hidden" name="meal_signup_id" id="meal-retract-signup-id" value="">
+      <input type="hidden" name="meal_retraction_token" id="meal-retraction-token" value="">
+      <div class="dialog-actions">
+        <button type="button" class="button button-secondary" data-close-meal-retract-dialog>Abbrechen</button>
+        <button type="submit" class="button button-danger">Jetzt zurücknehmen</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="summary-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="summary-dialog-title">
     <form method="dialog" class="dialog-heading dialog-heading--flush">
       <h2 id="summary-dialog-title">Abrechnung</h2>
@@ -751,12 +776,25 @@
                   <span>{{ slot.label }} · {{ signup.get_variant_display }} · {{ signup.get_status_display }}</span>
                 </div>
                 {% if signup.status == "active" and not slot.locked %}
-                  <form method="post" class="kiosk-list-row__actions">
-                    {% csrf_token %}
-                    <input type="hidden" name="action" value="meal_retract">
-                    <input type="hidden" name="meal_signup_id" value="{{ signup.pk }}">
-                    <button type="submit" class="button-secondary">Zurücknehmen</button>
-                  </form>
+                  {% if signup.requires_partner_retraction_confirmation %}
+                    <button
+                      type="button"
+                      class="button-secondary kiosk-list-row__actions"
+                      data-open-meal-retract-dialog
+                      data-meal-signup-id="{{ signup.pk }}"
+                      data-meal-retraction-token="{{ signup.retraction_confirmation_token }}"
+                      data-meal-retract-target="{% if signup.family_member %}{{ signup.family_member.full_name }}{% else %}{{ signup.participant.full_name }}{% endif %}"
+                      data-meal-retract-details="{{ slot.label }} am {{ signup.meal_date|date:'d.m.Y' }}"
+                      data-meal-retract-cost="{% if signup.charge %}{{ signup.charge.total|money_eur }}{% endif %}"
+                    >Zurücknehmen</button>
+                  {% else %}
+                    <form method="post" class="kiosk-list-row__actions">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="meal_retract">
+                      <input type="hidden" name="meal_signup_id" value="{{ signup.pk }}">
+                      <button type="submit" class="button-secondary">Zurücknehmen</button>
+                    </form>
+                  {% endif %}
                 {% endif %}
               </article>
             {% endfor %}
@@ -1095,6 +1133,12 @@
       const quickCancelChargeId = document.getElementById("quick-cancel-charge-id");
       const quickCancelDescription = document.getElementById("quick-cancel-description");
       const quickCancelTotal = document.getElementById("quick-cancel-total");
+      const mealRetractDialog = document.getElementById("meal-retract-dialog");
+      const mealRetractSignupId = document.getElementById("meal-retract-signup-id");
+      const mealRetractionToken = document.getElementById("meal-retraction-token");
+      const mealRetractTarget = document.getElementById("meal-retract-target");
+      const mealRetractDetails = document.getElementById("meal-retract-details");
+      const mealRetractCost = document.getElementById("meal-retract-cost");
       const openDialog = (dialog, trigger) => window.kioskDialogs.open(dialog, trigger);
 
       document.querySelectorAll("[data-quick-button]").forEach((button) => {
@@ -1258,6 +1302,21 @@
       document
         .querySelector("[data-close-quick-cancel-dialog]")
         ?.addEventListener("click", () => quickCancelDialog.close());
+
+      document.querySelectorAll("[data-open-meal-retract-dialog]").forEach((button) => {
+        button.addEventListener("click", () => {
+          mealRetractSignupId.value = button.dataset.mealSignupId || "";
+          mealRetractionToken.value = button.dataset.mealRetractionToken || "";
+          mealRetractTarget.textContent = button.dataset.mealRetractTarget || "Partnerkonto";
+          mealRetractDetails.textContent = button.dataset.mealRetractDetails || "Essensanmeldung";
+          const cost = button.dataset.mealRetractCost || "";
+          mealRetractCost.textContent = cost ? `Betrag: ${cost}` : "Ohne Abrechnungsposition";
+          openDialog(mealRetractDialog, button);
+        });
+      });
+      document
+        .querySelector("[data-close-meal-retract-dialog]")
+        ?.addEventListener("click", () => mealRetractDialog.close());
 
       const summaryDialog = document.getElementById("summary-dialog");
       document.querySelector("[data-open-summary-dialog]")?.addEventListener("click", (event) =>

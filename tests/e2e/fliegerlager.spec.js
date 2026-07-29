@@ -671,6 +671,75 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
   await expect(page).toHaveURL(/.*\/kiosk\/login\//);
 });
 
+test("Partner meal retraction requires explicit confirmation", async ({ page }) => {
+  await setupFirstAdmin(page);
+  const campName = await createCamp(page, "Partner-Essen", 0, 4);
+  await createParticipant(page, "Ada", "Lovelace", "", "1234");
+  await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
+  await page.getByRole("link", { name: campName, exact: true }).click();
+  await createParticipant(page, "Grace", "Hopper", "", "5678");
+  await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
+  await page.getByRole("link", { name: campName, exact: true }).click();
+  await page.getByRole("link", { name: "Preise verwalten" }).first().click();
+  await page.locator('input[name="meal-dinner_adult_price"]').fill("7.00");
+  await page.getByRole("button", { name: "Standardpreise speichern" }).click();
+  await logout(page);
+
+  await openKiosk(page, "/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Ada Lovelace" });
+  await page.getByLabel("PIN:", { exact: true }).fill("1234");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).click();
+  await page.locator("dialog#kiosk-menu-dialog").getByRole("link", { name: /Partner & Aktivitäten/ }).click();
+  await page.getByLabel("Teilnehmer einladen").selectOption({ label: "Grace Hopper" });
+  await page.getByRole("button", { name: "Partner einladen" }).click();
+  await page.getByRole("link", { name: "Abmelden" }).click();
+
+  await openKiosk(page, "/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Grace Hopper" });
+  await page.getByLabel("PIN:", { exact: true }).fill("5678");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).click();
+  await page.locator("dialog#kiosk-menu-dialog").getByRole("link", { name: /Partner & Aktivitäten/ }).click();
+  await page.getByRole("button", { name: "Annehmen" }).click();
+  await page.getByRole("link", { name: "Zurück" }).click();
+
+  await page.locator('[data-kiosk-card="food"]').getByRole("button", { name: /Abendessen/ }).click();
+  const graceMealCalendar = page.locator("dialog#meal-calendar-dialog");
+  await graceMealCalendar.getByRole("button", { name: "Essen buchen" }).click();
+  const graceMealDialog = page.locator("dialog#meal-dialog");
+  await graceMealDialog.locator("input[data-meal-date-checkbox]:not([disabled])").first().check();
+  await graceMealDialog.getByRole("button", { name: "Weiter" }).click();
+  await graceMealDialog.getByRole("button", { name: "Essensanmeldung speichern" }).click();
+  await expect(page.getByText("Essensanmeldung wurde für 1 Tag und 1 Person gespeichert.")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.getByRole("link", { name: "Abmelden" }).click();
+
+  await openKiosk(page, "/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Ada Lovelace" });
+  await page.getByLabel("PIN:", { exact: true }).fill("1234");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.goto("/kiosk/#meal-calendar");
+  const adaMealCalendar = page.locator("dialog#meal-calendar-dialog");
+  await expect(adaMealCalendar).toBeVisible();
+  await adaMealCalendar.locator(".meal-status-day--booked").first().click();
+  const mealDayDetail = page.locator('dialog[id^="meal-day-detail-"]:visible');
+  const partnerMealRow = mealDayDetail.locator(".meal-detail-row").filter({ hasText: "Grace Hopper" });
+  await expect(partnerMealRow).toContainText("Gebucht");
+  await partnerMealRow.getByRole("button", { name: "Zurücknehmen" }).click();
+
+  const retractionDialog = page.locator("dialog#meal-retract-dialog");
+  await expect(retractionDialog).toBeVisible();
+  await expect(retractionDialog).toContainText("Grace Hopper");
+  await expect(retractionDialog).toContainText("Betrag: 7,00 €");
+  await assertNoUnexpectedOverflow(page);
+  await retractionDialog.getByRole("button", { name: "Jetzt zurücknehmen" }).click();
+  await expect(page.getByText("Essensanmeldung wurde zurückgenommen.")).toBeVisible();
+  await page.emulateMedia({ colorScheme: "light" });
+});
+
 test("Kiosk masonry and expense cards stay responsive and accessible", async ({ page }) => {
   const { browserErrors, failedRequests } = trackPageIssues(page);
 

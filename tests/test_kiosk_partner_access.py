@@ -781,12 +781,36 @@ def test_charge_less_partner_meal_retraction_is_audited_and_notified(
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session.save()
 
+    page_response = kiosk_client.get(reverse("kiosk-home"))
+    visible_signup = next(item for item in page_response.context["meal_signups"] if item.pk == signup.pk)
+
+    assert visible_signup.requires_partner_retraction_confirmation is True
+    assert visible_signup.retraction_confirmation_token
+    page_content = page_response.content.decode("utf-8")
+    assert "data-open-meal-retract-dialog" in page_content
+    assert 'id="meal-retract-dialog"' in page_content
+
+    unconfirmed_response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal_retract",
+            "meal_signup_id": signup.pk,
+        },
+    )
+
+    signup.refresh_from_db()
+    assert unconfirmed_response.status_code == 200
+    assert signup.status == MealSignup.Status.ACTIVE
+    assert not KioskActionAuditLog.objects.filter(action=KioskActionAuditLog.Action.MEAL_RETRACTED).exists()
+    assert not PushMessage.objects.exists()
+
     with django_capture_on_commit_callbacks(execute=True):
         response = kiosk_client.post(
             reverse("kiosk-home"),
             {
                 "action": "meal_retract",
                 "meal_signup_id": signup.pk,
+                "meal_retraction_token": visible_signup.retraction_confirmation_token,
             },
         )
 
@@ -804,6 +828,82 @@ def test_charge_less_partner_meal_retraction_is_audited_and_notified(
     message = PushMessage.objects.get()
     assert message.subscription.participant == partner
     assert message.title == "Partnerkonto geändert"
+
+
+@pytest.mark.django_db
+def test_paid_partner_meal_retraction_requires_signed_confirmation(kiosk_client, monkeypatch):
+    fixed_now = timezone.make_aware(datetime(2026, 6, 30, 10, 0))
+    monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
+    camp = CampFactory(
+        is_active=True,
+        starts_on=date(2026, 6, 30),
+        ends_on=date(2026, 7, 14),
+    )
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    partner = ParticipantFactory(camp=camp, first_name="Grace", last_name="Hopper")
+    ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    charge = Charge.objects.create(
+        participant=partner,
+        kind=Charge.Kind.FOOD,
+        description="Abendessen",
+        quantity=Decimal("1.00"),
+        unit_price=Decimal("8.00"),
+        occurred_on=date(2026, 7, 2),
+        kiosk_booked_by=partner,
+    )
+    signup = MealSignup.objects.create(
+        participant=partner,
+        meal_date=date(2026, 7, 2),
+        meal=MealSignup.Meal.DINNER,
+        variant=MealSignup.Variant.NORMAL,
+        charge=charge,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    page_response = kiosk_client.get(reverse("kiosk-home"))
+    visible_signup = next(item for item in page_response.context["meal_signups"] if item.pk == signup.pk)
+    content = page_response.content.decode("utf-8")
+
+    assert visible_signup.requires_partner_retraction_confirmation is True
+    assert visible_signup.retraction_confirmation_token
+    assert f'data-meal-signup-id="{signup.pk}"' in content
+    assert 'data-meal-retract-cost="8,00 €"' in content
+
+    unconfirmed_response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal_retract",
+            "meal_signup_id": signup.pk,
+        },
+    )
+
+    signup.refresh_from_db()
+    charge.refresh_from_db()
+    assert unconfirmed_response.status_code == 200
+    assert signup.status == MealSignup.Status.ACTIVE
+    assert charge.deleted_at is None
+
+    confirmed_response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal_retract",
+            "meal_signup_id": signup.pk,
+            "meal_retraction_token": visible_signup.retraction_confirmation_token,
+        },
+    )
+
+    signup.refresh_from_db()
+    charge.refresh_from_db()
+    assert confirmed_response.status_code == 302
+    assert signup.status == MealSignup.Status.RETRACTED
+    assert charge.deleted_at is not None
 
 
 @pytest.mark.django_db

@@ -166,6 +166,8 @@ GUARDIAN_ONLY_KIOSK_ACTIONS = frozenset(
 KIOSK_QUICK_BOOKING_CANCEL_WINDOW = timedelta(minutes=15)
 KIOSK_QUICK_CONFIRMATION_SIGNING_SALT = "billing.kiosk-quick-confirmation.v1"
 KIOSK_QUICK_CONFIRMATION_MAX_AGE_SECONDS = 10 * 60
+KIOSK_MEAL_RETRACTION_SIGNING_SALT = "billing.kiosk-meal-retraction.v1"
+KIOSK_MEAL_RETRACTION_MAX_AGE_SECONDS = 10 * 60
 
 
 def _positive_int_or_none(value: Any) -> int | None:
@@ -252,6 +254,58 @@ def _kiosk_quick_confirmation_nonce(token: str, payload: dict[str, object]) -> u
         return uuid.UUID(nonce)
     except ValueError:
         return None
+
+
+def _kiosk_meal_retraction_payload(
+    participant: Participant,
+    signup: MealSignup,
+) -> dict[str, object]:
+    """Return the JSON-safe meal state covered by a partner retraction confirmation."""
+    charge = signup.charge
+    return {
+        "participant_id": participant.pk,
+        "camp_id": participant.camp_id,
+        "signup_id": signup.pk,
+        "target_participant_id": signup.participant_id,
+        "family_member_id": signup.family_member_id,
+        "meal_date": signup.meal_date.isoformat(),
+        "meal": signup.meal,
+        "variant": signup.variant,
+        "status": signup.status,
+        "charge": (
+            None
+            if charge is None
+            else {
+                "id": charge.pk,
+                "quantity": str(charge.quantity),
+                "unit_price": str(charge.unit_price),
+                "foerdersatz": str(charge.foerdersatz),
+                "deleted_at": charge.deleted_at.isoformat() if charge.deleted_at is not None else None,
+            }
+        ),
+    }
+
+
+def _sign_kiosk_meal_retraction(participant: Participant, signup: MealSignup) -> str:
+    """Sign the exact partner meal state shown in a retraction dialog."""
+    return signing.dumps(
+        _kiosk_meal_retraction_payload(participant, signup),
+        salt=KIOSK_MEAL_RETRACTION_SIGNING_SALT,
+        compress=True,
+    )
+
+
+def _matches_kiosk_meal_retraction(token: str, participant: Participant, signup: MealSignup) -> bool:
+    """Return whether a non-expired token matches the current partner meal state."""
+    try:
+        signed_payload = signing.loads(
+            token,
+            salt=KIOSK_MEAL_RETRACTION_SIGNING_SALT,
+            max_age=KIOSK_MEAL_RETRACTION_MAX_AGE_SECONDS,
+        )
+    except signing.BadSignature:
+        return False
+    return signed_payload == _kiosk_meal_retraction_payload(participant, signup)
 
 
 def kiosk_root(_request: HttpRequest) -> HttpResponse:
@@ -2998,6 +3052,15 @@ def kiosk_home(request, kiosk_mode="private"):
                 messages.error(request, "Essensanmeldung wurde nicht gefunden.")
             elif is_meal_change_locked(participant.camp, signup.meal_date):
                 messages.error(request, meal_change_lock_message(participant.camp, signup.meal_date))
+            elif signup.participant_id != participant.pk and not _matches_kiosk_meal_retraction(
+                request.POST.get("meal_retraction_token", ""),
+                participant,
+                signup,
+            ):
+                messages.error(
+                    request,
+                    "Bitte bestätige die Rücknahme der Partner-Essensanmeldung erneut.",
+                )
             else:
                 with transaction.atomic():
                     _retract_meal_signup(signup, participant, active_family_member)
@@ -3089,11 +3152,16 @@ def kiosk_home(request, kiosk_mode="private"):
             authorized_participant_ids=linked_participant_id_set,
         )
     meal_signups = (
-        MealSignup.objects.select_related("participant", "family_member")
+        MealSignup.objects.select_related("participant", "family_member", "charge")
         .filter(Q(participant=participant) | Q(participant_id__in=linked_participant_ids))
         .order_by("meal_date", "meal", "participant__last_name", "participant__first_name")
     )
     meal_signups = list(meal_signups)
+    for signup in meal_signups:
+        signup.requires_partner_retraction_confirmation = signup.participant_id != participant.pk
+        signup.retraction_confirmation_token = (
+            _sign_kiosk_meal_retraction(participant, signup) if signup.requires_partner_retraction_confirmation else ""
+        )
     meal_calendar_days = _kiosk_meal_calendar(participant.camp, participant, meal_signups, meal_targets)
     is_meal_post = request.method == "POST" and request.POST.get("action") == "meal"
     selected_meal_date_values = set(request.POST.getlist(meal_form.add_prefix("meal_dates"))) if is_meal_post else set()
