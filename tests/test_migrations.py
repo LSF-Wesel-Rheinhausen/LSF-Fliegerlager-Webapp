@@ -150,5 +150,5 @@ def test_partner_authorization_migration_requires_fresh_invitation_and_acceptanc
     pending.refresh_from_db()
     revoked.refresh_from_db()
     assert legacy_accepted.status == ParticipantBookingLink.Status.REVOKED
-    assert pending.status == ParticipantBookingLink.Status.PENDING
+    assert pending.status == ParticipantBookingLink.Status.REVOKED
     assert revoked.status == ParticipantBookingLink.Status.REVOKED

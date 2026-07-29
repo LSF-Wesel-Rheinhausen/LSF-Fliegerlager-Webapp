@@ -1451,6 +1451,35 @@ def test_kiosk_books_drink_with_camp_drink_price_and_subsidy_flag(kiosk_client):
 
 
 @pytest.mark.django_db
+def test_kiosk_quick_booking_rejects_explicitly_empty_target_selection(kiosk_client):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp)
+    rule = PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.DRINK,
+        name="Wasser",
+        unit_price=Decimal("1.50"),
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "quick",
+            "quick-price_rule": rule.pk,
+            "quick-quantity": 1,
+            "quick-targets-submitted": "1",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Bitte mindestens eine Person auswählen." in response.content.decode("utf-8")
+    assert not Charge.objects.exists()
+
+
+@pytest.mark.django_db
 def test_kiosk_can_cancel_own_quick_booking_within_cancel_window(kiosk_client):
     camp = CampFactory()
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")

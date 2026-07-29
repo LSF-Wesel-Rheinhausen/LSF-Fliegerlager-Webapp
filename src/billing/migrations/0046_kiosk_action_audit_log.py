@@ -7,7 +7,7 @@ from django.db import migrations, models
 def require_fresh_partner_authorization(apps, _schema_editor):
     """Revoke legacy booking-only consent before enabling broader partner access."""
     ParticipantBookingLink = apps.get_model("billing", "ParticipantBookingLink")
-    ParticipantBookingLink.objects.filter(status="accepted").update(status="revoked")
+    ParticipantBookingLink.objects.filter(status__in=["accepted", "pending"]).update(status="revoked")
 
 
 class Migration(migrations.Migration):

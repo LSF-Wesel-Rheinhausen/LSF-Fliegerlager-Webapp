@@ -286,6 +286,7 @@
         {% for error in quick_form.quantity.errors %}
           <span class="helptext error">{{ error }}</span>
         {% endfor %}
+        {{ quick_form.non_field_errors }}
       </form>
 
       <dialog id="meal-calendar-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="meal-calendar-dialog-title">
@@ -1069,25 +1070,34 @@
 
       const syncQuickTargets = (scope) => {
         submittedTargetContainer.replaceChildren();
-        document
-          .querySelectorAll(`[data-quick-target-scope="${scope}"]:checked`)
-          .forEach((checkbox) => {
-            const input = document.createElement("input");
-            input.type = "hidden";
-            input.name = "quick-target";
-            input.value = checkbox.value;
-            submittedTargetContainer.append(input);
-          });
+        const selectionMarker = document.createElement("input");
+        selectionMarker.type = "hidden";
+        selectionMarker.name = "quick-targets-submitted";
+        selectionMarker.value = "1";
+        submittedTargetContainer.append(selectionMarker);
+        const selectedTargets = [
+          ...document.querySelectorAll(`[data-quick-target-scope="${scope}"]:checked`),
+        ];
+        const targetError = document.querySelector(`[data-quick-target-error="${scope}"]`);
+        if (targetError) targetError.hidden = selectedTargets.length > 0;
+        selectedTargets.forEach((checkbox) => {
+          const input = document.createElement("input");
+          input.type = "hidden";
+          input.name = "quick-target";
+          input.value = checkbox.value;
+          submittedTargetContainer.append(input);
+        });
+        return selectedTargets.length > 0;
       };
 
       document.getElementById("submit-food-booking")?.addEventListener("click", () => {
-        syncQuickTargets("food");
+        if (!syncQuickTargets("food")) return;
         quantityInput.value = "1";
         drinkForm.requestSubmit();
       });
 
       const submitDrink = (quantity) => {
-        syncQuickTargets("drink");
+        if (!syncQuickTargets("drink")) return;
         quantityInput.value = quantity;
         drinkForm.requestSubmit();
       };

@@ -2536,20 +2536,22 @@ def kiosk_home(request, kiosk_mode="private"):
         if request.POST.get("action") == "quick":
             quick_form = QuickBookingForm(request.POST, participant=participant, prefix="quick")
             if quick_form.is_valid():
-                target_ids = request.POST.getlist("quick-target")
-                targets = [default_booking_target]
-                if target_ids:
-                    targets_by_token = _target_lookup(meal_targets)
-                    selected_targets = [
-                        targets_by_token[tid]["object"] for tid in target_ids if tid in targets_by_token
-                    ]
-                    if selected_targets:
-                        targets = selected_targets
+                target_ids = list(dict.fromkeys(request.POST.getlist("quick-target")))
+                targets_by_token = _target_lookup(meal_targets)
+                if not target_ids and request.POST.get("quick-targets-submitted") != "1":
+                    target_ids = [default_booking_target_token]
+                if any(target_id not in targets_by_token for target_id in target_ids):
+                    quick_form.add_error(None, "Mindestens eine ausgewählte Person ist nicht verfügbar.")
+                selected_targets = [
+                    targets_by_token[target_id]["object"] for target_id in target_ids if target_id in targets_by_token
+                ]
+                if not selected_targets:
+                    quick_form.add_error(None, "Bitte mindestens eine Person auswählen.")
 
                 rule = quick_form.cleaned_data["price_rule"]
                 occurred_on = timezone.localdate()
                 resolved_bookings = []
-                for target in set(targets):
+                for target in set(selected_targets):
                     if isinstance(target, ParticipantFamilyMember):
                         charge_participant = target.guardian
                         target_family_member = target

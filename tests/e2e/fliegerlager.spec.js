@@ -594,8 +594,15 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
 
   // Book a drink
   await page.getByRole("button", { name: "Apfelsaft" }).click();
-  await expect(page.locator("dialog#quick-dialog")).toBeVisible();
-  await page.locator("dialog#quick-dialog").getByRole("button", { name: "1x" }).click();
+  const quickDialog = page.locator("dialog#quick-dialog");
+  await expect(quickDialog).toBeVisible();
+  const quickTarget = quickDialog.locator('[data-quick-target-scope="drink"]').first();
+  await quickTarget.uncheck();
+  await quickDialog.getByRole("button", { name: "1x" }).click();
+  await expect(quickDialog).toBeVisible();
+  await expect(quickDialog.getByRole("alert")).toHaveText("Bitte mindestens eine Person auswählen.");
+  await quickTarget.check();
+  await quickDialog.getByRole("button", { name: "1x" }).click();
   await expect(page.getByText("Apfelsaft gebucht.")).toBeVisible();
 
   // The cancellation action stays directly usable on a phone-sized viewport.
