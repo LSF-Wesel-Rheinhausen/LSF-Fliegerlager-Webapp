@@ -13,6 +13,10 @@
 - Protokolliert den tatsächlichen Akteur und die betroffene Person, informiert
   das betroffene Partnerkonto und entzieht alle Partnerrechte unmittelbar nach
   einem Widerruf.
+- Prüft Schnellbuchungs-Preisregeln für jede ausgewählte Person separat und
+  verwendet bei Snacks den passenden Kinder-, Begleit- oder Erwachsenenpreis.
+- Hält Audittexte frei von Personennamen und verhindert das Löschen eines
+  Lagers, solange dessen Partner-Auditverlauf besteht.
 - Lässt PIN-, Sicherheits-, Identitäts- und Administrationsfunktionen
   ausdrücklich außerhalb der Partner-Vollmacht.
 

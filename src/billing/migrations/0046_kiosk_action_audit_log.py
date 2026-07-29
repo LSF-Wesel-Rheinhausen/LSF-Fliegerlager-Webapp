@@ -67,7 +67,7 @@ class Migration(migrations.Migration):
                 (
                     "camp",
                     models.ForeignKey(
-                        on_delete=django.db.models.deletion.CASCADE,
+                        on_delete=django.db.models.deletion.PROTECT,
                         related_name="kiosk_action_audit_logs",
                         to="billing.camp",
                     ),

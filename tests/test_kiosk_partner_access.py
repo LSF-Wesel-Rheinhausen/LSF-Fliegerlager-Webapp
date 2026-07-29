@@ -5,6 +5,7 @@ import pytest
 from django.apps import apps
 from django.contrib import admin
 from django.core.exceptions import ValidationError
+from django.db.models.deletion import ProtectedError
 from django.urls import resolve, reverse
 from django.utils import timezone
 
@@ -53,6 +54,24 @@ def test_kiosk_action_audit_log_rejects_instance_and_queryset_mutation():
         KioskActionAuditLog.objects.filter(pk=audit_log.pk).update(description="Manipuliert")
     with pytest.raises(ValidationError):
         KioskActionAuditLog.objects.filter(pk=audit_log.pk).delete()
+
+
+@pytest.mark.django_db
+def test_camp_with_kiosk_audit_history_cannot_be_deleted():
+    participant = ParticipantFactory()
+    partner = ParticipantFactory(camp=participant.camp)
+    audit_log = KioskActionAuditLog.objects.create(
+        camp=participant.camp,
+        actor_participant=participant,
+        target_participant=partner,
+        action=KioskActionAuditLog.Action.LINK_INVITED,
+        description="Partner-Vollmacht angefragt.",
+    )
+
+    with pytest.raises(ProtectedError):
+        participant.camp.delete()
+
+    assert KioskActionAuditLog.objects.filter(pk=audit_log.pk).exists()
 
 
 def test_partner_activity_routes_exist_for_both_kiosk_modes():
@@ -403,6 +422,9 @@ def test_linked_household_checkin_records_actual_actor_and_before_after(kiosk_cl
         "arrival_date": "2026-07-03",
         "departure_date": "2026-07-09",
     }
+    assert partner_child.full_name not in audit_log.description
+    assert partner_child.full_name not in str(audit_log.before)
+    assert partner_child.full_name not in str(audit_log.after)
 
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = partner.pk
@@ -464,6 +486,8 @@ def test_linked_family_quick_booking_and_cancellation_are_audited(kiosk_client):
     assert created_log.before == {}
     assert created_log.after["booking_reference"] == charge.booking_reference
     assert created_log.after["deleted_at"] is None
+    assert partner_child.full_name not in created_log.description
+    assert partner_child.full_name not in str(created_log.after)
 
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = partner.pk
@@ -484,6 +508,9 @@ def test_linked_family_quick_booking_and_cancellation_are_audited(kiosk_client):
     assert cancelled_log.booking_link == link
     assert cancelled_log.before["deleted_at"] is None
     assert cancelled_log.after["deleted_at"] is not None
+    assert partner_child.full_name not in cancelled_log.description
+    assert partner_child.full_name not in str(cancelled_log.before)
+    assert partner_child.full_name not in str(cancelled_log.after)
 
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
@@ -548,6 +575,8 @@ def test_linked_family_meal_booking_and_retraction_are_audited(kiosk_client, mon
     assert created_log.target_family_member == partner_child
     assert created_log.booking_link == link
     assert created_log.after["status"] == MealSignup.Status.ACTIVE
+    assert partner_child.full_name not in created_log.description
+    assert partner_child.full_name not in str(created_log.after)
 
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = partner.pk
@@ -568,6 +597,126 @@ def test_linked_family_meal_booking_and_retraction_are_audited(kiosk_client, mon
     assert retracted_log.booking_link == link
     assert retracted_log.before["status"] == MealSignup.Status.ACTIVE
     assert retracted_log.after["status"] == MealSignup.Status.RETRACTED
+    assert partner_child.full_name not in retracted_log.description
+    assert partner_child.full_name not in str(retracted_log.before)
+    assert partner_child.full_name not in str(retracted_log.after)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("kind", "meal_type", "is_default"),
+    [
+        (PriceRule.Kind.DRINK, "", False),
+        (PriceRule.Kind.MEAL, PriceRule.MealType.SNACK, True),
+    ],
+)
+def test_quick_booking_rejects_rule_that_does_not_apply_to_selected_partner_child(
+    kiosk_client,
+    kind,
+    meal_type,
+    is_default,
+):
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp, is_child=False, is_companion=False)
+    partner = ParticipantFactory(camp=camp)
+    partner_child = ParticipantFamilyMember.objects.create(
+        guardian=partner,
+        first_name="Kind",
+        last_name="Hopper",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    rule = PriceRuleFactory(
+        camp=camp,
+        kind=kind,
+        meal_type=meal_type,
+        is_default=is_default,
+        applies_to_children=False,
+        applies_to_adults=True,
+        applies_to_companions=False,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "quick",
+            "quick-price_rule": rule.pk,
+            "quick-quantity": 1,
+            "quick-target": [f"family-{partner_child.pk}"],
+        },
+    )
+
+    assert response.status_code == 200
+    expected_error = "Die Preisregel ist nicht für alle ausgewählten Personen verfügbar.".encode()
+    assert expected_error in response.content
+    assert not Charge.objects.exists()
+    assert not KioskActionAuditLog.objects.exists()
+
+
+@pytest.mark.django_db
+def test_quick_food_booking_resolves_the_selected_partner_child_price(kiosk_client):
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp, is_child=False, is_companion=False)
+    partner = ParticipantFactory(camp=camp)
+    partner_child = ParticipantFamilyMember.objects.create(
+        guardian=partner,
+        first_name="Kind",
+        last_name="Hopper",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    adult_rule = PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=PriceRule.MealType.SNACK,
+        is_default=True,
+        name="Mittagssnack Erwachsene",
+        unit_price=Decimal("8.00"),
+        applies_to_children=False,
+        applies_to_adults=True,
+        applies_to_companions=False,
+    )
+    child_rule = PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=PriceRule.MealType.SNACK,
+        is_default=True,
+        name="Mittagssnack Kinder",
+        unit_price=Decimal("4.00"),
+        applies_to_children=True,
+        applies_to_adults=False,
+        applies_to_companions=False,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "quick",
+            "quick-price_rule": adult_rule.pk,
+            "quick-quantity": 1,
+            "quick-target": [f"family-{partner_child.pk}"],
+        },
+    )
+
+    assert response.status_code == 302
+    charge = Charge.objects.get()
+    assert charge.participant == partner
+    assert charge.unit_price == child_rule.unit_price
+    assert child_rule.name in charge.description
 
 
 @pytest.mark.django_db

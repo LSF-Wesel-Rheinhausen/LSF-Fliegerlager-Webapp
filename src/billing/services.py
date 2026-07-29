@@ -377,6 +377,43 @@ def resolve_meal_price_rule(camp: Camp, meal: str, meal_date: date, *, is_child:
     return base_queryset.filter(is_default=True, meal_date__isnull=True).order_by("name", "pk").first()
 
 
+def resolve_quick_booking_price_rule(
+    selected_rule: PriceRule,
+    booking_date: date,
+    *,
+    is_child: bool,
+    is_companion: bool,
+) -> PriceRule | None:
+    """Resolve an actor-selected quick-booking rule for one concrete target.
+
+    Drink rules must explicitly apply to the target. Quick-food selections keep
+    an applicable submitted rule, prefer a date-specific override, and resolve
+    another target-group default when the submitted rule does not apply.
+    """
+    if is_child:
+        selected_rule_applies = selected_rule.applies_to_children
+    elif is_companion:
+        selected_rule_applies = selected_rule.applies_to_companions
+    else:
+        selected_rule_applies = selected_rule.applies_to_adults
+    if selected_rule.kind == PriceRule.Kind.DRINK:
+        return selected_rule if selected_rule_applies else None
+    if selected_rule.kind == PriceRule.Kind.MEAL:
+        resolved_rule = resolve_meal_price_rule(
+            selected_rule.camp,
+            selected_rule.meal_type,
+            booking_date,
+            is_child=is_child,
+            is_companion=is_companion,
+        )
+        if resolved_rule is not None and resolved_rule.meal_date == booking_date:
+            return resolved_rule
+        if selected_rule_applies:
+            return selected_rule
+        return resolved_rule
+    return None
+
+
 def charge_audit_snapshot(charge: Charge) -> dict[str, str | None]:
     """Return the auditable business fields for a booking charge.
 
@@ -399,10 +436,10 @@ def charge_audit_snapshot(charge: Charge) -> dict[str, str | None]:
 
 def kiosk_charge_audit_snapshot(charge: Charge) -> dict[str, str | None]:
     """Return the booking fields needed to resolve participant kiosk disputes."""
-    return {
-        **charge_audit_snapshot(charge),
-        "deleted_at": charge.deleted_at.isoformat() if charge.deleted_at else None,
-    }
+    snapshot = charge_audit_snapshot(charge)
+    snapshot.pop("description", None)
+    snapshot["deleted_at"] = charge.deleted_at.isoformat() if charge.deleted_at else None
+    return snapshot
 
 
 def kiosk_meal_signup_audit_snapshot(signup: MealSignup) -> dict[str, Any]:

@@ -138,6 +138,7 @@ from .services import (
     next_catering_order_date,
     participant_kiosk_summary,
     resolve_meal_price_rule,
+    resolve_quick_booking_price_rule,
     restore_booking_from_audit_log,
 )
 
@@ -1989,7 +1990,7 @@ def _update_kiosk_checkin_dates(request, participant, checkin_participants):
                     target_family_member=target_family_member,
                     booking_link=booking_link,
                     action=KioskActionAuditLog.Action.CHECKIN_UPDATED,
-                    description=f"Anwesenheit für {target.full_name} geändert.",
+                    description="Anwesenheit geändert.",
                     before=before,
                     after=after,
                 )
@@ -2155,7 +2156,7 @@ def _book_meal_for_target(
             booking_link=booking_link,
             charge=charge,
             action=KioskActionAuditLog.Action.MEAL_BOOKED,
-            description=f"{charge.booking_reference}: {charge.description} gespeichert.",
+            description=f"{charge.booking_reference}: Essensanmeldung gespeichert.",
             before=before,
             after=kiosk_meal_signup_audit_snapshot(signup),
         )
@@ -2209,7 +2210,7 @@ def _retract_meal_signup(
             booking_link=booking_link,
             charge=charge,
             action=KioskActionAuditLog.Action.MEAL_RETRACTED,
-            description=f"{charge.booking_reference}: {charge.description} zurückgenommen.",
+            description=f"{charge.booking_reference}: Essensanmeldung zurückgenommen.",
             before=before,
             after=kiosk_meal_signup_audit_snapshot(signup),
         )
@@ -2471,70 +2472,87 @@ def kiosk_home(request, kiosk_mode="private"):
 
                 rule = quick_form.cleaned_data["price_rule"]
                 occurred_on = timezone.localdate()
-                with transaction.atomic():
-                    for target in set(targets):
-                        if isinstance(target, ParticipantFamilyMember):
-                            charge_participant = target.guardian
-                            target_family_member = target
-                            target_is_child = target.is_child
-                            target_is_companion = target.role == target.Role.COMPANION
-                        else:
-                            charge_participant = target
-                            target_family_member = None
-                            target_is_child = target.is_child
-                            target_is_companion = target.is_companion
-                        booking_link = None
-                        if charge_participant.pk != participant.pk:
-                            booking_link = _accepted_booking_link_between(
-                                participant,
-                                charge_participant,
-                                for_update=True,
-                            )
-                            if booking_link is None:
-                                raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
-                        effective_rule = rule
-                        if rule.kind == PriceRule.Kind.MEAL:
-                            resolved_rule = resolve_meal_price_rule(
-                                participant.camp,
-                                rule.meal_type,
-                                occurred_on,
-                                is_child=target_is_child,
-                                is_companion=target_is_companion,
-                            )
-                            if resolved_rule is not None and resolved_rule.meal_date == occurred_on:
-                                effective_rule = resolved_rule
-                        charge_desc = f"{effective_rule.name} (Kiosk)"
-                        if target != participant:
-                            charge_desc = f"{effective_rule.name} (Kiosk) für {target.full_name}"
+                resolved_bookings = []
+                for target in set(targets):
+                    if isinstance(target, ParticipantFamilyMember):
+                        charge_participant = target.guardian
+                        target_family_member = target
+                        target_is_child = target.is_child
+                        target_is_companion = target.role == target.Role.COMPANION
+                    else:
+                        charge_participant = target
+                        target_family_member = None
+                        target_is_child = target.is_child
+                        target_is_companion = target.is_companion
+                    effective_rule = resolve_quick_booking_price_rule(
+                        rule,
+                        occurred_on,
+                        is_child=target_is_child,
+                        is_companion=target_is_companion,
+                    )
+                    if effective_rule is None:
+                        quick_form.add_error(
+                            "price_rule",
+                            "Die Preisregel ist nicht für alle ausgewählten Personen verfügbar.",
+                        )
+                        break
+                    resolved_bookings.append(
+                        (
+                            target,
+                            charge_participant,
+                            target_family_member,
+                            effective_rule,
+                        )
+                    )
 
-                        charge = Charge(
-                            participant=charge_participant,
-                            kind=Charge.Kind.DRINK if effective_rule.kind == PriceRule.Kind.DRINK else Charge.Kind.FOOD,
-                            description=charge_desc,
-                            quantity=quick_form.cleaned_data["quantity"],
-                            unit_price=effective_rule.unit_price,
-                            foerdersatz=effective_rule.foerdersatz,
-                            occurred_on=occurred_on,
-                            kiosk_booked_by=participant,
-                        )
-                        charge.save()
-                        if booking_link is not None:
-                            create_kiosk_action_audit_log(
-                                camp=participant.camp,
-                                actor_participant=participant,
-                                actor_family_member=active_family_member,
-                                target_participant=charge_participant,
-                                target_family_member=target_family_member,
-                                booking_link=booking_link,
-                                charge=charge,
-                                action=KioskActionAuditLog.Action.QUICK_BOOKED,
-                                description=f"{charge.booking_reference}: {effective_rule.name} gebucht.",
-                                before={},
-                                after=kiosk_charge_audit_snapshot(charge),
+                if not quick_form.errors:
+                    with transaction.atomic():
+                        for target, charge_participant, target_family_member, effective_rule in resolved_bookings:
+                            booking_link = None
+                            if charge_participant.pk != participant.pk:
+                                booking_link = _accepted_booking_link_between(
+                                    participant,
+                                    charge_participant,
+                                    for_update=True,
+                                )
+                                if booking_link is None:
+                                    raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
+                            charge_desc = f"{effective_rule.name} (Kiosk)"
+                            if target != participant:
+                                charge_desc = f"{effective_rule.name} (Kiosk) für {target.full_name}"
+
+                            charge = Charge(
+                                participant=charge_participant,
+                                kind=(
+                                    Charge.Kind.DRINK
+                                    if effective_rule.kind == PriceRule.Kind.DRINK
+                                    else Charge.Kind.FOOD
+                                ),
+                                description=charge_desc,
+                                quantity=quick_form.cleaned_data["quantity"],
+                                unit_price=effective_rule.unit_price,
+                                foerdersatz=effective_rule.foerdersatz,
+                                occurred_on=occurred_on,
+                                kiosk_booked_by=participant,
                             )
-                        transaction.on_commit(
-                            partial(_notify_linked_booking_by_id, charge.pk, participant.pk, cancelled=False)
-                        )
+                            charge.save()
+                            if booking_link is not None:
+                                create_kiosk_action_audit_log(
+                                    camp=participant.camp,
+                                    actor_participant=participant,
+                                    actor_family_member=active_family_member,
+                                    target_participant=charge_participant,
+                                    target_family_member=target_family_member,
+                                    booking_link=booking_link,
+                                    charge=charge,
+                                    action=KioskActionAuditLog.Action.QUICK_BOOKED,
+                                    description=f"{charge.booking_reference}: Schnellbuchung erstellt.",
+                                    before={},
+                                    after=kiosk_charge_audit_snapshot(charge),
+                                )
+                            transaction.on_commit(
+                                partial(_notify_linked_booking_by_id, charge.pk, participant.pk, cancelled=False)
+                            )
                 if not quick_form.errors:
                     messages.success(request, f"{rule.name} gebucht.")
                     return redirect(_kiosk_route(kiosk_mode, "home"))
@@ -2596,7 +2614,7 @@ def kiosk_home(request, kiosk_mode="private"):
                             booking_link=booking_link,
                             charge=charge,
                             action=KioskActionAuditLog.Action.QUICK_CANCELLED,
-                            description=f"{charge.booking_reference}: {charge.description} storniert.",
+                            description=f"{charge.booking_reference}: Schnellbuchung storniert.",
                             before=before,
                             after=kiosk_charge_audit_snapshot(charge),
                         )

@@ -816,7 +816,7 @@ class KioskActionAuditLog(models.Model):
         MEAL_RETRACTED = "meal_retracted", "Essensanmeldung zurückgenommen"
         CHECKIN_UPDATED = "checkin_updated", "Anwesenheit geändert"
 
-    camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="kiosk_action_audit_logs")
+    camp = models.ForeignKey(Camp, on_delete=models.PROTECT, related_name="kiosk_action_audit_logs")
     actor_participant = models.ForeignKey(
         Participant,
         on_delete=models.SET_NULL,
