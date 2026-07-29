@@ -661,6 +661,48 @@
     <button type="button" class="button" data-submit-custom-drink>Menge buchen</button>
   </dialog>
 
+  {% if quick_confirmation %}
+    <dialog
+      id="quick-confirmation-dialog"
+      class="kiosk-dialog kiosk-dialog--wide"
+      aria-labelledby="quick-confirmation-dialog-title"
+      data-auto-open-dialog
+    >
+      <form method="dialog" class="dialog-heading">
+        <h2 id="quick-confirmation-dialog-title">Mehrfachbuchung bestätigen</h2>
+        <button class="button button-secondary">Abbrechen</button>
+      </form>
+      <p>Bitte prüfe Personen, Mengen und Preise, bevor du die Buchungen kostenpflichtig bestätigst.</p>
+      <div class="kiosk-dialog-summary">
+        {% for item in quick_confirmation.items %}
+          <div class="kiosk-dialog-summary__row">
+            <span>
+              <strong>{{ item.name }}</strong><br>
+              <small>{{ item.price_rule_name }} · {{ item.quantity }} × {{ item.unit_price|money_eur }}</small>
+            </span>
+            <strong>{{ item.total|money_eur }}</strong>
+          </div>
+        {% endfor %}
+        <div class="kiosk-dialog-summary__row kiosk-dialog-summary__row--total">
+          <span>Gesamtsumme</span>
+          <strong>{{ quick_confirmation.total|money_eur }}</strong>
+        </div>
+      </div>
+      <form method="post" class="stack">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="quick">
+        <input type="hidden" name="quick-confirmed" value="1">
+        <input type="hidden" name="quick-price_rule" value="{{ quick_confirmation.price_rule_id }}">
+        <input type="hidden" name="quick-quantity" value="{{ quick_confirmation.quantity }}">
+        <input type="hidden" name="quick-targets-submitted" value="1">
+        {% for target_token in quick_confirmation.target_tokens %}
+          <input type="hidden" name="quick-target" value="{{ target_token }}">
+        {% endfor %}
+        <button type="submit" class="button">Jetzt kostenpflichtig buchen</button>
+      </form>
+    </dialog>
+  {% endif %}
+
   <dialog id="food-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="food-dialog-title">
     <form method="dialog" class="dialog-heading">
       <h2 id="food-dialog-title">Verpflegung buchen</h2>

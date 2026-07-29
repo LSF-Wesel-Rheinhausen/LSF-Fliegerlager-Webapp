@@ -592,21 +592,44 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
   await page.locator("dialog#food-dialog").getByRole("button", { name: "Kostenpflichtig buchen" }).click();
   await expect(page.getByText(/Standard Frühstück.*gebucht\./)).toBeVisible();
 
-  // Book a drink
+  // Create a second billing target for the multi-account confirmation.
+  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).click();
+  const kioskMenu = page.locator("dialog#kiosk-menu-dialog");
+  await kioskMenu.getByRole("button", { name: /Familie/ }).click();
+  const familyManagementDialog = page.locator("dialog#family-management-dialog");
+  await familyManagementDialog.getByRole("button", { name: "Anlegen" }).click();
+  const familyDialog = page.locator("dialog#family-dialog");
+  await familyDialog.getByLabel("Vorname").fill("Irène");
+  await familyDialog.getByLabel("Nachname").fill("Curie");
+  await familyDialog.getByLabel("Rolle").selectOption({ label: "Kind" });
+  await familyDialog.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByText("Familienmitglied wurde angelegt.")).toBeVisible();
+
+  // Book a drink only after confirming its two-target total on a dark mobile viewport.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ colorScheme: "dark" });
   await page.getByRole("button", { name: "Apfelsaft" }).click();
   const quickDialog = page.locator("dialog#quick-dialog");
   await expect(quickDialog).toBeVisible();
-  const quickTarget = quickDialog.locator('[data-quick-target-scope="drink"]').first();
-  await quickTarget.uncheck();
+  const quickTargets = quickDialog.locator('[data-quick-target-scope="drink"]');
+  await quickTargets.first().uncheck();
   await quickDialog.getByRole("button", { name: "1x" }).click();
   await expect(quickDialog).toBeVisible();
   await expect(quickDialog.getByRole("alert")).toHaveText("Bitte mindestens eine Person auswählen.");
-  await quickTarget.check();
+  await quickTargets.first().check();
+  await quickTargets.nth(1).check();
   await quickDialog.getByRole("button", { name: "1x" }).click();
+  const quickConfirmationDialog = page.locator("dialog#quick-confirmation-dialog");
+  await expect(quickConfirmationDialog).toBeVisible();
+  await expect(quickConfirmationDialog).toContainText("Marie Curie");
+  await expect(quickConfirmationDialog).toContainText("Irène Curie");
+  await expect(quickConfirmationDialog).toContainText("3,00 €");
+  await assertNoUnexpectedOverflow(page);
+  await quickConfirmationDialog.getByRole("button", { name: "Jetzt kostenpflichtig buchen" }).click();
   await expect(page.getByText("Apfelsaft gebucht.")).toBeVisible();
+  await page.emulateMedia({ colorScheme: "light" });
 
   // The cancellation action stays directly usable on a phone-sized viewport.
-  await page.setViewportSize({ width: 390, height: 844 });
   await assertNoUnexpectedOverflow(page);
   await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).click();
   await page.getByRole("button", { name: "Letzte Schnellbuchungen" }).click();

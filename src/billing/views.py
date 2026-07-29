@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 from datetime import datetime, timedelta
+from decimal import Decimal
 from functools import partial
 from typing import Any
 
@@ -2541,6 +2542,7 @@ def kiosk_home(request, kiosk_mode="private"):
     family_member_form = KioskFamilyMemberForm(prefix="family")
     family_member_pin_form = None
     family_member_pin_member_id = None
+    quick_confirmation = None
     if request.method == "POST":
         if is_post_camp:
             messages.error(request, "Das Lager ist beendet. Änderungen sind nicht mehr möglich.")
@@ -2568,7 +2570,7 @@ def kiosk_home(request, kiosk_mode="private"):
                 rule = quick_form.cleaned_data["price_rule"]
                 occurred_on = timezone.localdate()
                 resolved_bookings = []
-                for target in set(selected_targets):
+                for target in selected_targets:
                     if isinstance(target, ParticipantFamilyMember):
                         charge_participant = target.guardian
                         target_family_member = target
@@ -2600,7 +2602,30 @@ def kiosk_home(request, kiosk_mode="private"):
                         )
                     )
 
-                if not quick_form.errors:
+                requires_confirmation = len(resolved_bookings) > 1 and request.POST.get("quick-confirmed") != "1"
+                if not quick_form.errors and requires_confirmation:
+                    quantity = quick_form.cleaned_data["quantity"]
+                    confirmation_items = [
+                        {
+                            "name": target.full_name,
+                            "price_rule_name": effective_rule.name,
+                            "quantity": quantity,
+                            "unit_price": effective_rule.unit_price,
+                            "total": effective_rule.unit_price * quantity,
+                        }
+                        for target, _, _, effective_rule in resolved_bookings
+                    ]
+                    quick_confirmation = {
+                        "price_rule_id": rule.pk,
+                        "quantity": quantity,
+                        "target_tokens": target_ids,
+                        "items": confirmation_items,
+                        "total": sum(
+                            (item["total"] for item in confirmation_items),
+                            Decimal("0.00"),
+                        ),
+                    }
+                elif not quick_form.errors:
                     with transaction.atomic():
                         for target, charge_participant, target_family_member, effective_rule in resolved_bookings:
                             booking_link = None
@@ -2648,7 +2673,6 @@ def kiosk_home(request, kiosk_mode="private"):
                             transaction.on_commit(
                                 partial(_notify_linked_booking_by_id, charge.pk, participant.pk, cancelled=False)
                             )
-                if not quick_form.errors:
                     messages.success(request, f"{rule.name} gebucht.")
                     return redirect(_kiosk_route(kiosk_mode, "home"))
         elif request.POST.get("action") == "quick_cancel":
@@ -2979,6 +3003,7 @@ def kiosk_home(request, kiosk_mode="private"):
         "snack_rules": quick_form.fields["price_rule"].queryset.filter(kind=PriceRule.Kind.MEAL),
         "dinner_rule": dinner_rule,
         "quick_form": quick_form,
+        "quick_confirmation": quick_confirmation,
         "meal_targets": meal_targets,
         "checkin_participants": checkin_participants,
         "family_members": family_members,

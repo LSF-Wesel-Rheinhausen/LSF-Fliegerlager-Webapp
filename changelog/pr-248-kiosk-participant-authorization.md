@@ -29,6 +29,9 @@
 - Protokolliert und meldet auch Partner-Rücknahmen alter Essensanmeldungen
   ohne Kostenposition und erlaubt die Stornierung aktueller
   Partner-Eigenbuchungen innerhalb des bestehenden Zeitfensters.
+- Zeigt bei Schnellbuchungen für mehrere Konten vor dem Schreiben eine
+  verbindliche Übersicht über Personen, Mengen, Einzelpreise und Gesamtsumme
+  und verlangt eine ausdrückliche kostenpflichtige Bestätigung.
 - Lässt PIN-, Sicherheits-, Identitäts- und Administrationsfunktionen
   ausdrücklich außerhalb der Partner-Vollmacht.
 

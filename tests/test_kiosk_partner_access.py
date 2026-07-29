@@ -924,6 +924,94 @@ def test_quick_food_booking_resolves_the_selected_partner_child_price(kiosk_clie
 
 
 @pytest.mark.django_db
+def test_multi_account_quick_booking_requires_exact_cost_confirmation(kiosk_client):
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp, is_child=False, is_companion=False)
+    partner = ParticipantFactory(camp=camp)
+    partner_child = ParticipantFamilyMember.objects.create(
+        guardian=partner,
+        first_name="Kind",
+        last_name="Hopper",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    adult_rule = PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=PriceRule.MealType.SNACK,
+        is_default=True,
+        name="Snack Erwachsene",
+        unit_price=Decimal("4.00"),
+        applies_to_children=False,
+        applies_to_adults=True,
+        applies_to_companions=False,
+    )
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=PriceRule.MealType.SNACK,
+        is_default=True,
+        name="Snack Kinder",
+        unit_price=Decimal("2.00"),
+        applies_to_children=True,
+        applies_to_adults=False,
+        applies_to_companions=False,
+    )
+    target_tokens = [
+        f"participant-{participant.pk}",
+        f"family-{partner_child.pk}",
+    ]
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    request_data = {
+        "action": "quick",
+        "quick-price_rule": adult_rule.pk,
+        "quick-quantity": 2,
+        "quick-targets-submitted": "1",
+        "quick-target": target_tokens,
+    }
+
+    preview_response = kiosk_client.post(reverse("kiosk-home"), request_data)
+
+    assert preview_response.status_code == 200
+    assert not Charge.objects.exists()
+    confirmation = preview_response.context["quick_confirmation"]
+    assert confirmation["quantity"] == 2
+    assert confirmation["target_tokens"] == target_tokens
+    assert confirmation["total"] == Decimal("12.00")
+    assert [(item["name"], item["unit_price"], item["total"]) for item in confirmation["items"]] == [
+        (participant.full_name, Decimal("4.00"), Decimal("8.00")),
+        (partner_child.full_name, Decimal("2.00"), Decimal("4.00")),
+    ]
+    content = preview_response.content.decode("utf-8")
+    assert "Mehrfachbuchung bestätigen" in content
+    assert participant.full_name in content
+    assert partner_child.full_name in content
+    assert "12,00 €" in content
+
+    confirmation_response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            **request_data,
+            "quick-confirmed": "1",
+        },
+    )
+
+    assert confirmation_response.status_code == 302
+    charges = list(Charge.objects.order_by("unit_price"))
+    assert len(charges) == 2
+    assert [(charge.participant, charge.quantity, charge.unit_price) for charge in charges] == [
+        (partner, Decimal("2.00"), Decimal("2.00")),
+        (participant, Decimal("2.00"), Decimal("4.00")),
+    ]
+
+
+@pytest.mark.django_db
 def test_revoked_partner_authorization_immediately_removes_cross_account_cancellation(kiosk_client):
     camp = CampFactory(is_active=True)
     participant = ParticipantFactory(camp=camp)
