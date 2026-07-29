@@ -4,12 +4,19 @@ import django.db.models.deletion
 from django.db import migrations, models
 
 
+def require_fresh_partner_authorization(apps, _schema_editor):
+    """Revoke legacy booking-only consent before enabling broader partner access."""
+    ParticipantBookingLink = apps.get_model("billing", "ParticipantBookingLink")
+    ParticipantBookingLink.objects.filter(status="accepted").update(status="revoked")
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ("billing", "0045_campkioskregistrationattempt"),
     ]
 
     operations = [
+        migrations.RunPython(require_fresh_partner_authorization, migrations.RunPython.noop),
         migrations.CreateModel(
             name="KioskActionAuditLog",
             fields=[

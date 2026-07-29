@@ -6,10 +6,11 @@ from django.apps import apps
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 
-from billing.models import BookingAuditLog, Charge
-from tests.factories import ChargeFactory, UserFactory
+from billing.models import BookingAuditLog, Charge, ParticipantBookingLink
+from tests.factories import ChargeFactory, ParticipantFactory, UserFactory
 
 migration = importlib.import_module("billing.migrations.0013_remove_legacy_charge_cancellation_columns")
+partner_authorization_migration = importlib.import_module("billing.migrations.0046_kiosk_action_audit_log")
 
 
 def charge_columns() -> set[str]:
@@ -121,3 +122,33 @@ def test_price_element_subsidy_migration_preserves_existing_camp_rate() -> None:
     NewCharge = new_apps.get_model("billing", "Charge")
     assert NewPriceRule.objects.get(pk=eligible_rule.pk).foerdersatz == Decimal("0.4000")
     assert NewCharge.objects.get(pk=ineligible_charge.pk).foerdersatz == Decimal("0")
+
+
+@pytest.mark.django_db
+def test_partner_authorization_migration_requires_fresh_invitation_and_acceptance() -> None:
+    inviter = ParticipantFactory()
+    invitee = ParticipantFactory(camp=inviter.camp)
+    legacy_accepted = ParticipantBookingLink.objects.create(
+        inviter=inviter,
+        invitee=invitee,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    pending = ParticipantBookingLink.objects.create(
+        inviter=invitee,
+        invitee=inviter,
+        status=ParticipantBookingLink.Status.PENDING,
+    )
+    revoked = ParticipantBookingLink.objects.create(
+        inviter=inviter,
+        invitee=ParticipantFactory(camp=inviter.camp),
+        status=ParticipantBookingLink.Status.REVOKED,
+    )
+
+    partner_authorization_migration.require_fresh_partner_authorization(apps, None)
+
+    legacy_accepted.refresh_from_db()
+    pending.refresh_from_db()
+    revoked.refresh_from_db()
+    assert legacy_accepted.status == ParticipantBookingLink.Status.REVOKED
+    assert pending.status == ParticipantBookingLink.Status.PENDING
+    assert revoked.status == ParticipantBookingLink.Status.REVOKED

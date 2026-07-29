@@ -19,6 +19,10 @@
   Lagers, solange dessen Partner-Auditverlauf besteht.
 - Lädt Partnerhaushalte einmalig für Buchungs- und Check-in-Ziele und weist
   offene Einladungen archivierter Teilnehmer ab.
+- Widerruft bereits vor dieser Änderung angenommene Mitbuchungslinks, damit
+  beide Seiten dem erweiterten Vollmachtsumfang durch neue Einladung und
+  Annahme zustimmen, und lädt mehrere Partnerabrechnungen mit einer festen
+  statt kontenabhängigen Query-Anzahl.
 - Lässt PIN-, Sicherheits-, Identitäts- und Administrationsfunktionen
   ausdrücklich außerhalb der Partner-Vollmacht.
 

@@ -136,6 +136,7 @@ from .services import (
     meal_change_lock_message,
     meal_order_for_date,
     next_catering_order_date,
+    participant_kiosk_summaries,
     participant_kiosk_summary,
     resolve_meal_price_rule,
     resolve_quick_booking_price_rule,
@@ -1809,8 +1810,22 @@ def kiosk_partner_activity(request, kiosk_mode="private"):
     accepted_links = list(_accepted_booking_links(participant))
     partner_invoice_accounts = []
     if participant.camp.show_kiosk_invoices:
+        partners_by_id = {}
         for booking_link in accepted_links:
             partner = booking_link.invitee if booking_link.inviter_id == participant.pk else booking_link.inviter
+            partners_by_id.setdefault(partner.pk, partner)
+        partner_summaries = participant_kiosk_summaries(partners_by_id.values())
+        settlements_by_participant = {partner_id: [] for partner_id in partners_by_id}
+        for settlement in (
+            Settlement.objects.filter(
+                participant_id__in=partners_by_id,
+                run__camp_id=participant.camp_id,
+            )
+            .select_related("run", "run__camp", "participant", "participant__camp")
+            .order_by("-created_at")
+        ):
+            settlements_by_participant[settlement.participant_id].append(settlement)
+        for partner in partners_by_id.values():
             settlements = [
                 {
                     "snapshot": settlement,
@@ -1819,12 +1834,12 @@ def kiosk_partner_activity(request, kiosk_mode="private"):
                         args=[settlement.pk],
                     ),
                 }
-                for settlement in _participant_historic_settlements(partner)
+                for settlement in settlements_by_participant[partner.pk]
             ]
             partner_invoice_accounts.append(
                 {
                     "participant": partner,
-                    "summary": participant_kiosk_summary(partner),
+                    "summary": partner_summaries[partner.pk],
                     "live_pdf_url": reverse(
                         _kiosk_route(kiosk_mode, "participant-current-settlement-pdf"),
                         args=[partner.pk],
