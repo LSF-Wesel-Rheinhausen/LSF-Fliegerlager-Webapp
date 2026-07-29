@@ -225,6 +225,12 @@ urlpatterns = [
         name="kiosk-current-settlement-pdf",
     ),
     path(
+        "kiosk/participants/<int:participant_id>/export/settlement.pdf",
+        views.kiosk_participant_current_settlement_pdf,
+        {"kiosk_mode": "private"},
+        name="kiosk-participant-current-settlement-pdf",
+    ),
+    path(
         "camps/<int:camp_id>/participants/<int:participant_id>/approve/",
         views.approve_participant_registration,
         name="participant-approve-registration",
@@ -235,6 +241,12 @@ urlpatterns = [
         name="participant-reject-registration",
     ),
     path("kiosk/", views.kiosk_home, {"kiosk_mode": "private"}, name="kiosk-home"),
+    path(
+        "kiosk/partners/",
+        views.kiosk_partner_activity,
+        {"kiosk_mode": "private"},
+        name="kiosk-partner-activity",
+    ),
     path("kiosk/login/", views.kiosk_login, {"kiosk_mode": "private"}, name="kiosk-login"),
     path("kiosk/register/", views.kiosk_self_register, {"kiosk_mode": "private"}, name="kiosk-self-register"),
     path("kiosk/shifts/", views.kiosk_shifts, {"kiosk_mode": "private"}, name="kiosk-shifts"),
@@ -267,7 +279,19 @@ urlpatterns = [
         {"kiosk_mode": "central"},
         name="central-kiosk-current-settlement-pdf",
     ),
+    path(
+        "central/kiosk/participants/<int:participant_id>/export/settlement.pdf",
+        views.kiosk_participant_current_settlement_pdf,
+        {"kiosk_mode": "central"},
+        name="central-kiosk-participant-current-settlement-pdf",
+    ),
     path("central/kiosk/", views.kiosk_home, {"kiosk_mode": "central"}, name="central-kiosk-home"),
+    path(
+        "central/kiosk/partners/",
+        views.kiosk_partner_activity,
+        {"kiosk_mode": "central"},
+        name="central-kiosk-partner-activity",
+    ),
     path("central/kiosk/login/", views.kiosk_login, {"kiosk_mode": "central"}, name="central-kiosk-login"),
     path(
         "central/kiosk/register/",

@@ -1,32 +1,31 @@
-# Kiosk-Autorisierungsgrenzen
+# Auditierte Partner-Vollmachten im Kiosk
 
 ## Zusammenfassung
 
-- Ordnet historische Abrechnungen ausschließlich dem exakt angemeldeten
-  Teilnehmerdatensatz zu.
-- Verweigert PDF-Zugriffe, die bisher nur über gleiche Namen, E-Mail-Adressen
-  oder Begleitpersonennamen autorisiert wurden.
-- Schließt verknüpfte Buchungsteilnehmer aus dem Check-in aus, damit ein Kiosk
-  deren Anreise- und Abreisedaten nicht verändern kann.
+- Ersetzt implizite Teilnehmerzuordnungen über Namen, E-Mail-Adressen oder
+  Familienmitglieder durch eine ausdrücklich angenommene Partner-Vollmacht für
+  das aktuelle Lager.
+- Erlaubt Partnern gegenseitig aktuelle und abgeschlossene Rechnungen,
+  Buchungen sowie Anreise- und Abreisedaten des gesamten Haushalts zu
+  verwalten.
+- Ergänzt die Kiosk-Seite „Partner & Aktivitäten“ mit Vollmachtsverwaltung,
+  Partnerabrechnungen und einem unveränderlichen Aktivitätsprotokoll.
+- Protokolliert den tatsächlichen Akteur und die betroffene Person, informiert
+  das betroffene Partnerkonto und entzieht alle Partnerrechte unmittelbar nach
+  einem Widerruf.
+- Lässt PIN-, Sicherheits-, Identitäts- und Administrationsfunktionen
+  ausdrücklich außerhalb der Partner-Vollmacht.
 
 ## Geänderte Dateien
 
-- `src/billing/views.py`
-- `src/templates/billing/kiosk_home.html`
-- `tests/test_kiosk.py`
-- `tests/test_kiosk_camp_phases.py`
+- Kiosk-Autorisierung, Buchungs- und Check-in-Abläufe
+- Partner- und Aktivitätsseite samt Menüführung
+- Audit-Modell, Migration, Admin-Leseansicht und Benachrichtigungen
+- Benutzerhilfe und automatisierte Regressionstests
 
 ## Tests
 
-- Regressionstests für Abrechnungszugriffe über Namens-, E-Mail- und
-  Begleitpersonenkollisionen.
-- Regressionstests für Anzeige und manipulierte Übermittlung verknüpfter
-  Check-in-Teilnehmer.
-- Vollständiger lokaler Prüfablauf einschließlich Pytest, Playwright, Ruff,
-  Django-Systemcheck und mypy.
-
-## Offene Punkte
-
-- Eine spätere explizite, unveränderliche Personenidentität kann berechtigte
-  lagerübergreifende Abrechnungshistorien wieder ermöglichen, ohne auf
-  veränderliche Attribute zurückzugreifen.
+- Regressionstests für Partnerrechnungen, PDF-Autorisierung, Haushalt-
+  Buchungen, Check-in, Widerruf, Benachrichtigungen und append-only Audit.
+- Negativtests für ausstehende, widerrufene und lagerfremde Verknüpfungen sowie
+  unzulässige Vollmachtsverwaltung durch Begleitpersonen.

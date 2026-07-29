@@ -45,7 +45,7 @@
         <span class="kiosk-hero__eyebrow">Mein Kiosk</span>
         <div class="kiosk-hero__copy">
           <h1>{{ kiosk_actor.full_name }}</h1>
-          <p>{% if is_post_camp %}Das Lager ist beendet. Deine bisherigen Gemeinschaftsausgaben und Unterlagen bleiben hier einsehbar.{% else %}Buche Getränke und Essen, verwalte Mitbuchungen und behalte deine Abrechnung im Blick, ohne zwischen Seiten zu springen.{% endif %}</p>
+          <p>{% if is_post_camp %}Das Lager ist beendet. Deine bisherigen Gemeinschaftsausgaben und Unterlagen bleiben hier einsehbar.{% else %}Buche Getränke und Essen, verwalte Partner-Vollmachten und behalte deine Abrechnung im Blick, ohne zwischen Seiten zu springen.{% endif %}</p>
         </div>
         <div class="kiosk-meta">
           <span class="kiosk-meta__item">{{ participant.camp }}</span>
@@ -143,13 +143,13 @@
     </section>
   {% endif %}
 
-  {% if pending_invites and not is_pre_camp and not is_post_camp %}
+  {% if pending_invites and not kiosk_actor_is_family_member and not is_pre_camp and not is_post_camp %}
     <section class="panel kiosk-card kiosk-card--muted">
       <div class="kiosk-card__header">
         <div class="kiosk-card__header-main">
           <span class="kiosk-card__eyebrow">Offene Aktion</span>
           <h2>Einladungen</h2>
-          <p>Hier warten Freigaben für gegenseitiges Mitbuchen.</p>
+          <p>Hier wartet eine Partner-Vollmacht auf deine Entscheidung.</p>
         </div>
       </div>
       {% include "billing/includes/kiosk_pending_invites.html" %}
@@ -183,11 +183,11 @@
         <small>Begleitpersonen und Kinder verwalten.</small>
       </button>
       {% endif %}
-      <button type="button" class="kiosk-menu__item" data-dialog-target="booking-links-dialog">
-        <span>Mitbuchungen</span>
-        <small>Einladungen und gegenseitige Buchungsfreigaben verwalten.</small>
-      </button>
       {% endif %}
+      <a class="kiosk-menu__item" href="{{ kiosk_urls.partner_activity }}">
+        <span>Partner &amp; Aktivitäten</span>
+        <small>Vollmachten, Partnerabrechnungen und Änderungen einsehen.</small>
+      </a>
       <a class="kiosk-menu__item" href="{% url 'user-guide' %}">
         <span>Hilfe</span>
         <small>Anleitungen zu den wichtigsten Kiosk-Abläufen öffnen.</small>
@@ -212,6 +212,7 @@
           <input type="hidden" name="action" value="quick">
           <input type="hidden" name="quick-price_rule" id="quick-price-rule" value="">
           <input type="hidden" name="quick-quantity" id="id_quick-quantity" value="1">
+          <span data-quick-submitted-targets></span>
 
         <section class="panel kiosk-card kiosk-card--accent" data-kiosk-card="drinks">
           <div class="kiosk-card__header">
@@ -355,7 +356,7 @@
         <div class="kiosk-card__header kiosk-section-heading">
           <div class="kiosk-card__header-main">
             <h2 class="kiosk-title">Check-in</h2>
-            <p>Pflege An- und Abreise für dich, Begleitpersonen und freigegebene Mitbuchungen.</p>
+            <p>Pflege An- und Abreise für dein eigenes und freigegebene Partnerkonten samt Familie.</p>
           </div>
           <button type="button" class="button kiosk-card__action" data-open-checkin-dialog>Eintragen</button>
         </div>
@@ -538,56 +539,6 @@
         {% endfor %}
       </dialog>{% endif %}
 
-      <dialog id="booking-links-dialog"{% if booking_link_form.errors %} data-auto-open-dialog{% endif %} class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="booking-links-dialog-title">
-        <div class="kiosk-card__header kiosk-section-heading">
-          <div class="kiosk-card__header-main">
-            <h2 class="kiosk-title" id="booking-links-dialog-title">
-              Mitbuchungen
-              <button type="button" class="kiosk-help-button" data-help-text="Lade andere Teilnehmer ein, damit ihr euch gegenseitig beim Essen mit anmelden könnt. Sobald die Einladung angenommen wurde, könnt ihr euch gegenseitig auswählen. Die Abrechnung bleibt dabei für jeden separat." aria-label="Kurzhilfe Mitbuchungen">?</button>
-            </h2>
-            <p>Lade andere Teilnehmer ein und verwalte bestehende Freigaben.</p>
-          </div>
-          <button type="button" class="button button-secondary" data-close-dialog>Schließen</button>
-        </div>
-        <form method="post" class="form-grid">
-          {% csrf_token %}
-          <input type="hidden" name="action" value="booking_link_invite">
-          {{ booking_link_form.as_p }}
-          <div class="form-actions">
-            <button type="submit">Einladen</button>
-          </div>
-        </form>
-        {% if is_pre_camp and pending_invites %}
-          <section class="stack stack--compact" aria-labelledby="pending-booking-invites-title">
-            <h3 id="pending-booking-invites-title">Offene Einladungen</h3>
-            {% include "billing/includes/kiosk_pending_invites.html" %}
-          </section>
-        {% endif %}
-        {% for invite in sent_invites %}
-          <p class="hint">Offen: {{ invite.invitee.full_name }}</p>
-        {% endfor %}
-        {% for link in accepted_links %}
-          <div class="kiosk-list-row">
-            <div class="kiosk-list-row__content">
-              <strong>
-                {% if link.inviter_id == participant.pk %}{{ link.invitee.full_name }}{% else %}{{ link.inviter.full_name }}{% endif %}
-              </strong>
-              <span>Gegenseitig freigegeben</span>
-            </div>
-            <form method="post" class="kiosk-list-row__actions">
-              {% csrf_token %}
-              <input type="hidden" name="action" value="booking_link_revoke">
-              <input type="hidden" name="booking_link_id" value="{{ link.pk }}">
-              <button type="submit" class="button-secondary">Auflösen</button>
-            </form>
-          </div>
-        {% empty %}
-          <div class="kiosk-empty">
-            <strong>Keine angenommenen Verknüpfungen vorhanden.</strong>
-            <p>Einladungen erscheinen hier, sobald sie angenommen wurden.</p>
-          </div>
-        {% endfor %}
-      </dialog>
   <dialog id="quick-cancel-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="quick-cancel-dialog-title">
     <form method="dialog" class="dialog-heading">
       <div>
@@ -685,12 +636,17 @@
     </div>
   </dialog>
 
-  <dialog id="quick-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="quick-dialog-title">
+  <dialog id="quick-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="quick-dialog-title">
     <form method="dialog" class="dialog-heading">
       <h2 id="quick-dialog-title">Artikel buchen</h2>
       <button class="button button-secondary">Schließen</button>
     </form>
     <p class="hint" data-quick-dialog-name></p>
+    <div class="stack stack--compact">
+      <p>Für wen soll gebucht werden?</p>
+      {% include "billing/includes/kiosk_quick_targets.html" with target_scope="drink" %}
+    </div>
+    <p>Menge auswählen</p>
     <div class="quantity-grid" role="group" aria-label="Menge auswählen">
       {% for quantity in "12345" %}
         <button type="button" data-drink-quantity="{{ quantity }}">{{ quantity }}x</button>
@@ -712,16 +668,7 @@
 
     <div class="stack">
       <p>Wer soll eingebucht werden?</p>
-      <div class="target-list">
-        {% for target in meal_targets %}
-          <article class="target-row">
-            <label>
-              <input type="checkbox" form="quick-booking-form" name="quick-target" value="{{ target.token }}" {% if target.token == default_booking_target_token %}checked{% endif %}>
-              <span>{{ target.name }} · {{ target.role }}</span>
-            </label>
-          </article>
-        {% endfor %}
-      </div>
+      {% include "billing/includes/kiosk_quick_targets.html" with target_scope="food" %}
       <button type="button" class="button" id="submit-food-booking">Kostenpflichtig buchen</button>
     </div>
   </dialog>
@@ -909,7 +856,7 @@
     <form method="dialog" class="dialog-heading">
       <div>
         <h2 id="checkin-dialog-title">Check-in</h2>
-        <p class="dialog-heading__meta">An- und Abreise für dich und deine Begleitpersonen.</p>
+        <p class="dialog-heading__meta">An- und Abreise für dein eigenes und freigegebene Partnerkonten.</p>
       </div>
       <button class="button button-secondary">Schließen</button>
     </form>
@@ -1065,6 +1012,7 @@
       const drinkForm = document.getElementById("quick-booking-form");
       const priceRuleInput = document.getElementById("quick-price-rule");
       const quantityInput = document.getElementById("id_quick-quantity");
+      const submittedTargetContainer = document.querySelector("[data-quick-submitted-targets]");
       const customQuantityInput = document.getElementById("custom-drink-quantity");
       const drinkName = document.querySelector("[data-quick-dialog-name]");
       const mealDialog = document.getElementById("meal-dialog");
@@ -1119,14 +1067,29 @@
         });
       });
 
+      const syncQuickTargets = (scope) => {
+        submittedTargetContainer.replaceChildren();
+        document
+          .querySelectorAll(`[data-quick-target-scope="${scope}"]:checked`)
+          .forEach((checkbox) => {
+            const input = document.createElement("input");
+            input.type = "hidden";
+            input.name = "quick-target";
+            input.value = checkbox.value;
+            submittedTargetContainer.append(input);
+          });
+      };
+
       document.getElementById("submit-food-booking")?.addEventListener("click", () => {
+        syncQuickTargets("food");
         quantityInput.value = "1";
         drinkForm.requestSubmit();
       });
 
       const submitDrink = (quantity) => {
+        syncQuickTargets("drink");
         quantityInput.value = quantity;
-        drinkForm.submit();
+        drinkForm.requestSubmit();
       };
 
       document.querySelectorAll("[data-drink-quantity]").forEach((button) => {

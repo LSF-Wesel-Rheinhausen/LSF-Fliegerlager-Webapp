@@ -12,6 +12,7 @@ from .models import (
     DailyShiftTemplate,
     DrinkEntry,
     Expense,
+    KioskActionAuditLog,
     MealOrder,
     MealPlanEntry,
     MealSignup,
@@ -203,6 +204,41 @@ class ReadOnlySnapshotAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+@admin.register(KioskActionAuditLog)
+class KioskActionAuditLogAdmin(ReadOnlySnapshotAdmin):
+    list_display = (
+        "camp",
+        "actor_participant",
+        "actor_family_member",
+        "target_participant",
+        "target_family_member",
+        "action",
+        "created_at",
+    )
+    list_filter = ("camp", "action", "created_at")
+    search_fields = (
+        "actor_participant__first_name",
+        "actor_participant__last_name",
+        "target_participant__first_name",
+        "target_participant__last_name",
+        "description",
+    )
+    readonly_fields = (
+        "camp",
+        "actor_participant",
+        "actor_family_member",
+        "target_participant",
+        "target_family_member",
+        "booking_link",
+        "charge",
+        "action",
+        "description",
+        "before",
+        "after",
+        "created_at",
+    )
 
 
 @admin.register(SettlementRun)

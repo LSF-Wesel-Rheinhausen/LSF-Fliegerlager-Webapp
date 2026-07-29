@@ -15,6 +15,7 @@ from .models import (
     Camp,
     Charge,
     Expense,
+    KioskActionAuditLog,
     MealOrder,
     MealSignup,
     Participant,
@@ -30,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 PARTICIPANT_CATEGORIES: dict[str, str] = {
     "shifts": "Dienste und Diensttausch",
-    "booking_links": "Verknüpfungen und Buchungen",
+    "booking_links": "Partner-Vollmachten und Buchungen",
     "meal_deadlines": "Essensfristen",
     "expense_status": "Status eigener Auslagen",
 }
@@ -192,21 +193,21 @@ def notify_booking_link(link: ParticipantBookingLink, *, event: str, actor: Part
     """Notify the participant affected by a booking-link state change."""
     if event == "invited":
         recipient = link.invitee
-        title = "Neue Buchungseinladung"
-        body = f"{link.inviter.full_name} möchte Buchungen mit dir verknüpfen."
+        title = "Neue Partner-Vollmacht"
+        body = f"{link.inviter.full_name} möchte eine gegenseitige Partner-Vollmacht für dieses Lager einrichten."
     else:
         recipient = link.invitee if actor.pk == link.inviter_id else link.inviter
         labels = {"accepted": "angenommen", "declined": "abgelehnt", "revoked": "aufgelöst"}
         if event not in labels:
             raise ValueError("Unsupported booking-link event")
-        title = "Buchungsverknüpfung geändert"
-        body = f"{actor.full_name} hat die Buchungsverknüpfung {labels[event]}."
+        title = "Partner-Vollmacht geändert"
+        body = f"{actor.full_name} hat die Partner-Vollmacht {labels[event]}."
     queue_participant_notification(
         recipient,
         category="booking_links",
         title=title,
         body=body,
-        target_url="/kiosk/",
+        target_url="/kiosk/partners/",
         dedupe_key=f"booking-link:{link.pk}:{event}",
     )
 
@@ -236,6 +237,21 @@ def notify_linked_booking(charge: Charge, *, actor: Participant, cancelled: bool
         body=f"{actor.full_name} hat {charge.description} für dich {action}.",
         target_url="/kiosk/",
         dedupe_key=f"linked-booking:{charge.pk}:{'cancelled' if cancelled else 'created'}",
+    )
+
+
+def notify_kiosk_partner_action(audit_log: KioskActionAuditLog) -> None:
+    """Notify the affected account about one committed partner-authorized change."""
+    recipient = audit_log.target_participant
+    if recipient is None or audit_log.actor_participant_id == recipient.pk:
+        return
+    queue_participant_notification(
+        recipient,
+        category="booking_links",
+        title="Partnerkonto geändert",
+        body=(f"{audit_log.actor_display_name}: {audit_log.get_action_display()} für {audit_log.target_display_name}."),
+        target_url="/kiosk/partners/",
+        dedupe_key=f"kiosk-partner-action:{audit_log.pk}",
     )
 
 

@@ -308,7 +308,7 @@ test("Pre-camp kiosk stays compact and exposes only preparation areas", async ({
   await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).click();
   const menu = page.locator("dialog#kiosk-menu-dialog");
   await expect(menu.getByRole("button", { name: /Familie/ })).toBeVisible();
-  await expect(menu.getByRole("button", { name: /Mitbuchungen/ })).toBeVisible();
+  await expect(menu.getByRole("link", { name: /Partner & Aktivitäten/ })).toBeVisible();
   await expect(menu.getByRole("link", { name: /Hilfe/ })).toBeVisible();
   await expect(menu.getByRole("button", { name: /Kontakt Lagerleitung/ })).toBeVisible();
   await expect(menu.getByRole("button", { name: /Abendessen|Gemeinschaftsausgaben/ })).toHaveCount(0);

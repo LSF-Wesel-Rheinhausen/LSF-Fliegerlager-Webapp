@@ -78,6 +78,7 @@ from .models import (
     DailySettlementBackupLog,
     DailySettlementBackupSettings,
     Expense,
+    KioskActionAuditLog,
     MealOrder,
     MealPlanEntry,
     MealSignup,
@@ -90,7 +91,13 @@ from .models import (
     Shift,
     ShiftAssignment,
 )
-from .notifications import notify_booking_link, notify_expense_submitted, notify_linked_booking, notify_shift_exchange
+from .notifications import (
+    notify_booking_link,
+    notify_expense_submitted,
+    notify_kiosk_partner_action,
+    notify_linked_booking,
+    notify_shift_exchange,
+)
 from .permissions import (
     ADMIN_GROUP,
     EDITOR_GROUP,
@@ -120,9 +127,12 @@ from .services import (
     charge_audit_snapshot,
     create_booking_audit_log,
     create_booking_delete_audit_log,
+    create_kiosk_action_audit_log,
     create_manual_charge,
     create_settlement_run,
     is_meal_change_locked,
+    kiosk_charge_audit_snapshot,
+    kiosk_meal_signup_audit_snapshot,
     meal_change_lock_message,
     meal_order_for_date,
     next_catering_order_date,
@@ -139,10 +149,6 @@ PRE_CAMP_KIOSK_ACTIONS = frozenset(
         "family_member_create",
         "family_member_deactivate",
         "family_member_pin_set",
-        "booking_link_invite",
-        "booking_link_accept",
-        "booking_link_decline",
-        "booking_link_revoke",
     }
 )
 GUARDIAN_ONLY_KIOSK_ACTIONS = frozenset(
@@ -227,6 +233,7 @@ def _kiosk_context(kiosk_mode: str) -> dict[str, Any]:
             "home": reverse(_kiosk_route(kiosk_mode, "home")),
             "login": reverse(_kiosk_route(kiosk_mode, "login")),
             "logout": reverse(_kiosk_route(kiosk_mode, "logout")),
+            "partner_activity": reverse(_kiosk_route(kiosk_mode, "partner-activity")),
             "shifts": reverse(_kiosk_route(kiosk_mode, "shifts")),
             "shared_expense_request": reverse(_kiosk_route(kiosk_mode, "shared-expense-request")),
         },
@@ -1349,16 +1356,19 @@ def _kiosk_family_member_from_session(request, participant):
 
 
 def _participant_historic_settlements(participant: Participant):
-    """Retrieve finalized settlements owned by this exact participant record."""
+    """Retrieve finalized settlements owned by this participant in the current camp."""
     return (
-        Settlement.objects.filter(participant=participant, run__isnull=False)
+        Settlement.objects.filter(
+            participant=participant,
+            run__camp_id=participant.camp_id,
+        )
         .select_related("run", "run__camp", "participant", "participant__camp")
         .order_by("-created_at")
     )
 
 
 def kiosk_settlement_pdf(request, settlement_id, kiosk_mode="private"):
-    """Allow logged-in kiosk participants to download their own finalized settlement PDF."""
+    """Download a finalized current-camp invoice owned by the actor or an accepted partner."""
     _activate_kiosk_mode(request, kiosk_mode)
     participant = _kiosk_participant(request)
     if participant is None:
@@ -1373,7 +1383,16 @@ def kiosk_settlement_pdf(request, settlement_id, kiosk_mode="private"):
         run__isnull=False,
     )
 
-    if snapshot.participant_id != participant.pk:
+    if snapshot.run.camp_id != participant.camp_id:
+        return HttpResponseForbidden("Zugriff verweigert.")
+    if (
+        snapshot.participant_id != participant.pk
+        and _accepted_booking_link_between(
+            participant,
+            snapshot.participant,
+        )
+        is None
+    ):
         return HttpResponseForbidden("Zugriff verweigert.")
 
     return settlement_snapshot_pdf_response(snapshot)
@@ -1390,6 +1409,36 @@ def kiosk_current_settlement_pdf(request, kiosk_mode="private"):
         return HttpResponseForbidden("Rechnungen sind im Kiosk deaktiviert.")
 
     return participant_pdf_response(participant)
+
+
+def kiosk_participant_current_settlement_pdf(
+    request,
+    participant_id,
+    kiosk_mode="private",
+):
+    """Download a live invoice for the actor or one accepted same-camp partner."""
+    _activate_kiosk_mode(request, kiosk_mode)
+    actor = _kiosk_participant(request)
+    if actor is None:
+        return redirect(_kiosk_route(kiosk_mode, "login"))
+    if not actor.camp.show_kiosk_invoices:
+        return HttpResponseForbidden("Rechnungen sind im Kiosk deaktiviert.")
+
+    target = (
+        Participant.objects.select_related("camp")
+        .filter(
+            pk=participant_id,
+            camp=actor.camp,
+            camp__is_active=True,
+            archived_at__isnull=True,
+        )
+        .first()
+    )
+    if target is None:
+        return HttpResponseForbidden("Zugriff verweigert.")
+    if target.pk != actor.pk and _accepted_booking_link_between(actor, target) is None:
+        return HttpResponseForbidden("Zugriff verweigert.")
+    return participant_pdf_response(target)
 
 
 def _render_kiosk_login(
@@ -1529,11 +1578,38 @@ def _kiosk_family_member(request, participant):
 
 def _accepted_booking_links(participant):
     return ParticipantBookingLink.objects.select_related("inviter", "invitee").filter(
-        Q(inviter=participant) | Q(invitee=participant),
+        Q(inviter=participant, invitee__camp_id=participant.camp_id)
+        | Q(invitee=participant, inviter__camp_id=participant.camp_id),
         status=ParticipantBookingLink.Status.ACCEPTED,
+        inviter__camp__is_active=True,
+        invitee__camp__is_active=True,
         inviter__archived_at__isnull=True,
         invitee__archived_at__isnull=True,
     )
+
+
+def _accepted_booking_link_between(
+    participant: Participant,
+    target: Participant,
+    *,
+    for_update: bool = False,
+) -> ParticipantBookingLink | None:
+    """Return the current same-camp partner authorization between two accounts."""
+    if participant.pk == target.pk or participant.camp_id != target.camp_id:
+        return None
+    links = ParticipantBookingLink.objects.select_related("inviter", "invitee").filter(
+        Q(inviter=participant, invitee=target) | Q(inviter=target, invitee=participant),
+        status=ParticipantBookingLink.Status.ACCEPTED,
+        inviter__camp=participant.camp,
+        invitee__camp=participant.camp,
+        inviter__camp__is_active=True,
+        invitee__camp__is_active=True,
+        inviter__archived_at__isnull=True,
+        invitee__archived_at__isnull=True,
+    )
+    if for_update:
+        links = links.select_for_update()
+    return links.first()
 
 
 def _linked_booking_participants(participant):
@@ -1541,6 +1617,223 @@ def _linked_booking_participants(participant):
     for link in _accepted_booking_links(participant):
         linked_participants.append(link.invitee if link.inviter_id == participant.pk else link.inviter)
     return sorted(linked_participants, key=lambda item: (item.last_name, item.first_name, item.pk))
+
+
+def _notify_booking_link_by_id(link_id: int, event: str, actor_id: int) -> None:
+    """Load committed link state before queuing its participant notification."""
+    notify_booking_link(
+        ParticipantBookingLink.objects.select_related("inviter", "invitee").get(pk=link_id),
+        event=event,
+        actor=Participant.objects.get(pk=actor_id),
+    )
+
+
+def _notify_kiosk_partner_action_by_id(audit_log_id: int) -> None:
+    """Load one committed audit row before queuing its participant notification."""
+    notify_kiosk_partner_action(
+        KioskActionAuditLog.objects.select_related(
+            "actor_participant",
+            "actor_family_member",
+            "target_participant",
+            "target_family_member",
+        ).get(pk=audit_log_id)
+    )
+
+
+def kiosk_partner_activity(request, kiosk_mode="private"):
+    """Show current-camp partner permissions and the shared activity trail."""
+    _activate_kiosk_mode(request, kiosk_mode)
+    participant = _kiosk_participant(request)
+    if participant is None:
+        return redirect(_kiosk_route(kiosk_mode, "login"))
+
+    actor_family_member = _kiosk_family_member(request, participant)
+    booking_link_form = KioskBookingLinkInviteForm(inviter=participant, prefix="link")
+    if request.method == "POST":
+        if actor_family_member is not None:
+            return HttpResponseForbidden("Nur Hauptteilnehmer dürfen Partner-Vollmachten verwalten.")
+
+        action = request.POST.get("action")
+        if participant.camp.is_post_camp() and action != "booking_link_revoke":
+            messages.error(request, "Das Lager ist beendet. Neue Partner-Vollmachten sind nicht mehr möglich.")
+            return redirect(_kiosk_route(kiosk_mode, "partner-activity"))
+
+        if action == "booking_link_invite":
+            booking_link_form = KioskBookingLinkInviteForm(request.POST, inviter=participant, prefix="link")
+            if booking_link_form.is_valid():
+                invitee = booking_link_form.cleaned_data["participant"]
+                with transaction.atomic():
+                    booking_link = ParticipantBookingLink.objects.create(
+                        inviter=participant,
+                        invitee=invitee,
+                    )
+                    create_kiosk_action_audit_log(
+                        camp=participant.camp,
+                        actor_participant=participant,
+                        target_participant=invitee,
+                        booking_link=booking_link,
+                        action=KioskActionAuditLog.Action.LINK_INVITED,
+                        description="Partner-Vollmacht angefragt.",
+                        before={},
+                        after={"status": booking_link.status},
+                    )
+                    transaction.on_commit(
+                        partial(_notify_booking_link_by_id, booking_link.pk, "invited", participant.pk)
+                    )
+                messages.success(request, "Einladung zur Partner-Vollmacht wurde gesendet.")
+                return redirect(_kiosk_route(kiosk_mode, "partner-activity"))
+        elif action in {"booking_link_accept", "booking_link_decline", "booking_link_revoke"}:
+            link_id = _positive_int_or_none(request.POST.get("booking_link_id"))
+            new_status_by_action = {
+                "booking_link_accept": ParticipantBookingLink.Status.ACCEPTED,
+                "booking_link_decline": ParticipantBookingLink.Status.DECLINED,
+                "booking_link_revoke": ParticipantBookingLink.Status.REVOKED,
+            }
+            event_by_action = {
+                "booking_link_accept": "accepted",
+                "booking_link_decline": "declined",
+                "booking_link_revoke": "revoked",
+            }
+            audit_action_by_action = {
+                "booking_link_accept": KioskActionAuditLog.Action.LINK_ACCEPTED,
+                "booking_link_decline": KioskActionAuditLog.Action.LINK_DECLINED,
+                "booking_link_revoke": KioskActionAuditLog.Action.LINK_REVOKED,
+            }
+            success_message_by_action = {
+                "booking_link_accept": "Partner-Vollmacht wurde angenommen.",
+                "booking_link_decline": "Partner-Vollmacht wurde abgelehnt.",
+                "booking_link_revoke": "Partner-Vollmacht wurde widerrufen.",
+            }
+            with transaction.atomic():
+                booking_links = ParticipantBookingLink.objects.select_for_update().select_related(
+                    "inviter",
+                    "invitee",
+                )
+                if action == "booking_link_revoke":
+                    booking_link = booking_links.filter(
+                        Q(inviter=participant, invitee__camp=participant.camp)
+                        | Q(invitee=participant, inviter__camp=participant.camp),
+                        pk=link_id,
+                        status=ParticipantBookingLink.Status.ACCEPTED,
+                    ).first()
+                else:
+                    booking_link = booking_links.filter(
+                        invitee=participant,
+                        inviter__camp=participant.camp,
+                        pk=link_id,
+                        status=ParticipantBookingLink.Status.PENDING,
+                    ).first()
+                if booking_link is not None:
+                    before_status = booking_link.status
+                    other_participant = (
+                        booking_link.invitee if booking_link.inviter_id == participant.pk else booking_link.inviter
+                    )
+                    if action == "booking_link_revoke":
+                        pair_filter = Q(inviter=participant, invitee=other_participant) | Q(
+                            inviter=other_participant,
+                            invitee=participant,
+                        )
+                        for accepted_link in booking_links.filter(
+                            pair_filter,
+                            status=ParticipantBookingLink.Status.ACCEPTED,
+                        ):
+                            accepted_link.status = ParticipantBookingLink.Status.REVOKED
+                            accepted_link.save(update_fields=["status", "updated_at"])
+                    else:
+                        booking_link.status = new_status_by_action[action]
+                        booking_link.save(update_fields=["status", "updated_at"])
+                    booking_link.status = new_status_by_action[action]
+                    create_kiosk_action_audit_log(
+                        camp=participant.camp,
+                        actor_participant=participant,
+                        target_participant=other_participant,
+                        booking_link=booking_link,
+                        action=audit_action_by_action[action],
+                        description=success_message_by_action[action],
+                        before={"status": before_status},
+                        after={"status": booking_link.status},
+                    )
+                    transaction.on_commit(
+                        partial(
+                            _notify_booking_link_by_id,
+                            booking_link.pk,
+                            event_by_action[action],
+                            participant.pk,
+                        )
+                    )
+            if booking_link is not None:
+                messages.success(request, success_message_by_action[action])
+                return redirect(_kiosk_route(kiosk_mode, "partner-activity"))
+            messages.error(request, "Partner-Vollmacht wurde nicht gefunden.")
+
+    pending_invites = participant.received_booking_links.select_related("inviter").filter(
+        status=ParticipantBookingLink.Status.PENDING,
+        inviter__camp=participant.camp,
+    )
+    sent_invites = participant.sent_booking_links.select_related("invitee").filter(
+        status=ParticipantBookingLink.Status.PENDING,
+        invitee__camp=participant.camp,
+    )
+    accepted_links = list(_accepted_booking_links(participant))
+    partner_invoice_accounts = []
+    if participant.camp.show_kiosk_invoices:
+        for booking_link in accepted_links:
+            partner = booking_link.invitee if booking_link.inviter_id == participant.pk else booking_link.inviter
+            settlements = [
+                {
+                    "snapshot": settlement,
+                    "pdf_url": reverse(
+                        _kiosk_route(kiosk_mode, "settlement-pdf"),
+                        args=[settlement.pk],
+                    ),
+                }
+                for settlement in _participant_historic_settlements(partner)
+            ]
+            partner_invoice_accounts.append(
+                {
+                    "participant": partner,
+                    "summary": participant_kiosk_summary(partner),
+                    "live_pdf_url": reverse(
+                        _kiosk_route(kiosk_mode, "participant-current-settlement-pdf"),
+                        args=[partner.pk],
+                    ),
+                    "settlements": settlements,
+                }
+            )
+    activity_logs = (
+        KioskActionAuditLog.objects.select_related(
+            "actor_participant",
+            "actor_family_member",
+            "target_participant",
+            "target_family_member",
+        )
+        .filter(
+            Q(actor_participant=participant)
+            | Q(target_participant=participant)
+            | Q(booking_link__inviter=participant)
+            | Q(booking_link__invitee=participant),
+            camp=participant.camp,
+        )
+        .distinct()
+        .order_by("-created_at", "-pk")[:100]
+    )
+    return render(
+        request,
+        "billing/kiosk_partner_activity.html",
+        {
+            "participant": participant,
+            "kiosk_actor_is_family_member": actor_family_member is not None,
+            "booking_link_form": booking_link_form,
+            "pending_invites": pending_invites,
+            "sent_invites": sent_invites,
+            "accepted_links": accepted_links,
+            "partner_invoice_accounts": partner_invoice_accounts,
+            "activity_logs": activity_logs,
+            "is_pre_camp": participant.camp.is_pre_camp(),
+            "is_post_camp": participant.camp.is_post_camp(),
+            **_kiosk_context(kiosk_mode),
+        },
+    )
 
 
 def _kiosk_checkin_participants(participant):
@@ -1553,10 +1846,7 @@ def _kiosk_checkin_participants(participant):
             "camp": participant.camp,
         }
     ]
-    for member in participant.family_members.filter(
-        is_active=True,
-        role=ParticipantFamilyMember.Role.COMPANION,
-    ).order_by("last_name", "first_name"):
+    for member in participant.family_members.filter(is_active=True).order_by("last_name", "first_name"):
         targets.append(
             {
                 "token": f"family-{member.pk}",
@@ -1566,6 +1856,26 @@ def _kiosk_checkin_participants(participant):
                 "camp": participant.camp,
             }
         )
+    for linked_participant in _linked_booking_participants(participant):
+        targets.append(
+            {
+                "token": f"participant-{linked_participant.pk}",
+                "object": linked_participant,
+                "name": linked_participant.full_name,
+                "role": "Partnerkonto",
+                "camp": linked_participant.camp,
+            }
+        )
+        for member in linked_participant.family_members.filter(is_active=True).order_by("last_name", "first_name"):
+            targets.append(
+                {
+                    "token": f"family-{member.pk}",
+                    "object": member,
+                    "name": member.full_name,
+                    "role": f"Partnerkonto · {member.get_role_display()}",
+                    "camp": linked_participant.camp,
+                }
+            )
     return targets
 
 
@@ -1624,17 +1934,66 @@ def _update_kiosk_checkin_dates(request, participant, checkin_participants):
             messages.error(request, error)
         return False
 
+    actor_family_member = _kiosk_family_member(request, participant)
     with transaction.atomic():
-        for target, arrival_date, departure_date in updates:
+        for submitted_target, arrival_date, departure_date in updates:
+            if isinstance(submitted_target, Participant):
+                target = Participant.objects.select_for_update().get(pk=submitted_target.pk)
+                target_participant = target
+                target_family_member = None
+            else:
+                target = (
+                    ParticipantFamilyMember.objects.select_for_update()
+                    .select_related("guardian")
+                    .get(pk=submitted_target.pk)
+                )
+                target_participant = target.guardian
+                target_family_member = target
+
+            booking_link = None
+            if target_participant.pk != participant.pk:
+                booking_link = _accepted_booking_link_between(
+                    participant,
+                    target_participant,
+                    for_update=True,
+                )
+                if booking_link is None:
+                    raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
+
+            before = {
+                "arrival_date": target.arrival_date.isoformat() if target.arrival_date else None,
+                "departure_date": target.departure_date.isoformat() if target.departure_date else None,
+            }
             target.arrival_date = arrival_date
             target.departure_date = departure_date
             update_fields = ["arrival_date", "departure_date", "updated_at"]
             if isinstance(target, Participant):
+                before["booked_nights"] = target.booked_nights
                 target.booked_nights = (
                     max((departure_date - arrival_date).days, 0) if arrival_date and departure_date else 0
                 )
                 update_fields.append("booked_nights")
             target.save(update_fields=update_fields)
+            after = {
+                "arrival_date": target.arrival_date.isoformat() if target.arrival_date else None,
+                "departure_date": target.departure_date.isoformat() if target.departure_date else None,
+            }
+            if isinstance(target, Participant):
+                after["booked_nights"] = target.booked_nights
+            if booking_link is not None and before != after:
+                audit_log = create_kiosk_action_audit_log(
+                    camp=participant.camp,
+                    actor_participant=participant,
+                    actor_family_member=actor_family_member,
+                    target_participant=target_participant,
+                    target_family_member=target_family_member,
+                    booking_link=booking_link,
+                    action=KioskActionAuditLog.Action.CHECKIN_UPDATED,
+                    description=f"Anwesenheit für {target.full_name} geändert.",
+                    before=before,
+                    after=after,
+                )
+                transaction.on_commit(partial(_notify_kiosk_partner_action_by_id, audit_log.pk))
     messages.success(request, "Check-in-Daten wurden gespeichert.")
     return True
 
@@ -1690,6 +2049,19 @@ def _kiosk_meal_targets(participant):
                 "variant_choices": _variant_choices_for_booking_target(linked_participant.is_child),
             }
         )
+        for member in linked_participant.family_members.filter(is_active=True).order_by("last_name", "first_name"):
+            targets.append(
+                {
+                    "token": f"family-{member.pk}",
+                    "kind": "family",
+                    "object": member,
+                    "name": member.full_name,
+                    "role": f"Partnerkonto · {member.get_role_display()}",
+                    "is_child": member.is_child,
+                    "is_companion": member.role == member.Role.COMPANION,
+                    "variant_choices": _variant_choices_for_booking_target(member.is_child),
+                }
+            )
     return targets
 
 
@@ -1709,11 +2081,36 @@ def _notify_linked_booking_by_id(charge_id: int, actor_id: int, *, cancelled: bo
     notify_linked_booking(charge, actor=actor, cancelled=cancelled)
 
 
-def _book_meal_for_target(target, meal_date, meal, variant, price_rule, booked_by):
+def _book_meal_for_target(
+    target,
+    meal_date,
+    meal,
+    variant,
+    price_rule,
+    booked_by,
+    actor_family_member=None,
+):
     meal_display = dict(MealSignup.Meal.choices).get(meal, meal)
     target_object = target["object"]
     participant = target_object if target["kind"] == "participant" else target_object.guardian
     family_member = target_object if target["kind"] == "family" else None
+    booking_link = None
+    if participant.pk != booked_by.pk:
+        booking_link = _accepted_booking_link_between(booked_by, participant, for_update=True)
+        if booking_link is None:
+            raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
+    existing_signup = (
+        MealSignup.objects.select_for_update()
+        .select_related("charge")
+        .filter(
+            participant=participant,
+            family_member=family_member,
+            meal_date=meal_date,
+            meal=meal,
+        )
+        .first()
+    )
+    before = kiosk_meal_signup_audit_snapshot(existing_signup) if existing_signup is not None else {}
     signup_defaults = {
         "variant": variant,
         "status": MealSignup.Status.ACTIVE,
@@ -1747,10 +2144,52 @@ def _book_meal_for_target(target, meal_date, meal, variant, price_rule, booked_b
     if signup.charge_id != charge.pk:
         signup.charge = charge
         signup.save(update_fields=["charge", "updated_at"])
+    if booking_link is not None:
+        signup.charge = charge
+        create_kiosk_action_audit_log(
+            camp=booked_by.camp,
+            actor_participant=booked_by,
+            actor_family_member=actor_family_member,
+            target_participant=participant,
+            target_family_member=family_member,
+            booking_link=booking_link,
+            charge=charge,
+            action=KioskActionAuditLog.Action.MEAL_BOOKED,
+            description=f"{charge.booking_reference}: {charge.description} gespeichert.",
+            before=before,
+            after=kiosk_meal_signup_audit_snapshot(signup),
+        )
     transaction.on_commit(partial(_notify_linked_booking_by_id, charge.pk, booked_by.pk, cancelled=False))
 
 
-def _retract_meal_signup(signup: MealSignup, actor: Participant) -> None:
+def _retract_meal_signup(
+    signup: MealSignup,
+    actor: Participant,
+    actor_family_member: ParticipantFamilyMember | None = None,
+) -> None:
+    signup = (
+        MealSignup.objects.select_for_update()
+        .select_related("participant", "family_member", "charge", "charge__kiosk_booked_by")
+        .get(pk=signup.pk)
+    )
+    affected_participant = signup.participant
+    booking_link = None
+    if affected_participant.pk != actor.pk:
+        booking_link = _accepted_booking_link_between(actor, affected_participant, for_update=True)
+        if booking_link is None:
+            raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
+    elif signup.charge is not None and signup.charge.kiosk_booked_by_id != actor.pk:
+        creation_audit = (
+            KioskActionAuditLog.objects.select_related("booking_link")
+            .filter(
+                charge=signup.charge,
+                action=KioskActionAuditLog.Action.MEAL_BOOKED,
+            )
+            .order_by("created_at", "pk")
+            .first()
+        )
+        booking_link = creation_audit.booking_link if creation_audit is not None else None
+    before = kiosk_meal_signup_audit_snapshot(signup)
     signup.status = MealSignup.Status.RETRACTED
     signup.retracted_at = timezone.now()
     signup.save(update_fields=["status", "retracted_at", "updated_at"])
@@ -1760,18 +2199,36 @@ def _retract_meal_signup(signup: MealSignup, actor: Participant) -> None:
     charge.deleted_at = timezone.now()
     charge.deleted_by = None
     charge.save(update_fields=["deleted_at", "deleted_by"])
+    if affected_participant.pk != actor.pk or charge.kiosk_booked_by_id != affected_participant.pk:
+        create_kiosk_action_audit_log(
+            camp=actor.camp,
+            actor_participant=actor,
+            actor_family_member=actor_family_member,
+            target_participant=affected_participant,
+            target_family_member=signup.family_member,
+            booking_link=booking_link,
+            charge=charge,
+            action=KioskActionAuditLog.Action.MEAL_RETRACTED,
+            description=f"{charge.booking_reference}: {charge.description} zurückgenommen.",
+            before=before,
+            after=kiosk_meal_signup_audit_snapshot(signup),
+        )
     transaction.on_commit(partial(_notify_linked_booking_by_id, charge.pk, actor.pk, cancelled=True))
 
 
 def _is_kiosk_quick_charge_cancelable(charge: Charge, participant: Participant, now=None) -> bool:
     """Return whether a kiosk participant may cancel a quick charge."""
     current_time = now or timezone.now()
+    account_authorized = charge.participant_id == participant.pk or (
+        charge.kiosk_booked_by_id == participant.pk
+        and _accepted_booking_link_between(participant, charge.participant) is not None
+    )
     return (
         charge.deleted_at is None
         and charge.kiosk_booked_by_id is not None
         and charge.kind in {Charge.Kind.DRINK, Charge.Kind.FOOD}
         and charge.created_at >= current_time - KIOSK_QUICK_BOOKING_CANCEL_WINDOW
-        and (charge.participant_id == participant.pk or charge.kiosk_booked_by_id == participant.pk)
+        and account_authorized
         and not _is_charge_covered_by_settlement_run(charge)
     )
 
@@ -1990,7 +2447,6 @@ def kiosk_home(request, kiosk_mode="private"):
     family_member_form = KioskFamilyMemberForm(prefix="family")
     family_member_pin_form = None
     family_member_pin_member_id = None
-    booking_link_form = KioskBookingLinkInviteForm(inviter=participant, prefix="link")
     if request.method == "POST":
         if is_post_camp:
             messages.error(request, "Das Lager ist beendet. Änderungen sind nicht mehr möglich.")
@@ -2017,15 +2473,25 @@ def kiosk_home(request, kiosk_mode="private"):
                 occurred_on = timezone.localdate()
                 with transaction.atomic():
                     for target in set(targets):
-                        if hasattr(target, "first_name") and hasattr(target, "last_name") and hasattr(target, "role"):
-                            # This is a ParticipantFamilyMember
+                        if isinstance(target, ParticipantFamilyMember):
                             charge_participant = target.guardian
+                            target_family_member = target
                             target_is_child = target.is_child
                             target_is_companion = target.role == target.Role.COMPANION
                         else:
                             charge_participant = target
+                            target_family_member = None
                             target_is_child = target.is_child
                             target_is_companion = target.is_companion
+                        booking_link = None
+                        if charge_participant.pk != participant.pk:
+                            booking_link = _accepted_booking_link_between(
+                                participant,
+                                charge_participant,
+                                for_update=True,
+                            )
+                            if booking_link is None:
+                                raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
                         effective_rule = rule
                         if rule.kind == PriceRule.Kind.MEAL:
                             resolved_rule = resolve_meal_price_rule(
@@ -2052,6 +2518,20 @@ def kiosk_home(request, kiosk_mode="private"):
                             kiosk_booked_by=participant,
                         )
                         charge.save()
+                        if booking_link is not None:
+                            create_kiosk_action_audit_log(
+                                camp=participant.camp,
+                                actor_participant=participant,
+                                actor_family_member=active_family_member,
+                                target_participant=charge_participant,
+                                target_family_member=target_family_member,
+                                booking_link=booking_link,
+                                charge=charge,
+                                action=KioskActionAuditLog.Action.QUICK_BOOKED,
+                                description=f"{charge.booking_reference}: {effective_rule.name} gebucht.",
+                                before={},
+                                after=kiosk_charge_audit_snapshot(charge),
+                            )
                         transaction.on_commit(
                             partial(_notify_linked_booking_by_id, charge.pk, participant.pk, cancelled=False)
                         )
@@ -2077,9 +2557,49 @@ def kiosk_home(request, kiosk_mode="private"):
                 if charge is None or not _is_kiosk_quick_charge_cancelable(charge, participant):
                     messages.error(request, "Diese Buchung kann nicht mehr storniert werden.")
                 else:
+                    creation_audit = (
+                        KioskActionAuditLog.objects.select_related(
+                            "booking_link",
+                            "target_family_member",
+                        )
+                        .filter(
+                            charge=charge,
+                            action=KioskActionAuditLog.Action.QUICK_BOOKED,
+                        )
+                        .order_by("created_at", "pk")
+                        .first()
+                    )
+                    booking_link = None
+                    if charge.participant_id != participant.pk:
+                        booking_link = _accepted_booking_link_between(
+                            participant,
+                            charge.participant,
+                            for_update=True,
+                        )
+                        if booking_link is None:
+                            raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
+                    elif charge.kiosk_booked_by_id != participant.pk:
+                        booking_link = creation_audit.booking_link if creation_audit is not None else None
+                    before = kiosk_charge_audit_snapshot(charge)
                     charge.deleted_at = timezone.now()
                     charge.deleted_by = None
                     charge.save(update_fields=["deleted_at", "deleted_by"])
+                    if charge.kiosk_booked_by_id != charge.participant_id:
+                        create_kiosk_action_audit_log(
+                            camp=participant.camp,
+                            actor_participant=participant,
+                            actor_family_member=active_family_member,
+                            target_participant=charge.participant,
+                            target_family_member=(
+                                creation_audit.target_family_member if creation_audit is not None else None
+                            ),
+                            booking_link=booking_link,
+                            charge=charge,
+                            action=KioskActionAuditLog.Action.QUICK_CANCELLED,
+                            description=f"{charge.booking_reference}: {charge.description} storniert.",
+                            before=before,
+                            after=kiosk_charge_audit_snapshot(charge),
+                        )
                     transaction.on_commit(
                         partial(_notify_linked_booking_by_id, charge.pk, participant.pk, cancelled=True)
                     )
@@ -2149,7 +2669,15 @@ def kiosk_home(request, kiosk_mode="private"):
                 if not meal_form.errors:
                     with transaction.atomic():
                         for target, meal_date, variant, price_rule in bookings:
-                            _book_meal_for_target(target, meal_date, meal, variant, price_rule, participant)
+                            _book_meal_for_target(
+                                target,
+                                meal_date,
+                                meal,
+                                variant,
+                                price_rule,
+                                participant,
+                                active_family_member,
+                            )
                     day_label = "Tag" if len(meal_dates) == 1 else "Tage"
                     person_label = "Person" if len(selected_targets) == 1 else "Personen"
                     messages.success(
@@ -2174,7 +2702,7 @@ def kiosk_home(request, kiosk_mode="private"):
                 messages.error(request, meal_change_lock_message(participant.camp, signup.meal_date))
             else:
                 with transaction.atomic():
-                    _retract_meal_signup(signup, participant)
+                    _retract_meal_signup(signup, participant, active_family_member)
                 messages.success(request, "Essensanmeldung wurde zurückgenommen.")
                 return redirect(_kiosk_route(kiosk_mode, "home"))
         elif request.POST.get("action") == "family_member_create":
@@ -2223,70 +2751,6 @@ def kiosk_home(request, kiosk_mode="private"):
                 messages.success(request, "Familienmitglied wurde entfernt.")
                 return redirect(_kiosk_route(kiosk_mode, "home"))
             messages.error(request, "Familienmitglied wurde nicht gefunden.")
-        elif request.POST.get("action") == "booking_link_invite":
-            booking_link_form = KioskBookingLinkInviteForm(request.POST, inviter=participant, prefix="link")
-            if booking_link_form.is_valid():
-                with transaction.atomic():
-                    booking_link = ParticipantBookingLink.objects.create(
-                        inviter=participant,
-                        invitee=booking_link_form.cleaned_data["participant"],
-                    )
-                    transaction.on_commit(
-                        lambda link_id=booking_link.pk, actor_id=participant.pk: notify_booking_link(
-                            ParticipantBookingLink.objects.select_related("inviter", "invitee").get(pk=link_id),
-                            event="invited",
-                            actor=Participant.objects.get(pk=actor_id),
-                        )
-                    )
-                messages.success(request, "Einladung wurde gesendet.")
-                return redirect(_kiosk_route(kiosk_mode, "home"))
-        elif request.POST.get("action") in ["booking_link_accept", "booking_link_decline", "booking_link_revoke"]:
-            link_id = _positive_int_or_none(request.POST.get("booking_link_id"))
-            action = request.POST.get("action")
-            booking_link = None
-            if action == "booking_link_accept":
-                new_status = ParticipantBookingLink.Status.ACCEPTED
-                success_message = "Einladung wurde angenommen."
-                if link_id is not None:
-                    booking_link = participant.received_booking_links.filter(
-                        pk=link_id,
-                        status=ParticipantBookingLink.Status.PENDING,
-                    ).first()
-            elif action == "booking_link_decline":
-                new_status = ParticipantBookingLink.Status.DECLINED
-                success_message = "Einladung wurde abgelehnt."
-                if link_id is not None:
-                    booking_link = participant.received_booking_links.filter(
-                        pk=link_id,
-                        status=ParticipantBookingLink.Status.PENDING,
-                    ).first()
-            else:
-                new_status = ParticipantBookingLink.Status.REVOKED
-                success_message = "Verknüpfung wurde aufgelöst."
-                if link_id is not None:
-                    booking_link = ParticipantBookingLink.objects.filter(
-                        Q(inviter=participant) | Q(invitee=participant),
-                        pk=link_id,
-                        status=ParticipantBookingLink.Status.ACCEPTED,
-                    ).first()
-            if booking_link is not None:
-                booking_link.status = new_status
-                booking_link.save(update_fields=["status", "updated_at"])
-                event = {
-                    ParticipantBookingLink.Status.ACCEPTED: "accepted",
-                    ParticipantBookingLink.Status.DECLINED: "declined",
-                    ParticipantBookingLink.Status.REVOKED: "revoked",
-                }[new_status]
-                transaction.on_commit(
-                    lambda link_id=booking_link.pk, actor_id=participant.pk, event_name=event: notify_booking_link(
-                        ParticipantBookingLink.objects.select_related("inviter", "invitee").get(pk=link_id),
-                        event=event_name,
-                        actor=Participant.objects.get(pk=actor_id),
-                    )
-                )
-                messages.success(request, success_message)
-                return redirect(_kiosk_route(kiosk_mode, "home"))
-            messages.error(request, "Verknüpfung wurde nicht gefunden.")
         elif request.POST.get("action") == "checkin":
             if _update_kiosk_checkin_dates(request, participant, checkin_participants):
                 return redirect(_kiosk_route(kiosk_mode, "home"))
@@ -2322,7 +2786,7 @@ def kiosk_home(request, kiosk_mode="private"):
     ]
     meal_signups = (
         MealSignup.objects.select_related("participant", "family_member")
-        .filter(Q(participant=participant) | Q(participant_id__in=linked_participant_ids, family_member__isnull=True))
+        .filter(Q(participant=participant) | Q(participant_id__in=linked_participant_ids))
         .order_by("meal_date", "meal", "participant__last_name", "participant__first_name")
     )
     meal_signups = list(meal_signups)
@@ -2351,12 +2815,9 @@ def kiosk_home(request, kiosk_mode="private"):
         is_companion=participant.is_companion,
     )
     pending_invites = participant.received_booking_links.select_related("inviter").filter(
-        status=ParticipantBookingLink.Status.PENDING
+        status=ParticipantBookingLink.Status.PENDING,
+        inviter__camp=participant.camp,
     )
-    sent_invites = participant.sent_booking_links.select_related("invitee").filter(
-        status=ParticipantBookingLink.Status.PENDING
-    )
-    accepted_links = _accepted_booking_links(participant)
     announcements = list(participant.camp.announcements.filter(is_active=True)[:3])
     historic_settlements = list(_participant_historic_settlements(participant))
     latest_settlement = historic_settlements[0] if historic_settlements else None
@@ -2381,7 +2842,6 @@ def kiosk_home(request, kiosk_mode="private"):
         "family_member_form": family_member_form,
         "family_member_pin_form": family_member_pin_form,
         "family_member_pin_member_id": family_member_pin_member_id,
-        "booking_link_form": booking_link_form,
         "recent_quick_charges": recent_quick_charges,
         "meal_signups": meal_signups,
         "meal_calendar_days": meal_calendar_days,
@@ -2398,8 +2858,6 @@ def kiosk_home(request, kiosk_mode="private"):
         .filter(is_active=True)
         .order_by("last_name", "first_name"),
         "pending_invites": pending_invites,
-        "sent_invites": sent_invites,
-        "accepted_links": accepted_links,
         **_kiosk_context(kiosk_mode),
         "kiosk_contacts": admin_interface_contacts(User),
         "next_order_date": next_order_date,

@@ -43,7 +43,7 @@
     <ul class="guide-step-list">
       <li><strong>Anmelden:</strong> Öffne <em>Abendessen (Kalender)</em> und tippe auf den gewünschten Lagertag. Ein Dialog öffnet sich. Setze das Häkchen bei deinem Namen.</li>
       <li><strong>Variante wählen:</strong> Neben deinem Namen kannst du im Dropdown zwischen "Normal" und "Vegetarisch" (bzw. weiteren angebotenen Optionen) wählen.</li>
-      <li><strong>Familie & Freunde:</strong> Wenn du Familienmitglieder angelegt oder Mitbucher verknüpft hast (siehe nächster Punkt), kannst du diese hier direkt mit anmelden.</li>
+      <li><strong>Familie & Partnerkonten:</strong> Wenn du Familienmitglieder angelegt oder eine Partner-Vollmacht angenommen hast (siehe nächster Punkt), kannst du diese Personen hier direkt mit anmelden.</li>
       <li>Klicke am Ende auf "Essensanmeldung speichern".</li>
     </ul>
     <div class="guide-media">
@@ -53,14 +53,15 @@
   </section>
 
   <section class="guide-section" id="kiosk-family">
-    <h2>4. Familie und gegenseitiges Mitbuchen</h2>
-    <p>Oft meldet man nicht nur sich selbst zum Essen an, sondern auch Partner, Kinder oder gute Freunde.</p>
+    <h2>4. Familie und Partner-Vollmachten</h2>
+    <p>Ein Hauptkonto kann Familienkosten bündeln. Zusätzlich können zwei Lagerteilnehmer eine <strong>gegenseitige Partner-Vollmacht</strong> für die Verwaltung ihres aktuellen Lagerkontos vereinbaren.</p>
     <ul class="guide-step-list">
-      <li><strong>Familie:</strong> Unter <em>Menü → Familie</em> kannst du Angehörige anlegen. Diese Personen erhalten keinen eigenen Login. Wenn du sie zum Essen anmeldest, werden ihre Mahlzeiten auf <strong>deiner Endabrechnung</strong> gebucht.</li>
-      <li><strong>Mitbuchungen (Freunde):</strong> Unter <em>Menü → Mitbuchungen</em> kannst du andere Lagerteilnehmer (die einen eigenen Kiosk-Login haben) einladen. Sobald diese die Einladung bei sich annehmen, könnt ihr euch gegenseitig beim Essen auswählen. <strong>Die Abrechnung bleibt jedoch strikt getrennt!</strong> Jeder zahlt sein eigenes Essen.</li>
+      <li><strong>Familie:</strong> Unter <em>Menü → Familie</em> kannst du Kinder und Begleitpersonen anlegen. Kinder nutzen das Hauptkonto; Begleitpersonen können eine eigene PIN erhalten. Alle Kosten erscheinen auf der <strong>Abrechnung des Hauptkontos</strong>.</li>
+      <li><strong>Partner-Vollmacht:</strong> Unter <em>Menü → Partner &amp; Aktivitäten</em> kannst du einen anderen Lagerteilnehmer einladen. Nach ausdrücklicher Annahme dürft ihr gegenseitig die vollständige Abrechnung und PDF sehen, Essen und Getränke für das andere Hauptkonto samt Familie buchen sowie Anreise und Abreise verwalten.</li>
+      <li><strong>Nachvollziehbarkeit:</strong> Partneränderungen werden mit Akteur, Ziel und Vorher-/Nachher-Werten protokolliert. Abrechnungsrelevante Änderungen lösen eine Benachrichtigung aus. Beide Seiten können die Vollmacht widerrufen; der Widerruf wirkt sofort.</li>
     </ul>
     <div class="guide-media">
-      <img src="{% static 'billing/docs/kiosk_family.gif' %}?v=2" alt="Animation: Familie und Mitbuchungen" width="768" height="576" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+      <img src="{% static 'billing/docs/kiosk_family.gif' %}?v=2" alt="Animation: Familie und Partner-Vollmachten" width="768" height="576" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
       <p class="placeholder-text" style="display:none;">(Hinweis für Admins: Bitte Datei <code>src/static/billing/docs/kiosk_family.gif</code> hinterlegen)</p>
     </div>
   </section>

@@ -1068,16 +1068,27 @@ class KioskFamilyMemberForm(forms.ModelForm):
 
 
 class KioskBookingLinkInviteForm(forms.Form):
-    """Invite another active camp participant for reciprocal kiosk booking."""
+    """Invite another active camp participant to a reciprocal current-camp authorization."""
 
     participant = forms.ModelChoiceField(label="Teilnehmer einladen", queryset=Participant.objects.none())
 
     def __init__(self, *args, **kwargs):
         self.inviter = kwargs.pop("inviter")
         super().__init__(*args, **kwargs)
+        active_statuses = [
+            ParticipantBookingLink.Status.PENDING,
+            ParticipantBookingLink.Status.ACCEPTED,
+        ]
+        linked_participant_ids = {
+            invitee_id if inviter_id == self.inviter.pk else inviter_id
+            for inviter_id, invitee_id in ParticipantBookingLink.objects.filter(
+                models.Q(inviter=self.inviter) | models.Q(invitee=self.inviter),
+                status__in=active_statuses,
+            ).values_list("inviter_id", "invitee_id")
+        }
         self.fields["participant"].queryset = (
             Participant.objects.filter(camp=self.inviter.camp, camp__is_active=True, archived_at__isnull=True)
-            .exclude(pk=self.inviter.pk)
+            .exclude(pk__in={self.inviter.pk, *linked_participant_ids})
             .order_by("last_name", "first_name")
         )
 

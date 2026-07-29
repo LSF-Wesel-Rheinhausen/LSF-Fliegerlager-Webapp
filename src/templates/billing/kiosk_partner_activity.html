@@ -1,0 +1,184 @@
+{% extends "billing/kiosk_base.html" %}
+{% load billing_format %}
+{% block title %}Partner &amp; Aktivitäten | Kiosk{% endblock %}
+{% block kiosk_nav %}
+  <a class="button button-secondary" href="{{ kiosk_urls.home }}">Zurück</a>
+  <a class="button button-secondary" href="{{ kiosk_urls.logout }}">Abmelden</a>
+{% endblock %}
+{% block content %}
+  <section class="stack">
+    <header class="toolbar">
+      <div>
+        <h1>Partner &amp; Aktivitäten</h1>
+        <p>Verwalte gegenseitige Partner-Vollmachten für das aktuelle Lager und prüfe Änderungen.</p>
+      </div>
+    </header>
+
+    <section class="panel kiosk-card">
+      <div class="kiosk-card__header kiosk-section-heading">
+        <div class="kiosk-card__header-main">
+          <span class="kiosk-card__eyebrow">Berechtigungsumfang</span>
+          <h2>Was eine angenommene Freigabe erlaubt</h2>
+        </div>
+      </div>
+      <ul>
+        <li>Abrechnung einschließlich Familienpositionen und PDF einsehen</li>
+        <li>Getränke und Essen für das Partnerkonto buchen oder stornieren</li>
+        <li>Anreise, Abreise und Übernachtungen des Partnerhaushalts verwalten</li>
+      </ul>
+      <p class="hint">PINs, Stammdaten, weitere Partnerfreigaben und Adminfunktionen bleiben ausgeschlossen.</p>
+    </section>
+
+    {% if participant.camp.show_kiosk_invoices %}
+      <section class="stack">
+        <div>
+          <span class="kiosk-card__eyebrow">Freigegebene Abrechnung</span>
+          <h2>Partnerabrechnungen</h2>
+        </div>
+        {% for account in partner_invoice_accounts %}
+          <article class="panel kiosk-card">
+            <div class="kiosk-card__header kiosk-section-heading">
+              <div class="kiosk-card__header-main">
+                <h3>{{ account.participant.full_name }}</h3>
+                <p>Vollständige aktuelle Abrechnung einschließlich der über dieses Hauptkonto gebuchten Familie.</p>
+              </div>
+            </div>
+            <div class="kiosk-list-row">
+              <div class="kiosk-list-row__content">
+                <strong>Aktueller Saldo</strong>
+                <span>{{ account.summary.balance|money_eur }}</span>
+              </div>
+              <a class="button button-secondary" href="{{ account.live_pdf_url }}" target="_blank" rel="noopener">
+                Live-Abrechnung als PDF
+              </a>
+            </div>
+            <ul class="stack stack--compact">
+              {% for line in account.summary.lines %}
+                <li class="kiosk-list-row">
+                  <span>{{ line.label }}</span>
+                  <strong>{{ line.total|money_eur }}</strong>
+                </li>
+              {% empty %}
+                <li class="hint">Noch keine Abrechnungspositionen vorhanden.</li>
+              {% endfor %}
+            </ul>
+            {% if account.settlements %}
+              <div class="form-actions">
+                {% for item in account.settlements %}
+                  <a class="button button-ghost" href="{{ item.pdf_url }}" target="_blank" rel="noopener">
+                    Finale Abrechnung vom {{ item.snapshot.run.created_at|date:"d.m.Y H:i" }}
+                  </a>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </article>
+        {% empty %}
+          <div class="panel kiosk-empty">
+            <strong>Keine Partnerabrechnung freigegeben.</strong>
+          </div>
+        {% endfor %}
+      </section>
+    {% endif %}
+
+    <section class="panel kiosk-card">
+      <div class="kiosk-card__header kiosk-section-heading">
+        <div class="kiosk-card__header-main">
+          <span class="kiosk-card__eyebrow">Aktuelle Freigaben</span>
+          <h2>Partnerkonten</h2>
+        </div>
+      </div>
+      {% if not kiosk_actor_is_family_member and not is_post_camp %}
+        <form method="post" class="form-grid">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="booking_link_invite">
+          {{ booking_link_form.as_p }}
+          <div class="form-actions">
+            <button type="submit">Partner einladen</button>
+          </div>
+        </form>
+        {% if pending_invites %}
+          <section class="stack stack--compact" aria-labelledby="pending-partner-invites-title">
+            <h3 id="pending-partner-invites-title">Offene Einladungen</h3>
+            {% include "billing/includes/kiosk_pending_invites.html" %}
+          </section>
+        {% endif %}
+        {% for invite in sent_invites %}
+          <p class="hint">Einladung an {{ invite.invitee.full_name }} wartet auf Annahme.</p>
+        {% endfor %}
+      {% endif %}
+      {% for link in accepted_links %}
+        <div class="kiosk-list-row">
+          <div class="kiosk-list-row__content">
+            <strong>
+              {% if link.inviter_id == participant.pk %}{{ link.invitee.full_name }}{% else %}{{ link.inviter.full_name }}{% endif %}
+            </strong>
+            <span>Gegenseitige Vollmacht für {{ participant.camp.name }}</span>
+          </div>
+          {% if not kiosk_actor_is_family_member %}
+            <button
+              type="button"
+              class="button-secondary"
+              data-dialog-target="partner-revoke-dialog-{{ link.pk }}"
+              aria-haspopup="dialog"
+            >
+              Vollmacht widerrufen
+            </button>
+            <dialog
+              id="partner-revoke-dialog-{{ link.pk }}"
+              class="kiosk-dialog kiosk-dialog--compact"
+              aria-labelledby="partner-revoke-dialog-title-{{ link.pk }}"
+            >
+              <form method="dialog" class="dialog-heading">
+                <div>
+                  <h2 id="partner-revoke-dialog-title-{{ link.pk }}">Vollmacht wirklich widerrufen?</h2>
+                  <p class="dialog-heading__meta">Der gegenseitige Zugriff endet unmittelbar.</p>
+                </div>
+                <button class="button button-secondary">Schließen</button>
+              </form>
+              <p>
+                Danach sind Partnerabrechnungen, Buchungen und Anwesenheitsänderungen für dieses Konto nicht mehr
+                möglich.
+              </p>
+              <form method="post" class="dialog-actions">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="booking_link_revoke">
+                <input type="hidden" name="booking_link_id" value="{{ link.pk }}">
+                <button type="button" class="button button-secondary" data-close-dialog>Abbrechen</button>
+                <button type="submit" class="button button-danger">Jetzt widerrufen</button>
+              </form>
+            </dialog>
+          {% endif %}
+        </div>
+      {% empty %}
+        <div class="kiosk-empty">
+          <strong>Keine aktive Partner-Vollmacht.</strong>
+          <p>Angenommene Verknüpfungen erscheinen hier.</p>
+        </div>
+      {% endfor %}
+    </section>
+
+    <section class="panel kiosk-card">
+      <div class="kiosk-card__header kiosk-section-heading">
+        <div class="kiosk-card__header-main">
+          <span class="kiosk-card__eyebrow">Nachvollziehbarkeit</span>
+          <h2>Aktivitäten</h2>
+        </div>
+      </div>
+      {% for activity in activity_logs %}
+        <article class="kiosk-list-row">
+          <div class="kiosk-list-row__content">
+            <strong>{{ activity.actor_display_name }} · {{ activity.get_action_display }}</strong>
+            <span>{{ activity.created_at|date:"d.m.Y H:i" }} · {{ activity.target_display_name }}</span>
+            <span>{{ activity.description }}</span>
+            {% if activity.change_summary %}<span>{{ activity.change_summary }}</span>{% endif %}
+          </div>
+        </article>
+      {% empty %}
+        <div class="kiosk-empty">
+          <strong>Noch keine Partneraktivitäten.</strong>
+          <p>Freigaben und Änderungen an Partnerkonten werden hier protokolliert.</p>
+        </div>
+      {% endfor %}
+    </section>
+  </section>
+{% endblock %}

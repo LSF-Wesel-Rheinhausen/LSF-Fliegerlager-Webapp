@@ -17,10 +17,13 @@ from .models import (
     DrinkEntry,
     Expense,
     ExpenseAllocation,
+    KioskActionAuditLog,
     MealOrder,
     MealPlanEntry,
     MealSignup,
     Participant,
+    ParticipantBookingLink,
+    ParticipantFamilyMember,
     PriceRule,
     Settlement,
     SettlementRun,
@@ -387,10 +390,30 @@ def charge_audit_snapshot(charge: Charge) -> dict[str, str | None]:
         "booking_reference": charge.booking_reference,
         "kind": charge.kind,
         "description": charge.description,
-        "quantity": str(money(charge.quantity)),
-        "unit_price": str(money(charge.unit_price)),
-        "foerdersatz": str(rate(charge.foerdersatz)),
+        "quantity": str(money(Decimal(str(charge.quantity)))),
+        "unit_price": str(money(Decimal(str(charge.unit_price)))),
+        "foerdersatz": str(rate(Decimal(str(charge.foerdersatz)))),
         "occurred_on": charge.occurred_on.isoformat() if charge.occurred_on else None,
+    }
+
+
+def kiosk_charge_audit_snapshot(charge: Charge) -> dict[str, str | None]:
+    """Return the booking fields needed to resolve participant kiosk disputes."""
+    return {
+        **charge_audit_snapshot(charge),
+        "deleted_at": charge.deleted_at.isoformat() if charge.deleted_at else None,
+    }
+
+
+def kiosk_meal_signup_audit_snapshot(signup: MealSignup) -> dict[str, Any]:
+    """Return the meal and linked charge state relevant to kiosk disputes."""
+    return {
+        "meal_date": signup.meal_date.isoformat(),
+        "meal": signup.meal,
+        "variant": signup.variant,
+        "status": signup.status,
+        "retracted_at": signup.retracted_at.isoformat() if signup.retracted_at else None,
+        "charge": kiosk_charge_audit_snapshot(signup.charge) if signup.charge is not None else None,
     }
 
 
@@ -447,6 +470,62 @@ def create_booking_delete_audit_log(
         action=BookingAuditLog.Action.DELETED,
         before=before,
         after={},
+    )
+
+
+def create_kiosk_action_audit_log(
+    *,
+    camp: Camp,
+    actor_participant: Participant,
+    target_participant: Participant,
+    action: str,
+    description: str,
+    actor_family_member: ParticipantFamilyMember | None = None,
+    target_family_member: ParticipantFamilyMember | None = None,
+    booking_link: ParticipantBookingLink | None = None,
+    charge: Charge | None = None,
+    before: dict[str, Any] | None = None,
+    after: dict[str, Any] | None = None,
+) -> KioskActionAuditLog:
+    """Append one validated audit row for a current-camp kiosk action.
+
+    Args:
+        camp: Camp whose participant records are affected.
+        actor_participant: Main account under which the kiosk actor is logged in.
+        target_participant: Other main account involved in the action.
+        action: One value from :class:`KioskActionAuditLog.Action`.
+        description: Short participant-facing explanation without secrets.
+        actor_family_member: Companion who actually used the actor account, if any.
+        target_family_member: Family member affected below the target account, if any.
+        booking_link: Partner authorization used for the action, if applicable.
+        charge: Charge affected by a booking action, if applicable.
+        before: JSON-serializable state before the action.
+        after: JSON-serializable state after the action.
+
+    Returns:
+        The newly created append-only audit row.
+
+    Raises:
+        ValidationError: If an actor or target does not belong to the supplied camp/account.
+    """
+    if actor_participant.camp_id != camp.pk or target_participant.camp_id != camp.pk:
+        raise ValidationError("Kiosk-Audit darf nur Teilnehmer desselben Lagers verknüpfen.")
+    if actor_family_member is not None and actor_family_member.guardian_id != actor_participant.pk:
+        raise ValidationError("Die handelnde Begleitperson gehört nicht zum Akteur.")
+    if target_family_member is not None and target_family_member.guardian_id != target_participant.pk:
+        raise ValidationError("Das betroffene Familienmitglied gehört nicht zum Zielkonto.")
+    return KioskActionAuditLog.objects.create(
+        camp=camp,
+        actor_participant=actor_participant,
+        actor_family_member=actor_family_member,
+        target_participant=target_participant,
+        target_family_member=target_family_member,
+        booking_link=booking_link,
+        charge=charge,
+        action=action,
+        description=description,
+        before=before or {},
+        after=after or {},
     )
 
 
