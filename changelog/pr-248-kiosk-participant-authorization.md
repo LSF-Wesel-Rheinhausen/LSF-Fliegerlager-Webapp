@@ -31,7 +31,9 @@
   Partner-Eigenbuchungen innerhalb des bestehenden Zeitfensters.
   Rücknahmen aus einem fremden Partnerhaushalt erfordern zuvor einen
   expliziten Dialog mit einem signierten, zustandsgebundenen
-  Bestätigungstoken.
+  Bestätigungstoken. Status und signierter Zustand werden nach dem Datenbank-
+  Lock erneut geprüft, damit parallele Requests weder doppelte Stornierungen
+  noch doppelte Audit- oder Benachrichtigungseinträge erzeugen.
 - Zeigt bei Schnellbuchungen für mehrere Konten vor dem Schreiben eine
   verbindliche Übersicht über Personen, Mengen, Einzelpreise und Gesamtsumme
   und verlangt eine ausdrückliche kostenpflichtige Bestätigung. Ein

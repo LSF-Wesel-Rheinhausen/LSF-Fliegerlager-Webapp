@@ -5,6 +5,7 @@ import pytest
 from django.apps import apps
 from django.contrib import admin
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.db.models.deletion import ProtectedError
 from django.urls import resolve, reverse
 from django.utils import timezone
@@ -22,7 +23,12 @@ from billing.models import (
     Settlement,
     SettlementRun,
 )
-from billing.views import _kiosk_checkin_participants, _kiosk_meal_targets, _linked_booking_participants
+from billing.views import (
+    _kiosk_checkin_participants,
+    _kiosk_meal_targets,
+    _linked_booking_participants,
+    _retract_meal_signup,
+)
 from tests.factories import CampFactory, ParticipantFactory, PriceRuleFactory, SuperUserFactory
 
 
@@ -904,6 +910,60 @@ def test_paid_partner_meal_retraction_requires_signed_confirmation(kiosk_client,
     assert confirmed_response.status_code == 302
     assert signup.status == MealSignup.Status.RETRACTED
     assert charge.deleted_at is not None
+
+
+@pytest.mark.django_db
+def test_partner_meal_retraction_revalidates_stale_state_after_row_lock(
+    kiosk_client,
+    django_capture_on_commit_callbacks,
+    monkeypatch,
+):
+    fixed_now = timezone.make_aware(datetime(2026, 6, 30, 10, 0))
+    monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
+    camp = CampFactory(
+        is_active=True,
+        starts_on=date(2026, 6, 30),
+        ends_on=date(2026, 7, 14),
+    )
+    participant = ParticipantFactory(camp=camp)
+    partner = ParticipantFactory(camp=camp)
+    ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    signup = MealSignup.objects.create(
+        participant=partner,
+        meal_date=date(2026, 7, 2),
+        meal=MealSignup.Meal.DINNER,
+        variant=MealSignup.Variant.NORMAL,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    page_response = kiosk_client.get(reverse("kiosk-home"))
+    visible_signup = next(item for item in page_response.context["meal_signups"] if item.pk == signup.pk)
+    confirmation_token = visible_signup.retraction_confirmation_token
+
+    with django_capture_on_commit_callbacks() as notification_callbacks:
+        with transaction.atomic():
+            first_result = _retract_meal_signup(
+                signup,
+                participant,
+                confirmation_token=confirmation_token,
+            )
+        with transaction.atomic():
+            stale_result = _retract_meal_signup(
+                signup,
+                participant,
+                confirmation_token=confirmation_token,
+            )
+
+    assert first_result is True
+    assert stale_result is False
+    assert KioskActionAuditLog.objects.filter(action=KioskActionAuditLog.Action.MEAL_RETRACTED).count() == 1
+    assert len(notification_callbacks) == 1
 
 
 @pytest.mark.django_db

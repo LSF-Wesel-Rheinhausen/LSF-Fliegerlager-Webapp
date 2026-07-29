@@ -2367,34 +2367,42 @@ def _retract_meal_signup(
     signup: MealSignup,
     actor: Participant,
     actor_family_member: ParticipantFamilyMember | None = None,
-) -> None:
-    signup = (
+    *,
+    confirmation_token: str = "",
+) -> bool:
+    """Retract an active signup only if its locked state still matches the confirmation."""
+    locked_signup = (
         MealSignup.objects.select_for_update()
         .select_related("participant", "family_member", "charge", "charge__kiosk_booked_by")
-        .get(pk=signup.pk)
+        .filter(pk=signup.pk, status=MealSignup.Status.ACTIVE)
+        .first()
     )
-    affected_participant = signup.participant
+    if locked_signup is None:
+        return False
+    affected_participant = locked_signup.participant
     booking_link = None
     if affected_participant.pk != actor.pk:
+        if not _matches_kiosk_meal_retraction(confirmation_token, actor, locked_signup):
+            return False
         booking_link = _accepted_booking_link_between(actor, affected_participant, for_update=True)
         if booking_link is None:
             raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
-    elif signup.charge is not None and signup.charge.kiosk_booked_by_id != actor.pk:
+    elif locked_signup.charge is not None and locked_signup.charge.kiosk_booked_by_id != actor.pk:
         creation_audit = (
             KioskActionAuditLog.objects.select_related("booking_link")
             .filter(
-                charge=signup.charge,
+                charge=locked_signup.charge,
                 action=KioskActionAuditLog.Action.MEAL_BOOKED,
             )
             .order_by("created_at", "pk")
             .first()
         )
         booking_link = creation_audit.booking_link if creation_audit is not None else None
-    before = kiosk_meal_signup_audit_snapshot(signup)
-    signup.status = MealSignup.Status.RETRACTED
-    signup.retracted_at = timezone.now()
-    signup.save(update_fields=["status", "retracted_at", "updated_at"])
-    charge = signup.charge
+    before = kiosk_meal_signup_audit_snapshot(locked_signup)
+    locked_signup.status = MealSignup.Status.RETRACTED
+    locked_signup.retracted_at = timezone.now()
+    locked_signup.save(update_fields=["status", "retracted_at", "updated_at"])
+    charge = locked_signup.charge
     if charge is not None:
         charge.deleted_at = timezone.now()
         charge.deleted_by = None
@@ -2411,18 +2419,19 @@ def _retract_meal_signup(
             actor_participant=actor,
             actor_family_member=actor_family_member,
             target_participant=affected_participant,
-            target_family_member=signup.family_member,
+            target_family_member=locked_signup.family_member,
             booking_link=booking_link,
             charge=charge,
             action=KioskActionAuditLog.Action.MEAL_RETRACTED,
             description=description,
             before=before,
-            after=kiosk_meal_signup_audit_snapshot(signup),
+            after=kiosk_meal_signup_audit_snapshot(locked_signup),
         )
     if audit_log is not None and partner_action:
         transaction.on_commit(partial(_notify_kiosk_partner_action_by_id, audit_log.pk))
     elif charge is not None:
         transaction.on_commit(partial(_notify_linked_booking_by_id, charge.pk, actor.pk, cancelled=True))
+    return True
 
 
 def _is_kiosk_quick_charge_cancelable(
@@ -3063,9 +3072,19 @@ def kiosk_home(request, kiosk_mode="private"):
                 )
             else:
                 with transaction.atomic():
-                    _retract_meal_signup(signup, participant, active_family_member)
-                messages.success(request, "Essensanmeldung wurde zurückgenommen.")
-                return redirect(_kiosk_route(kiosk_mode, "home"))
+                    retracted = _retract_meal_signup(
+                        signup,
+                        participant,
+                        active_family_member,
+                        confirmation_token=request.POST.get("meal_retraction_token", ""),
+                    )
+                if retracted:
+                    messages.success(request, "Essensanmeldung wurde zurückgenommen.")
+                    return redirect(_kiosk_route(kiosk_mode, "home"))
+                messages.error(
+                    request,
+                    "Essensanmeldung wurde zwischenzeitlich geändert. Bitte lade die Seite neu und bestätige erneut.",
+                )
         elif request.POST.get("action") == "family_member_create":
             family_member_form = KioskFamilyMemberForm(request.POST, prefix="family")
             if family_member_form.is_valid():
