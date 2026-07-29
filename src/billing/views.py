@@ -2301,7 +2301,7 @@ def _book_meal_for_target(
         if booking_link is None:
             raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
     existing_signup = (
-        MealSignup.objects.select_for_update()
+        MealSignup.objects.select_for_update(of=("self",))
         .select_related("charge")
         .filter(
             participant=participant,
@@ -2372,7 +2372,7 @@ def _retract_meal_signup(
 ) -> bool:
     """Retract an active signup only if its locked state still matches the confirmation."""
     locked_signup = (
-        MealSignup.objects.select_for_update()
+        MealSignup.objects.select_for_update(of=("self",))
         .select_related("participant", "family_member", "charge", "charge__kiosk_booked_by")
         .filter(pk=signup.pk, status=MealSignup.Status.ACTIVE)
         .first()

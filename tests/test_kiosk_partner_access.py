@@ -3,9 +3,12 @@ from decimal import Decimal
 
 import pytest
 from django.apps import apps
+from django.conf import settings as django_settings
 from django.contrib import admin
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.backends.postgresql.base import DatabaseWrapper
+from django.db.models import QuerySet
 from django.db.models.deletion import ProtectedError
 from django.urls import resolve, reverse
 from django.utils import timezone
@@ -24,6 +27,7 @@ from billing.models import (
     SettlementRun,
 )
 from billing.views import (
+    _book_meal_for_target,
     _kiosk_checkin_participants,
     _kiosk_meal_targets,
     _linked_booking_participants,
@@ -964,6 +968,57 @@ def test_partner_meal_retraction_revalidates_stale_state_after_row_lock(
     assert stale_result is False
     assert KioskActionAuditLog.objects.filter(action=KioskActionAuditLog.Action.MEAL_RETRACTED).count() == 1
     assert len(notification_callbacks) == 1
+
+
+@pytest.mark.django_db
+def test_meal_signup_row_locks_exclude_nullable_postgresql_joins(monkeypatch):
+    participant = ParticipantFactory()
+    price_rule = PriceRuleFactory(
+        camp=participant.camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+    )
+    postgresql_settings = django_settings.DATABASES["default"].copy()
+    postgresql_settings.update(
+        {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": "compile_only",
+        }
+    )
+    postgresql_connection = DatabaseWrapper(postgresql_settings, alias="postgresql_compile")
+    monkeypatch.setattr(postgresql_connection, "get_autocommit", lambda: False)
+    locked_meal_signup_sql: list[str] = []
+    original_first = QuerySet.first
+
+    def capture_locked_meal_signup_sql(queryset):
+        if queryset.model is MealSignup and queryset.query.select_for_update:
+            sql, _params = queryset.query.get_compiler(connection=postgresql_connection).as_sql()
+            locked_meal_signup_sql.append(sql)
+        return original_first(queryset)
+
+    monkeypatch.setattr(QuerySet, "first", capture_locked_meal_signup_sql)
+    target = {
+        "kind": "participant",
+        "object": participant,
+    }
+
+    with transaction.atomic():
+        _book_meal_for_target(
+            target,
+            date(2026, 7, 2),
+            MealSignup.Meal.DINNER,
+            MealSignup.Variant.NORMAL,
+            price_rule,
+            participant,
+        )
+    signup = MealSignup.objects.get(participant=participant)
+    with transaction.atomic():
+        retracted = _retract_meal_signup(signup, participant)
+
+    assert retracted is True
+    assert len(locked_meal_signup_sql) == 2
+    assert all(" LEFT OUTER JOIN " in sql for sql in locked_meal_signup_sql)
+    assert all(' FOR UPDATE OF "billing_mealsignup"' in sql for sql in locked_meal_signup_sql)
 
 
 @pytest.mark.django_db

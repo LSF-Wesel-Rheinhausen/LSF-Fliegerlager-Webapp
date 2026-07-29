@@ -33,7 +33,9 @@
   expliziten Dialog mit einem signierten, zustandsgebundenen
   Bestätigungstoken. Status und signierter Zustand werden nach dem Datenbank-
   Lock erneut geprüft, damit parallele Requests weder doppelte Stornierungen
-  noch doppelte Audit- oder Benachrichtigungseinträge erzeugen.
+  noch doppelte Audit- oder Benachrichtigungseinträge erzeugen. Der Lock
+  beschränkt sich auf die Essensanmeldung selbst, sodass PostgreSQL nullable
+  vorgeladene Charge- und Familienrelationen nicht unzulässig mitsperrt.
 - Zeigt bei Schnellbuchungen für mehrere Konten vor dem Schreiben eine
   verbindliche Übersicht über Personen, Mengen, Einzelpreise und Gesamtsumme
   und verlangt eine ausdrückliche kostenpflichtige Bestätigung. Ein
