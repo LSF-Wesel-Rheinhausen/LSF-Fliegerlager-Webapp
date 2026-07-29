@@ -1,6 +1,7 @@
 import base64
 import json
 import logging
+import uuid
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from functools import partial
@@ -14,8 +15,8 @@ from django.contrib.auth.views import LoginView
 from django.core import signing
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.core.signing import BadSignature, Signer
-from django.db import transaction
-from django.db.models import Case, IntegerField, Prefetch, Q, Value, When
+from django.db import IntegrityError, transaction
+from django.db.models import Case, Exists, IntegerField, OuterRef, Prefetch, Q, Value, When
 from django.http import FileResponse, Http404, HttpRequest, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -220,16 +221,20 @@ def _kiosk_quick_confirmation_payload(
 
 
 def _sign_kiosk_quick_confirmation(payload: dict[str, object]) -> str:
-    """Sign a timestamped quick-booking preview without server-side session state."""
+    """Sign a timestamped quick-booking preview with a fresh one-time nonce."""
+    signed_payload = {
+        **payload,
+        "nonce": str(uuid.uuid4()),
+    }
     return signing.dumps(
-        payload,
+        signed_payload,
         salt=KIOSK_QUICK_CONFIRMATION_SIGNING_SALT,
         compress=True,
     )
 
 
-def _matches_kiosk_quick_confirmation(token: str, payload: dict[str, object]) -> bool:
-    """Return whether a non-expired token represents exactly the current charge set."""
+def _kiosk_quick_confirmation_nonce(token: str, payload: dict[str, object]) -> uuid.UUID | None:
+    """Return the nonce when a non-expired token exactly matches the current charge set."""
     try:
         signed_payload = signing.loads(
             token,
@@ -237,8 +242,16 @@ def _matches_kiosk_quick_confirmation(token: str, payload: dict[str, object]) ->
             max_age=KIOSK_QUICK_CONFIRMATION_MAX_AGE_SECONDS,
         )
     except signing.BadSignature:
-        return False
-    return signed_payload == payload
+        return None
+    if not isinstance(signed_payload, dict):
+        return None
+    nonce = signed_payload.pop("nonce", None)
+    if signed_payload != payload or not isinstance(nonce, str):
+        return None
+    try:
+        return uuid.UUID(nonce)
+    except ValueError:
+        return None
 
 
 def kiosk_root(_request: HttpRequest) -> HttpResponse:
@@ -2367,6 +2380,9 @@ def _is_kiosk_quick_charge_cancelable(
 ) -> bool:
     """Return whether a kiosk participant may cancel a quick charge."""
     current_time = now or timezone.now()
+    has_meal_signup = getattr(charge, "has_meal_signup", None)
+    if has_meal_signup is None:
+        has_meal_signup = charge.meal_signups.exists()
     account_authorized = charge.participant_id == participant.pk
     if not account_authorized and authorized_participant_ids is not None:
         account_authorized = charge.participant_id in authorized_participant_ids
@@ -2374,6 +2390,7 @@ def _is_kiosk_quick_charge_cancelable(
         account_authorized = _accepted_booking_link_between(participant, charge.participant) is not None
     return (
         charge.deleted_at is None
+        and not has_meal_signup
         and charge.kiosk_booked_by_id is not None
         and charge.kind in {Charge.Kind.DRINK, Charge.Kind.FOOD}
         and charge.created_at >= current_time - KIOSK_QUICK_BOOKING_CANCEL_WINDOW
@@ -2600,12 +2617,24 @@ def kiosk_home(request, kiosk_mode="private"):
         family_members=family_members,
         linked_participants=linked_participants,
     )
+    quick_booking_target_groups = set()
+    for target in meal_targets:
+        if target["is_child"]:
+            quick_booking_target_groups.add("child")
+        elif target["is_companion"]:
+            quick_booking_target_groups.add("companion")
+        else:
+            quick_booking_target_groups.add("adult")
     checkin_participants = _kiosk_checkin_participants(
         participant,
         family_members=family_members,
         linked_participants=linked_participants,
     )
-    quick_form = QuickBookingForm(participant=participant, prefix="quick")
+    quick_form = QuickBookingForm(
+        participant=participant,
+        target_groups=quick_booking_target_groups,
+        prefix="quick",
+    )
     meal_form = MealBookingForm(participant=participant, prefix="meal")
     family_member_form = KioskFamilyMemberForm(prefix="family")
     family_member_pin_form = None
@@ -2621,7 +2650,12 @@ def kiosk_home(request, kiosk_mode="private"):
         if active_family_member is not None and request.POST.get("action") in GUARDIAN_ONLY_KIOSK_ACTIONS:
             return HttpResponseForbidden("Nur Hauptteilnehmer dürfen Familienmitglieder verwalten.")
         if request.POST.get("action") == "quick":
-            quick_form = QuickBookingForm(request.POST, participant=participant, prefix="quick")
+            quick_form = QuickBookingForm(
+                request.POST,
+                participant=participant,
+                target_groups=quick_booking_target_groups,
+                prefix="quick",
+            )
             if quick_form.is_valid():
                 target_ids = list(dict.fromkeys(request.POST.getlist("quick-target")))
                 targets_by_token = _target_lookup(meal_targets)
@@ -2673,6 +2707,7 @@ def kiosk_home(request, kiosk_mode="private"):
                 confirmation_requested = request.POST.get("quick-confirmed") == "1"
                 requires_confirmation = len(resolved_bookings) > 1 or confirmation_requested
                 confirmation_matches = False
+                confirmation_nonce = None
                 if not quick_form.errors and requires_confirmation:
                     quantity = quick_form.cleaned_data["quantity"]
                     confirmation_items = [
@@ -2693,10 +2728,12 @@ def kiosk_home(request, kiosk_mode="private"):
                         target_ids=target_ids,
                         resolved_bookings=resolved_bookings,
                     )
-                    confirmation_matches = confirmation_requested and _matches_kiosk_quick_confirmation(
-                        request.POST.get("quick-confirmation-token", ""),
-                        confirmation_payload,
-                    )
+                    if confirmation_requested:
+                        confirmation_nonce = _kiosk_quick_confirmation_nonce(
+                            request.POST.get("quick-confirmation-token", ""),
+                            confirmation_payload,
+                        )
+                        confirmation_matches = confirmation_nonce is not None
                     if not confirmation_matches:
                         quick_confirmation = {
                             "price_rule_id": rule.pk,
@@ -2711,53 +2748,74 @@ def kiosk_home(request, kiosk_mode="private"):
                             "changed": confirmation_requested,
                         }
                 if not quick_form.errors and (not requires_confirmation or confirmation_matches):
-                    with transaction.atomic():
-                        for target, charge_participant, target_family_member, effective_rule in resolved_bookings:
-                            booking_link = None
-                            if charge_participant.pk != participant.pk:
-                                booking_link = _accepted_booking_link_between(
-                                    participant,
-                                    charge_participant,
-                                    for_update=True,
-                                )
-                                if booking_link is None:
-                                    raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
-                            charge_desc = f"{effective_rule.name} (Kiosk)"
-                            if target != participant:
-                                charge_desc = f"{effective_rule.name} (Kiosk) für {target.full_name}"
+                    if (
+                        confirmation_nonce is not None
+                        and Charge.objects.filter(kiosk_confirmation_nonce=confirmation_nonce).exists()
+                    ):
+                        messages.info(request, "Diese Bestätigung wurde bereits verarbeitet.")
+                        return redirect(_kiosk_route(kiosk_mode, "home"))
+                    try:
+                        with transaction.atomic():
+                            for booking_index, (
+                                target,
+                                charge_participant,
+                                target_family_member,
+                                effective_rule,
+                            ) in enumerate(resolved_bookings):
+                                booking_link = None
+                                if charge_participant.pk != participant.pk:
+                                    booking_link = _accepted_booking_link_between(
+                                        participant,
+                                        charge_participant,
+                                        for_update=True,
+                                    )
+                                    if booking_link is None:
+                                        raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
+                                charge_desc = f"{effective_rule.name} (Kiosk)"
+                                if target != participant:
+                                    charge_desc = f"{effective_rule.name} (Kiosk) für {target.full_name}"
 
-                            charge = Charge(
-                                participant=charge_participant,
-                                kind=(
-                                    Charge.Kind.DRINK
-                                    if effective_rule.kind == PriceRule.Kind.DRINK
-                                    else Charge.Kind.FOOD
-                                ),
-                                description=charge_desc,
-                                quantity=quick_form.cleaned_data["quantity"],
-                                unit_price=effective_rule.unit_price,
-                                foerdersatz=effective_rule.foerdersatz,
-                                occurred_on=occurred_on,
-                                kiosk_booked_by=participant,
-                            )
-                            charge.save()
-                            if booking_link is not None:
-                                create_kiosk_action_audit_log(
-                                    camp=participant.camp,
-                                    actor_participant=participant,
-                                    actor_family_member=active_family_member,
-                                    target_participant=charge_participant,
-                                    target_family_member=target_family_member,
-                                    booking_link=booking_link,
-                                    charge=charge,
-                                    action=KioskActionAuditLog.Action.QUICK_BOOKED,
-                                    description=f"{charge.booking_reference}: Schnellbuchung erstellt.",
-                                    before={},
-                                    after=kiosk_charge_audit_snapshot(charge),
+                                charge = Charge(
+                                    participant=charge_participant,
+                                    kind=(
+                                        Charge.Kind.DRINK
+                                        if effective_rule.kind == PriceRule.Kind.DRINK
+                                        else Charge.Kind.FOOD
+                                    ),
+                                    description=charge_desc,
+                                    quantity=quick_form.cleaned_data["quantity"],
+                                    unit_price=effective_rule.unit_price,
+                                    foerdersatz=effective_rule.foerdersatz,
+                                    occurred_on=occurred_on,
+                                    kiosk_booked_by=participant,
+                                    kiosk_confirmation_nonce=(confirmation_nonce if booking_index == 0 else None),
                                 )
-                            transaction.on_commit(
-                                partial(_notify_linked_booking_by_id, charge.pk, participant.pk, cancelled=False)
-                            )
+                                charge.save()
+                                if booking_link is not None:
+                                    create_kiosk_action_audit_log(
+                                        camp=participant.camp,
+                                        actor_participant=participant,
+                                        actor_family_member=active_family_member,
+                                        target_participant=charge_participant,
+                                        target_family_member=target_family_member,
+                                        booking_link=booking_link,
+                                        charge=charge,
+                                        action=KioskActionAuditLog.Action.QUICK_BOOKED,
+                                        description=f"{charge.booking_reference}: Schnellbuchung erstellt.",
+                                        before={},
+                                        after=kiosk_charge_audit_snapshot(charge),
+                                    )
+                                transaction.on_commit(
+                                    partial(_notify_linked_booking_by_id, charge.pk, participant.pk, cancelled=False)
+                                )
+                    except IntegrityError:
+                        if (
+                            confirmation_nonce is None
+                            or not Charge.objects.filter(kiosk_confirmation_nonce=confirmation_nonce).exists()
+                        ):
+                            raise
+                        messages.info(request, "Diese Bestätigung wurde bereits verarbeitet.")
+                        return redirect(_kiosk_route(kiosk_mode, "home"))
                     messages.success(request, f"{rule.name} gebucht.")
                     return redirect(_kiosk_route(kiosk_mode, "home"))
         elif request.POST.get("action") == "quick_cancel":
@@ -2768,6 +2826,11 @@ def kiosk_home(request, kiosk_mode="private"):
             with transaction.atomic():
                 charge = (
                     Charge.objects.select_for_update()
+                    .annotate(
+                        has_meal_signup=Exists(
+                            MealSignup.objects.filter(charge_id=OuterRef("pk")),
+                        )
+                    )
                     .select_related("participant")
                     .filter(
                         Q(participant=participant)
@@ -2776,6 +2839,7 @@ def kiosk_home(request, kiosk_mode="private"):
                         pk=charge_id,
                         kind__in=[Charge.Kind.DRINK, Charge.Kind.FOOD],
                         deleted_at__isnull=True,
+                        has_meal_signup=False,
                     )
                     .first()
                 )
@@ -3000,12 +3064,18 @@ def kiosk_home(request, kiosk_mode="private"):
             return redirect(_kiosk_route(kiosk_mode, "home"))
 
     recent_quick_charges = list(
-        Charge.objects.select_related("participant", "kiosk_booked_by")
+        Charge.objects.annotate(
+            has_meal_signup=Exists(
+                MealSignup.objects.filter(charge_id=OuterRef("pk")),
+            )
+        )
+        .select_related("participant", "kiosk_booked_by")
         .filter(
             Q(participant=participant) | Q(kiosk_booked_by=participant) | Q(participant_id__in=linked_participant_ids),
             kind__in=[Charge.Kind.DRINK, Charge.Kind.FOOD],
             deleted_at__isnull=True,
             kiosk_booked_by__isnull=False,
+            has_meal_signup=False,
         )
         .distinct()
         .order_by("-created_at")[:8]

@@ -34,7 +34,14 @@
   und verlangt eine ausdrückliche kostenpflichtige Bestätigung. Ein
   zeitlich begrenzter signierter Token bindet diese Bestätigung an den exakt
   gezeigten Buchungssatz; geänderte Ziele oder Preise erzwingen eine neue
-  Übersicht.
+  Übersicht. Ein eindeutiger, atomar mit der ersten Charge gespeicherter
+  Nonce verhindert doppelte Buchungen durch Doppelklicks oder Replay.
+- Bietet Schnellbuchungsartikel für alle tatsächlich verfügbaren
+  Zielgruppen an und prüft ihre Anwendbarkeit weiterhin für jede ausgewählte
+  Person separat.
+- Schließt Charges regulärer Kalender-Essensanmeldungen aus der
+  Schnellstornierung aus, damit Anmeldung und Abrechnung nicht auseinander
+  laufen.
 - Lässt PIN-, Sicherheits-, Identitäts- und Administrationsfunktionen
   ausdrücklich außerhalb der Partner-Vollmacht.
 

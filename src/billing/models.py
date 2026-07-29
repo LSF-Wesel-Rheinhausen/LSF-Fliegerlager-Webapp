@@ -740,6 +740,13 @@ class Charge(TimeStampedModel):
         related_name="kiosk_created_charges",
         help_text="Teilnehmer, der diese Kiosk-Schnellbuchung ausgelöst hat.",
     )
+    kiosk_confirmation_nonce = models.UUIDField(
+        null=True,
+        blank=True,
+        unique=True,
+        editable=False,
+        help_text="Einmaliger Marker der kostenpflichtig bestätigten Kiosk-Mehrfachbuchung.",
+    )
 
     class Meta:
         ordering = ["participant", "kind", "description"]

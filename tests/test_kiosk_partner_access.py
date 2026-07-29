@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -924,6 +924,56 @@ def test_quick_food_booking_resolves_the_selected_partner_child_price(kiosk_clie
 
 
 @pytest.mark.django_db
+def test_adult_can_select_child_only_drink_for_authorized_partner_child(kiosk_client):
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp, is_child=False, is_companion=False)
+    partner = ParticipantFactory(camp=camp)
+    partner_child = ParticipantFamilyMember.objects.create(
+        guardian=partner,
+        first_name="Kind",
+        last_name="Hopper",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    child_rule = PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.DRINK,
+        name="Kinder-Apfelsaft",
+        unit_price=Decimal("1.00"),
+        applies_to_children=True,
+        applies_to_adults=False,
+        applies_to_companions=False,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    page_response = kiosk_client.get(reverse("kiosk-home"))
+
+    assert child_rule in list(page_response.context["drink_rules"])
+
+    booking_response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "quick",
+            "quick-price_rule": child_rule.pk,
+            "quick-quantity": 1,
+            "quick-target": [f"family-{partner_child.pk}"],
+        },
+    )
+
+    assert booking_response.status_code == 302
+    charge = Charge.objects.get()
+    assert charge.participant == partner
+    assert charge.unit_price == Decimal("1.00")
+    assert partner_child.full_name in charge.description
+
+
+@pytest.mark.django_db
 def test_multi_account_quick_booking_requires_exact_cost_confirmation(kiosk_client):
     camp = CampFactory(is_active=True)
     participant = ParticipantFactory(camp=camp, is_child=False, is_companion=False)
@@ -1065,6 +1115,71 @@ def test_multi_account_quick_booking_requires_exact_cost_confirmation(kiosk_clie
         (partner, Decimal("2.00"), Decimal("2.00")),
         (participant, Decimal("2.00"), Decimal("5.00")),
     ]
+    assert sum(charge.kiosk_confirmation_nonce is not None for charge in charges) == 1
+
+    replay_response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            **request_data,
+            "quick-confirmed": "1",
+            "quick-confirmation-token": updated_confirmation["token"],
+        },
+        follow=True,
+    )
+
+    assert replay_response.status_code == 200
+    assert Charge.objects.count() == 2
+    assert "Diese Bestätigung wurde bereits verarbeitet." in replay_response.content.decode("utf-8")
+
+
+@pytest.mark.django_db
+def test_partner_meal_signup_charge_is_excluded_from_quick_cancellation(kiosk_client):
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp)
+    partner = ParticipantFactory(camp=camp)
+    ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    charge = Charge.objects.create(
+        participant=partner,
+        kiosk_booked_by=partner,
+        kind=Charge.Kind.FOOD,
+        description="Abendessen",
+        quantity=Decimal("1.00"),
+        unit_price=Decimal("8.00"),
+        occurred_on=timezone.localdate() + timedelta(days=1),
+    )
+    signup = MealSignup.objects.create(
+        participant=partner,
+        meal_date=charge.occurred_on,
+        meal=MealSignup.Meal.DINNER,
+        variant=MealSignup.Variant.NORMAL,
+        status=MealSignup.Status.ACTIVE,
+        charge=charge,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    page_response = kiosk_client.get(reverse("kiosk-home"))
+
+    assert charge.pk not in {item.pk for item in page_response.context["recent_quick_charges"]}
+
+    cancellation_response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "quick_cancel",
+            "charge_id": charge.pk,
+        },
+    )
+
+    assert cancellation_response.status_code == 200
+    charge.refresh_from_db()
+    signup.refresh_from_db()
+    assert charge.deleted_at is None
+    assert signup.status == MealSignup.Status.ACTIVE
 
 
 @pytest.mark.django_db

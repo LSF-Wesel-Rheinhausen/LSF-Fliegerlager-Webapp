@@ -996,6 +996,7 @@ class QuickBookingForm(forms.Form):
     def __init__(self, *args, **kwargs):
         camp = kwargs.pop("camp", None)
         participant = kwargs.pop("participant", None)
+        target_groups = kwargs.pop("target_groups", None)
         super().__init__(*args, **kwargs)
         if participant is not None:
             camp = participant.camp
@@ -1009,7 +1010,16 @@ class QuickBookingForm(forms.Form):
                 is_archived=False,
                 meal_date__isnull=True,
             ).order_by("name")
-            if participant is not None:
+            if target_groups is not None:
+                applicability = Q(pk__in=[])
+                if "child" in target_groups:
+                    applicability |= Q(applies_to_children=True)
+                if "adult" in target_groups:
+                    applicability |= Q(applies_to_adults=True)
+                if "companion" in target_groups:
+                    applicability |= Q(applies_to_companions=True)
+                queryset = queryset.filter(applicability)
+            elif participant is not None:
                 if participant.is_child:
                     queryset = queryset.filter(applies_to_children=True)
                 elif participant.is_companion:
