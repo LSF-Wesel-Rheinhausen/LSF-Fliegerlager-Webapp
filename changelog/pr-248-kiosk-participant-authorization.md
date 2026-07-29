@@ -51,6 +51,8 @@
   laufen.
 - Lässt PIN-, Sicherheits-, Identitäts- und Administrationsfunktionen
   ausdrücklich außerhalb der Partner-Vollmacht.
+- Zeigt den vollständigen Umfang und die Ausschlüsse der Partner-Vollmacht
+  unmittelbar vor jeder Annahme, auch auf der Kiosk-Startseite.
 
 ## Geänderte Dateien
 

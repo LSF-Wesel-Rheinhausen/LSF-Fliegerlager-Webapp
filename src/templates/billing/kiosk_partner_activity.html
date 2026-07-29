@@ -21,12 +21,7 @@
           <h2>Was eine angenommene Freigabe erlaubt</h2>
         </div>
       </div>
-      <ul>
-        <li>Abrechnung einschließlich Familienpositionen und PDF einsehen</li>
-        <li>Getränke und Essen für das Partnerkonto buchen oder stornieren</li>
-        <li>Anreise, Abreise und Übernachtungen des Partnerhaushalts verwalten</li>
-      </ul>
-      <p class="hint">PINs, Stammdaten, weitere Partnerfreigaben und Adminfunktionen bleiben ausgeschlossen.</p>
+      {% include "billing/includes/kiosk_partner_authorization_scope.html" %}
     </section>
 
     {% if participant.camp.show_kiosk_invoices %}

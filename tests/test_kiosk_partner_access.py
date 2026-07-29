@@ -185,6 +185,31 @@ def test_kiosk_home_links_to_partner_activity_page(kiosk_client):
 
 
 @pytest.mark.django_db
+def test_kiosk_home_discloses_full_partner_scope_before_invitation_acceptance(kiosk_client):
+    camp = CampFactory(is_active=True)
+    inviter = ParticipantFactory(camp=camp, first_name="Grace", last_name="Hopper")
+    invitee = ParticipantFactory(camp=camp)
+    ParticipantBookingLink.objects.create(inviter=inviter, invitee=invitee)
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = invitee.pk
+    session.save()
+
+    response = kiosk_client.get(reverse("kiosk-home"))
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    accept_button_index = content.index('value="booking_link_accept"')
+    disclosed_scope = (
+        "Abrechnung einschließlich Familienpositionen und PDF einsehen",
+        "Getränke und Essen für das Partnerkonto buchen oder stornieren",
+        "Anreise, Abreise und Übernachtungen des Partnerhaushalts verwalten",
+        "PINs, Stammdaten, weitere Partnerfreigaben und Adminfunktionen bleiben ausgeschlossen.",
+    )
+    assert "Grace Hopper" in content
+    assert all(content.index(scope_item) < accept_button_index for scope_item in disclosed_scope)
+
+
+@pytest.mark.django_db
 def test_quick_drink_dialog_lists_the_accepted_partner_household(kiosk_client):
     camp = CampFactory(is_active=True)
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
