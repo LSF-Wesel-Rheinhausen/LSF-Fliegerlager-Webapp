@@ -5,24 +5,30 @@ on:
     branches:
       - main
     paths-ignore:
-      - 'graphify-out/**'
-      - '**.md'
-      - 'docs/**'
+      - "graphify-out/**"
+      - "**.md"
+      - "docs/**"
   pull_request:
     paths-ignore:
-      - 'graphify-out/**'
-      - '**.md'
-      - 'docs/**'
+      - "graphify-out/**"
+      - "**.md"
+      - "docs/**"
   schedule:
-    - cron: '0 4 * * 1'
+    - cron: "0 4 * * 1"
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   trivy:
     name: Trivy vulnerability scanner
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -30,9 +36,9 @@ jobs:
       - name: Run Trivy vulnerability scanner in repo mode
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          format: 'table'
-          exit-code: '1'
+          scan-type: "fs"
+          scan-ref: "."
+          format: "table"
+          exit-code: "1"
           ignore-unfixed: true
-          severity: 'CRITICAL,HIGH'
+          severity: "CRITICAL,HIGH"

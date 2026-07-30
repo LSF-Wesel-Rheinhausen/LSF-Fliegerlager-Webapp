@@ -371,13 +371,13 @@ test("Admin creates and edits a manual booking and sees the change log", async (
     has: page.getByRole("heading", { name: "Buchungen", exact: true }),
   });
   const bookingRow = bookings.getByRole("row").filter({
-    has: page.getByRole("cell", { name: "Cola", exact: true }),
+    has: page.locator("td").filter({ hasText: /^Cola$/ }),
   });
-  await expect(bookingRow.getByRole("cell", { name: /^B#\d{5}$/ })).toBeVisible();
-  await expect(bookingRow.getByRole("cell", { name: "Getränke", exact: true })).toBeVisible();
-  await expect(bookingRow.getByRole("cell", { name: "2,00", exact: true })).toBeVisible();
-  await expect(bookingRow.getByRole("cell", { name: "2,50 €", exact: true })).toBeVisible();
-  await expect(bookingRow.getByRole("cell", { name: "5,00 €", exact: true })).toBeVisible();
+  await expect(bookingRow.locator("td").filter({ hasText: /^B#\d{5}$/ })).toHaveText(/^B#\d{5}$/);
+  await expect(bookingRow.locator("td").filter({ hasText: /^Getränke$/ })).toHaveText("Getränke");
+  await expect(bookingRow.locator("td").filter({ hasText: /^2,00$/ })).toHaveText("2,00");
+  await expect(bookingRow.locator("td").filter({ hasText: /^2,50 €$/ })).toHaveText("2,50 €");
+  await expect(bookingRow.locator("td").filter({ hasText: /^5,00 €$/ })).toHaveText("5,00 €");
   await bookingRow.getByRole("link", { name: "Bearbeiten", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Buchung bearbeiten" })).toBeVisible();
   await page.getByLabel("Beschreibung").fill("Cola korrigiert");
@@ -387,8 +387,13 @@ test("Admin creates and edits a manual booking and sees the change log", async (
 
   await expect(page.getByRole("heading", { name: "Ada Lovelace" })).toBeVisible();
   await expect(page.getByText("Buchung wurde gespeichert und protokolliert.")).toBeVisible();
-  await expect(page.getByRole("cell", { name: "Cola korrigiert" }).first()).toBeVisible();
-  await expect(page.getByRole("cell", { name: "7,50 €" })).toBeVisible();
+  const updatedBookingRow = bookings.getByRole("row").filter({
+    has: page.locator("td").filter({ hasText: /^Cola korrigiert$/ }),
+  });
+  await expect(updatedBookingRow.locator("td").filter({ hasText: /^Cola korrigiert$/ })).toHaveText(
+    "Cola korrigiert",
+  );
+  await expect(updatedBookingRow.locator("td").filter({ hasText: /^7,50 €$/ })).toHaveText("7,50 €");
   await expect(page.getByRole("heading", { name: "Änderungsprotokoll" })).toBeVisible();
   await expect(page.getByText("Cola · 2.00 x 2.50")).toBeVisible();
   await expect(page.getByText("Cola korrigiert · 3.00 x 2.50")).toBeVisible();

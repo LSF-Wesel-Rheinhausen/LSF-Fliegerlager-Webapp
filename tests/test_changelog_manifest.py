@@ -30,4 +30,4 @@ def test_docker_workflow_uses_first_parent_version():
 
     assert "uses: actions/checkout@v7\n        with:\n          fetch-depth: 0" in workflow
     assert 'echo "version=$(git rev-list --first-parent --count HEAD)"' in workflow
-    assert workflow.count("APP_VERSION=${{ steps.metadata.outputs.version }}") == 2
+    assert workflow.count("APP_VERSION=${{ steps.metadata.outputs.version }}") == 3
