@@ -329,6 +329,51 @@ def test_pending_partner_invitation_cannot_be_accepted_after_inviter_is_archived
 
 
 @pytest.mark.django_db
+def test_pending_partner_invitation_cannot_be_accepted_after_invitee_is_archived_before_pair_lock(
+    kiosk_client,
+    monkeypatch,
+):
+    camp = CampFactory(is_active=True)
+    inviter = ParticipantFactory(camp=camp)
+    invitee = ParticipantFactory(camp=camp)
+    invitation = ParticipantBookingLink.objects.create(inviter=inviter, invitee=invitee)
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = invitee.pk
+    session.save()
+    original_fetch_all = QuerySet._fetch_all
+    invitee_archived = False
+
+    def archive_invitee_before_pair_lock(queryset):
+        nonlocal invitee_archived
+        was_unfetched = queryset._result_cache is None
+        if (
+            was_unfetched
+            and not invitee_archived
+            and queryset.query.select_for_update
+            and queryset.model is Participant
+        ):
+            invitee_archived = True
+            Participant.objects.filter(pk=invitee.pk).update(archived_at=timezone.now())
+        original_fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", archive_invitee_before_pair_lock)
+
+    response = kiosk_client.post(
+        reverse("kiosk-partner-activity"),
+        {
+            "action": "booking_link_accept",
+            "booking_link_id": invitation.pk,
+        },
+    )
+
+    invitation.refresh_from_db()
+    assert invitee_archived is True
+    assert response.status_code == 200
+    assert invitation.status == ParticipantBookingLink.Status.PENDING
+    assert not KioskActionAuditLog.objects.exists()
+
+
+@pytest.mark.django_db
 def test_partner_invitation_rechecks_duplicates_after_locking_the_pair(kiosk_client, monkeypatch):
     camp = CampFactory(is_active=True)
     invitee = ParticipantFactory(camp=camp)
@@ -634,6 +679,68 @@ def test_linked_household_checkin_records_actual_actor_and_before_after(kiosk_cl
 
 
 @pytest.mark.django_db
+def test_checkin_rejects_family_member_deactivated_before_dependency_lock(kiosk_client, monkeypatch):
+    monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 7, 5))
+    camp = CampFactory(
+        is_active=True,
+        starts_on=date(2026, 7, 1),
+        ends_on=date(2026, 7, 14),
+    )
+    participant = ParticipantFactory(camp=camp)
+    child = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Kind",
+        last_name="Muster",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    page_response = kiosk_client.get(reverse("kiosk-home"))
+    child_token = f"family-{child.pk}"
+    state_token = next(
+        target["state_token"]
+        for target in page_response.context["checkin_participants"]
+        if target["token"] == child_token
+    )
+    original_fetch_all = QuerySet._fetch_all
+    child_deactivated = False
+
+    def deactivate_child_before_family_lock(queryset):
+        nonlocal child_deactivated
+        was_unfetched = queryset._result_cache is None
+        if (
+            was_unfetched
+            and not child_deactivated
+            and queryset.query.select_for_update
+            and queryset.model is ParticipantFamilyMember
+        ):
+            child_deactivated = True
+            ParticipantFamilyMember.objects.filter(pk=child.pk).update(is_active=False)
+        original_fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", deactivate_child_before_family_lock)
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "checkin",
+            "checkin_target": [child_token],
+            f"arrival_date_{child_token}": "2026-07-03",
+            f"departure_date_{child_token}": "2026-07-09",
+            f"checkin_state_{child_token}": state_token,
+        },
+    )
+
+    child.refresh_from_db()
+    assert child_deactivated is True
+    assert response.status_code == 403
+    assert child.arrival_date is None
+    assert child.departure_date is None
+    assert not KioskActionAuditLog.objects.exists()
+
+
+@pytest.mark.django_db
 def test_multi_partner_checkin_locks_authorizations_in_canonical_order(kiosk_client, monkeypatch):
     monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 7, 5))
     camp = CampFactory(
@@ -892,6 +999,134 @@ def test_linked_family_quick_booking_and_cancellation_are_audited(kiosk_client):
 
 
 @pytest.mark.django_db
+def test_partner_cancellation_retains_target_of_own_family_quick_booking(kiosk_client):
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp)
+    partner = ParticipantFactory(camp=camp)
+    child = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Kind",
+        last_name="Muster",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    rule = PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.DRINK,
+        name="Wasser",
+        unit_price=Decimal("1.50"),
+        applies_to_children=True,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    booking_response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "quick",
+            "quick-price_rule": rule.pk,
+            "quick-quantity": 1,
+            "quick-target": [f"family-{child.pk}"],
+        },
+    )
+
+    assert booking_response.status_code == 302
+    charge = Charge.objects.get()
+    created_log = KioskActionAuditLog.objects.get(action=KioskActionAuditLog.Action.QUICK_BOOKED)
+    assert created_log.actor_participant == participant
+    assert created_log.target_participant == participant
+    assert created_log.target_family_member == child
+    assert created_log.booking_link is None
+
+    booking_link = ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = partner.pk
+    session.save()
+
+    cancellation_response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "quick_cancel",
+            "charge_id": charge.pk,
+        },
+    )
+
+    assert cancellation_response.status_code == 302
+    cancelled_log = KioskActionAuditLog.objects.get(action=KioskActionAuditLog.Action.QUICK_CANCELLED)
+    assert cancelled_log.actor_participant == partner
+    assert cancelled_log.target_participant == participant
+    assert cancelled_log.target_family_member == child
+    assert cancelled_log.booking_link == booking_link
+
+
+@pytest.mark.django_db
+def test_quick_booking_rejects_family_role_changed_before_dependency_lock(kiosk_client, monkeypatch):
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp)
+    partner = ParticipantFactory(camp=camp)
+    partner_child = ParticipantFamilyMember.objects.create(
+        guardian=partner,
+        first_name="Kind",
+        last_name="Partner",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    rule = PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.DRINK,
+        unit_price=Decimal("1.50"),
+        applies_to_children=True,
+        applies_to_adults=False,
+        applies_to_companions=False,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    original_fetch_all = QuerySet._fetch_all
+    role_changed = False
+
+    def change_role_before_family_lock(queryset):
+        nonlocal role_changed
+        was_unfetched = queryset._result_cache is None
+        if (
+            was_unfetched
+            and not role_changed
+            and queryset.query.select_for_update
+            and queryset.model is ParticipantFamilyMember
+        ):
+            role_changed = True
+            ParticipantFamilyMember.objects.filter(pk=partner_child.pk).update(
+                role=ParticipantFamilyMember.Role.COMPANION
+            )
+        original_fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", change_role_before_family_lock)
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "quick",
+            "quick-price_rule": rule.pk,
+            "quick-quantity": 1,
+            "quick-target": [f"family-{partner_child.pk}"],
+        },
+    )
+
+    assert role_changed is True
+    assert response.status_code == 403
+    assert not Charge.objects.exists()
+    assert not KioskActionAuditLog.objects.exists()
+
+
+@pytest.mark.django_db
 def test_partner_can_cancel_partners_own_recent_quick_booking(
     kiosk_client,
     django_capture_on_commit_callbacks,
@@ -1035,6 +1270,80 @@ def test_linked_family_meal_booking_and_retraction_are_audited(kiosk_client, mon
     assert partner_child.full_name not in retracted_log.description
     assert partner_child.full_name not in str(retracted_log.before)
     assert partner_child.full_name not in str(retracted_log.after)
+
+
+@pytest.mark.django_db
+def test_meal_booking_rejects_family_guardian_changed_before_dependency_lock(kiosk_client, monkeypatch):
+    fixed_now = timezone.make_aware(datetime(2026, 6, 30, 10, 0))
+    monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
+    camp = CampFactory(
+        is_active=True,
+        starts_on=date(2026, 6, 30),
+        ends_on=date(2026, 7, 14),
+    )
+    participant = ParticipantFactory(camp=camp)
+    partner = ParticipantFactory(camp=camp)
+    replacement_guardian = ParticipantFactory(camp=camp)
+    partner_child = ParticipantFamilyMember.objects.create(
+        guardian=partner,
+        first_name="Kind",
+        last_name="Partner",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        is_default=True,
+        applies_to_children=True,
+        applies_to_adults=False,
+        name="Abendessen Kind",
+        unit_price=Decimal("5.00"),
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    original_fetch_all = QuerySet._fetch_all
+    guardian_changed = False
+
+    def change_guardian_before_family_lock(queryset):
+        nonlocal guardian_changed
+        was_unfetched = queryset._result_cache is None
+        if (
+            was_unfetched
+            and not guardian_changed
+            and queryset.query.select_for_update
+            and queryset.model is ParticipantFamilyMember
+        ):
+            guardian_changed = True
+            ParticipantFamilyMember.objects.filter(pk=partner_child.pk).update(guardian=replacement_guardian)
+        original_fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", change_guardian_before_family_lock)
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-meal_dates": "2026-07-02",
+            "meal-meal": MealSignup.Meal.DINNER,
+            "meal-variant": MealSignup.Variant.NORMAL,
+            "meal-target": [f"family-{partner_child.pk}"],
+            f"meal-variant-family-{partner_child.pk}": MealSignup.Variant.NORMAL_CHILD,
+        },
+    )
+
+    assert guardian_changed is True
+    assert response.status_code == 403
+    assert not MealSignup.objects.exists()
+    assert not Charge.objects.exists()
+    assert not KioskActionAuditLog.objects.exists()
 
 
 @pytest.mark.django_db

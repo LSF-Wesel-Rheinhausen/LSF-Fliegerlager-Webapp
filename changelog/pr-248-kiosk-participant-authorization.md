@@ -49,7 +49,13 @@
   Familienzeilen und danach sämtliche benötigten Vollmachten jeweils in
   stabiler Datenbankreihenfolge. Diese gesperrten Zeilen werden für den
   gesamten Schreibvorgang wiederverwendet, sodass auch parallele Widerrufe
-  keinen Fremdschlüssel-/Vollmachts-Lockzyklus bilden.
+  keinen Fremdschlüssel-/Vollmachts-Lockzyklus bilden. Nach dem Lock werden
+  Aktivstatus, Hauptkonto und preisrelevante Rolle jedes Familienmitglieds
+  erneut geprüft; auch die annehmende Seite einer Einladung muss dann noch
+  aktiv sein.
+- Hält das konkrete Familienziel auch bei Eigenhaushalts-Schnellbuchungen im
+  Audit fest, damit ein später verknüpfter Partner bei einer Stornierung
+  weiterhin die tatsächlich betroffene Person protokolliert.
 - Bindet jede Check-in-Zeile an ihren signierten Ausgangszustand, schreibt nur
   tatsächlich geänderte Zeilen und weist konkurrierend veränderte Daten ohne
   Teilaktualisierung zurück.
