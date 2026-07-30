@@ -19,6 +19,9 @@
   Lagers, solange dessen Partner-Auditverlauf besteht.
 - Lädt Partnerhaushalte einmalig für Buchungs- und Check-in-Ziele und weist
   offene Einladungen archivierter Teilnehmer ab.
+- Serialisiert parallele Einladungen für dasselbe Teilnehmerpaar und räumt
+  verbliebene offene oder angenommene Duplikate bei Annahme und Widerruf auf,
+  sodass ein alter Link die Vollmacht nicht später wiederherstellen kann.
 - Widerruft bereits vor dieser Änderung offene oder angenommene
   Mitbuchungslinks, damit
   beide Seiten dem erweiterten Vollmachtsumfang durch neue Einladung und
@@ -41,6 +44,10 @@
   erneut verwendet werden kann. Buchungs-Batches sperren alle betroffenen
   Essensanmeldungen in stabiler Reihenfolge, bevor sie Partner-Vollmachten
   sperren, damit parallele Gegenoperationen keinen Lock-Zyklus bilden.
+- Sperrt bei Essens-, Schnellbuchungs- und Check-in-Sammeländerungen für
+  mehrere Partnerkonten sämtliche benötigten Vollmachten einmalig in stabiler
+  Datenbankreihenfolge und verwendet diese gesperrten Zeilen für den gesamten
+  Schreibvorgang.
 - Bindet jede Check-in-Zeile an ihren signierten Ausgangszustand, schreibt nur
   tatsächlich geänderte Zeilen und weist konkurrierend veränderte Daten ohne
   Teilaktualisierung zurück.

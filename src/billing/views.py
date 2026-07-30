@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 import uuid
+from collections.abc import Iterable
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from functools import partial
@@ -1816,8 +1817,51 @@ def _accepted_booking_link_between(
         invitee__archived_at__isnull=True,
     )
     if for_update:
-        links = links.select_for_update()
-    return links.first()
+        links = links.select_for_update(of=("self",))
+    return links.order_by("pk").first()
+
+
+def _lock_booking_link_participant_pair(participant: Participant, target: Participant) -> bool:
+    """Lock an unordered participant pair canonically before changing its links."""
+    participant_ids = sorted({participant.pk, target.pk})
+    if len(participant_ids) != 2:
+        return False
+    locked_participants = list(
+        Participant.objects.select_for_update(of=("self",)).only("pk").filter(pk__in=participant_ids).order_by("pk")
+    )
+    return len(locked_participants) == 2
+
+
+def _lock_accepted_booking_links(
+    participant: Participant,
+    targets: Iterable[Participant],
+) -> dict[int, ParticipantBookingLink]:
+    """Lock every required partner authorization in stable database order."""
+    target_ids = sorted({target.pk for target in targets if target.pk != participant.pk})
+    if not target_ids:
+        return {}
+    booking_links = list(
+        ParticipantBookingLink.objects.select_for_update(of=("self",))
+        .select_related("inviter", "invitee")
+        .filter(
+            Q(inviter=participant, invitee_id__in=target_ids) | Q(invitee=participant, inviter_id__in=target_ids),
+            status=ParticipantBookingLink.Status.ACCEPTED,
+            inviter__camp_id=participant.camp_id,
+            invitee__camp_id=participant.camp_id,
+            inviter__camp__is_active=True,
+            invitee__camp__is_active=True,
+            inviter__archived_at__isnull=True,
+            invitee__archived_at__isnull=True,
+        )
+        .order_by("pk")
+    )
+    booking_links_by_target_id: dict[int, ParticipantBookingLink] = {}
+    for booking_link in booking_links:
+        target_id = booking_link.invitee_id if booking_link.inviter_id == participant.pk else booking_link.inviter_id
+        booking_links_by_target_id.setdefault(target_id, booking_link)
+    if set(booking_links_by_target_id) != set(target_ids):
+        raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
+    return booking_links_by_target_id
 
 
 def _linked_booking_participants(participant):
@@ -1895,26 +1939,49 @@ def kiosk_partner_activity(request, kiosk_mode="private"):
             booking_link_form = KioskBookingLinkInviteForm(request.POST, inviter=participant, prefix="link")
             if booking_link_form.is_valid():
                 invitee = booking_link_form.cleaned_data["participant"]
+                booking_link = None
                 with transaction.atomic():
-                    booking_link = ParticipantBookingLink.objects.create(
-                        inviter=participant,
-                        invitee=invitee,
+                    pair_locked = _lock_booking_link_participant_pair(participant, invitee)
+                    pair_filter = Q(inviter=participant, invitee=invitee) | Q(
+                        inviter=invitee,
+                        invitee=participant,
                     )
-                    create_kiosk_action_audit_log(
-                        camp=participant.camp,
-                        actor_participant=participant,
-                        target_participant=invitee,
-                        booking_link=booking_link,
-                        action=KioskActionAuditLog.Action.LINK_INVITED,
-                        description="Partner-Vollmacht angefragt.",
-                        before={},
-                        after={"status": booking_link.status},
+                    active_link_exists = (
+                        pair_locked
+                        and ParticipantBookingLink.objects.filter(
+                            pair_filter,
+                            status__in=[
+                                ParticipantBookingLink.Status.PENDING,
+                                ParticipantBookingLink.Status.ACCEPTED,
+                            ],
+                        ).exists()
                     )
-                    transaction.on_commit(
-                        partial(_notify_booking_link_by_id, booking_link.pk, "invited", participant.pk)
-                    )
-                messages.success(request, "Einladung zur Partner-Vollmacht wurde gesendet.")
-                return redirect(_kiosk_route(kiosk_mode, "partner-activity"))
+                    if not pair_locked or active_link_exists:
+                        booking_link_form.add_error(
+                            "participant",
+                            "Zwischen diesen Teilnehmern besteht bereits eine offene Verknüpfung.",
+                        )
+                    else:
+                        booking_link = ParticipantBookingLink.objects.create(
+                            inviter=participant,
+                            invitee=invitee,
+                        )
+                        create_kiosk_action_audit_log(
+                            camp=participant.camp,
+                            actor_participant=participant,
+                            target_participant=invitee,
+                            booking_link=booking_link,
+                            action=KioskActionAuditLog.Action.LINK_INVITED,
+                            description="Partner-Vollmacht angefragt.",
+                            before={},
+                            after={"status": booking_link.status},
+                        )
+                        transaction.on_commit(
+                            partial(_notify_booking_link_by_id, booking_link.pk, "invited", participant.pk)
+                        )
+                if booking_link is not None:
+                    messages.success(request, "Einladung zur Partner-Vollmacht wurde gesendet.")
+                    return redirect(_kiosk_route(kiosk_mode, "partner-activity"))
         elif action in {"booking_link_accept", "booking_link_decline", "booking_link_revoke"}:
             link_id = _positive_int_or_none(request.POST.get("booking_link_id"))
             new_status_by_action = {
@@ -1937,65 +2004,100 @@ def kiosk_partner_activity(request, kiosk_mode="private"):
                 "booking_link_decline": "Partner-Vollmacht wurde abgelehnt.",
                 "booking_link_revoke": "Partner-Vollmacht wurde widerrufen.",
             }
-            with transaction.atomic():
-                booking_links = ParticipantBookingLink.objects.select_for_update().select_related(
-                    "inviter",
-                    "invitee",
-                )
-                if action == "booking_link_revoke":
-                    booking_link = booking_links.filter(
-                        Q(inviter=participant, invitee__camp=participant.camp)
-                        | Q(invitee=participant, inviter__camp=participant.camp),
-                        pk=link_id,
-                        status=ParticipantBookingLink.Status.ACCEPTED,
-                    ).first()
-                else:
-                    booking_link = booking_links.filter(
-                        invitee=participant,
-                        inviter__camp=participant.camp,
-                        inviter__camp__is_active=True,
-                        inviter__archived_at__isnull=True,
-                        pk=link_id,
-                        status=ParticipantBookingLink.Status.PENDING,
-                    ).first()
-                if booking_link is not None:
-                    before_status = booking_link.status
-                    other_participant = (
-                        booking_link.invitee if booking_link.inviter_id == participant.pk else booking_link.inviter
-                    )
-                    if action == "booking_link_revoke":
-                        pair_filter = Q(inviter=participant, invitee=other_participant) | Q(
-                            inviter=other_participant,
-                            invitee=participant,
+            booking_link = None
+            candidate_link = (
+                ParticipantBookingLink.objects.select_related("inviter", "invitee").filter(pk=link_id).first()
+                if link_id is not None
+                else None
+            )
+            candidate_other_participant = None
+            if candidate_link is not None:
+                if candidate_link.inviter_id == participant.pk:
+                    candidate_other_participant = candidate_link.invitee
+                elif candidate_link.invitee_id == participant.pk:
+                    candidate_other_participant = candidate_link.inviter
+            if candidate_other_participant is not None and candidate_other_participant.camp_id == participant.camp_id:
+                with transaction.atomic():
+                    if _lock_booking_link_participant_pair(participant, candidate_other_participant):
+                        pair_filter = Q(
+                            inviter_id=participant.pk,
+                            invitee_id=candidate_other_participant.pk,
+                        ) | Q(
+                            inviter_id=candidate_other_participant.pk,
+                            invitee_id=participant.pk,
                         )
-                        for accepted_link in booking_links.filter(
-                            pair_filter,
-                            status=ParticipantBookingLink.Status.ACCEPTED,
-                        ):
-                            accepted_link.status = ParticipantBookingLink.Status.REVOKED
-                            accepted_link.save(update_fields=["status", "updated_at"])
-                    else:
-                        booking_link.status = new_status_by_action[action]
-                        booking_link.save(update_fields=["status", "updated_at"])
-                    booking_link.status = new_status_by_action[action]
-                    create_kiosk_action_audit_log(
-                        camp=participant.camp,
-                        actor_participant=participant,
-                        target_participant=other_participant,
-                        booking_link=booking_link,
-                        action=audit_action_by_action[action],
-                        description=success_message_by_action[action],
-                        before={"status": before_status},
-                        after={"status": booking_link.status},
-                    )
-                    transaction.on_commit(
-                        partial(
-                            _notify_booking_link_by_id,
-                            booking_link.pk,
-                            event_by_action[action],
-                            participant.pk,
+                        active_pair_links = list(
+                            ParticipantBookingLink.objects.select_for_update(of=("self",))
+                            .select_related("inviter", "invitee")
+                            .filter(
+                                pair_filter,
+                                status__in=[
+                                    ParticipantBookingLink.Status.PENDING,
+                                    ParticipantBookingLink.Status.ACCEPTED,
+                                ],
+                            )
+                            .order_by("pk")
                         )
-                    )
+                        selected_link = next(
+                            (pair_link for pair_link in active_pair_links if pair_link.pk == link_id),
+                            None,
+                        )
+                        if selected_link is not None:
+                            selected_other_participant = (
+                                selected_link.invitee
+                                if selected_link.inviter_id == participant.pk
+                                else selected_link.inviter
+                            )
+                            revoke_allowed = (
+                                action == "booking_link_revoke"
+                                and selected_link.status == ParticipantBookingLink.Status.ACCEPTED
+                            )
+                            response_allowed = (
+                                action != "booking_link_revoke"
+                                and selected_link.invitee_id == participant.pk
+                                and selected_link.status == ParticipantBookingLink.Status.PENDING
+                                and selected_link.inviter.camp_id == participant.camp_id
+                                and participant.camp.is_active
+                                and selected_link.inviter.archived_at is None
+                            )
+                            if selected_other_participant.camp_id == participant.camp_id and (
+                                revoke_allowed or response_allowed
+                            ):
+                                booking_link = selected_link
+                                before_status = booking_link.status
+                                for pair_link in active_pair_links:
+                                    next_status = None
+                                    if action == "booking_link_revoke":
+                                        next_status = ParticipantBookingLink.Status.REVOKED
+                                    elif pair_link.pk == booking_link.pk:
+                                        next_status = new_status_by_action[action]
+                                    elif (
+                                        action == "booking_link_accept"
+                                        or pair_link.status == ParticipantBookingLink.Status.PENDING
+                                    ):
+                                        next_status = ParticipantBookingLink.Status.REVOKED
+                                    if next_status is not None and pair_link.status != next_status:
+                                        pair_link.status = next_status
+                                        pair_link.save(update_fields=["status", "updated_at"])
+                                booking_link.status = new_status_by_action[action]
+                                create_kiosk_action_audit_log(
+                                    camp=participant.camp,
+                                    actor_participant=participant,
+                                    target_participant=selected_other_participant,
+                                    booking_link=booking_link,
+                                    action=audit_action_by_action[action],
+                                    description=success_message_by_action[action],
+                                    before={"status": before_status},
+                                    after={"status": booking_link.status},
+                                )
+                                transaction.on_commit(
+                                    partial(
+                                        _notify_booking_link_by_id,
+                                        booking_link.pk,
+                                        event_by_action[action],
+                                        participant.pk,
+                                    )
+                                )
             if booking_link is not None:
                 messages.success(request, success_message_by_action[action])
                 return redirect(_kiosk_route(kiosk_mode, "partner-activity"))
@@ -2261,16 +2363,10 @@ def _update_kiosk_checkin_dates(request, participant, checkin_participants):
             if target_participant.pk != participant.pk:
                 partner_participants[target_participant.pk] = target_participant
 
-        booking_links = {}
-        for partner_id in sorted(partner_participants):
-            booking_link = _accepted_booking_link_between(
-                participant,
-                partner_participants[partner_id],
-                for_update=True,
-            )
-            if booking_link is None:
-                raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
-            booking_links[partner_id] = booking_link
+        booking_links = _lock_accepted_booking_links(
+            participant,
+            partner_participants.values(),
+        )
 
         for update in updates:
             target = update["locked_target"]
@@ -2492,6 +2588,8 @@ def _book_meal_for_target(
     prelocked_signup: MealSignup | None = None,
     signup_lock_acquired: bool = False,
     signup_was_created: bool = False,
+    prelocked_booking_link: ParticipantBookingLink | None = None,
+    booking_link_lock_acquired: bool = False,
 ):
     meal_display = dict(MealSignup.Meal.choices).get(meal, meal)
     target_object = target["object"]
@@ -2516,7 +2614,11 @@ def _book_meal_for_target(
         )
     booking_link = None
     if participant.pk != booked_by.pk:
-        booking_link = _accepted_booking_link_between(booked_by, participant, for_update=True)
+        booking_link = (
+            prelocked_booking_link
+            if booking_link_lock_acquired
+            else _accepted_booking_link_between(booked_by, participant, for_update=True)
+        )
         if booking_link is None:
             raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
     before = (
@@ -3046,6 +3148,11 @@ def kiosk_home(request, kiosk_mode="private"):
                         return redirect(_kiosk_route(kiosk_mode, "home"))
                     try:
                         with transaction.atomic():
+                            booking_participants = [booking[1] for booking in resolved_bookings]
+                            locked_booking_links = _lock_accepted_booking_links(
+                                participant,
+                                booking_participants,
+                            )
                             for booking_index, (
                                 target,
                                 charge_participant,
@@ -3054,11 +3161,7 @@ def kiosk_home(request, kiosk_mode="private"):
                             ) in enumerate(resolved_bookings):
                                 booking_link = None
                                 if charge_participant.pk != participant.pk:
-                                    booking_link = _accepted_booking_link_between(
-                                        participant,
-                                        charge_participant,
-                                        for_update=True,
-                                    )
+                                    booking_link = locked_booking_links.get(charge_participant.pk)
                                     if booking_link is None:
                                         raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
                                 charge_desc = f"{effective_rule.name} (Kiosk)"
@@ -3257,8 +3360,20 @@ def kiosk_home(request, kiosk_mode="private"):
                 if not meal_form.errors:
                     with transaction.atomic():
                         locked_signups, created_signup_keys = _lock_meal_signups_for_bookings(bookings, meal)
+                        booking_participants = [
+                            target["object"] if target["kind"] == "participant" else target["object"].guardian
+                            for target, _meal_date, _variant, _price_rule in bookings
+                        ]
+                        locked_booking_links = _lock_accepted_booking_links(
+                            participant,
+                            booking_participants,
+                        )
                         for target, meal_date, variant, price_rule in bookings:
                             signup_key = _meal_signup_key(target, meal_date, meal)
+                            target_object = target["object"]
+                            target_participant = (
+                                target_object if target["kind"] == "participant" else target_object.guardian
+                            )
                             _book_meal_for_target(
                                 target,
                                 meal_date,
@@ -3270,6 +3385,8 @@ def kiosk_home(request, kiosk_mode="private"):
                                 prelocked_signup=locked_signups.get(signup_key),
                                 signup_lock_acquired=True,
                                 signup_was_created=signup_key in created_signup_keys,
+                                prelocked_booking_link=locked_booking_links.get(target_participant.pk),
+                                booking_link_lock_acquired=True,
                             )
                     day_label = "Tag" if len(meal_dates) == 1 else "Tage"
                     person_label = "Person" if len(selected_targets) == 1 else "Personen"

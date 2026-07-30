@@ -13,11 +13,13 @@ from django.db.models.deletion import ProtectedError
 from django.urls import resolve, reverse
 from django.utils import timezone
 
+from billing.forms import KioskBookingLinkInviteForm
 from billing.kiosk_access import KIOSK_FAMILY_MEMBER_SESSION_KEY, KIOSK_PARTICIPANT_SESSION_KEY
 from billing.models import (
     Charge,
     KioskActionAuditLog,
     MealSignup,
+    Participant,
     ParticipantBookingLink,
     ParticipantFamilyMember,
     PriceRule,
@@ -327,6 +329,76 @@ def test_pending_partner_invitation_cannot_be_accepted_after_inviter_is_archived
 
 
 @pytest.mark.django_db
+def test_partner_invitation_rechecks_duplicates_after_locking_the_pair(kiosk_client, monkeypatch):
+    camp = CampFactory(is_active=True)
+    invitee = ParticipantFactory(camp=camp)
+    inviter = ParticipantFactory(camp=camp)
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = inviter.pk
+    session.save()
+    original_is_valid = KioskBookingLinkInviteForm.is_valid
+    original_fetch_all = QuerySet._fetch_all
+    duplicate_injected = False
+    participant_lock_events = []
+
+    def inject_concurrent_invitation(form):
+        nonlocal duplicate_injected
+        is_valid = original_is_valid(form)
+        if is_valid and not duplicate_injected:
+            duplicate_injected = True
+            ParticipantBookingLink.objects.create(inviter=invitee, invitee=inviter)
+        return is_valid
+
+    def capture_participant_lock(queryset):
+        was_unfetched = queryset._result_cache is None
+        original_fetch_all(queryset)
+        if was_unfetched and queryset.query.select_for_update and queryset.model is Participant:
+            participant_lock_events.append(tuple(instance.pk for instance in queryset._result_cache))
+
+    monkeypatch.setattr(KioskBookingLinkInviteForm, "is_valid", inject_concurrent_invitation)
+    monkeypatch.setattr(QuerySet, "_fetch_all", capture_participant_lock)
+
+    response = kiosk_client.post(
+        reverse("kiosk-partner-activity"),
+        {
+            "action": "booking_link_invite",
+            "link-participant": invitee.pk,
+        },
+    )
+
+    assert response.status_code == 200
+    assert ParticipantBookingLink.objects.count() == 1
+    assert participant_lock_events == [tuple(sorted((inviter.pk, invitee.pk)))]
+    assert "Zwischen diesen Teilnehmern besteht bereits eine offene Verknüpfung." in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_accepting_partner_invitation_closes_duplicate_pending_invitations(kiosk_client):
+    camp = CampFactory(is_active=True)
+    inviter = ParticipantFactory(camp=camp)
+    invitee = ParticipantFactory(camp=camp)
+    selected_link = ParticipantBookingLink.objects.create(inviter=inviter, invitee=invitee)
+    duplicate_link = ParticipantBookingLink.objects.create(inviter=invitee, invitee=inviter)
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = invitee.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-partner-activity"),
+        {
+            "action": "booking_link_accept",
+            "booking_link_id": selected_link.pk,
+        },
+    )
+
+    assert response.status_code == 302
+    selected_link.refresh_from_db()
+    duplicate_link.refresh_from_db()
+    assert selected_link.status == ParticipantBookingLink.Status.ACCEPTED
+    assert duplicate_link.status == ParticipantBookingLink.Status.REVOKED
+
+
+@pytest.mark.django_db
 def test_accepted_partner_can_download_live_and_current_camp_snapshot(kiosk_client):
     camp = CampFactory(is_active=True, show_kiosk_invoices=True)
     participant = ParticipantFactory(camp=camp)
@@ -559,6 +631,63 @@ def test_linked_household_checkin_records_actual_actor_and_before_after(kiosk_cl
     assert "Kind Hopper" in activity_content
     assert "Anreise: – → 03.07.2026" in activity_content
     assert "Abreise: – → 09.07.2026" in activity_content
+
+
+@pytest.mark.django_db
+def test_multi_partner_checkin_locks_authorizations_in_canonical_order(kiosk_client, monkeypatch):
+    monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 7, 5))
+    camp = CampFactory(
+        is_active=True,
+        starts_on=date(2026, 7, 1),
+        ends_on=date(2026, 7, 14),
+    )
+    participant = ParticipantFactory(camp=camp)
+    first_partner = ParticipantFactory(camp=camp)
+    second_partner = ParticipantFactory(camp=camp)
+    second_link = ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=second_partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    first_link = ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=first_partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    page_response = kiosk_client.get(reverse("kiosk-home"))
+    checkin_targets = {target["token"]: target for target in page_response.context["checkin_participants"]}
+    first_token = f"participant-{first_partner.pk}"
+    second_token = f"participant-{second_partner.pk}"
+    authorization_locks = []
+    original_fetch_all = QuerySet._fetch_all
+
+    def capture_authorization_lock(queryset):
+        was_unfetched = queryset._result_cache is None
+        original_fetch_all(queryset)
+        if was_unfetched and queryset.query.select_for_update and queryset.model is ParticipantBookingLink:
+            authorization_locks.append(tuple(instance.pk for instance in queryset._result_cache))
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", capture_authorization_lock)
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "checkin",
+            "checkin_target": [first_token, second_token],
+            f"arrival_date_{first_token}": "2026-07-03",
+            f"departure_date_{first_token}": "2026-07-09",
+            f"checkin_state_{first_token}": checkin_targets[first_token]["state_token"],
+            f"arrival_date_{second_token}": "2026-07-04",
+            f"departure_date_{second_token}": "2026-07-10",
+            f"checkin_state_{second_token}": checkin_targets[second_token]["state_token"],
+        },
+    )
+
+    assert response.status_code == 302
+    assert authorization_locks == [tuple(sorted((first_link.pk, second_link.pk)))]
 
 
 @pytest.mark.django_db
@@ -1315,10 +1444,16 @@ def test_partner_meal_batch_locks_all_signups_before_authorization(kiosk_client,
         ends_on=date(2026, 7, 14),
     )
     actor = ParticipantFactory(camp=camp)
-    partner = ParticipantFactory(camp=camp)
-    ParticipantBookingLink.objects.create(
+    first_partner = ParticipantFactory(camp=camp)
+    second_partner = ParticipantFactory(camp=camp)
+    first_link = ParticipantBookingLink.objects.create(
         inviter=actor,
-        invitee=partner,
+        invitee=first_partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    second_link = ParticipantBookingLink.objects.create(
+        inviter=actor,
+        invitee=second_partner,
         status=ParticipantBookingLink.Status.ACCEPTED,
     )
     PriceRuleFactory(
@@ -1336,6 +1471,7 @@ def test_partner_meal_batch_locks_all_signups_before_authorization(kiosk_client,
             meal=MealSignup.Meal.DINNER,
             variant=MealSignup.Variant.NORMAL,
         )
+        for partner in (first_partner, second_partner)
         for meal_date in (date(2026, 7, 2), date(2026, 7, 3))
     ]
     session = kiosk_client.session
@@ -1368,8 +1504,12 @@ def test_partner_meal_batch_locks_all_signups_before_authorization(kiosk_client,
             "meal-meal_dates": ["2026-07-02", "2026-07-03"],
             "meal-meal": MealSignup.Meal.DINNER,
             "meal-variant": MealSignup.Variant.NORMAL,
-            "meal-target": [f"participant-{partner.pk}"],
-            f"meal-variant-participant-{partner.pk}": MealSignup.Variant.NORMAL,
+            "meal-target": [
+                f"participant-{second_partner.pk}",
+                f"participant-{first_partner.pk}",
+            ],
+            f"meal-variant-participant-{first_partner.pk}": MealSignup.Variant.NORMAL,
+            f"meal-variant-participant-{second_partner.pk}": MealSignup.Variant.NORMAL,
         },
     )
 
@@ -1382,6 +1522,8 @@ def test_partner_meal_batch_locks_all_signups_before_authorization(kiosk_client,
     }
     assert locked_signup_ids == {signup.pk for signup in signups}
     assert all(model is not MealSignup for model, _pks in lock_events[first_authorization_lock:])
+    authorization_locks = [pks for model, pks in lock_events if model is ParticipantBookingLink]
+    assert authorization_locks == [tuple(sorted((first_link.pk, second_link.pk)))]
 
 
 @pytest.mark.django_db
@@ -1711,6 +1853,72 @@ def test_multi_account_quick_booking_requires_exact_cost_confirmation(kiosk_clie
 
 
 @pytest.mark.django_db
+def test_multi_partner_quick_booking_locks_authorizations_in_canonical_order(kiosk_client, monkeypatch):
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp, is_child=False, is_companion=False)
+    first_partner = ParticipantFactory(camp=camp, is_child=False, is_companion=False)
+    second_partner = ParticipantFactory(camp=camp, is_child=False, is_companion=False)
+    first_link = ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=first_partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    second_link = ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=second_partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    rule = PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.DRINK,
+        unit_price=Decimal("2.00"),
+        applies_to_children=False,
+        applies_to_adults=True,
+        applies_to_companions=False,
+    )
+    target_tokens = [
+        f"participant-{second_partner.pk}",
+        f"participant-{first_partner.pk}",
+    ]
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    request_data = {
+        "action": "quick",
+        "quick-price_rule": rule.pk,
+        "quick-quantity": 1,
+        "quick-targets-submitted": "1",
+        "quick-target": target_tokens,
+    }
+    preview_response = kiosk_client.post(reverse("kiosk-home"), request_data)
+    confirmation = preview_response.context["quick_confirmation"]
+    authorization_locks = []
+    original_fetch_all = QuerySet._fetch_all
+
+    def capture_authorization_lock(queryset):
+        was_unfetched = queryset._result_cache is None
+        original_fetch_all(queryset)
+        if was_unfetched and queryset.query.select_for_update and queryset.model is ParticipantBookingLink:
+            authorization_locks.append(tuple(instance.pk for instance in queryset._result_cache))
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", capture_authorization_lock)
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            **request_data,
+            "quick-confirmed": "1",
+            "quick-confirmation-token": confirmation["token"],
+        },
+    )
+
+    assert preview_response.status_code == 200
+    assert response.status_code == 302
+    assert Charge.objects.count() == 2
+    assert authorization_locks == [tuple(sorted((first_link.pk, second_link.pk)))]
+
+
+@pytest.mark.django_db
 def test_partner_meal_signup_charge_is_excluded_from_quick_cancellation(kiosk_client):
     camp = CampFactory(is_active=True)
     participant = ParticipantFactory(camp=camp)
@@ -1802,7 +2010,7 @@ def test_revoked_partner_authorization_immediately_removes_cross_account_cancell
 
 
 @pytest.mark.django_db
-def test_revoke_closes_every_accepted_authorization_for_the_partner_pair(kiosk_client):
+def test_revoke_closes_every_active_authorization_for_the_partner_pair(kiosk_client):
     camp = CampFactory(is_active=True, show_kiosk_invoices=True)
     participant = ParticipantFactory(camp=camp)
     partner = ParticipantFactory(camp=camp)
@@ -1815,6 +2023,11 @@ def test_revoke_closes_every_accepted_authorization_for_the_partner_pair(kiosk_c
         inviter=partner,
         invitee=participant,
         status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    stale_pending_link = ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.PENDING,
     )
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
@@ -1831,6 +2044,8 @@ def test_revoke_closes_every_accepted_authorization_for_the_partner_pair(kiosk_c
     assert response.status_code == 302
     selected_link.refresh_from_db()
     duplicate_link.refresh_from_db()
+    stale_pending_link.refresh_from_db()
     assert selected_link.status == ParticipantBookingLink.Status.REVOKED
     assert duplicate_link.status == ParticipantBookingLink.Status.REVOKED
+    assert stale_pending_link.status == ParticipantBookingLink.Status.REVOKED
     assert kiosk_client.get(reverse("kiosk-participant-current-settlement-pdf", args=[partner.pk])).status_code == 403
