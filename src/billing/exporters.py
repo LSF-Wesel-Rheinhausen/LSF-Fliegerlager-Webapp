@@ -81,52 +81,60 @@ def _decimal_text(value: str | Decimal) -> float:
 
 
 def _write_cost_center_sheet_from_snapshot(sheet, cost_centers: list[dict]) -> None:
-    sheet.append(["Kostenstelle", "Einnahmen", "Ausgaben", "Saldo", "Anzahl Einnahmen", "Anzahl Ausgaben"])
+    sheet.append(
+        safe_csv_row(["Kostenstelle", "Einnahmen", "Ausgaben", "Saldo", "Anzahl Einnahmen", "Anzahl Ausgaben"])
+    )
     for data in cost_centers:
         sheet.append(
-            [
-                data["label"],
-                _decimal_text(data["income"]),
-                _decimal_text(data["expense_total"]),
-                _decimal_text(data["balance"]),
-                data["income_count"],
-                data["expense_count"],
-            ]
+            safe_csv_row(
+                [
+                    data["label"],
+                    _decimal_text(data["income"]),
+                    _decimal_text(data["expense_total"]),
+                    _decimal_text(data["balance"]),
+                    data["income_count"],
+                    data["expense_count"],
+                ]
+            )
         )
         _format_money_cells(sheet, sheet.max_row, (2, 3, 4))
 
     sheet.append([])
-    sheet.append(["Detaillierte Einnahmen pro Kostenstelle"])
-    sheet.append(["Kostenstelle", "Datum", "Teilnehmer", "Beschreibung", "Betrag"])
+    sheet.append(safe_csv_row(["Detaillierte Einnahmen pro Kostenstelle"]))
+    sheet.append(safe_csv_row(["Kostenstelle", "Datum", "Teilnehmer", "Beschreibung", "Betrag"]))
     for data in cost_centers:
         for income in data["income_details"]:
             participant_name = income["participant_name"]
             if income.get("family_member_name"):
                 participant_name = f"{participant_name} für {income['family_member_name']}"
             sheet.append(
-                [
-                    data["label"],
-                    income["meal_date"][8:10] + "." + income["meal_date"][5:7] + "." + income["meal_date"][:4],
-                    participant_name,
-                    income["description"],
-                    _decimal_text(income["amount"]),
-                ]
+                safe_csv_row(
+                    [
+                        data["label"],
+                        income["meal_date"][8:10] + "." + income["meal_date"][5:7] + "." + income["meal_date"][:4],
+                        participant_name,
+                        income["description"],
+                        _decimal_text(income["amount"]),
+                    ]
+                )
             )
             _format_money_cells(sheet, sheet.max_row, (5,))
 
     sheet.append([])
-    sheet.append(["Detaillierte Ausgaben pro Kostenstelle"])
-    sheet.append(["Kostenstelle", "Datum", "Antragsteller", "Beschreibung", "Betrag"])
+    sheet.append(safe_csv_row(["Detaillierte Ausgaben pro Kostenstelle"]))
+    sheet.append(safe_csv_row(["Kostenstelle", "Datum", "Antragsteller", "Beschreibung", "Betrag"]))
     for data in cost_centers:
         for expense in data["expense_details"]:
             sheet.append(
-                [
-                    data["label"],
-                    expense["paid_date"][8:10] + "." + expense["paid_date"][5:7] + "." + expense["paid_date"][:4],
-                    expense["applicant_name"],
-                    expense["description"],
-                    _decimal_text(expense["amount"]),
-                ]
+                safe_csv_row(
+                    [
+                        data["label"],
+                        expense["paid_date"][8:10] + "." + expense["paid_date"][5:7] + "." + expense["paid_date"][:4],
+                        expense["applicant_name"],
+                        expense["description"],
+                        _decimal_text(expense["amount"]),
+                    ]
+                )
             )
             _format_money_cells(sheet, sheet.max_row, (5,))
 
