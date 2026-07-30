@@ -1824,7 +1824,8 @@ def _lock_booking_authorization_dependencies(
     camp: Camp,
 ) -> tuple[Camp, dict[int, Participant], dict[int, ParticipantFamilyMember]]:
     """Lock the camp, then revalidate participant and family-member FK targets."""
-    participant_ids = sorted({participant.pk for participant in participants})
+    participants_by_id = {participant.pk: participant for participant in participants}
+    participant_ids = sorted(participants_by_id)
     family_members_by_id = {
         family_member.pk: family_member for family_member in family_members if family_member is not None
     }
@@ -1836,6 +1837,17 @@ def _lock_booking_authorization_dependencies(
         .filter(pk__in=participant_ids)
         .order_by("pk")
     }
+    for participant_id, submitted_participant in participants_by_id.items():
+        locked_participant = locked_participants.get(participant_id)
+        if locked_participant is None:
+            continue
+        if (
+            locked_participant.camp_id != locked_camp.pk
+            or locked_participant.archived_at is not None
+            or locked_participant.is_child != submitted_participant.is_child
+            or locked_participant.is_companion != submitted_participant.is_companion
+        ):
+            locked_participants.pop(participant_id)
     locked_family_members = {}
     if family_member_ids:
         locked_family_members = {
@@ -3293,24 +3305,67 @@ def kiosk_home(request, kiosk_mode="private"):
                                 active_family_member,
                                 *(booking[2] for booking in resolved_bookings),
                             ]
+                            expected_participant_ids = {participant.pk, *(item.pk for item in booking_participants)}
+                            expected_family_member_ids = {
+                                member.pk for member in booking_family_members if member is not None
+                            }
+                            locked_camp, locked_participants, locked_family_members = (
+                                _lock_booking_authorization_dependencies(
+                                    [participant, *booking_participants],
+                                    booking_family_members,
+                                    camp=participant.camp,
+                                )
+                            )
+                            if (
+                                set(locked_participants) != expected_participant_ids
+                                or set(locked_family_members) != expected_family_member_ids
+                            ):
+                                raise PermissionDenied("Das Buchungsziel ist nicht mehr verfügbar.")
+                            locked_actor = locked_participants[participant.pk]
+                            locked_actor_family_member = (
+                                locked_family_members[active_family_member.pk]
+                                if active_family_member is not None
+                                else None
+                            )
+                            locked_resolved_bookings = []
+                            for _target, charge_participant, target_family_member, effective_rule in resolved_bookings:
+                                locked_charge_participant = locked_participants[charge_participant.pk]
+                                locked_target_family_member = (
+                                    locked_family_members[target_family_member.pk]
+                                    if target_family_member is not None
+                                    else None
+                                )
+                                locked_target = locked_target_family_member or locked_charge_participant
+                                locked_resolved_bookings.append(
+                                    (
+                                        locked_target,
+                                        locked_charge_participant,
+                                        locked_target_family_member,
+                                        effective_rule,
+                                    )
+                                )
                             locked_booking_links = _lock_accepted_booking_links(
-                                participant,
-                                booking_participants,
-                                family_members=booking_family_members,
+                                locked_actor,
+                                [booking[1] for booking in locked_resolved_bookings],
+                                family_members=[
+                                    locked_actor_family_member,
+                                    *(booking[2] for booking in locked_resolved_bookings),
+                                ],
+                                dependencies_locked=True,
                             )
                             for booking_index, (
                                 target,
                                 charge_participant,
                                 target_family_member,
                                 effective_rule,
-                            ) in enumerate(resolved_bookings):
+                            ) in enumerate(locked_resolved_bookings):
                                 booking_link = None
-                                if charge_participant.pk != participant.pk:
+                                if charge_participant.pk != locked_actor.pk:
                                     booking_link = locked_booking_links.get(charge_participant.pk)
                                     if booking_link is None:
                                         raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
                                 charge_desc = f"{effective_rule.name} (Kiosk)"
-                                if target != participant:
+                                if target != locked_actor:
                                     charge_desc = f"{effective_rule.name} (Kiosk) für {target.full_name}"
 
                                 charge = Charge(
@@ -3325,15 +3380,15 @@ def kiosk_home(request, kiosk_mode="private"):
                                     unit_price=effective_rule.unit_price,
                                     foerdersatz=effective_rule.foerdersatz,
                                     occurred_on=occurred_on,
-                                    kiosk_booked_by=participant,
+                                    kiosk_booked_by=locked_actor,
                                     kiosk_confirmation_nonce=(confirmation_nonce if booking_index == 0 else None),
                                 )
                                 charge.save()
                                 if booking_link is not None or target_family_member is not None:
                                     create_kiosk_action_audit_log(
-                                        camp=participant.camp,
-                                        actor_participant=participant,
-                                        actor_family_member=active_family_member,
+                                        camp=locked_camp,
+                                        actor_participant=locked_actor,
+                                        actor_family_member=locked_actor_family_member,
                                         target_participant=charge_participant,
                                         target_family_member=target_family_member,
                                         booking_link=booking_link,
@@ -3344,7 +3399,7 @@ def kiosk_home(request, kiosk_mode="private"):
                                         after=kiosk_charge_audit_snapshot(charge),
                                     )
                                 transaction.on_commit(
-                                    partial(_notify_linked_booking_by_id, charge.pk, participant.pk, cancelled=False)
+                                    partial(_notify_linked_booking_by_id, charge.pk, locked_actor.pk, cancelled=False)
                                 )
                     except IntegrityError:
                         if (

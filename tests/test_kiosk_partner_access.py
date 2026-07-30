@@ -233,10 +233,71 @@ def test_quick_booking_snapshots_names_from_freshly_locked_identities(kiosk_clie
     )
 
     audit_log = KioskActionAuditLog.objects.get(action=KioskActionAuditLog.Action.QUICK_BOOKED)
+    charge = Charge.objects.get()
     assert identities_renamed is True
     assert response.status_code == 302
+    assert charge.description.endswith("für ZielNeu Alt")
     assert audit_log.actor_display_name == "AkteurNeu Alt"
     assert audit_log.target_display_name == "ZielNeu Alt"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("state_change", ["archived", "camp", "is_child", "is_companion"])
+def test_quick_booking_rejects_participant_state_changed_before_dependency_lock(
+    kiosk_client,
+    monkeypatch,
+    state_change,
+):
+    camp = CampFactory(is_active=True)
+    replacement_camp = CampFactory(name="Ersatzlager", year=camp.year + 1, is_active=False)
+    participant = ParticipantFactory(
+        camp=camp,
+        is_child=False,
+        is_companion=False,
+    )
+    rule = PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.DRINK,
+        applies_to_adults=True,
+        applies_to_children=False,
+        applies_to_companions=False,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    original_fetch_all = QuerySet._fetch_all
+    state_changed = False
+
+    def change_participant_before_lock(queryset):
+        nonlocal state_changed
+        was_unfetched = queryset._result_cache is None
+        if was_unfetched and not state_changed and queryset.query.select_for_update and queryset.model is Participant:
+            update = {
+                "archived": {"archived_at": timezone.now()},
+                "camp": {"camp_id": replacement_camp.pk},
+                "is_child": {"is_child": True},
+                "is_companion": {"is_companion": True},
+            }[state_change]
+            Participant.objects.filter(pk=participant.pk).update(**update)
+            state_changed = True
+        original_fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", change_participant_before_lock)
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "quick",
+            "quick-price_rule": rule.pk,
+            "quick-quantity": 1,
+            "quick-target": [f"participant-{participant.pk}"],
+        },
+    )
+
+    assert state_changed is True
+    assert response.status_code == 403
+    assert not Charge.objects.exists()
+    assert not KioskActionAuditLog.objects.exists()
 
 
 def test_partner_activity_routes_exist_for_both_kiosk_modes():

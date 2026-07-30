@@ -51,9 +51,10 @@
   die benötigten Vollmachten. Diese gesperrten Zeilen werden für den gesamten
   Schreibvorgang wiederverwendet, sodass parallele Abrechnungen, Widerrufe und
   Buchungen keinen Fremdschlüssel-/Vollmachts-Lockzyklus bilden. Nach dem Lock
-  werden Lageraktivität, Teilnehmerstatus, Hauptkonto und preisrelevante Rolle
-  erneut geprüft; insbesondere kann eine parallele Lagerdeaktivierung keine
-  neue Einladung mehr durchlassen.
+  werden Lageraktivität, Teilnehmer-Lagerzuordnung, Archivstatus, Kind-/
+  Begleitrolle sowie Hauptkonto und Rolle von Familienmitgliedern erneut
+  geprüft; insbesondere kann eine parallele Lagerdeaktivierung keine neue
+  Einladung mehr durchlassen.
 - Hält das konkrete Familienziel auch bei Eigenhaushalts-Schnellbuchungen im
   Audit fest, damit ein später verknüpfter Partner bei einer Stornierung
   weiterhin die tatsächlich betroffene Person protokolliert.
@@ -63,6 +64,9 @@
   Hauptkontowechsel schreiben die dargestellte Historie dadurch nicht
   rückwirkend um; fachliches Entfernen erfolgt weiterhin über die
   Deaktivierung.
+- Erstellt auch Schnellbuchungs-Charges, Rechnungsbeschreibungen und
+  Benachrichtigungen aus den frisch gesperrten Zielobjekten, damit ein Name,
+  der unmittelbar vor dem Lock geändert wurde, überall konsistent erscheint.
 - Bindet jede Check-in-Zeile an ihren signierten Ausgangszustand, schreibt nur
   tatsächlich geänderte Zeilen und weist konkurrierend veränderte Daten ohne
   Teilaktualisierung zurück.
