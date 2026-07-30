@@ -11,8 +11,8 @@ from config.middleware import SecurityHeadersMiddleware
 
 
 @pytest.mark.django_db
-def test_common_security_headers_are_set(client):
-    response = client.get(reverse("kiosk-login"))
+def test_common_security_headers_are_set(kiosk_client):
+    response = kiosk_client.get(reverse("kiosk-login"))
     csp = response["Content-Security-Policy"]
 
     assert response.status_code == 200
@@ -31,8 +31,8 @@ def test_common_security_headers_are_set(client):
 
 
 @pytest.mark.django_db
-def test_inline_script_uses_the_response_csp_nonce(client):
-    response = client.get(reverse("kiosk-login"))
+def test_inline_script_uses_the_response_csp_nonce(kiosk_client):
+    response = kiosk_client.get(reverse("kiosk-login"))
     nonce_match = re.search(r"script-src 'self' 'nonce-([^']+)'", response["Content-Security-Policy"])
 
     assert nonce_match is not None
@@ -48,6 +48,15 @@ def test_security_headers_middleware_wraps_static_file_middleware():
 
 def test_whitenoise_does_not_add_wildcard_cors_header():
     assert settings.WHITENOISE_ALLOW_ALL_ORIGINS is False
+
+
+@pytest.mark.django_db
+def test_flash_messages_remain_server_side(kiosk_client):
+    response = kiosk_client.get(reverse("kiosk-logout"))
+
+    assert response.status_code == 302
+    assert "messages" not in response.cookies
+    assert "Du wurdest vom Kiosk abgemeldet." in kiosk_client.session["_messages"]
 
 
 @override_settings(DEBUG=False)

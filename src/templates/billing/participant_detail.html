@@ -25,9 +25,9 @@
         <a class="button" href="{% url 'charge-create' participant.pk %}">Kosten erfassen</a>
         <a class="button" href="{% url 'payment-create' participant.pk %}">Zahlung erfassen</a>
         <a class="button" href="{% url 'pin-set' participant.pk %}">PIN setzen</a>
-        <form method="post" action="{% url 'pin-reset' participant.pk %}">
+        <form method="post" action="{% url 'pin-reset' participant.pk %}" onsubmit="return confirm('PIN sperren? Danach muss die Lagerleitung vor der nächsten Anmeldung eine neue PIN setzen.');">
           {% csrf_token %}
-          <button type="submit">PIN zurücksetzen</button>
+          <button type="submit">PIN sperren</button>
         </form>
       {% endif %}
       <a class="button" href="{% url 'export-participant-pdf' participant.pk %}" target="_blank" rel="noopener">Einzelabrechnung als PDF öffnen</a>
@@ -84,10 +84,10 @@
       </div>
       {% if not participant.is_archived %}
         <button
+          id="manual-charge-dialog-trigger"
           type="button"
           class="button"
           aria-haspopup="dialog"
-          onclick="document.getElementById('manual-charge-dialog').showModal()"
         >
           Buchung hinzufügen
         </button>
@@ -284,18 +284,30 @@
         </div>
       </form>
     </dialog>
-    {% if manual_charge_form.errors %}
-      <script nonce="{{ request.csp_nonce }}">
-        (() => {
-          const manualChargeDialog = document.getElementById("manual-charge-dialog");
-          if (!manualChargeDialog?.open) {
+    <script nonce="{{ request.csp_nonce }}">
+      (() => {
+        const manualChargeDialog = document.getElementById("manual-charge-dialog");
+        const manualChargeDialogTrigger = document.getElementById("manual-charge-dialog-trigger");
+        if (!manualChargeDialog || !manualChargeDialogTrigger) {
+          return;
+        }
+
+        manualChargeDialogTrigger.addEventListener("click", () => {
+          manualChargeDialog.showModal();
+        });
+        manualChargeDialog.addEventListener("close", () => {
+          manualChargeDialogTrigger.focus();
+        });
+
+        {% if manual_charge_form.errors %}
+          if (!manualChargeDialog.open) {
             manualChargeDialog?.showModal();
             const errorTarget = manualChargeDialog?.querySelector("[aria-invalid='true'], [role='alert']");
             errorTarget?.focus();
           }
-        })();
-      </script>
-    {% endif %}
+        {% endif %}
+      })();
+    </script>
   {% endif %}
 
 {% endblock %}

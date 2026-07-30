@@ -1,10 +1,11 @@
 const { expect, test } = require("./fixtures");
+const { openKiosk } = require("./kioskAccess");
 
 async function expectInstallGuide(browser, baseURL, userAgent, expectedInstructions) {
   const context = await browser.newContext({ baseURL, userAgent });
   const page = await context.newPage();
 
-  await page.goto("/kiosk/login/");
+  await openKiosk(page, "/kiosk/login/");
   await page.getByRole("button", { name: "Installieren", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "App installieren" });
   await expect(dialog).toBeVisible();
@@ -26,7 +27,7 @@ test("Private kiosk installs its scoped PWA and serves the offline fallback", as
   expect(manifest.start_url).toBe("/kiosk/");
   expect(manifest.icons.map((icon) => icon.sizes)).toEqual(expect.arrayContaining(["192x192", "512x512"]));
 
-  await page.goto("/kiosk/login/");
+  await openKiosk(page, "/kiosk/login/");
   await expect(page.locator('link[rel="manifest"]')).toHaveAttribute("href", "/kiosk/manifest.webmanifest");
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.reload();
@@ -53,7 +54,7 @@ test("Central kiosk exposes a distinct scope without a public login timer", asyn
   expect(manifest.scope).toBe("/central/kiosk/");
   expect(manifest.start_url).toBe("/central/kiosk/");
 
-  await page.goto("/central/kiosk/login/");
+  await openKiosk(page, "/central/kiosk/login/");
   await expect(page).toHaveURL(/\/central\/kiosk\/login\/$/);
   await expect(page.locator('link[rel="manifest"]')).toHaveAttribute(
     "href",

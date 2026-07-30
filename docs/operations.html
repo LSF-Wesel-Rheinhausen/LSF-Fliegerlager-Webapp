@@ -48,6 +48,7 @@ python src/manage.py runserver</code></pre>
           <li><code>CSRF_TRUSTED_ORIGINS</code>: kommaseparierte Origins inklusive Schema.</li>
           <li><code>DJANGO_HTTPS=1</code>: aktiviert HTTPS-Redirect sowie sichere Session- und CSRF-Cookies.</li>
           <li><code>DJANGO_TRUST_PROXY_SSL_HEADER=1</code>: nur hinter einem kontrollierten Proxy aktivieren, der <code>X-Forwarded-Proto</code> bereinigt.</li>
+          <li><code>KIOSK_ACCESS_TRUSTED_PROXY_ADDRESSES</code>: exakte direkte Proxy-IP-Adressen, die <code>X-Forwarded-For</code> mit genau einer Client-IP ersetzen dürfen.</li>
           <li><code>AUTHELIA_SSO_ENABLED=1</code>: aktiviert optional Trusted-Header-SSO für vorhandene aktive Django-Konten.</li>
           <li><code>AUTHELIA_SSO_EMAIL_HEADER</code>: vom Proxy neu gesetzter E-Mail-Header, standardmäßig <code>Remote-Email</code>.</li>
           <li><code>DJANGO_HSTS_SECONDS</code>: HSTS erst nach verifiziertem HTTPS-Betrieb schrittweise aktivieren.</li>
@@ -55,7 +56,7 @@ python src/manage.py runserver</code></pre>
           <li><code>UPDATE_AGENT_TOKEN</code>: separates langes Secret für die interne Update-API.</li>
           <li><code>APP_IMAGE</code>: freigegebenes GHCR-App-Image, standardmäßig <code>latest</code>.</li>
         </ul>
-        <p>Bei aktiviertem Authelia-SSO darf Port 8000 nicht direkt erreichbar sein. Der kontrollierte Reverse Proxy muss jeden clientseitigen Identitätsheader entfernen und <code>Remote-Email</code> ausschließlich aus Authelias Forward-Auth-Antwort setzen. Django erstellt keine Konten und übernimmt keine Authelia-Gruppen; die bestehenden Rollen bleiben maßgeblich.</p>
+        <p>Für eine gerätegetrennte Lager-PIN-Drosselung muss der kontrollierte Reverse Proxy jeden eingehenden <code>X-Forwarded-For</code>-Header entfernen und ihn mit genau einer Client-IP ersetzen; seine im App-Container sichtbare Quell-IP wird explizit über <code>KIOSK_ACCESS_TRUSTED_PROXY_ADDRESSES</code> freigegeben. Bei aktiviertem Authelia-SSO darf Port 8000 nicht direkt erreichbar sein. Der Proxy muss außerdem jeden clientseitigen Identitätsheader entfernen und <code>Remote-Email</code> ausschließlich aus Authelias Forward-Auth-Antwort setzen. Django erstellt keine Konten und übernimmt keine Authelia-Gruppen; die bestehenden Rollen bleiben maßgeblich.</p>
       </section>
 
       <section>
@@ -99,7 +100,7 @@ curl http://localhost:8000/healthz/</code></pre>
           <li>Preisverwaltung öffnen und Lagerpauschalen für Teilnehmer/Begleiter und 1/2 Wochen eintragen.</li>
           <li>Getränkepreise, Standardpreise für Frühstück/Abendessen und bei Bedarf abweichende Tagespreise anlegen.</li>
           <li>Teilnehmer importieren oder manuell anlegen.</li>
-          <li>PINs setzen oder Teilnehmer im Kiosk ihre PIN beim ersten Login setzen lassen.</li>
+          <li>Für manuell angelegte Teilnehmer PINs setzen; bei der Kiosk-Selbstregistrierung vergeben Teilnehmer ihre PIN bereits im Registrierungsformular.</li>
           <li>Tägliche Dienstvorlagen pflegen, Dienste für den Lagerzeitraum erzeugen und die Besetzungsauswertung kontrollieren.</li>
           <li>Während des Lagers Kiosk für Buchungen nutzen: Getränke per großer Ein-Tap-Taste buchen, Essen anmelden, Countdown zur automatischen Abmeldung im Blick behalten.</li>
           <li>Teilnehmer Dienste übernehmen, zurückgeben oder zum Tausch anbieten lassen.</li>
@@ -146,8 +147,10 @@ npm run test:local</code></pre>
           <li>Neue Python-Funktionen sollen Type Hints nutzen.</li>
           <li><code>.env</code>-Dateien und echte Secrets dürfen nicht ins Repository.</li>
           <li>Produktionsstarts schlagen ohne starken Secret Key und explizite Hostliste fehl.</li>
-          <li>Der Teilnehmer-Kiosk mit PIN-Selbstvergabe ist nur für kontrollierte Geräte beziehungsweise Netze vorgesehen.</li>
-          <li>Nach fünf falschen PIN-Eingaben wird der Teilnehmerzugang vorübergehend gesperrt.</li>
+          <li>Admins richten vor der Nutzung in der Lagerübersicht einen gemeinsamen 6- bis 12-stelligen Lager-PIN ein. Sie können alle ausgestellten Gerätezugänge zentral widerrufen, ohne persönliche Teilnehmer-PINs zu ändern.</li>
+          <li>Der Kiosk prüft Lager-Cookie und Widerrufsgeneration serverseitig vor jeder Geschäftsroute; schreibende Requests ohne gültigen Zugang werden nicht an die View weitergegeben.</li>
+          <li>Nach fünf falschen Lager- beziehungsweise persönlichen PIN-Eingaben wird der jeweilige Zugang vorübergehend gesperrt.</li>
+          <li>Kiosk-Selbstregistrierungen werden persistent pro Lagerzugang und gehashtem Client-Schlüssel begrenzt; ein neues Browser-Cookie umgeht diese Grenze nicht.</li>
           <li>Abrechnungs- und Kiosk-Operationen sollen transaktional und ORM-effizient umgesetzt werden.</li>
           <li>Templates sollen semantisches HTML, mobile-first CSS und barrierearme Formulare nutzen.</li>
           <li>Dynamisches Verhalten soll mit modernem Vanilla JavaScript oder bewusst ausgewählten leichten Tools umgesetzt werden.</li>

@@ -38,7 +38,7 @@
         <h2>Domain-Modell</h2>
         <p><code>Camp</code> hält die Lagerdaten. <code>PriceRule</code> und gebuchte <code>Charge</code>-Positionen speichern ihren eigenen Fördersatz. <code>Participant</code> hält Teilnehmerdaten inklusive Hilfssatz, Berufssatz, Nächten und Begleitstatus.</p>
         <p><code>PriceRule</code> bildet Preisregeln ab. Für Lagerpauschalen gibt es strukturierte Felder für Dauer (<code>1w</code>/<code>2w</code>) und Rolle (<code>participant</code>/<code>companion</code>); für Mahlzeiten gibt es Typ, optionales Tagesdatum und Standardregeln.</p>
-        <p><code>UserProfile</code> ergänzt Django-Nutzer um Anwendungsdaten. <code>Charge</code>, <code>Payment</code> und <code>Expense</code> bilden Kosten, Zahlungen und vorgestreckte Beträge ab. <code>ParticipantPin</code> schützt den Kiosk-Zugang mit gehashtem PIN, Fehlversuchszähler und zeitlich begrenzter Sperre.</p>
+        <p><code>UserProfile</code> ergänzt Django-Nutzer um Anwendungsdaten. <code>Charge</code>, <code>Payment</code> und <code>Expense</code> bilden Kosten, Zahlungen und vorgestreckte Beträge ab. <code>CampKioskAccess</code> hält den Hash des gemeinsamen Lager-PINs und eine rotierbare Widerrufsgeneration; <code>ParticipantPin</code> schützt anschließend die persönliche Kiosk-Identität mit gehashtem PIN, Fehlversuchszähler und zeitlich begrenzter Sperre.</p>
         <p><code>MealSignup</code> speichert Essensanmeldungen eindeutig pro Teilnehmer, Datum und Mahlzeit. <code>DrinkEntry</code> bleibt für ältere Getränkedaten erhalten; aktuelle Kiosk-Getränke werden als <code>Charge</code> gespeichert.</p>
         <p><code>BookingAuditLog</code> protokolliert Admin-Korrekturen an Buchungen. <code>SettlementRun</code> hält fortlaufend versionierte Lagerläufe; zugehörige <code>Settlement</code>-Datensätze speichern unveränderliche Teilnehmer-Snapshots.</p>
         <p><code>Shift</code>, <code>DailyShiftTemplate</code>, <code>DailyShiftException</code> und <code>ShiftAssignment</code> bilden einzelne Dienste, tägliche Vorlagen, Tagesausnahmen, Besetzungen und Tauschangebote ab.</p>
@@ -65,7 +65,8 @@
       <section>
         <h2>Kiosk-Datenfluss</h2>
         <ol>
-          <li>Teilnehmer meldet sich mit PIN an oder legt beim ersten Mal eine PIN an.</li>
+          <li>Die Middleware prüft vor jeder Kiosk-Geschäftsroute das signierte Lager-Cookie gegen aktives Lager und Widerrufsgeneration. Ohne gültigen Zugang werden GETs zur Lager-PIN-Abfrage umgeleitet und schreibende Requests mit 403 beendet.</li>
+          <li>Nach der Lagerfreigabe meldet sich der Teilnehmer mit der persönlichen PIN an oder legt sie beim ersten Mal fest.</li>
           <li>Getränke und Essen werden aus den Preisregeln des aktiven Lagers geladen.</li>
           <li>Getränke werden als Kostenpositionen gespeichert; Essensanmeldungen erzeugen oder aktualisieren die passende Anmeldung und Kostenposition.</li>
           <li>Die Kiosk-Zusammenfassung wird aus der normalen Abrechnung berechnet.</li>

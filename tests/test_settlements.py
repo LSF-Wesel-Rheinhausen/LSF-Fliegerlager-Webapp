@@ -1,8 +1,9 @@
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
+from django.utils import timezone
 
 from billing.models import Charge, Expense, PriceRule
 from billing.services import calculate_participant_settlement
@@ -94,13 +95,18 @@ def test_settlement_grouping_preserves_per_booking_rounding():
 
 
 @pytest.mark.django_db
-def test_settlement_uses_creation_date_when_booking_date_is_missing():
+def test_settlement_uses_local_creation_date_when_booking_date_is_missing():
     participant = ParticipantFactory()
     charge = ChargeFactory(participant=participant, occurred_on=None)
+    created_at = datetime(2026, 7, 28, 22, 7, tzinfo=UTC)
+    Charge.objects.filter(pk=charge.pk).update(created_at=created_at)
+    charge.refresh_from_db()
 
-    result = calculate_participant_settlement(participant)
+    with timezone.override("Europe/Berlin"):
+        result = calculate_participant_settlement(participant)
 
-    assert result.lines[0].occurred_on == charge.created_at.date()
+    assert charge.created_at.date() == date(2026, 7, 28)
+    assert result.lines[0].occurred_on == date(2026, 7, 29)
     assert result.lines[0].booking_references == (charge.booking_reference,)
 
 

@@ -16,4 +16,4 @@ Servergerenderte Django-Templates.
 - `billing/form.html`: Generisches Formularlayout fuer CRUD-Aktionen.
 - `billing/import_preview.html`: Importformular und Vorschautabelle.
 - `billing/shift_manage.html`, `billing/shift_report.html`, `billing/shift_templates_manage.html`: Dienstverwaltung, Soll-/Ist-Auswertung und tägliche Vorlagen.
-- `billing/kiosk_base.html`, `billing/kiosk_login.html`, `billing/kiosk_pin_setup.html`, `billing/kiosk_home.html`, `billing/kiosk_shifts.html`: Kiosk-Layout mit Auto-Logout-Timer, PIN-Flows, Buchungsoberflaeche und Dienstwahl/Tausch.
+- `billing/kiosk_base.html`, `billing/kiosk_login.html`, `billing/kiosk_home.html`, `billing/kiosk_shifts.html`: Kiosk-Layout mit Auto-Logout-Timer, PIN-geschuetztem Login, Selbstregistrierung, Buchungsoberflaeche und Dienstwahl/Tausch.

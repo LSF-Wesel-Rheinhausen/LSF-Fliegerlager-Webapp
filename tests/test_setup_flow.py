@@ -60,11 +60,11 @@ def test_setup_form_escapes_rejected_user_input(client):
 
 
 @pytest.mark.django_db
-def test_root_opens_private_kiosk(client):
+def test_root_requires_shared_camp_access(client):
     response = client.get("/")
 
     assert response.status_code == 302
-    assert response["Location"] == reverse("kiosk-home")
+    assert response["Location"] == "/kiosk/access/?next=%2F"
 
 
 @pytest.mark.django_db

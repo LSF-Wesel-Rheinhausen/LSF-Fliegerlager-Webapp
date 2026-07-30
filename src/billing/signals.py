@@ -9,7 +9,8 @@ def activate_remaining_camp(sender, **kwargs):
     if not Camp.objects.filter(is_active=True).exists():
         remaining = Camp.objects.order_by("-updated_at", "-pk").first()
         if remaining is not None:
-            Camp.objects.filter(pk=remaining.pk).update(is_active=True)
+            remaining.is_active = True
+            remaining.save(update_fields=["is_active"])
 
 
 @receiver(post_save, sender=Participant)

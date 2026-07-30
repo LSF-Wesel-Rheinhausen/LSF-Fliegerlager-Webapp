@@ -29,17 +29,17 @@ def test_camp_phase_model_methods():
 
 
 @pytest.mark.django_db
-def test_kiosk_pre_camp_renders_countdown_and_rejects_date_updates(client):
+def test_kiosk_pre_camp_renders_countdown_and_rejects_date_updates(kiosk_client):
     today = timezone.localdate()
     camp = CampFactory(is_active=True, starts_on=today + timedelta(days=7), ends_on=today + timedelta(days=14))
     participant = ParticipantFactory(camp=camp, arrival_date=camp.starts_on, departure_date=camp.ends_on)
 
-    session = client.session
+    session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session[KIOSK_MODE_SESSION_KEY] = "private"
     session.save()
 
-    response = client.get(reverse("kiosk-home"))
+    response = kiosk_client.get(reverse("kiosk-home"))
     assert response.status_code == 200
     assert b"Lagerbeginn" in response.content
     assert b"Noch 7 Tage bis Lagerbeginn" in response.content
@@ -47,7 +47,7 @@ def test_kiosk_pre_camp_renders_countdown_and_rejects_date_updates(client):
 
     new_arrival = (today + timedelta(days=8)).isoformat()
     new_departure = (today + timedelta(days=13)).isoformat()
-    res_post = client.post(
+    res_post = kiosk_client.post(
         reverse("kiosk-home"),
         {
             "action": "update_attendance_dates",
@@ -64,7 +64,7 @@ def test_kiosk_pre_camp_renders_countdown_and_rejects_date_updates(client):
 
 
 @pytest.mark.django_db
-def test_kiosk_post_camp_renders_screen_and_settlement_archive(client):
+def test_kiosk_post_camp_renders_screen_and_settlement_archive(kiosk_client):
     admin = SuperUserFactory()
     today = timezone.localdate()
     camp = CampFactory(is_active=True, starts_on=today - timedelta(days=20), ends_on=today - timedelta(days=5))
@@ -80,12 +80,12 @@ def test_kiosk_post_camp_renders_screen_and_settlement_archive(client):
         balance=Decimal("100.00"),
     )
 
-    session = client.session
+    session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session[KIOSK_MODE_SESSION_KEY] = "private"
     session.save()
 
-    response = client.get(reverse("kiosk-home"))
+    response = kiosk_client.get(reverse("kiosk-home"))
     assert response.status_code == 200
     assert b"Lager beendet" in response.content
     assert b"Letzte Abrechnung herunterladen" in response.content
@@ -93,7 +93,7 @@ def test_kiosk_post_camp_renders_screen_and_settlement_archive(client):
 
 
 @pytest.mark.django_db
-def test_kiosk_post_camp_renders_one_read_only_invoice_area(client):
+def test_kiosk_post_camp_renders_one_read_only_invoice_area(kiosk_client):
     admin = SuperUserFactory()
     today = timezone.localdate()
     camp = CampFactory(
@@ -118,12 +118,12 @@ def test_kiosk_post_camp_renders_one_read_only_invoice_area(client):
         total_advanced=Decimal("0.00"),
         balance=Decimal("100.00"),
     )
-    session = client.session
+    session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session[KIOSK_MODE_SESSION_KEY] = "private"
     session.save()
 
-    response = client.get(reverse("kiosk-home"))
+    response = kiosk_client.get(reverse("kiosk-home"))
     content = response.content.decode("utf-8")
 
     assert response.status_code == 200
@@ -140,7 +140,7 @@ def test_kiosk_post_camp_renders_one_read_only_invoice_area(client):
 
 
 @pytest.mark.django_db
-def test_kiosk_post_camp_hides_invoice_actions_when_admin_disabled_them(client):
+def test_kiosk_post_camp_hides_invoice_actions_when_admin_disabled_them(kiosk_client):
     today = timezone.localdate()
     camp = CampFactory(
         is_active=True,
@@ -149,18 +149,18 @@ def test_kiosk_post_camp_hides_invoice_actions_when_admin_disabled_them(client):
         show_kiosk_invoices=False,
     )
     participant = ParticipantFactory(camp=camp)
-    session = client.session
+    session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session.save()
 
-    response = client.get(reverse("kiosk-home"))
+    response = kiosk_client.get(reverse("kiosk-home"))
     content = response.content.decode("utf-8")
 
     assert response.status_code == 200
     assert "Lager beendet" in content
     assert "Abrechnung herunterladen" not in content
     assert "Aktuelle Abrechnung" not in content
-    assert client.get(reverse("kiosk-current-settlement-pdf")).status_code == 403
+    assert kiosk_client.get(reverse("kiosk-current-settlement-pdf")).status_code == 403
 
 
 @pytest.mark.django_db
@@ -182,17 +182,17 @@ def test_kiosk_post_camp_hides_invoice_actions_when_admin_disabled_them(client):
         "update_attendance_dates",
     ],
 )
-def test_kiosk_post_camp_rejects_every_home_write_action(client, kiosk_mode, route_name, action):
+def test_kiosk_post_camp_rejects_every_home_write_action(kiosk_client, kiosk_mode, route_name, action):
     today = timezone.localdate()
     camp = CampFactory(is_active=True, starts_on=today - timedelta(days=20), ends_on=today - timedelta(days=1))
     participant = ParticipantFactory(camp=camp)
     PriceRuleFactory(camp=camp)
-    session = client.session
+    session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session[KIOSK_MODE_SESSION_KEY] = kiosk_mode
     session.save()
 
-    response = client.post(reverse(route_name), {"action": action}, follow=True)
+    response = kiosk_client.post(reverse(route_name), {"action": action}, follow=True)
 
     assert response.status_code == 200
     assert "Das Lager ist beendet. Änderungen sind nicht mehr möglich." in response.content.decode("utf-8")
@@ -209,15 +209,15 @@ def test_kiosk_post_camp_rejects_every_home_write_action(client, kiosk_mode, rou
         ("central-kiosk-shared-expense-request", "post"),
     ],
 )
-def test_kiosk_post_camp_blocks_separate_write_workflows(client, route_name, method):
+def test_kiosk_post_camp_blocks_separate_write_workflows(kiosk_client, route_name, method):
     today = timezone.localdate()
     camp = CampFactory(is_active=True, starts_on=today - timedelta(days=20), ends_on=today - timedelta(days=1))
     participant = ParticipantFactory(camp=camp)
-    session = client.session
+    session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session.save()
 
-    response = getattr(client, method)(reverse(route_name), follow=True)
+    response = getattr(kiosk_client, method)(reverse(route_name), follow=True)
 
     assert response.status_code == 200
     assert "Das Lager ist beendet. Änderungen sind nicht mehr möglich." in response.content.decode("utf-8")
@@ -225,7 +225,7 @@ def test_kiosk_post_camp_blocks_separate_write_workflows(client, route_name, met
 
 
 @pytest.mark.django_db
-def test_kiosk_settlement_pdf_download_permissions(client):
+def test_kiosk_settlement_pdf_download_permissions(kiosk_client):
     admin = SuperUserFactory()
     camp = CampFactory(is_active=True)
     participant = ParticipantFactory(camp=camp)
@@ -249,21 +249,21 @@ def test_kiosk_settlement_pdf_download_permissions(client):
         balance=Decimal("75.00"),
     )
 
-    session = client.session
+    session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session[KIOSK_MODE_SESSION_KEY] = "private"
     session.save()
 
     # 1. Download own settlement -> 200 PDF
-    res_own = client.get(reverse("kiosk-settlement-pdf", args=[own_settlement.pk]))
+    res_own = kiosk_client.get(reverse("kiosk-settlement-pdf", args=[own_settlement.pk]))
     assert res_own.status_code == 200
     assert res_own["Content-Type"] == "application/pdf"
 
     # 2. Try downloading another participant's settlement -> 403 Forbidden
-    res_other = client.get(reverse("kiosk-settlement-pdf", args=[other_settlement.pk]))
+    res_other = kiosk_client.get(reverse("kiosk-settlement-pdf", args=[other_settlement.pk]))
     assert res_other.status_code == 403
 
     # 3. Live current settlement -> 200 PDF
-    res_live = client.get(reverse("kiosk-current-settlement-pdf"))
+    res_live = kiosk_client.get(reverse("kiosk-current-settlement-pdf"))
     assert res_live.status_code == 200
     assert res_live["Content-Type"] == "application/pdf"

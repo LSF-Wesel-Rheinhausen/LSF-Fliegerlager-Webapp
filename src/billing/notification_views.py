@@ -9,10 +9,11 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.http import require_POST
 
+from .kiosk_access import KIOSK_MODE_SESSION_KEY, KIOSK_PARTICIPANT_SESSION_KEY
 from .models import Participant, PushSubscription
 from .notifications import allowed_categories, queue_participant_notification, queue_user_notification
 from .pwa_views import pwa_template_context
-from .views import KIOSK_MODE_SESSION_KEY, KIOSK_PARTICIPANT_SESSION_KEY, _kiosk_context
+from .views import _kiosk_context
 
 
 def _json_payload(request: HttpRequest) -> dict[str, Any] | None:
