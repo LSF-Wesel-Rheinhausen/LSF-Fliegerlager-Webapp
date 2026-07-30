@@ -1800,8 +1800,6 @@ def _accepted_booking_links(participant):
 def _accepted_booking_link_between(
     participant: Participant,
     target: Participant,
-    *,
-    for_update: bool = False,
 ) -> ParticipantBookingLink | None:
     """Return the current same-camp partner authorization between two accounts."""
     if participant.pk == target.pk or participant.camp_id != target.camp_id:
@@ -1816,30 +1814,70 @@ def _accepted_booking_link_between(
         inviter__archived_at__isnull=True,
         invitee__archived_at__isnull=True,
     )
-    if for_update:
-        links = links.select_for_update(of=("self",))
     return links.order_by("pk").first()
+
+
+def _lock_booking_authorization_dependencies(
+    participants: Iterable[Participant],
+    family_members: Iterable[ParticipantFamilyMember | None] = (),
+) -> tuple[dict[int, Participant], dict[int, ParticipantFamilyMember]]:
+    """Lock participant and family-member FK targets before authorization rows."""
+    participant_ids = sorted({participant.pk for participant in participants})
+    family_member_ids = sorted({family_member.pk for family_member in family_members if family_member is not None})
+    locked_participants = {
+        participant.pk: participant
+        for participant in Participant.objects.select_for_update(of=("self",))
+        .filter(pk__in=participant_ids)
+        .order_by("pk")
+    }
+    locked_family_members = {}
+    if family_member_ids:
+        locked_family_members = {
+            family_member.pk: family_member
+            for family_member in ParticipantFamilyMember.objects.select_for_update(of=("self",))
+            .select_related("guardian")
+            .filter(pk__in=family_member_ids)
+            .order_by("pk")
+        }
+    return locked_participants, locked_family_members
 
 
 def _lock_booking_link_participant_pair(participant: Participant, target: Participant) -> bool:
     """Lock an unordered participant pair canonically before changing its links."""
-    participant_ids = sorted({participant.pk, target.pk})
-    if len(participant_ids) != 2:
+    expected_participant_ids = {participant.pk, target.pk}
+    if len(expected_participant_ids) != 2:
         return False
-    locked_participants = list(
-        Participant.objects.select_for_update(of=("self",)).only("pk").filter(pk__in=participant_ids).order_by("pk")
+    locked_participants, _locked_family_members = _lock_booking_authorization_dependencies(
+        [participant, target],
     )
-    return len(locked_participants) == 2
+    return set(locked_participants) == expected_participant_ids
 
 
 def _lock_accepted_booking_links(
     participant: Participant,
     targets: Iterable[Participant],
+    *,
+    family_members: Iterable[ParticipantFamilyMember | None] = (),
+    dependencies_locked: bool = False,
 ) -> dict[int, ParticipantBookingLink]:
-    """Lock every required partner authorization in stable database order."""
-    target_ids = sorted({target.pk for target in targets if target.pk != participant.pk})
+    """Lock required FK targets, then partner authorizations, in stable order."""
+    targets_by_id = {target.pk: target for target in targets if target.pk != participant.pk}
+    target_ids = sorted(targets_by_id)
     if not target_ids:
         return {}
+    family_members_by_id = {
+        family_member.pk: family_member for family_member in family_members if family_member is not None
+    }
+    if not dependencies_locked:
+        expected_participant_ids = {participant.pk, *target_ids}
+        locked_participants, locked_family_members = _lock_booking_authorization_dependencies(
+            [participant, *targets_by_id.values()],
+            family_members_by_id.values(),
+        )
+        if set(locked_participants) != expected_participant_ids or set(locked_family_members) != set(
+            family_members_by_id
+        ):
+            raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
     booking_links = list(
         ParticipantBookingLink.objects.select_for_update(of=("self",))
         .select_related("inviter", "invitee")
@@ -2319,28 +2357,31 @@ def _update_kiosk_checkin_dates(request, participant, checkin_participants):
         for error in errors:
             messages.error(request, error)
         return False
+    if not updates:
+        return True
 
     actor_family_member = _kiosk_family_member(request, participant)
     with transaction.atomic():
-        participant_ids = sorted(
-            {update["target"].pk for update in updates if isinstance(update["target"], Participant)}
+        dependency_participants = [participant]
+        dependency_family_members = [actor_family_member]
+        for update in updates:
+            submitted_target = update["target"]
+            if isinstance(submitted_target, Participant):
+                dependency_participants.append(submitted_target)
+            else:
+                dependency_participants.append(submitted_target.guardian)
+                dependency_family_members.append(submitted_target)
+        expected_participant_ids = {target.pk for target in dependency_participants}
+        expected_family_member_ids = {target.pk for target in dependency_family_members if target is not None}
+        locked_participants, locked_family_members = _lock_booking_authorization_dependencies(
+            dependency_participants,
+            dependency_family_members,
         )
-        family_member_ids = sorted(
-            {update["target"].pk for update in updates if isinstance(update["target"], ParticipantFamilyMember)}
-        )
-        locked_participants = {
-            target.pk: target
-            for target in Participant.objects.select_for_update(of=("self",))
-            .filter(pk__in=participant_ids)
-            .order_by("pk")
-        }
-        locked_family_members = {
-            target.pk: target
-            for target in ParticipantFamilyMember.objects.select_for_update(of=("self",))
-            .select_related("guardian")
-            .filter(pk__in=family_member_ids)
-            .order_by("pk")
-        }
+        if (
+            set(locked_participants) != expected_participant_ids
+            or set(locked_family_members) != expected_family_member_ids
+        ):
+            raise PermissionDenied("Der Check-in-Eintrag ist nicht mehr verfügbar.")
 
         partner_participants = {}
         for update in updates:
@@ -2366,6 +2407,8 @@ def _update_kiosk_checkin_dates(request, participant, checkin_participants):
         booking_links = _lock_accepted_booking_links(
             participant,
             partner_participants.values(),
+            family_members=locked_family_members.values(),
+            dependencies_locked=True,
         )
 
         for update in updates:
@@ -2614,11 +2657,14 @@ def _book_meal_for_target(
         )
     booking_link = None
     if participant.pk != booked_by.pk:
-        booking_link = (
-            prelocked_booking_link
-            if booking_link_lock_acquired
-            else _accepted_booking_link_between(booked_by, participant, for_update=True)
-        )
+        if booking_link_lock_acquired:
+            booking_link = prelocked_booking_link
+        else:
+            booking_link = _lock_accepted_booking_links(
+                booked_by,
+                [participant],
+                family_members=[actor_family_member, family_member],
+            ).get(participant.pk)
         if booking_link is None:
             raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
     before = (
@@ -2712,7 +2758,11 @@ def _retract_meal_signup(
     if affected_participant.pk != actor.pk:
         if not _matches_kiosk_meal_retraction(confirmation_token, actor, locked_signup):
             return False
-        booking_link = _accepted_booking_link_between(actor, affected_participant, for_update=True)
+        booking_link = _lock_accepted_booking_links(
+            actor,
+            [affected_participant],
+            family_members=[actor_family_member, locked_signup.family_member],
+        ).get(affected_participant.pk)
         if booking_link is None:
             raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
     elif locked_signup.charge is not None and locked_signup.charge.kiosk_booked_by_id != actor.pk:
@@ -3149,9 +3199,14 @@ def kiosk_home(request, kiosk_mode="private"):
                     try:
                         with transaction.atomic():
                             booking_participants = [booking[1] for booking in resolved_bookings]
+                            booking_family_members = [
+                                active_family_member,
+                                *(booking[2] for booking in resolved_bookings),
+                            ]
                             locked_booking_links = _lock_accepted_booking_links(
                                 participant,
                                 booking_participants,
+                                family_members=booking_family_members,
                             )
                             for booking_index, (
                                 target,
@@ -3257,11 +3312,14 @@ def kiosk_home(request, kiosk_mode="private"):
                     )
                     booking_link = None
                     if charge.participant_id != participant.pk:
-                        booking_link = _accepted_booking_link_between(
+                        booking_link = _lock_accepted_booking_links(
                             participant,
-                            charge.participant,
-                            for_update=True,
-                        )
+                            [charge.participant],
+                            family_members=[
+                                active_family_member,
+                                creation_audit.target_family_member if creation_audit is not None else None,
+                            ],
+                        ).get(charge.participant_id)
                         if booking_link is None:
                             raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
                     elif charge.kiosk_booked_by_id != participant.pk:
@@ -3364,9 +3422,16 @@ def kiosk_home(request, kiosk_mode="private"):
                             target["object"] if target["kind"] == "participant" else target["object"].guardian
                             for target, _meal_date, _variant, _price_rule in bookings
                         ]
+                        booking_family_members = [active_family_member]
+                        booking_family_members.extend(
+                            target["object"]
+                            for target, _meal_date, _variant, _price_rule in bookings
+                            if target["kind"] == "family"
+                        )
                         locked_booking_links = _lock_accepted_booking_links(
                             participant,
                             booking_participants,
+                            family_members=booking_family_members,
                         )
                         for target, meal_date, variant, price_rule in bookings:
                             signup_key = _meal_signup_key(target, meal_date, meal)

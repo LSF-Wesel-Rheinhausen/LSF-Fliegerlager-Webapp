@@ -661,16 +661,25 @@ def test_multi_partner_checkin_locks_authorizations_in_canonical_order(kiosk_cli
     checkin_targets = {target["token"]: target for target in page_response.context["checkin_participants"]}
     first_token = f"participant-{first_partner.pk}"
     second_token = f"participant-{second_partner.pk}"
-    authorization_locks = []
+    lock_events = []
     original_fetch_all = QuerySet._fetch_all
 
-    def capture_authorization_lock(queryset):
+    def capture_lock_event(queryset):
         was_unfetched = queryset._result_cache is None
         original_fetch_all(queryset)
-        if was_unfetched and queryset.query.select_for_update and queryset.model is ParticipantBookingLink:
-            authorization_locks.append(tuple(instance.pk for instance in queryset._result_cache))
+        if (
+            was_unfetched
+            and queryset.query.select_for_update
+            and queryset.model in {Participant, ParticipantBookingLink}
+        ):
+            lock_events.append(
+                (
+                    queryset.model,
+                    tuple(instance.pk for instance in queryset._result_cache),
+                )
+            )
 
-    monkeypatch.setattr(QuerySet, "_fetch_all", capture_authorization_lock)
+    monkeypatch.setattr(QuerySet, "_fetch_all", capture_lock_event)
 
     response = kiosk_client.post(
         reverse("kiosk-home"),
@@ -687,7 +696,10 @@ def test_multi_partner_checkin_locks_authorizations_in_canonical_order(kiosk_cli
     )
 
     assert response.status_code == 302
-    assert authorization_locks == [tuple(sorted((first_link.pk, second_link.pk)))]
+    assert lock_events == [
+        (Participant, tuple(sorted((participant.pk, first_partner.pk, second_partner.pk)))),
+        (ParticipantBookingLink, tuple(sorted((first_link.pk, second_link.pk)))),
+    ]
 
 
 @pytest.mark.django_db
@@ -1397,14 +1409,24 @@ def test_partner_meal_workflows_lock_signup_before_authorization(monkeypatch):
         "retract": [],
     }
     active_workflow = "book"
-    original_first = QuerySet.first
+    original_fetch_all = QuerySet._fetch_all
 
     def capture_lock_order(queryset):
-        if queryset.query.select_for_update and queryset.model in {MealSignup, ParticipantBookingLink}:
+        was_unfetched = queryset._result_cache is None
+        original_fetch_all(queryset)
+        if (
+            was_unfetched
+            and queryset.query.select_for_update
+            and queryset.model
+            in {
+                MealSignup,
+                Participant,
+                ParticipantBookingLink,
+            }
+        ):
             lock_order_by_workflow[active_workflow].append(queryset.model)
-        return original_first(queryset)
 
-    monkeypatch.setattr(QuerySet, "first", capture_lock_order)
+    monkeypatch.setattr(QuerySet, "_fetch_all", capture_lock_order)
 
     with transaction.atomic():
         _book_meal_for_target(
@@ -1428,8 +1450,8 @@ def test_partner_meal_workflows_lock_signup_before_authorization(monkeypatch):
 
     assert retracted is True
     assert lock_order_by_workflow == {
-        "book": [MealSignup, ParticipantBookingLink],
-        "retract": [MealSignup, ParticipantBookingLink],
+        "book": [MealSignup, Participant, ParticipantBookingLink],
+        "retract": [MealSignup, Participant, ParticipantBookingLink],
     }
 
 
@@ -1486,7 +1508,7 @@ def test_partner_meal_batch_locks_all_signups_before_authorization(kiosk_client,
         if (
             was_unfetched
             and queryset.query.select_for_update
-            and queryset.model in {MealSignup, ParticipantBookingLink}
+            and queryset.model in {MealSignup, Participant, ParticipantBookingLink}
         ):
             lock_events.append(
                 (
@@ -1522,6 +1544,8 @@ def test_partner_meal_batch_locks_all_signups_before_authorization(kiosk_client,
     }
     assert locked_signup_ids == {signup.pk for signup in signups}
     assert all(model is not MealSignup for model, _pks in lock_events[first_authorization_lock:])
+    participant_locks = [pks for model, pks in lock_events if model is Participant]
+    assert participant_locks == [tuple(sorted((actor.pk, first_partner.pk, second_partner.pk)))]
     authorization_locks = [pks for model, pks in lock_events if model is ParticipantBookingLink]
     assert authorization_locks == [tuple(sorted((first_link.pk, second_link.pk)))]
 
@@ -1858,6 +1882,12 @@ def test_multi_partner_quick_booking_locks_authorizations_in_canonical_order(kio
     participant = ParticipantFactory(camp=camp, is_child=False, is_companion=False)
     first_partner = ParticipantFactory(camp=camp, is_child=False, is_companion=False)
     second_partner = ParticipantFactory(camp=camp, is_child=False, is_companion=False)
+    first_partner_child = ParticipantFamilyMember.objects.create(
+        guardian=first_partner,
+        first_name="Kind",
+        last_name="Partner",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
     first_link = ParticipantBookingLink.objects.create(
         inviter=participant,
         invitee=first_partner,
@@ -1872,13 +1902,13 @@ def test_multi_partner_quick_booking_locks_authorizations_in_canonical_order(kio
         camp=camp,
         kind=PriceRule.Kind.DRINK,
         unit_price=Decimal("2.00"),
-        applies_to_children=False,
+        applies_to_children=True,
         applies_to_adults=True,
         applies_to_companions=False,
     )
     target_tokens = [
         f"participant-{second_partner.pk}",
-        f"participant-{first_partner.pk}",
+        f"family-{first_partner_child.pk}",
     ]
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
@@ -1892,16 +1922,25 @@ def test_multi_partner_quick_booking_locks_authorizations_in_canonical_order(kio
     }
     preview_response = kiosk_client.post(reverse("kiosk-home"), request_data)
     confirmation = preview_response.context["quick_confirmation"]
-    authorization_locks = []
+    lock_events = []
     original_fetch_all = QuerySet._fetch_all
 
-    def capture_authorization_lock(queryset):
+    def capture_lock_event(queryset):
         was_unfetched = queryset._result_cache is None
         original_fetch_all(queryset)
-        if was_unfetched and queryset.query.select_for_update and queryset.model is ParticipantBookingLink:
-            authorization_locks.append(tuple(instance.pk for instance in queryset._result_cache))
+        if (
+            was_unfetched
+            and queryset.query.select_for_update
+            and queryset.model in {Participant, ParticipantFamilyMember, ParticipantBookingLink}
+        ):
+            lock_events.append(
+                (
+                    queryset.model,
+                    tuple(instance.pk for instance in queryset._result_cache),
+                )
+            )
 
-    monkeypatch.setattr(QuerySet, "_fetch_all", capture_authorization_lock)
+    monkeypatch.setattr(QuerySet, "_fetch_all", capture_lock_event)
 
     response = kiosk_client.post(
         reverse("kiosk-home"),
@@ -1915,7 +1954,84 @@ def test_multi_partner_quick_booking_locks_authorizations_in_canonical_order(kio
     assert preview_response.status_code == 200
     assert response.status_code == 302
     assert Charge.objects.count() == 2
-    assert authorization_locks == [tuple(sorted((first_link.pk, second_link.pk)))]
+    assert lock_events == [
+        (Participant, tuple(sorted((participant.pk, first_partner.pk, second_partner.pk)))),
+        (ParticipantFamilyMember, (first_partner_child.pk,)),
+        (ParticipantBookingLink, tuple(sorted((first_link.pk, second_link.pk)))),
+    ]
+
+
+@pytest.mark.django_db
+def test_partner_quick_cancellation_locks_dependencies_before_authorization(kiosk_client, monkeypatch):
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp)
+    partner = ParticipantFactory(camp=camp)
+    partner_child = ParticipantFamilyMember.objects.create(
+        guardian=partner,
+        first_name="Kind",
+        last_name="Partner",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    booking_link = ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    charge = Charge.objects.create(
+        participant=partner,
+        kiosk_booked_by=partner,
+        kind=Charge.Kind.DRINK,
+        description="Wasser (Kiosk) für Kind Partner",
+        quantity=Decimal("1.00"),
+        unit_price=Decimal("1.50"),
+    )
+    KioskActionAuditLog.objects.create(
+        camp=camp,
+        actor_participant=partner,
+        target_participant=partner,
+        target_family_member=partner_child,
+        booking_link=booking_link,
+        charge=charge,
+        action=KioskActionAuditLog.Action.QUICK_BOOKED,
+        description=f"{charge.booking_reference}: Schnellbuchung erstellt.",
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    lock_events = []
+    original_fetch_all = QuerySet._fetch_all
+
+    def capture_lock_event(queryset):
+        was_unfetched = queryset._result_cache is None
+        original_fetch_all(queryset)
+        if (
+            was_unfetched
+            and queryset.query.select_for_update
+            and queryset.model in {Participant, ParticipantFamilyMember, ParticipantBookingLink}
+        ):
+            lock_events.append(
+                (
+                    queryset.model,
+                    tuple(instance.pk for instance in queryset._result_cache),
+                )
+            )
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", capture_lock_event)
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "quick_cancel",
+            "charge_id": charge.pk,
+        },
+    )
+
+    assert response.status_code == 302
+    assert lock_events == [
+        (Participant, tuple(sorted((participant.pk, partner.pk)))),
+        (ParticipantFamilyMember, (partner_child.pk,)),
+        (ParticipantBookingLink, (booking_link.pk,)),
+    ]
 
 
 @pytest.mark.django_db

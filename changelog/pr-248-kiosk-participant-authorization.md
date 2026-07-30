@@ -45,9 +45,11 @@
   Essensanmeldungen in stabiler Reihenfolge, bevor sie Partner-Vollmachten
   sperren, damit parallele Gegenoperationen keinen Lock-Zyklus bilden.
 - Sperrt bei Essens-, Schnellbuchungs- und Check-in-Sammeländerungen für
-  mehrere Partnerkonten sämtliche benötigten Vollmachten einmalig in stabiler
-  Datenbankreihenfolge und verwendet diese gesperrten Zeilen für den gesamten
-  Schreibvorgang.
+  mehrere Partnerkonten zuerst alle referenzierten Teilnehmer- und
+  Familienzeilen und danach sämtliche benötigten Vollmachten jeweils in
+  stabiler Datenbankreihenfolge. Diese gesperrten Zeilen werden für den
+  gesamten Schreibvorgang wiederverwendet, sodass auch parallele Widerrufe
+  keinen Fremdschlüssel-/Vollmachts-Lockzyklus bilden.
 - Bindet jede Check-in-Zeile an ihren signierten Ausgangszustand, schreibt nur
   tatsächlich geänderte Zeilen und weist konkurrierend veränderte Daten ohne
   Teilaktualisierung zurück.
