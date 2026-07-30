@@ -740,7 +740,12 @@ def test_booking_link_and_linked_booking_events_notify_the_other_participant():
     )
     link = ParticipantBookingLink.objects.create(inviter=inviter, invitee=invitee)
 
-    notify_booking_link(link, event="invited", actor=inviter)
+    notify_booking_link(
+        link,
+        event="invited",
+        actor_id=inviter.pk,
+        actor_display_name=inviter.full_name,
+    )
     charge = Charge.objects.create(
         participant=invitee,
         kiosk_booked_by=inviter,

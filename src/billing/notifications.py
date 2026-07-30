@@ -189,19 +189,25 @@ def notify_expense_status(expense: Expense) -> None:
     )
 
 
-def notify_booking_link(link: ParticipantBookingLink, *, event: str, actor: Participant) -> None:
-    """Notify the participant affected by a booking-link state change."""
+def notify_booking_link(
+    link: ParticipantBookingLink,
+    *,
+    event: str,
+    actor_id: int,
+    actor_display_name: str,
+) -> None:
+    """Notify a participant using the actor name captured under the pair lock."""
     if event == "invited":
         recipient = link.invitee
         title = "Neue Partner-Vollmacht"
-        body = f"{link.inviter.full_name} möchte eine gegenseitige Partner-Vollmacht für dieses Lager einrichten."
+        body = f"{actor_display_name} möchte eine gegenseitige Partner-Vollmacht für dieses Lager einrichten."
     else:
-        recipient = link.invitee if actor.pk == link.inviter_id else link.inviter
+        recipient = link.invitee if actor_id == link.inviter_id else link.inviter
         labels = {"accepted": "angenommen", "declined": "abgelehnt", "revoked": "aufgelöst"}
         if event not in labels:
             raise ValueError("Unsupported booking-link event")
         title = "Partner-Vollmacht geändert"
-        body = f"{actor.full_name} hat die Partner-Vollmacht {labels[event]}."
+        body = f"{actor_display_name} hat die Partner-Vollmacht {labels[event]}."
     queue_participant_notification(
         recipient,
         category="booking_links",

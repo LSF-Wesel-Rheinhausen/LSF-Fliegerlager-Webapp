@@ -544,6 +544,59 @@ def test_quick_booking_notification_uses_locked_actor_name_snapshot(
 
 
 @pytest.mark.django_db
+def test_companion_quick_booking_notification_attributes_actual_actor(
+    kiosk_client,
+    django_capture_on_commit_callbacks,
+    settings,
+):
+    settings.WEB_PUSH_ENABLED = True
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    companion = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Charles",
+        last_name="Babbage",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    partner = ParticipantFactory(camp=camp, first_name="Grace", last_name="Hopper")
+    ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    PushSubscription.objects.create(
+        participant=partner,
+        endpoint="https://push.example.test/companion-quick-actor",
+        p256dh="key",
+        auth="secret",
+        categories=["booking_links"],
+    )
+    rule = PriceRuleFactory(camp=camp, kind=PriceRule.Kind.DRINK, name="Wasser")
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    session.save()
+
+    with django_capture_on_commit_callbacks(execute=True):
+        response = kiosk_client.post(
+            reverse("kiosk-home"),
+            {
+                "action": "quick",
+                "quick-price_rule": rule.pk,
+                "quick-quantity": 1,
+                "quick-target": [f"participant-{partner.pk}"],
+            },
+        )
+
+    assert response.status_code == 302
+    audit_log = KioskActionAuditLog.objects.get(action=KioskActionAuditLog.Action.QUICK_BOOKED)
+    assert audit_log.actor_family_member == companion
+    message = PushMessage.objects.get()
+    assert message.body.startswith("Charles Babbage hat ")
+    assert "Ada Lovelace" not in message.body
+
+
+@pytest.mark.django_db
 def test_quick_cancellation_notification_uses_locked_actor_name_snapshot(
     kiosk_client,
     django_capture_on_commit_callbacks,
@@ -629,6 +682,102 @@ def test_partner_activity_routes_exist_for_both_kiosk_modes():
         resolve("/central/kiosk/participants/42/export/settlement.pdf").url_name
         == "central-kiosk-participant-current-settlement-pdf"
     )
+
+
+@pytest.mark.django_db
+def test_partner_invitation_notification_uses_locked_actor_name_snapshot(
+    kiosk_client,
+    django_capture_on_commit_callbacks,
+    settings,
+):
+    settings.WEB_PUSH_ENABLED = True
+    camp = CampFactory(is_active=True)
+    inviter = ParticipantFactory(camp=camp, first_name="Ada", last_name="Alt")
+    invitee = ParticipantFactory(camp=camp)
+    PushSubscription.objects.create(
+        participant=invitee,
+        endpoint="https://push.example.test/locked-inviter-name",
+        p256dh="key",
+        auth="secret",
+        categories=["booking_links"],
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = inviter.pk
+    session.save()
+
+    with django_capture_on_commit_callbacks() as callbacks:
+        response = kiosk_client.post(
+            reverse("kiosk-partner-activity"),
+            {
+                "action": "booking_link_invite",
+                "link-participant": invitee.pk,
+            },
+        )
+
+    Participant.objects.filter(pk=inviter.pk).update(first_name="AdaNeu")
+    for callback in callbacks:
+        callback()
+
+    assert response.status_code == 302
+    assert len(callbacks) == 1
+    message = PushMessage.objects.get()
+    assert message.body.startswith("Ada Alt möchte ")
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("action", "initial_status", "expected_label"),
+    [
+        ("booking_link_accept", ParticipantBookingLink.Status.PENDING, "angenommen"),
+        ("booking_link_decline", ParticipantBookingLink.Status.PENDING, "abgelehnt"),
+        ("booking_link_revoke", ParticipantBookingLink.Status.ACCEPTED, "aufgelöst"),
+    ],
+)
+def test_partner_response_notification_uses_locked_actor_name_snapshot(
+    kiosk_client,
+    django_capture_on_commit_callbacks,
+    settings,
+    action,
+    initial_status,
+    expected_label,
+):
+    settings.WEB_PUSH_ENABLED = True
+    camp = CampFactory(is_active=True)
+    other_participant = ParticipantFactory(camp=camp)
+    actor = ParticipantFactory(camp=camp, first_name="Grace", last_name="Alt")
+    booking_link = ParticipantBookingLink.objects.create(
+        inviter=other_participant,
+        invitee=actor,
+        status=initial_status,
+    )
+    PushSubscription.objects.create(
+        participant=other_participant,
+        endpoint=f"https://push.example.test/locked-link-actor-{action}",
+        p256dh="key",
+        auth="secret",
+        categories=["booking_links"],
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = actor.pk
+    session.save()
+
+    with django_capture_on_commit_callbacks() as callbacks:
+        response = kiosk_client.post(
+            reverse("kiosk-partner-activity"),
+            {
+                "action": action,
+                "booking_link_id": booking_link.pk,
+            },
+        )
+
+    Participant.objects.filter(pk=actor.pk).update(first_name="GraceNeu")
+    for callback in callbacks:
+        callback()
+
+    assert response.status_code == 302
+    assert len(callbacks) == 1
+    message = PushMessage.objects.get()
+    assert message.body == f"Grace Alt hat die Partner-Vollmacht {expected_label}."
 
 
 @pytest.mark.django_db
@@ -2134,6 +2283,66 @@ def test_paid_partner_meal_retraction_requires_signed_confirmation(kiosk_client,
 
 
 @pytest.mark.django_db
+def test_partner_meal_retraction_rejects_charge_changed_after_signup_lock(monkeypatch):
+    actor = ParticipantFactory()
+    partner = ParticipantFactory(camp=actor.camp)
+    ParticipantBookingLink.objects.create(
+        inviter=actor,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    charge = Charge.objects.create(
+        participant=partner,
+        kiosk_booked_by=actor,
+        kind=Charge.Kind.FOOD,
+        description="Abendessen",
+        quantity=Decimal("1.00"),
+        unit_price=Decimal("8.00"),
+        occurred_on=date(2026, 7, 2),
+    )
+    signup = MealSignup.objects.create(
+        participant=partner,
+        meal_date=date(2026, 7, 2),
+        meal=MealSignup.Meal.DINNER,
+        variant=MealSignup.Variant.NORMAL,
+        charge=charge,
+    )
+    confirmation_token = _sign_kiosk_meal_retraction(actor, signup)
+    original_fetch_all = QuerySet._fetch_all
+    charge_changed = False
+    charge_lock_observed = False
+
+    def change_charge_after_signup_lock(queryset):
+        nonlocal charge_changed, charge_lock_observed
+        was_unfetched = queryset._result_cache is None
+        original_fetch_all(queryset)
+        if was_unfetched and not charge_changed and queryset.query.select_for_update and queryset.model is MealSignup:
+            Charge.objects.filter(pk=charge.pk).update(unit_price=Decimal("9.00"))
+            charge_changed = True
+        if was_unfetched and queryset.query.select_for_update and queryset.model is Charge:
+            charge_lock_observed = True
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", change_charge_after_signup_lock)
+
+    with transaction.atomic():
+        result = _retract_meal_signup(
+            signup,
+            actor,
+            confirmation_token=confirmation_token,
+        )
+
+    signup.refresh_from_db()
+    charge.refresh_from_db()
+    assert charge_changed is True
+    assert charge_lock_observed is True
+    assert result is False
+    assert signup.status == MealSignup.Status.ACTIVE
+    assert charge.unit_price == Decimal("9.00")
+    assert charge.deleted_at is None
+    assert not KioskActionAuditLog.objects.exists()
+
+
+@pytest.mark.django_db
 def test_partner_meal_retraction_revalidates_stale_state_after_row_lock(
     kiosk_client,
     django_capture_on_commit_callbacks,
@@ -2354,6 +2563,7 @@ def test_partner_meal_workflows_lock_camp_and_identities_before_signup_and_autho
             and queryset.model
             in {
                 Camp,
+                Charge,
                 MealSignup,
                 Participant,
                 ParticipantBookingLink,
@@ -2387,7 +2597,7 @@ def test_partner_meal_workflows_lock_camp_and_identities_before_signup_and_autho
     assert retracted is True
     assert lock_order_by_workflow == {
         "book": [Camp, Participant, PriceRule, MealSignup, ParticipantBookingLink],
-        "retract": [Camp, Participant, MealSignup, ParticipantBookingLink],
+        "retract": [Camp, Participant, MealSignup, Charge, ParticipantBookingLink],
     }
 
 

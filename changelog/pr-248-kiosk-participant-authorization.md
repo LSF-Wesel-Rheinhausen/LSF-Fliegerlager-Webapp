@@ -37,8 +37,10 @@
   Bestätigungstoken. Status und signierter Zustand werden nach dem Datenbank-
   Lock erneut geprüft, damit parallele Requests weder doppelte Stornierungen
   noch doppelte Audit- oder Benachrichtigungseinträge erzeugen. Der Lock
-  beschränkt sich auf die Essensanmeldung selbst, sodass PostgreSQL nullable
-  vorgeladene Charge- und Familienrelationen nicht unzulässig mitsperrt.
+  sperrt zuerst nur die Essensanmeldung und lädt danach eine vorhandene Charge
+  separat unter Lock neu. Dadurch bleiben nullable Relationen unter
+  PostgreSQL zulässig und eine zwischenzeitlich geänderte Charge kann weder
+  die Tokenprüfung noch den Audit-Snapshot umgehen.
   Jede erfolgreiche Rücknahme erhöht zusätzlich eine persistente Version,
   sodass ihr Bestätigungstoken auch nach einer identischen Neubuchung nicht
   erneut verwendet werden kann. Buchungs-Batches sperren alle betroffenen
@@ -74,7 +76,10 @@
   damit ein Name, der unmittelbar vor dem Lock geändert wurde, überall
   konsistent erscheint. Der Namens-Snapshot wird an den Commit-Callback
   übergeben und dort nicht aus einer später erneut geladenen Identität
-  rekonstruiert.
+  rekonstruiert. Handelt eine Begleitperson, nennt die Benachrichtigung diese
+  tatsächliche Person statt des Hauptkontos. Auch Einladungs-, Annahme-,
+  Ablehnungs- und Widerrufsbenachrichtigungen verwenden den unter Lock
+  erfassten Namen.
 - Bindet jede Check-in-Zeile an ihren signierten Ausgangszustand, schreibt nur
   tatsächlich geänderte Zeilen und weist konkurrierend veränderte Daten ohne
   Teilaktualisierung zurück.

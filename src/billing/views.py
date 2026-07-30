@@ -2032,12 +2032,18 @@ def _linked_booking_participants(participant):
     )
 
 
-def _notify_booking_link_by_id(link_id: int, event: str, actor_id: int) -> None:
+def _notify_booking_link_by_id(
+    link_id: int,
+    event: str,
+    actor_id: int,
+    actor_display_name: str,
+) -> None:
     """Load committed link state before queuing its participant notification."""
     notify_booking_link(
         ParticipantBookingLink.objects.select_related("inviter", "invitee").get(pk=link_id),
         event=event,
-        actor=Participant.objects.get(pk=actor_id),
+        actor_id=actor_id,
+        actor_display_name=actor_display_name,
     )
 
 
@@ -2129,7 +2135,13 @@ def kiosk_partner_activity(request, kiosk_mode="private"):
                             after={"status": booking_link.status},
                         )
                         transaction.on_commit(
-                            partial(_notify_booking_link_by_id, booking_link.pk, "invited", locked_inviter.pk)
+                            partial(
+                                _notify_booking_link_by_id,
+                                booking_link.pk,
+                                "invited",
+                                locked_inviter.pk,
+                                locked_inviter.full_name,
+                            )
                         )
                 if booking_link is not None:
                     messages.success(request, "Einladung zur Partner-Vollmacht wurde gesendet.")
@@ -2251,6 +2263,7 @@ def kiosk_partner_activity(request, kiosk_mode="private"):
                                         booking_link.pk,
                                         event_by_action[action],
                                         locked_participant.pk,
+                                        locked_participant.full_name,
                                     )
                                 )
             if booking_link is not None:
@@ -2914,7 +2927,9 @@ def _book_meal_for_target(
             _notify_linked_booking_by_id,
             charge.pk,
             booked_by.pk,
-            actor_display_name=booked_by.full_name,
+            actor_display_name=(
+                actor_family_member.full_name if actor_family_member is not None else booked_by.full_name
+            ),
             cancelled=False,
         )
     )
@@ -2949,7 +2964,7 @@ def _retract_meal_signup(
     )
     locked_signup = (
         MealSignup.objects.select_for_update(of=("self",))
-        .select_related("participant", "family_member", "charge", "charge__kiosk_booked_by")
+        .select_related("participant", "family_member")
         .filter(pk=signup.pk, status=MealSignup.Status.ACTIVE)
         .first()
     )
@@ -2959,6 +2974,12 @@ def _retract_meal_signup(
         or locked_signup.family_member_id != (affected_family_member.pk if affected_family_member is not None else None)
     ):
         return False
+    locked_charge = None
+    if locked_signup.charge_id is not None:
+        locked_charge = Charge.objects.select_for_update(of=("self",)).filter(pk=locked_signup.charge_id).first()
+        if locked_charge is None:
+            return False
+    locked_signup.charge = locked_charge
     booking_link = None
     if affected_participant.pk != actor.pk:
         if not _matches_kiosk_meal_retraction(confirmation_token, actor, locked_signup):
@@ -2971,11 +2992,11 @@ def _retract_meal_signup(
         ).get(affected_participant.pk)
         if booking_link is None:
             raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
-    elif locked_signup.charge is not None and locked_signup.charge.kiosk_booked_by_id != actor.pk:
+    elif locked_charge is not None and locked_charge.kiosk_booked_by_id != actor.pk:
         creation_audit = (
             KioskActionAuditLog.objects.select_related("booking_link")
             .filter(
-                charge=locked_signup.charge,
+                charge=locked_charge,
                 action=KioskActionAuditLog.Action.MEAL_BOOKED,
             )
             .order_by("created_at", "pk")
@@ -2987,7 +3008,7 @@ def _retract_meal_signup(
     locked_signup.retraction_version += 1
     locked_signup.retracted_at = timezone.now()
     locked_signup.save(update_fields=["status", "retraction_version", "retracted_at", "updated_at"])
-    charge = locked_signup.charge
+    charge = locked_charge
     if charge is not None:
         charge.deleted_at = timezone.now()
         charge.deleted_by = None
@@ -3020,7 +3041,9 @@ def _retract_meal_signup(
                 _notify_linked_booking_by_id,
                 charge.pk,
                 actor.pk,
-                actor_display_name=actor.full_name,
+                actor_display_name=(
+                    actor_family_member.full_name if actor_family_member is not None else actor.full_name
+                ),
                 cancelled=True,
             )
         )
@@ -3546,7 +3569,11 @@ def kiosk_home(request, kiosk_mode="private"):
                                         _notify_linked_booking_by_id,
                                         charge.pk,
                                         locked_actor.pk,
-                                        actor_display_name=locked_actor.full_name,
+                                        actor_display_name=(
+                                            locked_actor_family_member.full_name
+                                            if locked_actor_family_member is not None
+                                            else locked_actor.full_name
+                                        ),
                                         cancelled=False,
                                     )
                                 )
@@ -3693,7 +3720,11 @@ def kiosk_home(request, kiosk_mode="private"):
                                     _notify_linked_booking_by_id,
                                     charge.pk,
                                     locked_actor.pk,
-                                    actor_display_name=locked_actor.full_name,
+                                    actor_display_name=(
+                                        locked_actor_family_member.full_name
+                                        if locked_actor_family_member is not None
+                                        else locked_actor.full_name
+                                    ),
                                     cancelled=True,
                                 )
                             )
