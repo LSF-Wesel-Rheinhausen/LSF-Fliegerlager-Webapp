@@ -152,3 +152,48 @@ def test_partner_authorization_migration_requires_fresh_invitation_and_acceptanc
     assert legacy_accepted.status == ParticipantBookingLink.Status.REVOKED
     assert pending.status == ParticipantBookingLink.Status.REVOKED
     assert revoked.status == ParticipantBookingLink.Status.REVOKED
+
+
+@pytest.mark.django_db(transaction=True)
+def test_kiosk_audit_migration_snapshots_existing_family_member_names() -> None:
+    executor = MigrationExecutor(connection)
+    old_target = [("billing", "0049_protect_kiosk_audit_family_members")]
+    executor.migrate(old_target)
+    old_apps = executor.loader.project_state(old_target).apps
+
+    Camp = old_apps.get_model("billing", "Camp")
+    Participant = old_apps.get_model("billing", "Participant")
+    FamilyMember = old_apps.get_model("billing", "ParticipantFamilyMember")
+    AuditLog = old_apps.get_model("billing", "KioskActionAuditLog")
+    camp = Camp.objects.create(name="Migration", year=2030, is_active=True)
+    participant = Participant.objects.create(camp=camp, first_name="Haupt", last_name="Konto")
+    actor = FamilyMember.objects.create(
+        guardian=participant,
+        first_name="Akteur",
+        last_name="Alt",
+        role="companion",
+    )
+    target = FamilyMember.objects.create(
+        guardian=participant,
+        first_name="Ziel",
+        last_name="Alt",
+        role="child",
+    )
+    audit_log = AuditLog.objects.create(
+        camp=camp,
+        actor_participant=participant,
+        actor_family_member=actor,
+        target_participant=participant,
+        target_family_member=target,
+        action="quick_booked",
+        description="Schnellbuchung erstellt.",
+    )
+
+    new_target = [("billing", "0050_kiosk_audit_display_name_snapshots")]
+    executor = MigrationExecutor(connection)
+    executor.migrate(new_target)
+    new_apps = executor.loader.project_state(new_target).apps
+
+    migrated_audit_log = new_apps.get_model("billing", "KioskActionAuditLog").objects.get(pk=audit_log.pk)
+    assert migrated_audit_log.actor_display_name_snapshot == "Akteur Alt"
+    assert migrated_audit_log.target_display_name_snapshot == "Ziel Alt"

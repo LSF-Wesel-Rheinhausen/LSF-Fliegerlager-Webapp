@@ -16,6 +16,7 @@ from django.utils import timezone
 from billing.forms import KioskBookingLinkInviteForm
 from billing.kiosk_access import KIOSK_FAMILY_MEMBER_SESSION_KEY, KIOSK_PARTICIPANT_SESSION_KEY
 from billing.models import (
+    Camp,
     Charge,
     KioskActionAuditLog,
     MealSignup,
@@ -131,6 +132,56 @@ def test_family_members_with_actor_or_target_audit_history_cannot_be_deleted():
     target_audit.refresh_from_db()
     assert actor_audit.actor_family_member == actor_family_member
     assert target_audit.target_family_member == target_family_member
+
+
+@pytest.mark.django_db
+def test_family_member_audit_display_names_remain_immutable_after_identity_changes():
+    participant = ParticipantFactory()
+    replacement_guardian = ParticipantFactory(camp=participant.camp)
+    actor_family_member = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Akteur",
+        last_name="Alt",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    target_family_member = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Ziel",
+        last_name="Alt",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    actor_audit = KioskActionAuditLog.objects.create(
+        camp=participant.camp,
+        actor_participant=participant,
+        actor_family_member=actor_family_member,
+        target_participant=participant,
+        action=KioskActionAuditLog.Action.QUICK_BOOKED,
+        description="Schnellbuchung erstellt.",
+    )
+    target_audit = KioskActionAuditLog.objects.create(
+        camp=participant.camp,
+        actor_participant=participant,
+        target_participant=participant,
+        target_family_member=target_family_member,
+        action=KioskActionAuditLog.Action.QUICK_BOOKED,
+        description="Schnellbuchung erstellt.",
+    )
+
+    ParticipantFamilyMember.objects.filter(pk=actor_family_member.pk).update(
+        guardian=replacement_guardian,
+        first_name="Akteur",
+        last_name="Neu",
+    )
+    ParticipantFamilyMember.objects.filter(pk=target_family_member.pk).update(
+        guardian=replacement_guardian,
+        first_name="Ziel",
+        last_name="Neu",
+    )
+
+    actor_audit.refresh_from_db()
+    target_audit.refresh_from_db()
+    assert actor_audit.actor_display_name == "Akteur Alt"
+    assert target_audit.target_display_name == "Ziel Alt"
 
 
 def test_partner_activity_routes_exist_for_both_kiosk_modes():
@@ -455,6 +506,56 @@ def test_partner_invitation_cannot_be_created_after_invitee_is_archived_before_p
 
     assert invitee_archived is True
     assert response.status_code == 200
+    assert not ParticipantBookingLink.objects.exists()
+    assert not KioskActionAuditLog.objects.exists()
+
+
+@pytest.mark.django_db
+def test_partner_invitation_locks_and_revalidates_camp_before_participant_pair(
+    kiosk_client,
+    monkeypatch,
+):
+    camp = CampFactory(is_active=True)
+    inviter = ParticipantFactory(camp=camp)
+    invitee = ParticipantFactory(camp=camp)
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = inviter.pk
+    session.save()
+    original_fetch_all = QuerySet._fetch_all
+    camp_deactivated = False
+    lock_events = []
+
+    def deactivate_camp_before_lock(queryset):
+        nonlocal camp_deactivated
+        was_unfetched = queryset._result_cache is None
+        if was_unfetched and not camp_deactivated and queryset.query.select_for_update and queryset.model is Camp:
+            Camp.objects.filter(pk=camp.pk).update(is_active=False)
+            camp_deactivated = True
+        original_fetch_all(queryset)
+        if was_unfetched and queryset.query.select_for_update and queryset.model in {Camp, Participant}:
+            lock_events.append(
+                (
+                    queryset.model,
+                    tuple(instance.pk for instance in queryset._result_cache),
+                )
+            )
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", deactivate_camp_before_lock)
+
+    response = kiosk_client.post(
+        reverse("kiosk-partner-activity"),
+        {
+            "action": "booking_link_invite",
+            "link-participant": invitee.pk,
+        },
+    )
+
+    assert camp_deactivated is True
+    assert response.status_code == 200
+    assert lock_events == [
+        (Camp, (camp.pk,)),
+        (Participant, tuple(sorted((inviter.pk, invitee.pk)))),
+    ]
     assert not ParticipantBookingLink.objects.exists()
     assert not KioskActionAuditLog.objects.exists()
 

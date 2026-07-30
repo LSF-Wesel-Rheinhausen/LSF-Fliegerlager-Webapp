@@ -850,6 +850,8 @@ class KioskActionAuditLog(models.Model):
         blank=True,
         related_name="received_kiosk_action_audit_logs",
     )
+    actor_display_name_snapshot = models.CharField(max_length=241, blank=True, default="", editable=False)
+    target_display_name_snapshot = models.CharField(max_length=241, blank=True, default="", editable=False)
     booking_link = models.ForeignKey(
         ParticipantBookingLink,
         on_delete=models.SET_NULL,
@@ -883,29 +885,41 @@ class KioskActionAuditLog(models.Model):
         """Create a new audit row and reject later mutation through model saves."""
         if not self._state.adding:
             raise ValidationError("Kiosk-Audit-Einträge dürfen nicht verändert werden.")
+        if not self.actor_display_name_snapshot:
+            self.actor_display_name_snapshot = self._current_actor_display_name()
+        if not self.target_display_name_snapshot:
+            self.target_display_name_snapshot = self._current_target_display_name()
         return super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
         """Reject direct deletion so application code treats the trail as append-only."""
         raise ValidationError("Kiosk-Audit-Einträge dürfen nicht gelöscht werden.")
 
-    @property
-    def actor_display_name(self) -> str:
-        """Return the person who actually used the kiosk identity."""
+    def _current_actor_display_name(self) -> str:
+        """Resolve an actor name only while creating its immutable snapshot."""
         if self.actor_family_member is not None:
             return self.actor_family_member.full_name
         if self.actor_participant is not None:
             return self.actor_participant.full_name
         return "Unbekannter Akteur"
 
-    @property
-    def target_display_name(self) -> str:
-        """Return the most specific affected account or family member."""
+    def _current_target_display_name(self) -> str:
+        """Resolve a target name only while creating its immutable snapshot."""
         if self.target_family_member is not None:
             return self.target_family_member.full_name
         if self.target_participant is not None:
             return self.target_participant.full_name
         return "Unbekanntes Ziel"
+
+    @property
+    def actor_display_name(self) -> str:
+        """Return the immutable name of the person who used the kiosk identity."""
+        return self.actor_display_name_snapshot or self._current_actor_display_name()
+
+    @property
+    def target_display_name(self) -> str:
+        """Return the immutable name of the affected account or family member."""
+        return self.target_display_name_snapshot or self._current_target_display_name()
 
     @staticmethod
     def _format_audit_date(value: str | None) -> str:

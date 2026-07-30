@@ -211,9 +211,9 @@ class KioskActionAuditLogAdmin(ReadOnlySnapshotAdmin):
     list_display = (
         "camp",
         "actor_participant",
-        "actor_family_member",
+        "actor_display_name",
         "target_participant",
-        "target_family_member",
+        "target_display_name",
         "action",
         "created_at",
     )
@@ -223,14 +223,18 @@ class KioskActionAuditLogAdmin(ReadOnlySnapshotAdmin):
         "actor_participant__last_name",
         "target_participant__first_name",
         "target_participant__last_name",
+        "actor_display_name_snapshot",
+        "target_display_name_snapshot",
         "description",
     )
     readonly_fields = (
         "camp",
         "actor_participant",
         "actor_family_member",
+        "actor_display_name_snapshot",
         "target_participant",
         "target_family_member",
+        "target_display_name_snapshot",
         "booking_link",
         "charge",
         "action",

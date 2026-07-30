@@ -44,22 +44,22 @@
   erneut verwendet werden kann. Buchungs-Batches sperren alle betroffenen
   Essensanmeldungen in stabiler Reihenfolge, bevor sie Partner-Vollmachten
   sperren, damit parallele Gegenoperationen keinen Lock-Zyklus bilden.
-- Sperrt bei Essens-, Schnellbuchungs- und Check-in-Sammeländerungen für
-  mehrere Partnerkonten zuerst alle referenzierten Teilnehmer- und
-  Familienzeilen und danach sämtliche benötigten Vollmachten jeweils in
-  stabiler Datenbankreihenfolge. Diese gesperrten Zeilen werden für den
-  gesamten Schreibvorgang wiederverwendet, sodass auch parallele Widerrufe
-  keinen Fremdschlüssel-/Vollmachts-Lockzyklus bilden. Nach dem Lock werden
-  Aktivstatus, Hauptkonto und preisrelevante Rolle jedes Familienmitglieds
-  erneut geprüft; bei Erstellung und Annahme einer Einladung müssen auch die
-  frisch gesperrten Teilnehmerzeilen noch aktiv und demselben Lager zugeordnet
-  sein.
+- Sperrt bei allen Partner-Schreibvorgängen zuerst das betroffene Lager und
+  danach alle referenzierten Teilnehmer-, Familien- und Vollmachtszeilen
+  jeweils in stabiler Datenbankreihenfolge. Diese gesperrten Zeilen werden für
+  den gesamten Schreibvorgang wiederverwendet, sodass parallele Abrechnungen,
+  Widerrufe und Buchungen keinen Fremdschlüssel-/Vollmachts-Lockzyklus bilden.
+  Nach dem Lock werden Lageraktivität, Teilnehmerstatus, Hauptkonto und
+  preisrelevante Rolle erneut geprüft; insbesondere kann eine parallele
+  Lagerdeaktivierung keine neue Einladung mehr durchlassen.
 - Hält das konkrete Familienziel auch bei Eigenhaushalts-Schnellbuchungen im
   Audit fest, damit ein später verknüpfter Partner bei einer Stornierung
   weiterhin die tatsächlich betroffene Person protokolliert.
-- Schützt Familienmitglieder mit vorhandener Audit-Historie vor dem Löschen,
-  damit die protokollierte Akteurs- und Zielidentität dauerhaft erhalten
-  bleibt; fachliches Entfernen erfolgt weiterhin über die Deaktivierung.
+- Schützt Familienmitglieder mit vorhandener Audit-Historie vor dem Löschen
+  und speichert unveränderliche Akteurs- und Zielnamen im Audit. Spätere
+  Namens- oder Hauptkontowechsel schreiben die dargestellte Historie dadurch
+  nicht rückwirkend um; fachliches Entfernen erfolgt weiterhin über die
+  Deaktivierung.
 - Bindet jede Check-in-Zeile an ihren signierten Ausgangszustand, schreibt nur
   tatsächlich geänderte Zeilen und weist konkurrierend veränderte Daten ohne
   Teilaktualisierung zurück.
