@@ -333,6 +333,7 @@ def _kiosk_meal_retraction_payload(
             if charge is None
             else {
                 "id": charge.pk,
+                "owner_participant_id": charge.participant_id,
                 "quantity": str(charge.quantity),
                 "unit_price": str(charge.unit_price),
                 "foerdersatz": str(charge.foerdersatz),
@@ -2977,7 +2978,7 @@ def _retract_meal_signup(
     locked_charge = None
     if locked_signup.charge_id is not None:
         locked_charge = Charge.objects.select_for_update(of=("self",)).filter(pk=locked_signup.charge_id).first()
-        if locked_charge is None:
+        if locked_charge is None or locked_charge.participant_id != affected_participant.pk:
             return False
     locked_signup.charge = locked_charge
     booking_link = None

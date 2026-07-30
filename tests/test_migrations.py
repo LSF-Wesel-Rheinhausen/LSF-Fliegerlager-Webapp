@@ -11,6 +11,9 @@ from tests.factories import ChargeFactory, ParticipantFactory, UserFactory
 
 migration = importlib.import_module("billing.migrations.0013_remove_legacy_charge_cancellation_columns")
 partner_authorization_migration = importlib.import_module("billing.migrations.0046_kiosk_action_audit_log")
+booking_link_permissions_migration = importlib.import_module(
+    "billing.migrations.0051_remove_booking_link_mutation_permissions"
+)
 
 
 def charge_columns() -> set[str]:
@@ -152,6 +155,30 @@ def test_partner_authorization_migration_requires_fresh_invitation_and_acceptanc
     assert legacy_accepted.status == ParticipantBookingLink.Status.REVOKED
     assert pending.status == ParticipantBookingLink.Status.REVOKED
     assert revoked.status == ParticipantBookingLink.Status.REVOKED
+
+
+@pytest.mark.django_db
+def test_booking_link_permissions_migration_removes_existing_role_mutation_rights() -> None:
+    group_model = apps.get_model("auth", "Group")
+    permission_model = apps.get_model("auth", "Permission")
+    booking_link_permissions = permission_model.objects.filter(
+        content_type__app_label="billing",
+        content_type__model="participantbookinglink",
+    )
+    groups = [group_model.objects.create(name=name) for name in ("Admin", "Bearbeiter")]
+    for group in groups:
+        group.permissions.set(booking_link_permissions)
+
+    booking_link_permissions_migration.remove_booking_link_mutation_permissions(apps, None)
+    booking_link_permissions_migration.remove_booking_link_mutation_permissions(apps, None)
+
+    for group in groups:
+        assert set(
+            group.permissions.filter(
+                content_type__app_label="billing",
+                content_type__model="participantbookinglink",
+            ).values_list("codename", flat=True)
+        ) == {"view_participantbookinglink"}
 
 
 @pytest.mark.django_db(transaction=True)

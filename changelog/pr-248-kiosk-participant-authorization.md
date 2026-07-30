@@ -40,7 +40,9 @@
   sperrt zuerst nur die Essensanmeldung und lädt danach eine vorhandene Charge
   separat unter Lock neu. Dadurch bleiben nullable Relationen unter
   PostgreSQL zulässig und eine zwischenzeitlich geänderte Charge kann weder
-  die Tokenprüfung noch den Audit-Snapshot umgehen.
+  die Tokenprüfung noch den Audit-Snapshot umgehen. Gehört die frisch
+  gesperrte Charge nicht mehr zum Hauptkonto der Essensanmeldung, wird die
+  Rücknahme ohne Änderung abgewiesen.
   Jede erfolgreiche Rücknahme erhöht zusätzlich eine persistente Version,
   sodass ihr Bestätigungstoken auch nach einer identischen Neubuchung nicht
   erneut verwendet werden kann. Buchungs-Batches sperren alle betroffenen
@@ -98,6 +100,10 @@
   laufen.
 - Lässt PIN-, Sicherheits-, Identitäts- und Administrationsfunktionen
   ausdrücklich außerhalb der Partner-Vollmacht.
+- Zeigt Partner-Vollmachten im Django-Admin ausschließlich lesend an und
+  entzieht bestehenden sowie künftig eingerichteten Standardrollen deren
+  Add-, Change- und Delete-Rechte. Nur der auditierte Teilnehmer-Workflow kann
+  eine Einladung erstellen oder ihren Consent-Status ändern.
 - Zeigt den vollständigen Umfang und die Ausschlüsse der Partner-Vollmacht
   unmittelbar vor jeder Annahme, auch auf der Kiosk-Startseite. Dazu gehört
   ausdrücklich, dass aktive Begleitpersonen beider Hauptkonten die Vollmacht
@@ -119,4 +125,6 @@
   unzulässige Vollmachtsverwaltung durch Begleitpersonen.
 - Race-Regressionen für doppelte Identitätssnapshots, Lagerdeaktivierung,
   archivierte oder geänderte Quick-/Essenspreisregeln und Namensänderungen vor
-  beziehungsweise nach den Identitätslocks.
+  beziehungsweise nach den Identitätslocks sowie umgehängte Essens-Charges.
+- Admin-, Rollen- und Migrationsregressionen für ausschließlich lesbare
+  Partner-Vollmachten und den Entzug bereits vergebener Mutationsrechte.

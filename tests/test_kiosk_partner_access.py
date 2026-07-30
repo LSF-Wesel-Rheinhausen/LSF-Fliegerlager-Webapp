@@ -53,6 +53,13 @@ def test_kiosk_action_audit_log_is_read_only_in_admin():
     assert model_admin.has_delete_permission(None) is False
 
 
+def test_participant_booking_links_are_read_only_in_admin():
+    model_admin = admin.site._registry[ParticipantBookingLink]
+    assert model_admin.has_add_permission(None) is False
+    assert model_admin.has_change_permission(None) is False
+    assert model_admin.has_delete_permission(None) is False
+
+
 @pytest.mark.django_db
 def test_kiosk_action_audit_log_rejects_instance_and_queryset_mutation():
     participant = ParticipantFactory()
@@ -2307,6 +2314,7 @@ def test_partner_meal_retraction_rejects_charge_changed_after_signup_lock(monkey
         variant=MealSignup.Variant.NORMAL,
         charge=charge,
     )
+    signup = MealSignup.objects.select_related("charge").get(pk=signup.pk)
     confirmation_token = _sign_kiosk_meal_retraction(actor, signup)
     original_fetch_all = QuerySet._fetch_all
     charge_changed = False
@@ -2338,6 +2346,52 @@ def test_partner_meal_retraction_rejects_charge_changed_after_signup_lock(monkey
     assert result is False
     assert signup.status == MealSignup.Status.ACTIVE
     assert charge.unit_price == Decimal("9.00")
+    assert charge.deleted_at is None
+    assert not KioskActionAuditLog.objects.exists()
+
+
+@pytest.mark.django_db
+def test_partner_meal_retraction_rejects_charge_reassigned_after_confirmation():
+    actor = ParticipantFactory()
+    partner = ParticipantFactory(camp=actor.camp)
+    unrelated_participant = ParticipantFactory(camp=actor.camp)
+    ParticipantBookingLink.objects.create(
+        inviter=actor,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    charge = Charge.objects.create(
+        participant=partner,
+        kiosk_booked_by=actor,
+        kind=Charge.Kind.FOOD,
+        description="Abendessen",
+        quantity=Decimal("1.00"),
+        unit_price=Decimal("8.00"),
+        occurred_on=date(2026, 7, 2),
+    )
+    signup = MealSignup.objects.create(
+        participant=partner,
+        meal_date=date(2026, 7, 2),
+        meal=MealSignup.Meal.DINNER,
+        variant=MealSignup.Variant.NORMAL,
+        charge=charge,
+    )
+    signup = MealSignup.objects.select_related("charge").get(pk=signup.pk)
+    confirmation_token = _sign_kiosk_meal_retraction(actor, signup)
+    Charge.objects.filter(pk=charge.pk).update(participant=unrelated_participant)
+
+    with transaction.atomic():
+        result = _retract_meal_signup(
+            signup,
+            actor,
+            confirmation_token=confirmation_token,
+        )
+
+    signup.refresh_from_db()
+    charge.refresh_from_db()
+    assert result is False
+    assert signup.status == MealSignup.Status.ACTIVE
+    assert charge.participant == unrelated_participant
     assert charge.deleted_at is None
     assert not KioskActionAuditLog.objects.exists()
 

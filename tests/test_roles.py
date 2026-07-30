@@ -40,6 +40,18 @@ def test_bootstrap_default_roles_limits_app_admin_permissions_to_business_models
 
 
 @pytest.mark.django_db
+def test_bootstrap_default_roles_keeps_partner_authorizations_read_only():
+    admin_group, editor_group, _huebers_group = bootstrap_default_roles()
+
+    for group in (admin_group, editor_group):
+        booking_link_permissions = group.permissions.filter(
+            content_type__app_label="billing",
+            content_type__model="participantbookinglink",
+        )
+        assert set(booking_link_permissions.values_list("codename", flat=True)) == {"view_participantbookinglink"}
+
+
+@pytest.mark.django_db
 def test_bootstrap_default_roles_removes_previously_granted_auth_permissions():
     admin_group, _editor_group, _huebers_group = bootstrap_default_roles()
     change_user = Permission.objects.get(content_type__app_label="auth", codename="change_user")

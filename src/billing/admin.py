@@ -94,9 +94,23 @@ class ParticipantFamilyMemberAdmin(admin.ModelAdmin):
 
 @admin.register(ParticipantBookingLink)
 class ParticipantBookingLinkAdmin(admin.ModelAdmin):
+    """Expose participant consent records without allowing administrative writes."""
+
     list_display = ("inviter", "invitee", "status", "created_at", "updated_at")
     list_filter = ("status", "created_at")
     search_fields = ("inviter__first_name", "inviter__last_name", "invitee__first_name", "invitee__last_name")
+
+    def has_add_permission(self, request):
+        """Require creation through the audited participant invitation workflow."""
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        """Require status changes through the audited participant consent workflow."""
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        """Retain participant consent history for authorization audits."""
+        return False
 
 
 @admin.register(PriceRule)
