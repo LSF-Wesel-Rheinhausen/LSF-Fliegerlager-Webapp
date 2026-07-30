@@ -15,6 +15,7 @@ from .models import (
     Camp,
     Charge,
     Expense,
+    KioskActionAuditLog,
     MealOrder,
     MealSignup,
     Participant,
@@ -30,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 PARTICIPANT_CATEGORIES: dict[str, str] = {
     "shifts": "Dienste und Diensttausch",
-    "booking_links": "Verknüpfungen und Buchungen",
+    "booking_links": "Partner-Vollmachten und Buchungen",
     "meal_deadlines": "Essensfristen",
     "expense_status": "Status eigener Auslagen",
 }
@@ -188,43 +189,56 @@ def notify_expense_status(expense: Expense) -> None:
     )
 
 
-def notify_booking_link(link: ParticipantBookingLink, *, event: str, actor: Participant) -> None:
-    """Notify the participant affected by a booking-link state change."""
+def notify_booking_link(
+    link: ParticipantBookingLink,
+    *,
+    event: str,
+    actor_id: int,
+    actor_display_name: str,
+) -> None:
+    """Notify a participant using the actor name captured under the pair lock."""
     if event == "invited":
         recipient = link.invitee
-        title = "Neue Buchungseinladung"
-        body = f"{link.inviter.full_name} möchte Buchungen mit dir verknüpfen."
+        title = "Neue Partner-Vollmacht"
+        body = f"{actor_display_name} möchte eine gegenseitige Partner-Vollmacht für dieses Lager einrichten."
     else:
-        recipient = link.invitee if actor.pk == link.inviter_id else link.inviter
+        recipient = link.invitee if actor_id == link.inviter_id else link.inviter
         labels = {"accepted": "angenommen", "declined": "abgelehnt", "revoked": "aufgelöst"}
         if event not in labels:
             raise ValueError("Unsupported booking-link event")
-        title = "Buchungsverknüpfung geändert"
-        body = f"{actor.full_name} hat die Buchungsverknüpfung {labels[event]}."
+        title = "Partner-Vollmacht geändert"
+        body = f"{actor_display_name} hat die Partner-Vollmacht {labels[event]}."
     queue_participant_notification(
         recipient,
         category="booking_links",
         title=title,
         body=body,
-        target_url="/kiosk/",
+        target_url="/kiosk/partners/",
         dedupe_key=f"booking-link:{link.pk}:{event}",
     )
 
 
-def notify_linked_booking(charge: Charge, *, actor: Participant, cancelled: bool) -> None:
+def notify_linked_booking(
+    charge: Charge,
+    *,
+    actor_id: int,
+    actor_display_name: str,
+    cancelled: bool,
+) -> None:
     """Notify the other participant affected by a linked kiosk booking.
 
     Args:
         charge: Charge created for one participant by a linked participant.
-        actor: Participant who performed the current booking or cancellation.
+        actor_id: Primary key of the participant who performed the action.
+        actor_display_name: Immutable name snapshot taken while the actor row was locked.
         cancelled: Whether the current action cancelled rather than created the charge.
     """
     original_booker = charge.kiosk_booked_by
     if original_booker is None or original_booker.pk == charge.participant_id:
         return
-    if actor.pk == charge.participant_id:
+    if actor_id == charge.participant_id:
         recipient = original_booker
-    elif actor.pk == original_booker.pk:
+    elif actor_id == original_booker.pk:
         recipient = charge.participant
     else:
         return
@@ -233,9 +247,24 @@ def notify_linked_booking(charge: Charge, *, actor: Participant, cancelled: bool
         recipient,
         category="booking_links",
         title=f"Buchung {action}",
-        body=f"{actor.full_name} hat {charge.description} für dich {action}.",
+        body=f"{actor_display_name} hat {charge.description} für dich {action}.",
         target_url="/kiosk/",
         dedupe_key=f"linked-booking:{charge.pk}:{'cancelled' if cancelled else 'created'}",
+    )
+
+
+def notify_kiosk_partner_action(audit_log: KioskActionAuditLog) -> None:
+    """Notify the affected account about one committed partner-authorized change."""
+    recipient = audit_log.target_participant
+    if recipient is None or audit_log.actor_participant_id == recipient.pk:
+        return
+    queue_participant_notification(
+        recipient,
+        category="booking_links",
+        title="Partnerkonto geändert",
+        body=(f"{audit_log.actor_display_name}: {audit_log.get_action_display()} für {audit_log.target_display_name}."),
+        target_url="/kiosk/partners/",
+        dedupe_key=f"kiosk-partner-action:{audit_log.pk}",
     )
 
 

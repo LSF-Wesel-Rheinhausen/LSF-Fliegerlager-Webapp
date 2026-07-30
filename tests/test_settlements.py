@@ -5,8 +5,8 @@ from unittest.mock import patch
 import pytest
 from django.utils import timezone
 
-from billing.models import Charge, Expense, PriceRule
-from billing.services import calculate_participant_settlement
+from billing.models import Charge, Expense, ExpenseAllocation, PriceRule
+from billing.services import calculate_participant_settlement, participant_kiosk_summaries
 from tests.factories import (
     CampFactory,
     ChargeFactory,
@@ -162,6 +162,61 @@ def test_settlement_calculates_due_paid_advanced_and_balance():
     assert result.total_paid == Decimal("40.00")
     assert result.total_advanced == Decimal("12.00")
     assert result.balance == Decimal("47.50")
+
+
+@pytest.mark.django_db
+def test_participant_kiosk_summaries_batch_partner_billing_queries(django_assert_num_queries):
+    camp = CampFactory()
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.NIGHT,
+        name="Übernachtung",
+        unit_price=Decimal("10.00"),
+        is_default=True,
+    )
+    participants = []
+    for index in range(3):
+        participant = ParticipantFactory(camp=camp, actual_nights=index + 1)
+        charge = ChargeFactory(
+            participant=participant,
+            description=f"Buchung {index}",
+            unit_price=Decimal("5.00"),
+        )
+        DrinkEntryFactory(
+            participant=participant,
+            quantity=2,
+            unit_price=Decimal("1.50"),
+        )
+        PaymentFactory(
+            participant=participant,
+            amount=Decimal("2.00"),
+            paid_on=date(2025, 7, 1),
+        )
+        expense = ExpenseFactory(
+            participant=participant,
+            description=f"Auslage {index}",
+            amount=Decimal("4.00"),
+            reimbursable=True,
+            status=Expense.Status.APPROVED,
+        )
+        ExpenseAllocation.objects.create(
+            expense=expense,
+            participant=participant,
+            amount=Decimal("1.00"),
+        )
+        participants.append((participant, charge))
+
+    with django_assert_num_queries(7):
+        summaries = participant_kiosk_summaries([participant for participant, _charge in participants])
+
+    assert set(summaries) == {participant.pk for participant, _charge in participants}
+    for index, (participant, charge) in enumerate(participants):
+        summary = summaries[participant.pk]
+        assert summary["total_due"] == Decimal(19 + (index * 10))
+        assert summary["total_paid"] == Decimal("2.00")
+        assert summary["total_advanced"] == Decimal("4.00")
+        assert summary["balance"] == Decimal(13 + (index * 10))
+        assert any(line["booking_references"] == (charge.booking_reference,) for line in summary["lines"])
 
 
 @pytest.mark.django_db

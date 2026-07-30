@@ -16,6 +16,7 @@ from billing.kiosk_access import (
 from billing.models import (
     Charge,
     Expense,
+    KioskActionAuditLog,
     MealOrder,
     MealPlanEntry,
     MealSignup,
@@ -37,6 +38,11 @@ def _freeze_meal_lock_time(monkeypatch, fixed_now):
     monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
 
 
+def _checkin_state_tokens(kiosk_client):
+    response = kiosk_client.get(reverse("kiosk-home"))
+    return {target["token"]: target["state_token"] for target in response.context["checkin_participants"]}
+
+
 @pytest.mark.django_db
 def test_kiosk_user_guide_points_menu_only_sections_to_menu(kiosk_client):
     response = kiosk_client.get(reverse("user-guide"))
@@ -46,7 +52,13 @@ def test_kiosk_user_guide_points_menu_only_sections_to_menu(kiosk_client):
     assert "Menü → Letzte Schnellbuchungen" in content
     assert "Abendessen (Kalender)" in content
     assert "Menü → Familie" in content
-    assert "Menü → Mitbuchungen" in content
+    assert "Menü → Partner &amp; Aktivitäten" in content
+    assert "gegenseitige Partner-Vollmacht" in content
+    assert "Abrechnung und PDF" in content
+    assert "Anreise und Abreise" in content
+    assert "aktive Begleitpersonen beider Hauptkonten" in content
+    assert "mit ihrer eigenen PIN ausüben" in content
+    assert "strikt getrennt" not in content
     assert "scrolle auf der Startseite" not in content
     for animation in ("login", "drinks", "meals", "family", "shifts"):
         assert f"/static/billing/docs/kiosk_{animation}.gif?v=2" in content
@@ -488,7 +500,7 @@ def test_pre_camp_kiosk_shows_only_identity_countdown_and_available_menu_areas(k
     menu = content.split('<nav class="kiosk-menu" aria-label="Kiosk-Bereiche">', maxsplit=1)[1].split(
         "</nav>", maxsplit=1
     )[0]
-    for available_area in ("Familie", "Mitbuchungen", "Hilfe", "Kontakt Lagerleitung"):
+    for available_area in ("Familie", "Partner &amp; Aktivitäten", "Hilfe", "Kontakt Lagerleitung"):
         assert available_area in menu
     for unavailable_area in (
         "Abendessen (Kalender)",
@@ -498,12 +510,12 @@ def test_pre_camp_kiosk_shows_only_identity_countdown_and_available_menu_areas(k
     ):
         assert unavailable_area not in menu
 
-    booking_links_dialog = content.split('<dialog id="booking-links-dialog"', maxsplit=1)[1].split(
-        "</dialog>", maxsplit=1
-    )[0]
-    assert "Grace Hopper" in booking_links_dialog
-    assert 'value="booking_link_accept"' in booking_links_dialog
-    assert 'value="booking_link_decline"' in booking_links_dialog
+    partner_response = kiosk_client.get(reverse("kiosk-partner-activity"))
+    partner_content = partner_response.content.decode("utf-8")
+    assert partner_response.status_code == 200
+    assert "Grace Hopper" in partner_content
+    assert 'value="booking_link_accept"' in partner_content
+    assert 'value="booking_link_decline"' in partner_content
 
 
 @pytest.mark.django_db
@@ -556,7 +568,45 @@ def test_pre_camp_kiosk_login_uses_compact_layout(kiosk_client):
 
 
 @pytest.mark.django_db
-def test_kiosk_checkin_updates_own_and_linked_participant_dates(kiosk_client, monkeypatch):
+def test_kiosk_checkin_targets_include_linked_household(kiosk_client, monkeypatch):
+    monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 7, 5))
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 14))
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")
+    linked = ParticipantFactory(camp=camp, first_name="Grace", last_name="B")
+    linked_companion = ParticipantFamilyMember.objects.create(
+        guardian=linked,
+        first_name="Alan",
+        last_name="B",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    linked_child = ParticipantFamilyMember.objects.create(
+        guardian=linked,
+        first_name="Kind",
+        last_name="B",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=linked,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.get(reverse("kiosk-home"))
+
+    assert response.status_code == 200
+    assert [target["token"] for target in response.context["checkin_participants"]] == [
+        f"participant-{participant.pk}",
+        f"participant-{linked.pk}",
+        f"family-{linked_companion.pk}",
+        f"family-{linked_child.pk}",
+    ]
+
+
+@pytest.mark.django_db
+def test_kiosk_checkin_updates_linked_participant_dates(kiosk_client, monkeypatch):
     monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 7, 5))
     camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 14))
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")
@@ -569,25 +619,22 @@ def test_kiosk_checkin_updates_own_and_linked_participant_dates(kiosk_client, mo
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session.save()
+    linked_token = f"participant-{linked.pk}"
+    checkin_state_tokens = _checkin_state_tokens(kiosk_client)
 
     response = kiosk_client.post(
         reverse("kiosk-home"),
         {
             "action": "checkin",
-            "checkin_target": [f"participant-{participant.pk}", f"participant-{linked.pk}"],
-            f"arrival_date_participant-{participant.pk}": "2026-07-02",
-            f"departure_date_participant-{participant.pk}": "2026-07-10",
-            f"arrival_date_participant-{linked.pk}": "2026-07-03",
-            f"departure_date_participant-{linked.pk}": "2026-07-09",
+            "checkin_target": [linked_token],
+            f"arrival_date_{linked_token}": "2026-07-03",
+            f"departure_date_{linked_token}": "2026-07-09",
+            f"checkin_state_{linked_token}": checkin_state_tokens[linked_token],
         },
     )
 
     assert response.status_code == 302
-    participant.refresh_from_db()
     linked.refresh_from_db()
-    assert participant.arrival_date == date(2026, 7, 2)
-    assert participant.departure_date == date(2026, 7, 10)
-    assert participant.booked_nights == 8
     assert linked.arrival_date == date(2026, 7, 3)
     assert linked.departure_date == date(2026, 7, 9)
     assert linked.booked_nights == 6
@@ -628,14 +675,17 @@ def test_kiosk_checkin_rejects_departure_before_arrival(kiosk_client, monkeypatc
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session.save()
+    participant_token = f"participant-{participant.pk}"
+    checkin_state_tokens = _checkin_state_tokens(kiosk_client)
 
     response = kiosk_client.post(
         reverse("kiosk-home"),
         {
             "action": "checkin",
-            "checkin_target": [f"participant-{participant.pk}"],
-            f"arrival_date_participant-{participant.pk}": "2026-07-10",
-            f"departure_date_participant-{participant.pk}": "2026-07-02",
+            "checkin_target": [participant_token],
+            f"arrival_date_{participant_token}": "2026-07-10",
+            f"departure_date_{participant_token}": "2026-07-02",
+            f"checkin_state_{participant_token}": checkin_state_tokens[participant_token],
         },
     )
 
@@ -647,7 +697,36 @@ def test_kiosk_checkin_rejects_departure_before_arrival(kiosk_client, monkeypatc
 
 
 @pytest.mark.django_db
-def test_kiosk_checkin_updates_companion_and_rejects_child_target(kiosk_client, monkeypatch):
+def test_kiosk_checkin_rejects_tampered_original_state(kiosk_client, monkeypatch):
+    monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 7, 5))
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 14))
+    participant = ParticipantFactory(camp=camp)
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    participant_token = f"participant-{participant.pk}"
+    checkin_state_tokens = _checkin_state_tokens(kiosk_client)
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "checkin",
+            "checkin_target": [participant_token],
+            f"arrival_date_{participant_token}": "2026-07-02",
+            f"departure_date_{participant_token}": "2026-07-10",
+            f"checkin_state_{participant_token}": (checkin_state_tokens[participant_token] + "tampered"),
+        },
+    )
+
+    participant.refresh_from_db()
+    assert response.status_code == 200
+    assert participant.arrival_date is None
+    assert participant.departure_date is None
+    assert "Die Check-in-Daten konnten nicht bestätigt werden." in response.content.decode("utf-8")
+
+
+@pytest.mark.django_db
+def test_kiosk_checkin_updates_companion_and_child_targets(kiosk_client, monkeypatch):
     monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 7, 5))
     camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 14))
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")
@@ -666,46 +745,35 @@ def test_kiosk_checkin_updates_companion_and_rejects_child_target(kiosk_client, 
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session.save()
+    companion_token = f"family-{companion.pk}"
+    child_token = f"family-{child.pk}"
+    checkin_state_tokens = _checkin_state_tokens(kiosk_client)
 
     response = kiosk_client.post(
         reverse("kiosk-home"),
         {
             "action": "checkin",
-            "checkin_target": [f"family-{companion.pk}", f"family-{child.pk}"],
-            f"arrival_date_family-{companion.pk}": "2026-07-02",
-            f"departure_date_family-{companion.pk}": "2026-07-10",
-            f"arrival_date_family-{child.pk}": "2026-07-03",
-            f"departure_date_family-{child.pk}": "2026-07-09",
-        },
-    )
-
-    assert response.status_code == 200
-    companion.refresh_from_db()
-    child.refresh_from_db()
-    assert companion.arrival_date is None
-    assert companion.departure_date is None
-    assert child.arrival_date is None
-    assert child.departure_date is None
-    assert "Ein Teilnehmer darf über diesen Kiosk nicht bearbeitet werden.".encode() in response.content
-
-    response = kiosk_client.post(
-        reverse("kiosk-home"),
-        {
-            "action": "checkin",
-            "checkin_target": [f"family-{companion.pk}"],
-            f"arrival_date_family-{companion.pk}": "2026-07-02",
-            f"departure_date_family-{companion.pk}": "2026-07-10",
+            "checkin_target": [companion_token, child_token],
+            f"arrival_date_{companion_token}": "2026-07-02",
+            f"departure_date_{companion_token}": "2026-07-10",
+            f"checkin_state_{companion_token}": checkin_state_tokens[companion_token],
+            f"arrival_date_{child_token}": "2026-07-03",
+            f"departure_date_{child_token}": "2026-07-09",
+            f"checkin_state_{child_token}": checkin_state_tokens[child_token],
         },
     )
 
     assert response.status_code == 302
     companion.refresh_from_db()
+    child.refresh_from_db()
     assert companion.arrival_date == date(2026, 7, 2)
     assert companion.departure_date == date(2026, 7, 10)
+    assert child.arrival_date == date(2026, 7, 3)
+    assert child.departure_date == date(2026, 7, 9)
 
 
 @pytest.mark.django_db
-def test_kiosk_home_checkin_dialog_lists_companion_but_not_child(kiosk_client):
+def test_kiosk_home_checkin_dialog_lists_companion_and_child(kiosk_client):
     participant = ParticipantFactory(first_name="Ada", last_name="A")
     ParticipantFamilyMember.objects.create(
         guardian=participant,
@@ -729,7 +797,7 @@ def test_kiosk_home_checkin_dialog_lists_companion_but_not_child(kiosk_client):
     content = response.content.decode()
     checkin_dialog = content[content.index('id="checkin-dialog"') :]
     assert "Grace A" in checkin_dialog
-    assert "Kind A" not in checkin_dialog
+    assert "Kind A" in checkin_dialog
 
 
 @pytest.mark.django_db
@@ -1048,9 +1116,9 @@ def test_kiosk_home_renders_only_ordered_core_cards_and_menu_dialogs(kiosk_clien
         b"quick-bookings-dialog",
         b"shared-expenses-dialog",
         b"family-management-dialog",
-        b"booking-links-dialog",
     ):
         assert b'id="' + dialog_id + b'"' in content
+    assert b'id="booking-links-dialog"' not in content
     assert "Noch keine Anträge eingereicht.".encode() in content
 
 
@@ -1427,6 +1495,35 @@ def test_kiosk_books_drink_with_camp_drink_price_and_subsidy_flag(kiosk_client):
     assert entry.unit_price == Decimal("2.50")
     assert entry.foerdersatz == Decimal("1.0000")
     assert entry.kiosk_booked_by == participant
+
+
+@pytest.mark.django_db
+def test_kiosk_quick_booking_rejects_explicitly_empty_target_selection(kiosk_client):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp)
+    rule = PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.DRINK,
+        name="Wasser",
+        unit_price=Decimal("1.50"),
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "quick",
+            "quick-price_rule": rule.pk,
+            "quick-quantity": 1,
+            "quick-targets-submitted": "1",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Bitte mindestens eine Person auswählen." in response.content.decode("utf-8")
+    assert not Charge.objects.exists()
 
 
 @pytest.mark.django_db
@@ -2414,7 +2511,7 @@ def test_kiosk_deactivates_own_family_member(kiosk_client):
     ],
 )
 @pytest.mark.django_db
-def test_kiosk_home_rejects_non_numeric_related_object_ids(kiosk_client, action, id_field):
+def test_kiosk_rejects_non_numeric_related_object_ids(kiosk_client, action, id_field):
     participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
@@ -2425,8 +2522,9 @@ def test_kiosk_home_rejects_non_numeric_related_object_ids(kiosk_client, action,
         "booking_links": ParticipantBookingLink.objects.count(),
     }
 
+    route_name = "kiosk-partner-activity" if action.startswith("booking_link_") else "kiosk-home"
     response = kiosk_client.post(
-        reverse("kiosk-home"),
+        reverse(route_name),
         {
             "action": action,
             id_field: "not-an-id",
@@ -2468,14 +2566,14 @@ def test_kiosk_shifts_rejects_non_numeric_shift_id_without_side_effect(kiosk_cli
 
 
 @pytest.mark.django_db
-def test_invalid_booking_link_invite_reopens_management_dialog(kiosk_client):
+def test_invalid_partner_invite_stays_on_activity_page(kiosk_client):
     participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session.save()
 
     response = kiosk_client.post(
-        reverse("kiosk-home"),
+        reverse("kiosk-partner-activity"),
         {
             "action": "booking_link_invite",
             "link-participant": "",
@@ -2484,7 +2582,7 @@ def test_invalid_booking_link_invite_reopens_management_dialog(kiosk_client):
 
     assert response.status_code == 200
     assert response.context["booking_link_form"].errors
-    assert b'id="booking-links-dialog" data-auto-open-dialog' in response.content
+    assert b"Partner &amp; Aktivit\xc3\xa4ten" in response.content
 
 
 @pytest.mark.django_db
@@ -2497,7 +2595,7 @@ def test_kiosk_booking_link_invite_accept_revoke_flow(kiosk_client):
     session.save()
 
     response = kiosk_client.post(
-        reverse("kiosk-home"),
+        reverse("kiosk-partner-activity"),
         {
             "action": "booking_link_invite",
             "link-participant": invitee.pk,
@@ -2511,7 +2609,7 @@ def test_kiosk_booking_link_invite_accept_revoke_flow(kiosk_client):
     session[KIOSK_PARTICIPANT_SESSION_KEY] = invitee.pk
     session.save()
     response = kiosk_client.post(
-        reverse("kiosk-home"),
+        reverse("kiosk-partner-activity"),
         {
             "action": "booking_link_accept",
             "booking_link_id": link.pk,
@@ -2525,7 +2623,7 @@ def test_kiosk_booking_link_invite_accept_revoke_flow(kiosk_client):
     assert f"participant-{inviter.pk}".encode() in response.content
 
     response = kiosk_client.post(
-        reverse("kiosk-home"),
+        reverse("kiosk-partner-activity"),
         {
             "action": "booking_link_revoke",
             "booking_link_id": link.pk,
@@ -2535,6 +2633,13 @@ def test_kiosk_booking_link_invite_accept_revoke_flow(kiosk_client):
     assert response.status_code == 302
     link.refresh_from_db()
     assert link.status == ParticipantBookingLink.Status.REVOKED
+    assert list(
+        KioskActionAuditLog.objects.filter(booking_link=link).values_list("action", flat=True).order_by("created_at")
+    ) == [
+        KioskActionAuditLog.Action.LINK_INVITED,
+        KioskActionAuditLog.Action.LINK_ACCEPTED,
+        KioskActionAuditLog.Action.LINK_REVOKED,
+    ]
 
 
 @pytest.mark.django_db
@@ -2584,7 +2689,7 @@ def test_kiosk_books_meal_for_linked_participant_on_linked_account(kiosk_client,
 
 
 @pytest.mark.django_db
-def test_kiosk_hides_linked_participant_family_member_meal_signups(kiosk_client):
+def test_kiosk_shows_linked_participant_family_member_meal_signups(kiosk_client):
     camp = CampFactory()
     viewer = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")
     linked = ParticipantFactory(camp=camp, first_name="Grace", last_name="B")
@@ -2620,7 +2725,8 @@ def test_kiosk_hides_linked_participant_family_member_meal_signups(kiosk_client)
 
     assert response.status_code == 200
     assert b"Grace B" in response.content
-    assert b"Kind B" not in response.content
+    assert b"Kind B" in response.content
+    assert any(signup.family_member_id == family_member.pk for signup in response.context["meal_signups"])
 
 
 @pytest.mark.django_db

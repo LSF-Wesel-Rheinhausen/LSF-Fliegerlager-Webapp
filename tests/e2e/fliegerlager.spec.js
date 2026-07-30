@@ -308,7 +308,7 @@ test("Pre-camp kiosk stays compact and exposes only preparation areas", async ({
   await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).click();
   const menu = page.locator("dialog#kiosk-menu-dialog");
   await expect(menu.getByRole("button", { name: /Familie/ })).toBeVisible();
-  await expect(menu.getByRole("button", { name: /Mitbuchungen/ })).toBeVisible();
+  await expect(menu.getByRole("link", { name: /Partner & Aktivitäten/ })).toBeVisible();
   await expect(menu.getByRole("link", { name: /Hilfe/ })).toBeVisible();
   await expect(menu.getByRole("button", { name: /Kontakt Lagerleitung/ })).toBeVisible();
   await expect(menu.getByRole("button", { name: /Abendessen|Gemeinschaftsausgaben/ })).toHaveCount(0);
@@ -592,14 +592,44 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
   await page.locator("dialog#food-dialog").getByRole("button", { name: "Kostenpflichtig buchen" }).click();
   await expect(page.getByText(/Standard Frühstück.*gebucht\./)).toBeVisible();
 
-  // Book a drink
+  // Create a second billing target for the multi-account confirmation.
+  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).click();
+  const kioskMenu = page.locator("dialog#kiosk-menu-dialog");
+  await kioskMenu.getByRole("button", { name: /Familie/ }).click();
+  const familyManagementDialog = page.locator("dialog#family-management-dialog");
+  await familyManagementDialog.getByRole("button", { name: "Anlegen" }).click();
+  const familyDialog = page.locator("dialog#family-dialog");
+  await familyDialog.getByLabel("Vorname").fill("Irène");
+  await familyDialog.getByLabel("Nachname").fill("Curie");
+  await familyDialog.getByLabel("Rolle").selectOption({ label: "Kind" });
+  await familyDialog.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByText("Familienmitglied wurde angelegt.")).toBeVisible();
+
+  // Book a drink only after confirming its two-target total on a dark mobile viewport.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ colorScheme: "dark" });
   await page.getByRole("button", { name: "Apfelsaft" }).click();
-  await expect(page.locator("dialog#quick-dialog")).toBeVisible();
-  await page.locator("dialog#quick-dialog").getByRole("button", { name: "1x" }).click();
+  const quickDialog = page.locator("dialog#quick-dialog");
+  await expect(quickDialog).toBeVisible();
+  const quickTargets = quickDialog.locator('[data-quick-target-scope="drink"]');
+  await quickTargets.first().uncheck();
+  await quickDialog.getByRole("button", { name: "1x" }).click();
+  await expect(quickDialog).toBeVisible();
+  await expect(quickDialog.getByRole("alert")).toHaveText("Bitte mindestens eine Person auswählen.");
+  await quickTargets.first().check();
+  await quickTargets.nth(1).check();
+  await quickDialog.getByRole("button", { name: "1x" }).click();
+  const quickConfirmationDialog = page.locator("dialog#quick-confirmation-dialog");
+  await expect(quickConfirmationDialog).toBeVisible();
+  await expect(quickConfirmationDialog).toContainText("Marie Curie");
+  await expect(quickConfirmationDialog).toContainText("Irène Curie");
+  await expect(quickConfirmationDialog).toContainText("3,00 €");
+  await assertNoUnexpectedOverflow(page);
+  await quickConfirmationDialog.getByRole("button", { name: "Jetzt kostenpflichtig buchen" }).click();
   await expect(page.getByText("Apfelsaft gebucht.")).toBeVisible();
+  await page.emulateMedia({ colorScheme: "light" });
 
   // The cancellation action stays directly usable on a phone-sized viewport.
-  await page.setViewportSize({ width: 390, height: 844 });
   await assertNoUnexpectedOverflow(page);
   await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).click();
   await page.getByRole("button", { name: "Letzte Schnellbuchungen" }).click();
@@ -639,6 +669,75 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
 
   await page.getByRole("link", { name: "Abmelden" }).click();
   await expect(page).toHaveURL(/.*\/kiosk\/login\//);
+});
+
+test("Partner meal retraction requires explicit confirmation", async ({ page }) => {
+  await setupFirstAdmin(page);
+  const campName = await createCamp(page, "Partner-Essen", 0, 4);
+  await createParticipant(page, "Ada", "Lovelace", "", "1234");
+  await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
+  await page.getByRole("link", { name: campName, exact: true }).click();
+  await createParticipant(page, "Grace", "Hopper", "", "5678");
+  await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
+  await page.getByRole("link", { name: campName, exact: true }).click();
+  await page.getByRole("link", { name: "Preise verwalten" }).first().click();
+  await page.locator('input[name="meal-dinner_adult_price"]').fill("7.00");
+  await page.getByRole("button", { name: "Standardpreise speichern" }).click();
+  await logout(page);
+
+  await openKiosk(page, "/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Ada Lovelace" });
+  await page.getByLabel("PIN:", { exact: true }).fill("1234");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).click();
+  await page.locator("dialog#kiosk-menu-dialog").getByRole("link", { name: /Partner & Aktivitäten/ }).click();
+  await page.getByLabel("Teilnehmer einladen").selectOption({ label: "Grace Hopper" });
+  await page.getByRole("button", { name: "Partner einladen" }).click();
+  await page.getByRole("link", { name: "Abmelden" }).click();
+
+  await openKiosk(page, "/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Grace Hopper" });
+  await page.getByLabel("PIN:", { exact: true }).fill("5678");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).click();
+  await page.locator("dialog#kiosk-menu-dialog").getByRole("link", { name: /Partner & Aktivitäten/ }).click();
+  await page.getByRole("button", { name: "Annehmen" }).click();
+  await page.getByRole("link", { name: "Zurück" }).click();
+
+  await page.locator('[data-kiosk-card="food"]').getByRole("button", { name: /Abendessen/ }).click();
+  const graceMealCalendar = page.locator("dialog#meal-calendar-dialog");
+  await graceMealCalendar.getByRole("button", { name: "Essen buchen" }).click();
+  const graceMealDialog = page.locator("dialog#meal-dialog");
+  await graceMealDialog.locator("input[data-meal-date-checkbox]:not([disabled])").first().check();
+  await graceMealDialog.getByRole("button", { name: "Weiter" }).click();
+  await graceMealDialog.getByRole("button", { name: "Essensanmeldung speichern" }).click();
+  await expect(page.getByText("Essensanmeldung wurde für 1 Tag und 1 Person gespeichert.")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.getByRole("link", { name: "Abmelden" }).click();
+
+  await openKiosk(page, "/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Ada Lovelace" });
+  await page.getByLabel("PIN:", { exact: true }).fill("1234");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.goto("/kiosk/#meal-calendar");
+  const adaMealCalendar = page.locator("dialog#meal-calendar-dialog");
+  await expect(adaMealCalendar).toBeVisible();
+  await adaMealCalendar.locator(".meal-status-day--booked").first().click();
+  const mealDayDetail = page.locator('dialog[id^="meal-day-detail-"]:visible');
+  const partnerMealRow = mealDayDetail.locator(".meal-detail-row").filter({ hasText: "Grace Hopper" });
+  await expect(partnerMealRow).toContainText("Gebucht");
+  await partnerMealRow.getByRole("button", { name: "Zurücknehmen" }).click();
+
+  const retractionDialog = page.locator("dialog#meal-retract-dialog");
+  await expect(retractionDialog).toBeVisible();
+  await expect(retractionDialog).toContainText("Grace Hopper");
+  await expect(retractionDialog).toContainText("Betrag: 7,00 €");
+  await assertNoUnexpectedOverflow(page);
+  await retractionDialog.getByRole("button", { name: "Jetzt zurücknehmen" }).click();
+  await expect(page.getByText("Essensanmeldung wurde zurückgenommen.")).toBeVisible();
+  await page.emulateMedia({ colorScheme: "light" });
 });
 
 test("Kiosk masonry and expense cards stay responsive and accessible", async ({ page }) => {

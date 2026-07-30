@@ -38,6 +38,13 @@ APP_ADMIN_PERMISSION_MODELS = frozenset(
         "userprofile",
     }
 )
+PARTNER_LINK_MUTATION_PERMISSION_CODENAMES = frozenset(
+    {
+        "add_participantbookinglink",
+        "change_participantbookinglink",
+        "delete_participantbookinglink",
+    }
+)
 
 
 def bootstrap_default_roles():
@@ -48,10 +55,12 @@ def bootstrap_default_roles():
     admin_permissions = Permission.objects.filter(
         content_type__app_label="billing",
         content_type__model__in=APP_ADMIN_PERMISSION_MODELS,
-    )
+    ).exclude(codename__in=PARTNER_LINK_MUTATION_PERMISSION_CODENAMES)
     admin_group.permissions.set(admin_permissions)
-    editable = Permission.objects.filter(content_type__app_label="billing").filter(
-        Q(codename__startswith="add_") | Q(codename__startswith="change_") | Q(codename__startswith="view_")
+    editable = (
+        Permission.objects.filter(content_type__app_label="billing")
+        .filter(Q(codename__startswith="add_") | Q(codename__startswith="change_") | Q(codename__startswith="view_"))
+        .exclude(codename__in=PARTNER_LINK_MUTATION_PERMISSION_CODENAMES)
     )
     editor_group.permissions.set(editable)
     huebers_group.permissions.set(Permission.objects.none())

@@ -740,7 +740,12 @@ def test_booking_link_and_linked_booking_events_notify_the_other_participant():
     )
     link = ParticipantBookingLink.objects.create(inviter=inviter, invitee=invitee)
 
-    notify_booking_link(link, event="invited", actor=inviter)
+    notify_booking_link(
+        link,
+        event="invited",
+        actor_id=inviter.pk,
+        actor_display_name=inviter.full_name,
+    )
     charge = Charge.objects.create(
         participant=invitee,
         kiosk_booked_by=inviter,
@@ -749,10 +754,18 @@ def test_booking_link_and_linked_booking_events_notify_the_other_participant():
         quantity=1,
         unit_price=Decimal("1.50"),
     )
-    notify_linked_booking(charge, actor=inviter, cancelled=False)
+    notify_linked_booking(
+        charge,
+        actor_id=inviter.pk,
+        actor_display_name=inviter.full_name,
+        cancelled=False,
+    )
 
     assert PushMessage.objects.filter(category="booking_links").count() == 2
     assert PushMessage.objects.filter(body__contains="Wasser").exists()
+    invitation = PushMessage.objects.get(dedupe_key=f"booking-link:{link.pk}:invited")
+    assert "Partner-Vollmacht" in invitation.body
+    assert invitation.target_url == reverse("kiosk-partner-activity")
 
 
 @pytest.mark.django_db
@@ -779,7 +792,12 @@ def test_linked_booking_cancellation_notifies_original_booker_with_actual_actor(
         unit_price=Decimal("1.50"),
     )
 
-    notify_linked_booking(charge, actor=cancelling_participant, cancelled=True)
+    notify_linked_booking(
+        charge,
+        actor_id=cancelling_participant.pk,
+        actor_display_name=cancelling_participant.full_name,
+        cancelled=True,
+    )
 
     message = PushMessage.objects.get()
     assert message.subscription == subscription
@@ -923,12 +941,70 @@ def test_booking_invitation_view_queues_after_commit(kiosk_client, django_captur
 
     with django_capture_on_commit_callbacks(execute=True):
         response = kiosk_client.post(
-            reverse("kiosk-home"),
+            reverse("kiosk-partner-activity"),
             {"action": "booking_link_invite", "link-participant": invitee.pk},
         )
 
     assert response.status_code == 302
     assert PushMessage.objects.filter(category="booking_links", subscription__participant=invitee).exists()
+
+
+@pytest.mark.django_db
+def test_linked_checkin_change_notifies_affected_partner(
+    kiosk_client,
+    django_capture_on_commit_callbacks,
+    monkeypatch,
+):
+    monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 7, 5))
+    camp = CampFactory(
+        is_active=True,
+        starts_on=date(2026, 7, 1),
+        ends_on=date(2026, 7, 14),
+    )
+    actor = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    partner = ParticipantFactory(camp=camp, first_name="Grace", last_name="Hopper")
+    ParticipantBookingLink.objects.create(
+        inviter=actor,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    PushSubscription.objects.create(
+        participant=partner,
+        endpoint="https://push.example.test/partner-checkin",
+        p256dh="key",
+        auth="secret",
+        categories=["booking_links"],
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = actor.pk
+    session.save()
+    page_response = kiosk_client.get(reverse("kiosk-home"))
+    partner_token = f"participant-{partner.pk}"
+    state_token = next(
+        target["state_token"]
+        for target in page_response.context["checkin_participants"]
+        if target["token"] == partner_token
+    )
+
+    with django_capture_on_commit_callbacks(execute=True):
+        response = kiosk_client.post(
+            reverse("kiosk-home"),
+            {
+                "action": "checkin",
+                "checkin_target": [partner_token],
+                f"arrival_date_{partner_token}": "2026-07-03",
+                f"departure_date_{partner_token}": "2026-07-09",
+                f"checkin_state_{partner_token}": state_token,
+            },
+        )
+
+    assert response.status_code == 302
+    message = PushMessage.objects.get()
+    assert message.subscription.participant == partner
+    assert message.title == "Partnerkonto geändert"
+    assert "Ada Lovelace" in message.body
+    assert "Anwesenheit" in message.body
+    assert message.target_url == reverse("kiosk-partner-activity")
 
 
 @pytest.mark.django_db

@@ -45,7 +45,7 @@
         <span class="kiosk-hero__eyebrow">Mein Kiosk</span>
         <div class="kiosk-hero__copy">
           <h1>{{ kiosk_actor.full_name }}</h1>
-          <p>{% if is_post_camp %}Das Lager ist beendet. Deine bisherigen Gemeinschaftsausgaben und Unterlagen bleiben hier einsehbar.{% else %}Buche Getränke und Essen, verwalte Mitbuchungen und behalte deine Abrechnung im Blick, ohne zwischen Seiten zu springen.{% endif %}</p>
+          <p>{% if is_post_camp %}Das Lager ist beendet. Deine bisherigen Gemeinschaftsausgaben und Unterlagen bleiben hier einsehbar.{% else %}Buche Getränke und Essen, verwalte Partner-Vollmachten und behalte deine Abrechnung im Blick, ohne zwischen Seiten zu springen.{% endif %}</p>
         </div>
         <div class="kiosk-meta">
           <span class="kiosk-meta__item">{{ participant.camp }}</span>
@@ -143,13 +143,13 @@
     </section>
   {% endif %}
 
-  {% if pending_invites and not is_pre_camp and not is_post_camp %}
+  {% if pending_invites and not kiosk_actor_is_family_member and not is_pre_camp and not is_post_camp %}
     <section class="panel kiosk-card kiosk-card--muted">
       <div class="kiosk-card__header">
         <div class="kiosk-card__header-main">
           <span class="kiosk-card__eyebrow">Offene Aktion</span>
           <h2>Einladungen</h2>
-          <p>Hier warten Freigaben für gegenseitiges Mitbuchen.</p>
+          <p>Hier wartet eine Partner-Vollmacht auf deine Entscheidung.</p>
         </div>
       </div>
       {% include "billing/includes/kiosk_pending_invites.html" %}
@@ -183,11 +183,11 @@
         <small>Begleitpersonen und Kinder verwalten.</small>
       </button>
       {% endif %}
-      <button type="button" class="kiosk-menu__item" data-dialog-target="booking-links-dialog">
-        <span>Mitbuchungen</span>
-        <small>Einladungen und gegenseitige Buchungsfreigaben verwalten.</small>
-      </button>
       {% endif %}
+      <a class="kiosk-menu__item" href="{{ kiosk_urls.partner_activity }}">
+        <span>Partner &amp; Aktivitäten</span>
+        <small>Vollmachten, Partnerabrechnungen und Änderungen einsehen.</small>
+      </a>
       <a class="kiosk-menu__item" href="{% url 'user-guide' %}">
         <span>Hilfe</span>
         <small>Anleitungen zu den wichtigsten Kiosk-Abläufen öffnen.</small>
@@ -212,6 +212,7 @@
           <input type="hidden" name="action" value="quick">
           <input type="hidden" name="quick-price_rule" id="quick-price-rule" value="">
           <input type="hidden" name="quick-quantity" id="id_quick-quantity" value="1">
+          <span data-quick-submitted-targets></span>
 
         <section class="panel kiosk-card kiosk-card--accent" data-kiosk-card="drinks">
           <div class="kiosk-card__header">
@@ -285,6 +286,7 @@
         {% for error in quick_form.quantity.errors %}
           <span class="helptext error">{{ error }}</span>
         {% endfor %}
+        {{ quick_form.non_field_errors }}
       </form>
 
       <dialog id="meal-calendar-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="meal-calendar-dialog-title">
@@ -355,7 +357,7 @@
         <div class="kiosk-card__header kiosk-section-heading">
           <div class="kiosk-card__header-main">
             <h2 class="kiosk-title">Check-in</h2>
-            <p>Pflege An- und Abreise für dich, Begleitpersonen und freigegebene Mitbuchungen.</p>
+            <p>Pflege An- und Abreise für dein eigenes und freigegebene Partnerkonten samt Familie.</p>
           </div>
           <button type="button" class="button kiosk-card__action" data-open-checkin-dialog>Eintragen</button>
         </div>
@@ -394,6 +396,7 @@
                 {% endif %}
               </div>
               <dl class="quick-booking-row__meta">
+                <div><dt>Konto</dt><dd>{{ entry.participant.full_name }}</dd></div>
                 <div><dt>Menge</dt><dd>{{ entry.quantity }}</dd></div>
                 <div><dt>Einzelpreis</dt><dd>{{ entry.unit_price|money_eur }}</dd></div>
                 <div><dt>Summe</dt><dd>{{ entry.total|money_eur }}</dd></div>
@@ -538,56 +541,6 @@
         {% endfor %}
       </dialog>{% endif %}
 
-      <dialog id="booking-links-dialog"{% if booking_link_form.errors %} data-auto-open-dialog{% endif %} class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="booking-links-dialog-title">
-        <div class="kiosk-card__header kiosk-section-heading">
-          <div class="kiosk-card__header-main">
-            <h2 class="kiosk-title" id="booking-links-dialog-title">
-              Mitbuchungen
-              <button type="button" class="kiosk-help-button" data-help-text="Lade andere Teilnehmer ein, damit ihr euch gegenseitig beim Essen mit anmelden könnt. Sobald die Einladung angenommen wurde, könnt ihr euch gegenseitig auswählen. Die Abrechnung bleibt dabei für jeden separat." aria-label="Kurzhilfe Mitbuchungen">?</button>
-            </h2>
-            <p>Lade andere Teilnehmer ein und verwalte bestehende Freigaben.</p>
-          </div>
-          <button type="button" class="button button-secondary" data-close-dialog>Schließen</button>
-        </div>
-        <form method="post" class="form-grid">
-          {% csrf_token %}
-          <input type="hidden" name="action" value="booking_link_invite">
-          {{ booking_link_form.as_p }}
-          <div class="form-actions">
-            <button type="submit">Einladen</button>
-          </div>
-        </form>
-        {% if is_pre_camp and pending_invites %}
-          <section class="stack stack--compact" aria-labelledby="pending-booking-invites-title">
-            <h3 id="pending-booking-invites-title">Offene Einladungen</h3>
-            {% include "billing/includes/kiosk_pending_invites.html" %}
-          </section>
-        {% endif %}
-        {% for invite in sent_invites %}
-          <p class="hint">Offen: {{ invite.invitee.full_name }}</p>
-        {% endfor %}
-        {% for link in accepted_links %}
-          <div class="kiosk-list-row">
-            <div class="kiosk-list-row__content">
-              <strong>
-                {% if link.inviter_id == participant.pk %}{{ link.invitee.full_name }}{% else %}{{ link.inviter.full_name }}{% endif %}
-              </strong>
-              <span>Gegenseitig freigegeben</span>
-            </div>
-            <form method="post" class="kiosk-list-row__actions">
-              {% csrf_token %}
-              <input type="hidden" name="action" value="booking_link_revoke">
-              <input type="hidden" name="booking_link_id" value="{{ link.pk }}">
-              <button type="submit" class="button-secondary">Auflösen</button>
-            </form>
-          </div>
-        {% empty %}
-          <div class="kiosk-empty">
-            <strong>Keine angenommenen Verknüpfungen vorhanden.</strong>
-            <p>Einladungen erscheinen hier, sobald sie angenommen wurden.</p>
-          </div>
-        {% endfor %}
-      </dialog>
   <dialog id="quick-cancel-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="quick-cancel-dialog-title">
     <form method="dialog" class="dialog-heading">
       <div>
@@ -607,6 +560,31 @@
       <div class="dialog-actions">
         <button type="button" class="button button-secondary" data-close-quick-cancel-dialog>Abbrechen</button>
         <button type="submit" class="button button-danger">Jetzt stornieren</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="meal-retract-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="meal-retract-dialog-title">
+    <form method="dialog" class="dialog-heading">
+      <div>
+        <h2 id="meal-retract-dialog-title">Partner-Essensanmeldung zurücknehmen?</h2>
+        <p class="dialog-heading__meta">Die Anmeldung und ihre Abrechnungsposition werden zurückgenommen.</p>
+      </div>
+      <button class="button button-secondary">Schließen</button>
+    </form>
+    <div class="kiosk-note">
+      <strong id="meal-retract-target"></strong>
+      <span id="meal-retract-details"></span>
+      <span id="meal-retract-cost"></span>
+    </div>
+    <form method="post" id="meal-retract-form">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="meal_retract">
+      <input type="hidden" name="meal_signup_id" id="meal-retract-signup-id" value="">
+      <input type="hidden" name="meal_retraction_token" id="meal-retraction-token" value="">
+      <div class="dialog-actions">
+        <button type="button" class="button button-secondary" data-close-meal-retract-dialog>Abbrechen</button>
+        <button type="submit" class="button button-danger">Jetzt zurücknehmen</button>
       </div>
     </form>
   </dialog>
@@ -685,12 +663,17 @@
     </div>
   </dialog>
 
-  <dialog id="quick-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="quick-dialog-title">
+  <dialog id="quick-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="quick-dialog-title">
     <form method="dialog" class="dialog-heading">
       <h2 id="quick-dialog-title">Artikel buchen</h2>
       <button class="button button-secondary">Schließen</button>
     </form>
     <p class="hint" data-quick-dialog-name></p>
+    <div class="stack stack--compact">
+      <p>Für wen soll gebucht werden?</p>
+      {% include "billing/includes/kiosk_quick_targets.html" with target_scope="drink" %}
+    </div>
+    <p>Menge auswählen</p>
     <div class="quantity-grid" role="group" aria-label="Menge auswählen">
       {% for quantity in "12345" %}
         <button type="button" data-drink-quantity="{{ quantity }}">{{ quantity }}x</button>
@@ -703,6 +686,55 @@
     <button type="button" class="button" data-submit-custom-drink>Menge buchen</button>
   </dialog>
 
+  {% if quick_confirmation %}
+    <dialog
+      id="quick-confirmation-dialog"
+      class="kiosk-dialog kiosk-dialog--wide"
+      aria-labelledby="quick-confirmation-dialog-title"
+      data-auto-open-dialog
+    >
+      <form method="dialog" class="dialog-heading">
+        <h2 id="quick-confirmation-dialog-title">Mehrfachbuchung bestätigen</h2>
+        <button class="button button-secondary">Abbrechen</button>
+      </form>
+      <p>Bitte prüfe Personen, Mengen und Preise, bevor du die Buchungen kostenpflichtig bestätigst.</p>
+      {% if quick_confirmation.changed %}
+        <div class="kiosk-note" role="alert">
+          <strong>Buchungsdaten wurden aktualisiert</strong>
+          <span>Auswahl oder Preise stimmen nicht mehr mit der vorherigen Übersicht überein. Bitte erneut prüfen.</span>
+        </div>
+      {% endif %}
+      <div class="kiosk-dialog-summary">
+        {% for item in quick_confirmation.items %}
+          <div class="kiosk-dialog-summary__row">
+            <span>
+              <strong>{{ item.name }}</strong><br>
+              <small>{{ item.price_rule_name }} · {{ item.quantity }} × {{ item.unit_price|money_eur }}</small>
+            </span>
+            <strong>{{ item.total|money_eur }}</strong>
+          </div>
+        {% endfor %}
+        <div class="kiosk-dialog-summary__row kiosk-dialog-summary__row--total">
+          <span>Gesamtsumme</span>
+          <strong>{{ quick_confirmation.total|money_eur }}</strong>
+        </div>
+      </div>
+      <form method="post" class="stack">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="quick">
+        <input type="hidden" name="quick-confirmed" value="1">
+        <input type="hidden" name="quick-confirmation-token" value="{{ quick_confirmation.token }}">
+        <input type="hidden" name="quick-price_rule" value="{{ quick_confirmation.price_rule_id }}">
+        <input type="hidden" name="quick-quantity" value="{{ quick_confirmation.quantity }}">
+        <input type="hidden" name="quick-targets-submitted" value="1">
+        {% for target_token in quick_confirmation.target_tokens %}
+          <input type="hidden" name="quick-target" value="{{ target_token }}">
+        {% endfor %}
+        <button type="submit" class="button">Jetzt kostenpflichtig buchen</button>
+      </form>
+    </dialog>
+  {% endif %}
+
   <dialog id="food-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="food-dialog-title">
     <form method="dialog" class="dialog-heading">
       <h2 id="food-dialog-title">Verpflegung buchen</h2>
@@ -712,16 +744,7 @@
 
     <div class="stack">
       <p>Wer soll eingebucht werden?</p>
-      <div class="target-list">
-        {% for target in meal_targets %}
-          <article class="target-row">
-            <label>
-              <input type="checkbox" form="quick-booking-form" name="quick-target" value="{{ target.token }}" {% if target.token == default_booking_target_token %}checked{% endif %}>
-              <span>{{ target.name }} · {{ target.role }}</span>
-            </label>
-          </article>
-        {% endfor %}
-      </div>
+      {% include "billing/includes/kiosk_quick_targets.html" with target_scope="food" %}
       <button type="button" class="button" id="submit-food-booking">Kostenpflichtig buchen</button>
     </div>
   </dialog>
@@ -753,12 +776,25 @@
                   <span>{{ slot.label }} · {{ signup.get_variant_display }} · {{ signup.get_status_display }}</span>
                 </div>
                 {% if signup.status == "active" and not slot.locked %}
-                  <form method="post" class="kiosk-list-row__actions">
-                    {% csrf_token %}
-                    <input type="hidden" name="action" value="meal_retract">
-                    <input type="hidden" name="meal_signup_id" value="{{ signup.pk }}">
-                    <button type="submit" class="button-secondary">Zurücknehmen</button>
-                  </form>
+                  {% if signup.requires_partner_retraction_confirmation %}
+                    <button
+                      type="button"
+                      class="button-secondary kiosk-list-row__actions"
+                      data-open-meal-retract-dialog
+                      data-meal-signup-id="{{ signup.pk }}"
+                      data-meal-retraction-token="{{ signup.retraction_confirmation_token }}"
+                      data-meal-retract-target="{% if signup.family_member %}{{ signup.family_member.full_name }}{% else %}{{ signup.participant.full_name }}{% endif %}"
+                      data-meal-retract-details="{{ slot.label }} am {{ signup.meal_date|date:'d.m.Y' }}"
+                      data-meal-retract-cost="{% if signup.charge %}{{ signup.charge.total|money_eur }}{% endif %}"
+                    >Zurücknehmen</button>
+                  {% else %}
+                    <form method="post" class="kiosk-list-row__actions">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="meal_retract">
+                      <input type="hidden" name="meal_signup_id" value="{{ signup.pk }}">
+                      <button type="submit" class="button-secondary">Zurücknehmen</button>
+                    </form>
+                  {% endif %}
                 {% endif %}
               </article>
             {% endfor %}
@@ -909,7 +945,7 @@
     <form method="dialog" class="dialog-heading">
       <div>
         <h2 id="checkin-dialog-title">Check-in</h2>
-        <p class="dialog-heading__meta">An- und Abreise für dich, Begleitpersonen und freigegebene Teilnehmerprofile.</p>
+        <p class="dialog-heading__meta">An- und Abreise für dein eigenes und freigegebene Partnerkonten.</p>
       </div>
       <button class="button button-secondary">Schließen</button>
     </form>
@@ -932,6 +968,11 @@
               {% endif %}
             </div>
             <input type="hidden" name="checkin_target" value="{{ checkin_target.token }}">
+            <input
+              type="hidden"
+              name="checkin_state_{{ checkin_target.token }}"
+              value="{{ checkin_target.state_token }}"
+            >
             <p class="dialog-field">
               <label for="arrival-date-{{ checkin_target.token }}">Anreise</label>
               <input
@@ -1065,6 +1106,7 @@
       const drinkForm = document.getElementById("quick-booking-form");
       const priceRuleInput = document.getElementById("quick-price-rule");
       const quantityInput = document.getElementById("id_quick-quantity");
+      const submittedTargetContainer = document.querySelector("[data-quick-submitted-targets]");
       const customQuantityInput = document.getElementById("custom-drink-quantity");
       const drinkName = document.querySelector("[data-quick-dialog-name]");
       const mealDialog = document.getElementById("meal-dialog");
@@ -1096,6 +1138,12 @@
       const quickCancelChargeId = document.getElementById("quick-cancel-charge-id");
       const quickCancelDescription = document.getElementById("quick-cancel-description");
       const quickCancelTotal = document.getElementById("quick-cancel-total");
+      const mealRetractDialog = document.getElementById("meal-retract-dialog");
+      const mealRetractSignupId = document.getElementById("meal-retract-signup-id");
+      const mealRetractionToken = document.getElementById("meal-retraction-token");
+      const mealRetractTarget = document.getElementById("meal-retract-target");
+      const mealRetractDetails = document.getElementById("meal-retract-details");
+      const mealRetractCost = document.getElementById("meal-retract-cost");
       const openDialog = (dialog, trigger) => window.kioskDialogs.open(dialog, trigger);
 
       document.querySelectorAll("[data-quick-button]").forEach((button) => {
@@ -1119,14 +1167,38 @@
         });
       });
 
+      const syncQuickTargets = (scope) => {
+        submittedTargetContainer.replaceChildren();
+        const selectionMarker = document.createElement("input");
+        selectionMarker.type = "hidden";
+        selectionMarker.name = "quick-targets-submitted";
+        selectionMarker.value = "1";
+        submittedTargetContainer.append(selectionMarker);
+        const selectedTargets = [
+          ...document.querySelectorAll(`[data-quick-target-scope="${scope}"]:checked`),
+        ];
+        const targetError = document.querySelector(`[data-quick-target-error="${scope}"]`);
+        if (targetError) targetError.hidden = selectedTargets.length > 0;
+        selectedTargets.forEach((checkbox) => {
+          const input = document.createElement("input");
+          input.type = "hidden";
+          input.name = "quick-target";
+          input.value = checkbox.value;
+          submittedTargetContainer.append(input);
+        });
+        return selectedTargets.length > 0;
+      };
+
       document.getElementById("submit-food-booking")?.addEventListener("click", () => {
+        if (!syncQuickTargets("food")) return;
         quantityInput.value = "1";
         drinkForm.requestSubmit();
       });
 
       const submitDrink = (quantity) => {
+        if (!syncQuickTargets("drink")) return;
         quantityInput.value = quantity;
-        drinkForm.submit();
+        drinkForm.requestSubmit();
       };
 
       document.querySelectorAll("[data-drink-quantity]").forEach((button) => {
@@ -1235,6 +1307,21 @@
       document
         .querySelector("[data-close-quick-cancel-dialog]")
         ?.addEventListener("click", () => quickCancelDialog.close());
+
+      document.querySelectorAll("[data-open-meal-retract-dialog]").forEach((button) => {
+        button.addEventListener("click", () => {
+          mealRetractSignupId.value = button.dataset.mealSignupId || "";
+          mealRetractionToken.value = button.dataset.mealRetractionToken || "";
+          mealRetractTarget.textContent = button.dataset.mealRetractTarget || "Partnerkonto";
+          mealRetractDetails.textContent = button.dataset.mealRetractDetails || "Essensanmeldung";
+          const cost = button.dataset.mealRetractCost || "";
+          mealRetractCost.textContent = cost ? `Betrag: ${cost}` : "Ohne Abrechnungsposition";
+          openDialog(mealRetractDialog, button);
+        });
+      });
+      document
+        .querySelector("[data-close-meal-retract-dialog]")
+        ?.addEventListener("click", () => mealRetractDialog.close());
 
       const summaryDialog = document.getElementById("summary-dialog");
       document.querySelector("[data-open-summary-dialog]")?.addEventListener("click", (event) =>

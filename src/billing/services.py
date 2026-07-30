@@ -1,13 +1,14 @@
 import re
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from functools import partial
-from typing import Any
+from typing import Any, cast
 
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import transaction
-from django.db.models import Max, Q, Sum
+from django.db.models import Max, Prefetch, Q, Sum
 from django.utils import timezone
 
 from .models import (
@@ -17,10 +18,13 @@ from .models import (
     DrinkEntry,
     Expense,
     ExpenseAllocation,
+    KioskActionAuditLog,
     MealOrder,
     MealPlanEntry,
     MealSignup,
     Participant,
+    ParticipantBookingLink,
+    ParticipantFamilyMember,
     PriceRule,
     Settlement,
     SettlementRun,
@@ -374,6 +378,43 @@ def resolve_meal_price_rule(camp: Camp, meal: str, meal_date: date, *, is_child:
     return base_queryset.filter(is_default=True, meal_date__isnull=True).order_by("name", "pk").first()
 
 
+def resolve_quick_booking_price_rule(
+    selected_rule: PriceRule,
+    booking_date: date,
+    *,
+    is_child: bool,
+    is_companion: bool,
+) -> PriceRule | None:
+    """Resolve an actor-selected quick-booking rule for one concrete target.
+
+    Drink rules must explicitly apply to the target. Quick-food selections keep
+    an applicable submitted rule, prefer a date-specific override, and resolve
+    another target-group default when the submitted rule does not apply.
+    """
+    if is_child:
+        selected_rule_applies = selected_rule.applies_to_children
+    elif is_companion:
+        selected_rule_applies = selected_rule.applies_to_companions
+    else:
+        selected_rule_applies = selected_rule.applies_to_adults
+    if selected_rule.kind == PriceRule.Kind.DRINK:
+        return selected_rule if selected_rule_applies else None
+    if selected_rule.kind == PriceRule.Kind.MEAL:
+        resolved_rule = resolve_meal_price_rule(
+            selected_rule.camp,
+            selected_rule.meal_type,
+            booking_date,
+            is_child=is_child,
+            is_companion=is_companion,
+        )
+        if resolved_rule is not None and resolved_rule.meal_date == booking_date:
+            return resolved_rule
+        if selected_rule_applies:
+            return selected_rule
+        return resolved_rule
+    return None
+
+
 def charge_audit_snapshot(charge: Charge) -> dict[str, str | None]:
     """Return the auditable business fields for a booking charge.
 
@@ -387,10 +428,30 @@ def charge_audit_snapshot(charge: Charge) -> dict[str, str | None]:
         "booking_reference": charge.booking_reference,
         "kind": charge.kind,
         "description": charge.description,
-        "quantity": str(money(charge.quantity)),
-        "unit_price": str(money(charge.unit_price)),
-        "foerdersatz": str(rate(charge.foerdersatz)),
+        "quantity": str(money(Decimal(str(charge.quantity)))),
+        "unit_price": str(money(Decimal(str(charge.unit_price)))),
+        "foerdersatz": str(rate(Decimal(str(charge.foerdersatz)))),
         "occurred_on": charge.occurred_on.isoformat() if charge.occurred_on else None,
+    }
+
+
+def kiosk_charge_audit_snapshot(charge: Charge) -> dict[str, str | None]:
+    """Return the booking fields needed to resolve participant kiosk disputes."""
+    snapshot = charge_audit_snapshot(charge)
+    snapshot.pop("description", None)
+    snapshot["deleted_at"] = charge.deleted_at.isoformat() if charge.deleted_at else None
+    return snapshot
+
+
+def kiosk_meal_signup_audit_snapshot(signup: MealSignup) -> dict[str, Any]:
+    """Return the meal and linked charge state relevant to kiosk disputes."""
+    return {
+        "meal_date": signup.meal_date.isoformat(),
+        "meal": signup.meal,
+        "variant": signup.variant,
+        "status": signup.status,
+        "retracted_at": signup.retracted_at.isoformat() if signup.retracted_at else None,
+        "charge": kiosk_charge_audit_snapshot(signup.charge) if signup.charge is not None else None,
     }
 
 
@@ -447,6 +508,78 @@ def create_booking_delete_audit_log(
         action=BookingAuditLog.Action.DELETED,
         before=before,
         after={},
+    )
+
+
+def create_kiosk_action_audit_log(
+    *,
+    camp: Camp,
+    actor_participant: Participant,
+    target_participant: Participant,
+    action: str,
+    description: str,
+    actor_family_member: ParticipantFamilyMember | None = None,
+    target_family_member: ParticipantFamilyMember | None = None,
+    booking_link: ParticipantBookingLink | None = None,
+    charge: Charge | None = None,
+    before: dict[str, Any] | None = None,
+    after: dict[str, Any] | None = None,
+) -> KioskActionAuditLog:
+    """Append one validated audit row for a current-camp kiosk action.
+
+    Args:
+        camp: Camp whose participant records are affected.
+        actor_participant: Main account under which the kiosk actor is logged in.
+        target_participant: Other main account involved in the action.
+        action: One value from :class:`KioskActionAuditLog.Action`.
+        description: Short participant-facing explanation without secrets.
+        actor_family_member: Companion who actually used the actor account, if any.
+        target_family_member: Family member affected below the target account, if any.
+        booking_link: Partner authorization used for the action, if applicable.
+        charge: Charge affected by a booking action, if applicable.
+        before: JSON-serializable state before the action.
+        after: JSON-serializable state after the action.
+
+    Returns:
+        The newly created append-only audit row.
+
+    Raises:
+        ValidationError: If an identity disappeared or does not belong to the supplied camp/account.
+    """
+    participant_ids = {actor_participant.pk, target_participant.pk}
+    participants_by_id = Participant.objects.in_bulk(participant_ids)
+    if set(participants_by_id) != participant_ids:
+        raise ValidationError("Eine Kiosk-Audit-Identität ist nicht mehr verfügbar.")
+    actor_participant = participants_by_id[actor_participant.pk]
+    target_participant = participants_by_id[target_participant.pk]
+
+    family_member_ids = {
+        family_member.pk for family_member in (actor_family_member, target_family_member) if family_member is not None
+    }
+    family_members_by_id = ParticipantFamilyMember.objects.in_bulk(family_member_ids)
+    if set(family_members_by_id) != family_member_ids:
+        raise ValidationError("Eine Kiosk-Audit-Identität ist nicht mehr verfügbar.")
+    actor_family_member = family_members_by_id[actor_family_member.pk] if actor_family_member is not None else None
+    target_family_member = family_members_by_id[target_family_member.pk] if target_family_member is not None else None
+
+    if actor_participant.camp_id != camp.pk or target_participant.camp_id != camp.pk:
+        raise ValidationError("Kiosk-Audit darf nur Teilnehmer desselben Lagers verknüpfen.")
+    if actor_family_member is not None and actor_family_member.guardian_id != actor_participant.pk:
+        raise ValidationError("Die handelnde Begleitperson gehört nicht zum Akteur.")
+    if target_family_member is not None and target_family_member.guardian_id != target_participant.pk:
+        raise ValidationError("Das betroffene Familienmitglied gehört nicht zum Zielkonto.")
+    return KioskActionAuditLog.objects.create(
+        camp=camp,
+        actor_participant=actor_participant,
+        actor_family_member=actor_family_member,
+        target_participant=target_participant,
+        target_family_member=target_family_member,
+        booking_link=booking_link,
+        charge=charge,
+        action=action,
+        description=description,
+        before=before or {},
+        after=after or {},
     )
 
 
@@ -539,18 +672,25 @@ def build_settlement_line(
     )
 
 
-def default_charge_lines(participant):
-    default_rules = PriceRule.objects.filter(camp=participant.camp, is_default=True)
-    rules = list(default_rules.filter(kind=PriceRule.Kind.NIGHT))
-    camp_flat_rules = default_rules.filter(kind=PriceRule.Kind.CAMP_FLAT)
-    matching_camp_flat_rules = camp_flat_rules.filter(
-        camp_flat_duration=participant_camp_flat_duration(participant),
-        camp_flat_role=participant_camp_flat_role(participant),
-    )
-    if matching_camp_flat_rules.exists():
+def default_charge_lines(
+    participant: Participant,
+    default_rules: Iterable[PriceRule] | None = None,
+) -> list[SettlementLine]:
+    if default_rules is None:
+        default_rules = PriceRule.objects.filter(camp=participant.camp, is_default=True)
+    available_rules = list(default_rules)
+    rules = [rule for rule in available_rules if rule.kind == PriceRule.Kind.NIGHT]
+    camp_flat_rules = [rule for rule in available_rules if rule.kind == PriceRule.Kind.CAMP_FLAT]
+    matching_camp_flat_rules = [
+        rule
+        for rule in camp_flat_rules
+        if rule.camp_flat_duration == participant_camp_flat_duration(participant)
+        and rule.camp_flat_role == participant_camp_flat_role(participant)
+    ]
+    if matching_camp_flat_rules:
         rules.extend(matching_camp_flat_rules)
     else:
-        rules.extend(camp_flat_rules.filter(camp_flat_duration="", camp_flat_role=""))
+        rules.extend(rule for rule in camp_flat_rules if rule.camp_flat_duration == "" and rule.camp_flat_role == "")
     lines = []
     for rule in rules:
         if not _rule_applies(rule, participant):
@@ -571,9 +711,13 @@ def default_charge_lines(participant):
     return lines
 
 
-def manual_charge_lines(participant):
+def manual_charge_lines(
+    participant: Participant,
+    charges: Iterable[Charge] | None = None,
+) -> list[SettlementLine]:
     grouped_charges: dict[tuple[Any, ...], dict[str, Any]] = {}
-    charges = Charge.objects.filter(participant=participant, deleted_at__isnull=True).order_by("created_at", "pk")
+    if charges is None:
+        charges = Charge.objects.filter(participant=participant, deleted_at__isnull=True).order_by("created_at", "pk")
     for charge in charges:
         occurred_on = charge.occurred_on or timezone.localdate(charge.created_at)
         individual_line = build_settlement_line(
@@ -631,14 +775,36 @@ def manual_charge_lines(participant):
     return lines
 
 
-def drink_charge_lines(participant):
+def drink_charge_lines(
+    participant: Participant,
+    drink_entries: Iterable[DrinkEntry] | None = None,
+) -> list[SettlementLine]:
     lines = []
-    entries = (
-        DrinkEntry.objects.filter(participant=participant)
-        .values("drink", "unit_price", "foerdersatz")
-        .annotate(quantity_sum=Sum("quantity"))
-        .order_by("drink", "foerdersatz")
-    )
+    entries: Iterable[Mapping[str, Any]]
+    if drink_entries is None:
+        entries = (
+            DrinkEntry.objects.filter(participant=participant)
+            .values("drink", "unit_price", "foerdersatz")
+            .annotate(quantity_sum=Sum("quantity"))
+            .order_by("drink", "foerdersatz")
+        )
+    else:
+        grouped_entries: dict[tuple[str, Decimal, Decimal], int] = {}
+        for drink_entry in drink_entries:
+            key = (drink_entry.drink, drink_entry.unit_price, drink_entry.foerdersatz)
+            grouped_entries[key] = grouped_entries.get(key, 0) + drink_entry.quantity
+        entries = [
+            {
+                "drink": drink,
+                "unit_price": unit_price,
+                "foerdersatz": subsidy_rate,
+                "quantity_sum": quantity,
+            }
+            for (drink, unit_price, subsidy_rate), quantity in sorted(
+                grouped_entries.items(),
+                key=lambda item: (item[0][0], item[0][2], item[0][1]),
+            )
+        ]
     for entry in entries:
         quantity = Decimal(entry["quantity_sum"] or 0)
         unit_price = money(entry["unit_price"])
@@ -655,9 +821,13 @@ def drink_charge_lines(participant):
     return lines
 
 
-def shared_expense_charge_lines(participant):
+def shared_expense_charge_lines(
+    participant: Participant,
+    allocations: Iterable[ExpenseAllocation] | None = None,
+) -> list[SettlementLine]:
     lines = []
-    allocations = ExpenseAllocation.objects.filter(participant=participant).select_related("expense")
+    if allocations is None:
+        allocations = ExpenseAllocation.objects.filter(participant=participant).select_related("expense")
     for allocation in allocations:
         date_str = allocation.expense.paid_on.strftime("%d.%m.%Y") if allocation.expense.paid_on else ""
         date_part = f" ({date_str})" if date_str else ""
@@ -708,6 +878,91 @@ def calculate_participant_settlement(participant):
         total_advanced=total_advanced,
         balance=balance,
     )
+
+
+def calculate_participant_settlements(
+    participants: Iterable[Participant],
+) -> dict[int, SettlementResult]:
+    """Calculate multiple participant settlements with a bounded query count.
+
+    Args:
+        participants: Persisted participants whose current settlement is needed.
+
+    Returns:
+        Settlement results keyed by participant ID. Duplicate inputs are loaded once.
+    """
+    participant_ids = list(dict.fromkeys(participant.pk for participant in participants if participant.pk is not None))
+    if not participant_ids:
+        return {}
+
+    loaded_participants = (
+        Participant.objects.filter(pk__in=participant_ids)
+        .select_related("camp")
+        .prefetch_related(
+            Prefetch(
+                "charges",
+                queryset=Charge.objects.filter(deleted_at__isnull=True).order_by("created_at", "pk"),
+                to_attr="settlement_charges",
+            ),
+            Prefetch(
+                "drink_entries",
+                queryset=DrinkEntry.objects.order_by("drink", "foerdersatz", "unit_price", "pk"),
+                to_attr="settlement_drink_entries",
+            ),
+            Prefetch(
+                "expense_allocations",
+                queryset=ExpenseAllocation.objects.select_related("expense"),
+                to_attr="settlement_expense_allocations",
+            ),
+            Prefetch("payments", to_attr="settlement_payments"),
+            Prefetch(
+                "expenses",
+                queryset=Expense.objects.filter(
+                    reimbursable=True,
+                    status=Expense.Status.APPROVED,
+                ),
+                to_attr="settlement_advanced_expenses",
+            ),
+        )
+    )
+    participants_by_id = {participant.pk: participant for participant in loaded_participants}
+    default_rules_by_camp: dict[int, list[PriceRule]] = {}
+    for rule in PriceRule.objects.filter(
+        camp_id__in={participant.camp_id for participant in participants_by_id.values()},
+        is_default=True,
+    ):
+        default_rules_by_camp.setdefault(rule.camp_id, []).append(rule)
+
+    results: dict[int, SettlementResult] = {}
+    for participant_id in participant_ids:
+        participant = participants_by_id.get(participant_id)
+        if participant is None:
+            continue
+        prefetched_participant = cast(Any, participant)
+        lines = (
+            default_charge_lines(participant, default_rules_by_camp.get(participant.camp_id, ()))
+            + manual_charge_lines(participant, prefetched_participant.settlement_charges)
+            + drink_charge_lines(participant, prefetched_participant.settlement_drink_entries)
+            + shared_expense_charge_lines(participant, prefetched_participant.settlement_expense_allocations)
+        )
+        total_gross = money(sum((line.gross_total for line in lines), ZERO))
+        total_subsidy = money(sum((line.subsidy_amount for line in lines), ZERO))
+        total_due = money(sum((line.total for line in lines), ZERO))
+        total_paid = money(sum((payment.amount for payment in prefetched_participant.settlement_payments), ZERO))
+        total_advanced = money(
+            sum((expense.amount for expense in prefetched_participant.settlement_advanced_expenses), ZERO)
+        )
+        results[participant_id] = SettlementResult(
+            participant=participant,
+            lines=lines,
+            total_gross=total_gross,
+            total_subsidy=total_subsidy,
+            total_due=total_due,
+            total_paid=total_paid,
+            total_advanced=total_advanced,
+            balance=money(total_due - total_paid - total_advanced),
+        )
+    return results
 
 
 def calculate_camp_settlements(camp):
@@ -822,10 +1077,9 @@ def create_settlement_run(
     return run
 
 
-def participant_kiosk_summary(participant):
-    result = calculate_participant_settlement(participant)
+def _participant_kiosk_summary_from_result(result: SettlementResult) -> dict[str, Any]:
     return {
-        "participant": participant.full_name,
+        "participant": result.participant.full_name,
         "total_gross": result.total_gross,
         "total_subsidy": result.total_subsidy,
         "total_due": result.total_due,
@@ -844,6 +1098,19 @@ def participant_kiosk_summary(participant):
             }
             for line in result.lines
         ],
+    }
+
+
+def participant_kiosk_summary(participant: Participant) -> dict[str, Any]:
+    """Return one participant's current kiosk invoice summary."""
+    return _participant_kiosk_summary_from_result(calculate_participant_settlement(participant))
+
+
+def participant_kiosk_summaries(participants: Iterable[Participant]) -> dict[int, dict[str, Any]]:
+    """Return current kiosk invoice summaries with queries independent of account count."""
+    return {
+        participant_id: _participant_kiosk_summary_from_result(result)
+        for participant_id, result in calculate_participant_settlements(participants).items()
     }
 
 

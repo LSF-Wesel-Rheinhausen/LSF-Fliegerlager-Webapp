@@ -12,6 +12,7 @@ from .models import (
     DailyShiftTemplate,
     DrinkEntry,
     Expense,
+    KioskActionAuditLog,
     MealOrder,
     MealPlanEntry,
     MealSignup,
@@ -93,9 +94,23 @@ class ParticipantFamilyMemberAdmin(admin.ModelAdmin):
 
 @admin.register(ParticipantBookingLink)
 class ParticipantBookingLinkAdmin(admin.ModelAdmin):
+    """Expose participant consent records without allowing administrative writes."""
+
     list_display = ("inviter", "invitee", "status", "created_at", "updated_at")
     list_filter = ("status", "created_at")
     search_fields = ("inviter__first_name", "inviter__last_name", "invitee__first_name", "invitee__last_name")
+
+    def has_add_permission(self, request):
+        """Require creation through the audited participant invitation workflow."""
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        """Require status changes through the audited participant consent workflow."""
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        """Retain participant consent history for authorization audits."""
+        return False
 
 
 @admin.register(PriceRule)
@@ -203,6 +218,45 @@ class ReadOnlySnapshotAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+@admin.register(KioskActionAuditLog)
+class KioskActionAuditLogAdmin(ReadOnlySnapshotAdmin):
+    list_display = (
+        "camp",
+        "actor_participant",
+        "actor_display_name",
+        "target_participant",
+        "target_display_name",
+        "action",
+        "created_at",
+    )
+    list_filter = ("camp", "action", "created_at")
+    search_fields = (
+        "actor_participant__first_name",
+        "actor_participant__last_name",
+        "target_participant__first_name",
+        "target_participant__last_name",
+        "actor_display_name_snapshot",
+        "target_display_name_snapshot",
+        "description",
+    )
+    readonly_fields = (
+        "camp",
+        "actor_participant",
+        "actor_family_member",
+        "actor_display_name_snapshot",
+        "target_participant",
+        "target_family_member",
+        "target_display_name_snapshot",
+        "booking_link",
+        "charge",
+        "action",
+        "description",
+        "before",
+        "after",
+        "created_at",
+    )
 
 
 @admin.register(SettlementRun)

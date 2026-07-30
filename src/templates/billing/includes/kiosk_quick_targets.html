@@ -1,0 +1,18 @@
+<div class="target-list">
+  {% for target in meal_targets %}
+    <article class="target-row">
+      <label>
+        <input
+          type="checkbox"
+          value="{{ target.token }}"
+          data-quick-target-scope="{{ target_scope }}"
+          {% if target.token == default_booking_target_token %}checked{% endif %}
+        >
+        <span>{{ target.name }} · {{ target.role }}</span>
+      </label>
+    </article>
+  {% endfor %}
+</div>
+<p class="helptext error" role="alert" data-quick-target-error="{{ target_scope }}" hidden>
+  Bitte mindestens eine Person auswählen.
+</p>

@@ -632,7 +632,7 @@ class ParticipantFamilyMemberPin(TimeStampedModel):
 
 
 class ParticipantBookingLink(TimeStampedModel):
-    """Track participant-to-participant kiosk booking invitations."""
+    """Track reciprocal participant account authorizations for one camp."""
 
     class Status(models.TextChoices):
         PENDING = "pending", "Offen"
@@ -740,6 +740,13 @@ class Charge(TimeStampedModel):
         related_name="kiosk_created_charges",
         help_text="Teilnehmer, der diese Kiosk-Schnellbuchung ausgelöst hat.",
     )
+    kiosk_confirmation_nonce = models.UUIDField(
+        null=True,
+        blank=True,
+        unique=True,
+        editable=False,
+        help_text="Einmaliger Marker der kostenpflichtig bestätigten Kiosk-Mehrfachbuchung.",
+    )
 
     class Meta:
         ordering = ["participant", "kind", "description"]
@@ -790,6 +797,166 @@ class BookingAuditLog(models.Model):
 
     def __str__(self):
         return f"{self.charge}: {self.get_action_display()} am {self.created_at:%Y-%m-%d %H:%M}"
+
+
+class _AppendOnlyAuditQuerySet(models.QuerySet):
+    """Reject bulk mutation paths that would bypass model-level audit guards."""
+
+    def update(self, **kwargs):
+        raise ValidationError("Kiosk-Audit-Einträge dürfen nicht verändert werden.")
+
+    def delete(self):
+        raise ValidationError("Kiosk-Audit-Einträge dürfen nicht gelöscht werden.")
+
+
+class KioskActionAuditLog(models.Model):
+    """Persist an append-only trail of partner-authorized kiosk actions."""
+
+    class Action(models.TextChoices):
+        LINK_INVITED = "link_invited", "Partner eingeladen"
+        LINK_ACCEPTED = "link_accepted", "Partnerfreigabe angenommen"
+        LINK_DECLINED = "link_declined", "Partnerfreigabe abgelehnt"
+        LINK_REVOKED = "link_revoked", "Partnerfreigabe widerrufen"
+        QUICK_BOOKED = "quick_booked", "Schnellbuchung erstellt"
+        QUICK_CANCELLED = "quick_cancelled", "Schnellbuchung storniert"
+        MEAL_BOOKED = "meal_booked", "Essensanmeldung gespeichert"
+        MEAL_RETRACTED = "meal_retracted", "Essensanmeldung zurückgenommen"
+        CHECKIN_UPDATED = "checkin_updated", "Anwesenheit geändert"
+
+    camp = models.ForeignKey(Camp, on_delete=models.PROTECT, related_name="kiosk_action_audit_logs")
+    actor_participant = models.ForeignKey(
+        Participant,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="performed_kiosk_action_audit_logs",
+    )
+    actor_family_member = models.ForeignKey(
+        ParticipantFamilyMember,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="performed_kiosk_action_audit_logs",
+    )
+    target_participant = models.ForeignKey(
+        Participant,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="received_kiosk_action_audit_logs",
+    )
+    target_family_member = models.ForeignKey(
+        ParticipantFamilyMember,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="received_kiosk_action_audit_logs",
+    )
+    actor_display_name_snapshot = models.CharField(max_length=241, blank=True, default="", editable=False)
+    target_display_name_snapshot = models.CharField(max_length=241, blank=True, default="", editable=False)
+    booking_link = models.ForeignKey(
+        ParticipantBookingLink,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="kiosk_action_audit_logs",
+    )
+    charge = models.ForeignKey(
+        Charge,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="kiosk_action_audit_logs",
+    )
+    action = models.CharField(max_length=32, choices=Action.choices)
+    description = models.CharField(max_length=255)
+    before = models.JSONField(default=dict)
+    after = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+    objects = _AppendOnlyAuditQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["camp", "-created_at"], name="kiosk_audit_camp_created"),
+            models.Index(fields=["actor_participant", "-created_at"], name="kiosk_audit_actor_created"),
+            models.Index(fields=["target_participant", "-created_at"], name="kiosk_audit_target_created"),
+        ]
+
+    def save(self, *args, **kwargs):
+        """Create a new audit row and reject later mutation through model saves."""
+        if not self._state.adding:
+            raise ValidationError("Kiosk-Audit-Einträge dürfen nicht verändert werden.")
+        if not self.actor_display_name_snapshot:
+            self.actor_display_name_snapshot = self._current_actor_display_name()
+        if not self.target_display_name_snapshot:
+            self.target_display_name_snapshot = self._current_target_display_name()
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        """Reject direct deletion so application code treats the trail as append-only."""
+        raise ValidationError("Kiosk-Audit-Einträge dürfen nicht gelöscht werden.")
+
+    def _current_actor_display_name(self) -> str:
+        """Resolve an actor name only while creating its immutable snapshot."""
+        if self.actor_family_member is not None:
+            return self.actor_family_member.full_name
+        if self.actor_participant is not None:
+            return self.actor_participant.full_name
+        return "Unbekannter Akteur"
+
+    def _current_target_display_name(self) -> str:
+        """Resolve a target name only while creating its immutable snapshot."""
+        if self.target_family_member is not None:
+            return self.target_family_member.full_name
+        if self.target_participant is not None:
+            return self.target_participant.full_name
+        return "Unbekanntes Ziel"
+
+    @property
+    def actor_display_name(self) -> str:
+        """Return the immutable name of the person who used the kiosk identity."""
+        return self.actor_display_name_snapshot or self._current_actor_display_name()
+
+    @property
+    def target_display_name(self) -> str:
+        """Return the immutable name of the affected account or family member."""
+        return self.target_display_name_snapshot or self._current_target_display_name()
+
+    @staticmethod
+    def _format_audit_date(value: str | None) -> str:
+        if value is None:
+            return "–"
+        try:
+            return date.fromisoformat(value).strftime("%d.%m.%Y")
+        except ValueError:
+            return value
+
+    @property
+    def change_summary(self) -> str:
+        """Return a concise participant-facing representation of before/after values."""
+        if self.action == self.Action.CHECKIN_UPDATED:
+            parts = [
+                "Anreise: "
+                f"{self._format_audit_date(self.before.get('arrival_date'))} → "
+                f"{self._format_audit_date(self.after.get('arrival_date'))}",
+                "Abreise: "
+                f"{self._format_audit_date(self.before.get('departure_date'))} → "
+                f"{self._format_audit_date(self.after.get('departure_date'))}",
+            ]
+            if "booked_nights" in self.before or "booked_nights" in self.after:
+                parts.append(
+                    f"Übernachtungen: {self.before.get('booked_nights', '–')} → {self.after.get('booked_nights', '–')}"
+                )
+            return " · ".join(parts)
+        if self.action in {self.Action.QUICK_CANCELLED, self.Action.MEAL_RETRACTED}:
+            return "Status: aktiv → storniert"
+        if self.action in {self.Action.QUICK_BOOKED, self.Action.MEAL_BOOKED}:
+            return f"Buchung: {self.after.get('booking_reference') or self.after.get('status', 'gespeichert')}"
+        if "status" in self.before or "status" in self.after:
+            return f"Status: {self.before.get('status', '–')} → {self.after.get('status', '–')}"
+        return ""
+
+    def __str__(self):
+        return f"{self.get_action_display()} am {self.created_at:%Y-%m-%d %H:%M}"
 
 
 class Payment(TimeStampedModel):
@@ -911,6 +1078,7 @@ class MealSignup(TimeStampedModel):
         default=Decimal("0"),
         validators=[MinValueValidator(Decimal("0")), MaxValueValidator(Decimal("1"))],
     )
+    retraction_version = models.PositiveBigIntegerField(default=0, editable=False)
     retracted_at = models.DateTimeField(null=True, blank=True)
     charge = models.ForeignKey(
         Charge,
