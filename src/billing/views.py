@@ -2675,11 +2675,35 @@ def _book_meal_for_target(
     signup_was_created: bool = False,
     prelocked_booking_link: ParticipantBookingLink | None = None,
     booking_link_lock_acquired: bool = False,
+    dependencies_lock_acquired: bool = False,
 ):
+    """Book one meal after acquiring dependencies in the global lock order."""
     meal_display = dict(MealSignup.Meal.choices).get(meal, meal)
     target_object = target["object"]
     participant = target_object if target["kind"] == "participant" else target_object.guardian
     family_member = target_object if target["kind"] == "family" else None
+    if (signup_lock_acquired or booking_link_lock_acquired) and not dependencies_lock_acquired:
+        raise ValueError("Vorbereitete MealSignup- oder Vollmachts-Locks benötigen gesperrte Identitäten.")
+    if not dependencies_lock_acquired:
+        expected_participant_ids = {booked_by.pk, participant.pk}
+        expected_family_member_ids = {
+            member.pk for member in (actor_family_member, family_member) if member is not None
+        }
+        _locked_camp, locked_participants, locked_family_members = _lock_booking_authorization_dependencies(
+            [booked_by, participant],
+            [actor_family_member, family_member],
+            camp=booked_by.camp,
+        )
+        if (
+            set(locked_participants) != expected_participant_ids
+            or set(locked_family_members) != expected_family_member_ids
+        ):
+            raise PermissionDenied("Das Buchungsziel ist nicht mehr verfügbar.")
+        booked_by = locked_participants[booked_by.pk]
+        participant = locked_participants[participant.pk]
+        actor_family_member = locked_family_members[actor_family_member.pk] if actor_family_member is not None else None
+        family_member = locked_family_members[family_member.pk] if family_member is not None else None
+        dependencies_lock_acquired = True
     existing_signup: MealSignup | None
     if signup_lock_acquired:
         if prelocked_signup is None:
@@ -2706,6 +2730,7 @@ def _book_meal_for_target(
                 booked_by,
                 [participant],
                 family_members=[actor_family_member, family_member],
+                dependencies_locked=dependencies_lock_acquired,
             ).get(participant.pk)
         if booking_link is None:
             raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
@@ -2787,15 +2812,37 @@ def _retract_meal_signup(
     confirmation_token: str = "",
 ) -> bool:
     """Retract an active signup only if its locked state still matches the confirmation."""
+    submitted_participant = signup.participant
+    submitted_family_member = signup.family_member
+    expected_participant_ids = {actor.pk, submitted_participant.pk}
+    expected_family_member_ids = {
+        member.pk for member in (actor_family_member, submitted_family_member) if member is not None
+    }
+    locked_camp, locked_participants, locked_family_members = _lock_booking_authorization_dependencies(
+        [actor, submitted_participant],
+        [actor_family_member, submitted_family_member],
+        camp=actor.camp,
+    )
+    if set(locked_participants) != expected_participant_ids or set(locked_family_members) != expected_family_member_ids:
+        return False
+    actor = locked_participants[actor.pk]
+    affected_participant = locked_participants[submitted_participant.pk]
+    actor_family_member = locked_family_members[actor_family_member.pk] if actor_family_member is not None else None
+    affected_family_member = (
+        locked_family_members[submitted_family_member.pk] if submitted_family_member is not None else None
+    )
     locked_signup = (
         MealSignup.objects.select_for_update(of=("self",))
         .select_related("participant", "family_member", "charge", "charge__kiosk_booked_by")
         .filter(pk=signup.pk, status=MealSignup.Status.ACTIVE)
         .first()
     )
-    if locked_signup is None:
+    if (
+        locked_signup is None
+        or locked_signup.participant_id != affected_participant.pk
+        or locked_signup.family_member_id != (affected_family_member.pk if affected_family_member is not None else None)
+    ):
         return False
-    affected_participant = locked_signup.participant
     booking_link = None
     if affected_participant.pk != actor.pk:
         if not _matches_kiosk_meal_retraction(confirmation_token, actor, locked_signup):
@@ -2803,7 +2850,8 @@ def _retract_meal_signup(
         booking_link = _lock_accepted_booking_links(
             actor,
             [affected_participant],
-            family_members=[actor_family_member, locked_signup.family_member],
+            family_members=[actor_family_member, affected_family_member],
+            dependencies_locked=True,
         ).get(affected_participant.pk)
         if booking_link is None:
             raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
@@ -2836,11 +2884,11 @@ def _retract_meal_signup(
         if charge is not None:
             description = f"{charge.booking_reference}: {description}"
         audit_log = create_kiosk_action_audit_log(
-            camp=actor.camp,
+            camp=locked_camp,
             actor_participant=actor,
             actor_family_member=actor_family_member,
             target_participant=affected_participant,
-            target_family_member=locked_signup.family_member,
+            target_family_member=affected_family_member,
             booking_link=booking_link,
             charge=charge,
             action=KioskActionAuditLog.Action.MEAL_RETRACTED,
@@ -3459,7 +3507,6 @@ def kiosk_home(request, kiosk_mode="private"):
                     )
                 if not meal_form.errors:
                     with transaction.atomic():
-                        locked_signups, created_signup_keys = _lock_meal_signups_for_bookings(bookings, meal)
                         booking_participants = [
                             target["object"] if target["kind"] == "participant" else target["object"].guardian
                             for target, _meal_date, _variant, _price_rule in bookings
@@ -3470,30 +3517,65 @@ def kiosk_home(request, kiosk_mode="private"):
                             for target, _meal_date, _variant, _price_rule in bookings
                             if target["kind"] == "family"
                         )
+                        expected_participant_ids = {participant.pk, *(item.pk for item in booking_participants)}
+                        expected_family_member_ids = {
+                            member.pk for member in booking_family_members if member is not None
+                        }
+                        _locked_camp, locked_participants, locked_family_members = (
+                            _lock_booking_authorization_dependencies(
+                                [participant, *booking_participants],
+                                booking_family_members,
+                                camp=participant.camp,
+                            )
+                        )
+                        if (
+                            set(locked_participants) != expected_participant_ids
+                            or set(locked_family_members) != expected_family_member_ids
+                        ):
+                            raise PermissionDenied("Das Buchungsziel ist nicht mehr verfügbar.")
+                        locked_actor = locked_participants[participant.pk]
+                        locked_actor_family_member = (
+                            locked_family_members[active_family_member.pk] if active_family_member is not None else None
+                        )
+                        locked_booking_participants = [locked_participants[item.pk] for item in booking_participants]
+                        locked_booking_family_members = [
+                            locked_family_members[member.pk] for member in booking_family_members if member is not None
+                        ]
+                        locked_signups, created_signup_keys = _lock_meal_signups_for_bookings(bookings, meal)
                         locked_booking_links = _lock_accepted_booking_links(
-                            participant,
-                            booking_participants,
-                            family_members=booking_family_members,
+                            locked_actor,
+                            locked_booking_participants,
+                            family_members=locked_booking_family_members,
+                            dependencies_locked=True,
                         )
                         for target, meal_date, variant, price_rule in bookings:
                             signup_key = _meal_signup_key(target, meal_date, meal)
                             target_object = target["object"]
-                            target_participant = (
-                                target_object if target["kind"] == "participant" else target_object.guardian
+                            locked_target_object = (
+                                locked_participants[target_object.pk]
+                                if target["kind"] == "participant"
+                                else locked_family_members[target_object.pk]
+                            )
+                            locked_target = {**target, "object": locked_target_object}
+                            target_participant_id = (
+                                locked_target_object.pk
+                                if target["kind"] == "participant"
+                                else locked_target_object.guardian_id
                             )
                             _book_meal_for_target(
-                                target,
+                                locked_target,
                                 meal_date,
                                 meal,
                                 variant,
                                 price_rule,
-                                participant,
-                                active_family_member,
+                                locked_actor,
+                                locked_actor_family_member,
                                 prelocked_signup=locked_signups.get(signup_key),
                                 signup_lock_acquired=True,
                                 signup_was_created=signup_key in created_signup_keys,
-                                prelocked_booking_link=locked_booking_links.get(target_participant.pk),
+                                prelocked_booking_link=locked_booking_links.get(target_participant_id),
                                 booking_link_lock_acquired=True,
+                                dependencies_lock_acquired=True,
                             )
                     day_label = "Tag" if len(meal_dates) == 1 else "Tage"
                     person_label = "Person" if len(selected_targets) == 1 else "Personen"

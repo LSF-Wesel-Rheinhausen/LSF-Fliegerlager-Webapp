@@ -544,8 +544,24 @@ def create_kiosk_action_audit_log(
         The newly created append-only audit row.
 
     Raises:
-        ValidationError: If an actor or target does not belong to the supplied camp/account.
+        ValidationError: If an identity disappeared or does not belong to the supplied camp/account.
     """
+    participant_ids = {actor_participant.pk, target_participant.pk}
+    participants_by_id = Participant.objects.in_bulk(participant_ids)
+    if set(participants_by_id) != participant_ids:
+        raise ValidationError("Eine Kiosk-Audit-Identität ist nicht mehr verfügbar.")
+    actor_participant = participants_by_id[actor_participant.pk]
+    target_participant = participants_by_id[target_participant.pk]
+
+    family_member_ids = {
+        family_member.pk for family_member in (actor_family_member, target_family_member) if family_member is not None
+    }
+    family_members_by_id = ParticipantFamilyMember.objects.in_bulk(family_member_ids)
+    if set(family_members_by_id) != family_member_ids:
+        raise ValidationError("Eine Kiosk-Audit-Identität ist nicht mehr verfügbar.")
+    actor_family_member = family_members_by_id[actor_family_member.pk] if actor_family_member is not None else None
+    target_family_member = family_members_by_id[target_family_member.pk] if target_family_member is not None else None
+
     if actor_participant.camp_id != camp.pk or target_participant.camp_id != camp.pk:
         raise ValidationError("Kiosk-Audit darf nur Teilnehmer desselben Lagers verknüpfen.")
     if actor_family_member is not None and actor_family_member.guardian_id != actor_participant.pk:

@@ -184,6 +184,61 @@ def test_family_member_audit_display_names_remain_immutable_after_identity_chang
     assert target_audit.target_display_name == "Ziel Alt"
 
 
+@pytest.mark.django_db
+def test_quick_booking_snapshots_names_from_freshly_locked_identities(kiosk_client, monkeypatch):
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp, first_name="Akteur", last_name="Alt")
+    partner = ParticipantFactory(camp=camp)
+    partner_child = ParticipantFamilyMember.objects.create(
+        guardian=partner,
+        first_name="Ziel",
+        last_name="Alt",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    rule = PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.DRINK,
+        applies_to_children=True,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    original_fetch_all = QuerySet._fetch_all
+    identities_renamed = False
+
+    def rename_identities_before_camp_lock(queryset):
+        nonlocal identities_renamed
+        was_unfetched = queryset._result_cache is None
+        if was_unfetched and not identities_renamed and queryset.query.select_for_update and queryset.model is Camp:
+            Participant.objects.filter(pk=participant.pk).update(first_name="AkteurNeu")
+            ParticipantFamilyMember.objects.filter(pk=partner_child.pk).update(first_name="ZielNeu")
+            identities_renamed = True
+        original_fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", rename_identities_before_camp_lock)
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "quick",
+            "quick-price_rule": rule.pk,
+            "quick-quantity": 1,
+            "quick-target": [f"family-{partner_child.pk}"],
+        },
+    )
+
+    audit_log = KioskActionAuditLog.objects.get(action=KioskActionAuditLog.Action.QUICK_BOOKED)
+    assert identities_renamed is True
+    assert response.status_code == 302
+    assert audit_log.actor_display_name == "AkteurNeu Alt"
+    assert audit_log.target_display_name == "ZielNeu Alt"
+
+
 def test_partner_activity_routes_exist_for_both_kiosk_modes():
     assert resolve("/kiosk/partners/").url_name == "kiosk-partner-activity"
     assert resolve("/central/kiosk/partners/").url_name == "central-kiosk-partner-activity"
@@ -1883,7 +1938,7 @@ def test_meal_signup_row_locks_exclude_nullable_postgresql_joins(monkeypatch):
 
 
 @pytest.mark.django_db
-def test_partner_meal_workflows_lock_signup_before_authorization(monkeypatch):
+def test_partner_meal_workflows_lock_camp_and_identities_before_signup_and_authorization(monkeypatch):
     actor = ParticipantFactory()
     partner = ParticipantFactory(camp=actor.camp)
     ParticipantBookingLink.objects.create(
@@ -1915,6 +1970,7 @@ def test_partner_meal_workflows_lock_signup_before_authorization(monkeypatch):
             and queryset.query.select_for_update
             and queryset.model
             in {
+                Camp,
                 MealSignup,
                 Participant,
                 ParticipantBookingLink,
@@ -1946,8 +2002,8 @@ def test_partner_meal_workflows_lock_signup_before_authorization(monkeypatch):
 
     assert retracted is True
     assert lock_order_by_workflow == {
-        "book": [MealSignup, Participant, ParticipantBookingLink],
-        "retract": [MealSignup, Participant, ParticipantBookingLink],
+        "book": [Camp, Participant, MealSignup, ParticipantBookingLink],
+        "retract": [Camp, Participant, MealSignup, ParticipantBookingLink],
     }
 
 
@@ -2044,6 +2100,77 @@ def test_partner_meal_batch_locks_all_signups_before_authorization(kiosk_client,
     assert participant_locks == [tuple(sorted((actor.pk, first_partner.pk, second_partner.pk)))]
     authorization_locks = [pks for model, pks in lock_events if model is ParticipantBookingLink]
     assert authorization_locks == [tuple(sorted((first_link.pk, second_link.pk)))]
+
+
+@pytest.mark.django_db
+def test_partner_meal_batch_locks_camp_and_identities_before_creating_signup(kiosk_client, monkeypatch):
+    fixed_now = timezone.make_aware(datetime(2026, 6, 30, 10, 0))
+    monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
+    camp = CampFactory(
+        is_active=True,
+        starts_on=date(2026, 6, 30),
+        ends_on=date(2026, 7, 14),
+    )
+    actor = ParticipantFactory(camp=camp)
+    partner = ParticipantFactory(camp=camp)
+    ParticipantBookingLink.objects.create(
+        inviter=actor,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        applies_to_adults=True,
+        is_default=True,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = actor.pk
+    session.save()
+    events = []
+    original_fetch_all = QuerySet._fetch_all
+    original_create = QuerySet.create
+
+    def capture_lock_event(queryset):
+        was_unfetched = queryset._result_cache is None
+        original_fetch_all(queryset)
+        if (
+            was_unfetched
+            and queryset.query.select_for_update
+            and queryset.model in {Camp, Participant, MealSignup, ParticipantBookingLink}
+        ):
+            events.append(("lock", queryset.model))
+
+    def capture_signup_create(queryset, **kwargs):
+        if queryset.model is MealSignup:
+            events.append(("create", MealSignup))
+        return original_create(queryset, **kwargs)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", capture_lock_event)
+    monkeypatch.setattr(QuerySet, "create", capture_signup_create)
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-meal_dates": ["2026-07-02"],
+            "meal-meal": MealSignup.Meal.DINNER,
+            "meal-variant": MealSignup.Variant.NORMAL,
+            "meal-target": [f"participant-{partner.pk}"],
+            f"meal-variant-participant-{partner.pk}": MealSignup.Variant.NORMAL,
+        },
+    )
+
+    assert response.status_code == 302
+    assert events == [
+        ("lock", Camp),
+        ("lock", Participant),
+        ("create", MealSignup),
+        ("lock", MealSignup),
+        ("lock", ParticipantBookingLink),
+    ]
 
 
 @pytest.mark.django_db
