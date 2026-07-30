@@ -1887,10 +1887,10 @@ def _lock_booking_authorization_dependencies(
         if family_member is not None:
             family_member_snapshots_by_id.setdefault(family_member.pk, []).append(family_member)
     family_member_ids = sorted(family_member_snapshots_by_id)
-    locked_camp = Camp.objects.select_for_update(of=("self",)).get(pk=camp.pk)
+    locked_camp = Camp.objects.select_for_update(of=("self",), no_key=True).get(pk=camp.pk)
     locked_participants = {
         participant.pk: participant
-        for participant in Participant.objects.select_for_update(of=("self",))
+        for participant in Participant.objects.select_for_update(of=("self",), no_key=True)
         .filter(pk__in=participant_ids)
         .order_by("pk")
     }
@@ -1912,7 +1912,7 @@ def _lock_booking_authorization_dependencies(
     if family_member_ids:
         locked_family_members = {
             family_member.pk: family_member
-            for family_member in ParticipantFamilyMember.objects.select_for_update(of=("self",))
+            for family_member in ParticipantFamilyMember.objects.select_for_update(of=("self",), no_key=True)
             .select_related("guardian")
             .filter(pk__in=family_member_ids)
             .order_by("pk")
@@ -2089,6 +2089,7 @@ def kiosk_partner_activity(request, kiosk_mode="private"):
                     locked_invitee = locked_pair_participants.get(invitee.pk)
                     pair_is_active = (
                         locked_camp.is_active
+                        and not locked_camp.is_post_camp()
                         and locked_inviter is not None
                         and locked_invitee is not None
                         and locked_inviter.archived_at is None
@@ -2225,6 +2226,7 @@ def kiosk_partner_activity(request, kiosk_mode="private"):
                                 and selected_link.status == ParticipantBookingLink.Status.PENDING
                                 and selected_link.inviter.camp_id == participant.camp_id
                                 and locked_camp.is_active
+                                and not locked_camp.is_post_camp()
                                 and locked_participant.archived_at is None
                                 and locked_other_participant.archived_at is None
                             )

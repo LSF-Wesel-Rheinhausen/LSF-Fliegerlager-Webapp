@@ -1,5 +1,6 @@
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from unittest.mock import patch
 
 import pytest
 from django.apps import apps
@@ -35,6 +36,7 @@ from billing.views import (
     _kiosk_meal_targets,
     _linked_booking_participants,
     _lock_booking_authorization_dependencies,
+    _lock_booking_link_participant_pair,
     _retract_meal_signup,
     _sign_kiosk_meal_retraction,
 )
@@ -3454,3 +3456,35 @@ def test_revoke_closes_every_active_authorization_for_the_partner_pair(kiosk_cli
     assert duplicate_link.status == ParticipantBookingLink.Status.REVOKED
     assert stale_pending_link.status == ParticipantBookingLink.Status.REVOKED
     assert kiosk_client.get(reverse("kiosk-participant-current-settlement-pdf", args=[partner.pk])).status_code == 403
+
+
+@pytest.mark.django_db
+def test_partner_consent_rejected_if_camp_ends_before_lock(kiosk_client):
+    camp = CampFactory(is_active=True, starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 10))
+    inviter = ParticipantFactory(camp=camp)
+    invitee = ParticipantFactory(camp=camp)
+    pending_link = ParticipantBookingLink.objects.create(
+        inviter=inviter,
+        invitee=invitee,
+        status=ParticipantBookingLink.Status.PENDING,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = invitee.pk
+    session.save()
+
+    def _simulate_camp_ended(*args, **kwargs):
+        Camp.objects.filter(pk=camp.pk).update(ends_on=date(2026, 7, 5))
+        return _lock_booking_link_participant_pair(invitee, inviter)
+
+    with patch("billing.views._lock_booking_link_participant_pair", side_effect=_simulate_camp_ended):
+        response = kiosk_client.post(
+            reverse("kiosk-partner-activity"),
+            {
+                "action": "booking_link_accept",
+                "booking_link_id": pending_link.pk,
+            },
+        )
+
+    assert response.status_code == 302
+    pending_link.refresh_from_db()
+    assert pending_link.status == ParticipantBookingLink.Status.PENDING
