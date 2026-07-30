@@ -156,6 +156,7 @@ jobs:
 
       - name: Browser UI tests
         env:
+          HOME: /root
           PLAYWRIGHT_PROJECT: ${{ matrix.browser }}
         run: npm run test:e2e -- --project="${PLAYWRIGHT_PROJECT}"
 

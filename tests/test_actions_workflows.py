@@ -25,6 +25,9 @@ def test_ci_separates_quality_python_and_browser_checks() -> None:
 def test_ci_uses_version_matched_playwright_container_without_runtime_install() -> None:
     ci = workflow("ci.yml")
     e2e_job = ci.split("\n  e2e:\n", maxsplit=1)[1].split("\n  gate:\n", maxsplit=1)[0]
+    browser_test_step = e2e_job.split("\n      - name: Browser UI tests\n", maxsplit=1)[1].split(
+        "\n      - name:", maxsplit=1
+    )[0]
 
     assert (
         "mcr.microsoft.com/playwright:v1.61.1-noble"
@@ -39,6 +42,7 @@ def test_ci_uses_version_matched_playwright_container_without_runtime_install() 
     assert "actions/cache@" not in ci
     assert "cache: pip" not in e2e_job
     assert "python -m pip install -r requirements.txt" in e2e_job
+    assert "HOME: /root" in browser_test_step
 
 
 def test_ci_skips_expensive_checks_for_docs_but_always_reports_the_gate() -> None:
