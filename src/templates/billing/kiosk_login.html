@@ -55,18 +55,251 @@
     </div>
   </section>
 
-  {% if not is_post_camp %}<dialog id="self-registration-dialog"{% if enrollment_form.errors %} open{% endif %} class="dialog" style="max-width: 500px; width: 90%; border: none; border-radius: var(--radius); padding: 1.5rem; background: var(--panel);">
-    <form method="post" action="{% if kiosk_mode == 'central' %}{% url 'central-kiosk-self-register' %}{% else %}{% url 'kiosk-self-register' %}{% endif %}">
+  {% if not is_post_camp %}
+  <dialog id="self-registration-dialog"{% if enrollment_form.errors %} open{% endif %} class="dialog wizard-dialog">
+    <form method="post" action="{% if kiosk_mode == 'central' %}{% url 'central-kiosk-self-register' %}{% else %}{% url 'kiosk-self-register' %}{% endif %}" id="self-registration-form" novalidate>
       {% csrf_token %}
-      <h2 style="margin-top: 0; font-size: 1.25rem;">📝 Selbstregistrierung Fliegerlager</h2>
-      <p style="color: var(--muted); font-size: 0.9rem;">
-        Trage deine Daten ein und wähle deine persönliche PIN. Nach dem Absenden prüft die Lagerleitung deine preisrelevanten Angaben und gibt die Registrierung frei.
-      </p>
-      {{ enrollment_form.as_p }}
-      <div class="form-actions" style="margin-top: 1rem; display: flex; justify-content: flex-end; gap: 0.5rem;">
+      <header class="wizard-header">
+        <h2 class="wizard-title">📝 Registrierung Fliegerlager</h2>
+        <p class="wizard-subtitle">
+          In 4 Schritten zum Fliegerlager anmelden. Nach dem Absenden schaltet die Lagerleitung deinen Account frei.
+        </p>
+        <ol class="wizard-progress" aria-label="Registrierungsfortschritt">
+          <li class="wizard-progress__step is-active" data-wizard-step-indicator="1">
+            <span class="wizard-progress__num">1</span>
+            <span class="wizard-progress__label">Person</span>
+          </li>
+          <li class="wizard-progress__step" data-wizard-step-indicator="2">
+            <span class="wizard-progress__num">2</span>
+            <span class="wizard-progress__label">Aufenthalt</span>
+          </li>
+          <li class="wizard-progress__step" data-wizard-step-indicator="3">
+            <span class="wizard-progress__num">3</span>
+            <span class="wizard-progress__label">Tarif</span>
+          </li>
+          <li class="wizard-progress__step" data-wizard-step-indicator="4">
+            <span class="wizard-progress__num">4</span>
+            <span class="wizard-progress__label">PIN</span>
+          </li>
+        </ol>
+      </header>
+
+      {% if enrollment_form.non_field_errors %}
+        <div class="message error" role="alert" style="margin-bottom: 1rem;">
+          {% for err in enrollment_form.non_field_errors %}<p>{{ err }}</p>{% endfor %}
+        </div>
+      {% endif %}
+
+      <!-- Schritt 1: Persönliche Daten -->
+      <section class="wizard-step is-active" data-wizard-step="1">
+        <h3 class="wizard-step__title">👤 Persönliche Angaben</h3>
+        <p class="wizard-step__desc">Gib deinen Vor- und Nachnamen ein. Kontaktdaten sind optional.</p>
+
+        <div class="form-group{% if enrollment_form.first_name.errors %} has-error{% endif %}">
+          {{ enrollment_form.first_name.label_tag }}
+          {{ enrollment_form.first_name }}
+          {% if enrollment_form.first_name.errors %}<span class="form-error">{{ enrollment_form.first_name.errors.0 }}</span>{% endif %}
+        </div>
+        <div class="form-group{% if enrollment_form.last_name.errors %} has-error{% endif %}">
+          {{ enrollment_form.last_name.label_tag }}
+          {{ enrollment_form.last_name }}
+          {% if enrollment_form.last_name.errors %}<span class="form-error">{{ enrollment_form.last_name.errors.0 }}</span>{% endif %}
+        </div>
+        <div class="form-group{% if enrollment_form.email.errors %} has-error{% endif %}">
+          {{ enrollment_form.email.label_tag }}
+          {{ enrollment_form.email }}
+          {% if enrollment_form.email.errors %}<span class="form-error">{{ enrollment_form.email.errors.0 }}</span>{% endif %}
+        </div>
+        <div class="form-group{% if enrollment_form.phone.errors %} has-error{% endif %}">
+          {{ enrollment_form.phone.label_tag }}
+          {{ enrollment_form.phone }}
+          {% if enrollment_form.phone.errors %}<span class="form-error">{{ enrollment_form.phone.errors.0 }}</span>{% endif %}
+        </div>
+      </section>
+
+      <!-- Schritt 2: Aufenthalt & Anreise -->
+      <section class="wizard-step" data-wizard-step="2" hidden>
+        <h3 class="wizard-step__title">📅 Anreise & Abreise</h3>
+        <p class="wizard-step__desc">
+          Wähle deine geplanten An- und Abreisetage.
+          {% if camp and camp.starts_on and camp.ends_on %}
+            <br><small class="text-muted">Offizieller Lagerzeitraum: {{ camp.starts_on|date:"d.m.Y" }} bis {{ camp.ends_on|date:"d.m.Y" }}</small>
+          {% endif %}
+        </p>
+
+        <div class="form-group{% if enrollment_form.arrival_date.errors %} has-error{% endif %}">
+          {{ enrollment_form.arrival_date.label_tag }}
+          {{ enrollment_form.arrival_date }}
+          {% if enrollment_form.arrival_date.errors %}<span class="form-error">{{ enrollment_form.arrival_date.errors.0 }}</span>{% endif %}
+        </div>
+
+        <div class="form-group{% if enrollment_form.departure_date.errors %} has-error{% endif %}">
+          {{ enrollment_form.departure_date.label_tag }}
+          {{ enrollment_form.departure_date }}
+          {% if enrollment_form.departure_date.errors %}<span class="form-error">{{ enrollment_form.departure_date.errors.0 }}</span>{% endif %}
+        </div>
+
+        <!-- Hinweis für Frühanreise / Aufbau -->
+        {% if camp and camp.starts_on %}
+          <div id="arrival-notice" class="kiosk-note" style="display: none; margin-top: 0.75rem; border-left: 4px solid var(--accent, #1f5d42);">
+            <strong>ℹ️ Hinweis zur Frühanreise / Aufbau:</strong>
+            <p style="margin: 0.25rem 0 0 0; font-size: 0.875rem;">
+              Du reist vor dem offiziellen Lagerbeginn ({{ camp.starts_on|date:"d.m.Y" }}) an. Bitte stimme deine Anreise und eventuelle Helfer-Einsätze rechtzeitig mit der Lagerleitung ab.
+            </p>
+          </div>
+        {% endif %}
+
+        <div class="form-group{% if enrollment_form.notes.errors %} has-error{% endif %}" style="margin-top: 0.75rem;">
+          {{ enrollment_form.notes.label_tag }}
+          {{ enrollment_form.notes }}
+          {% if enrollment_form.notes.errors %}<span class="form-error">{{ enrollment_form.notes.errors.0 }}</span>{% endif %}
+        </div>
+      </section>
+
+      <!-- Schritt 3: Status & Tarif -->
+      <section class="wizard-step" data-wizard-step="3" hidden>
+        <h3 class="wizard-step__title">🏷️ Status & Ermäßigungen</h3>
+        <p class="wizard-step__desc">Wähle deine Abrechnungskategorie. Preisrelevante Angaben werden vor der Freigabe von der Lagerleitung geprüft.</p>
+
+        <div class="checkbox-group" style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.5rem;">
+          <label class="checkbox-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+            {{ enrollment_form.is_child }}
+            <span><strong>{{ enrollment_form.is_child.label }}</strong> &ndash; Ermäßigter Kindertarif</span>
+          </label>
+          <label class="checkbox-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+            {{ enrollment_form.is_youth_group }}
+            <span><strong>{{ enrollment_form.is_youth_group.label }}</strong> &ndash; Mitglied der Jugendgruppe</span>
+          </label>
+          <label class="checkbox-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+            {{ enrollment_form.is_companion }}
+            <span><strong>{{ enrollment_form.is_companion.label }}</strong> &ndash; Mitreisende Begleitperson</span>
+          </label>
+        </div>
+      </section>
+
+      <!-- Schritt 4: PIN-Sicherheit -->
+      <section class="wizard-step" data-wizard-step="4" hidden>
+        <h3 class="wizard-step__title">🔒 PIN festlegen</h3>
+        <p class="wizard-step__desc">Mit deiner PIN meldest du dich am Kiosk an. Vergib eine 4- bis 12-stellige PIN.</p>
+
+        <div class="form-group{% if enrollment_form.pin.errors %} has-error{% endif %}">
+          {{ enrollment_form.pin.label_tag }}
+          {{ enrollment_form.pin }}
+          {% if enrollment_form.pin.errors %}<span class="form-error">{{ enrollment_form.pin.errors.0 }}</span>{% endif %}
+        </div>
+        <div class="form-group{% if enrollment_form.pin_repeat.errors %} has-error{% endif %}">
+          {{ enrollment_form.pin_repeat.label_tag }}
+          {{ enrollment_form.pin_repeat }}
+          {% if enrollment_form.pin_repeat.errors %}<span class="form-error">{{ enrollment_form.pin_repeat.errors.0 }}</span>{% endif %}
+        </div>
+      </section>
+
+      <footer class="wizard-footer">
         <button type="button" class="button button-secondary" onclick="document.getElementById('self-registration-dialog').close();">Abbrechen</button>
-        <button type="submit" class="button">Registrierung absenden</button>
-      </div>
+        <div class="wizard-footer__nav">
+          <button type="button" class="button button-secondary button-step-prev" style="display: none;">← Zurück</button>
+          <button type="button" class="button button-step-next">Weiter →</button>
+          <button type="submit" class="button button-step-submit" style="display: none;">📝 Registrierung absenden</button>
+        </div>
+      </footer>
     </form>
-  </dialog>{% endif %}
+  </dialog>
+
+  <script nonce="{{ request.csp_nonce }}">
+    (() => {
+      const dialog = document.getElementById("self-registration-dialog");
+      if (!dialog) return;
+
+      const steps = Array.from(dialog.querySelectorAll("[data-wizard-step]"));
+      const indicators = Array.from(dialog.querySelectorAll("[data-wizard-step-indicator]"));
+      const btnPrev = dialog.querySelector(".button-step-prev");
+      const btnNext = dialog.querySelector(".button-step-next");
+      const btnSubmit = dialog.querySelector(".button-step-submit");
+      const arrivalInput = dialog.querySelector("#id_enrollment_arrival_date");
+      const noticeBox = document.getElementById("arrival-notice");
+
+      const campStart = "{% if camp and camp.starts_on %}{{ camp.starts_on|date:'Y-m-d' }}{% endif %}";
+
+      let currentStep = 1;
+
+      const updateArrivalNotice = () => {
+        if (!arrivalInput || !noticeBox || !campStart) return;
+        const val = arrivalInput.value;
+        if (val && val < campStart) {
+          noticeBox.style.display = "block";
+        } else {
+          noticeBox.style.display = "none";
+        }
+      };
+
+      if (arrivalInput) {
+        arrivalInput.addEventListener("change", updateArrivalNotice);
+        arrivalInput.addEventListener("input", updateArrivalNotice);
+        updateArrivalNotice();
+      }
+
+      const showStep = (stepNum) => {
+        currentStep = stepNum;
+        steps.forEach((s) => {
+          const isTarget = Number(s.dataset.wizardStep) === currentStep;
+          s.hidden = !isTarget;
+          s.classList.toggle("is-active", isTarget);
+        });
+
+        indicators.forEach((ind) => {
+          const stepIndex = Number(ind.dataset.wizardStepIndicator);
+          ind.classList.toggle("is-active", stepIndex === currentStep);
+          ind.classList.toggle("is-completed", stepIndex < currentStep);
+        });
+
+        if (btnPrev) btnPrev.style.display = currentStep > 1 ? "inline-flex" : "none";
+        if (btnNext) btnNext.style.display = currentStep < steps.length ? "inline-flex" : "none";
+        if (btnSubmit) btnSubmit.style.display = currentStep === steps.length ? "inline-flex" : "none";
+      };
+
+      const validateStep = (stepNum) => {
+        const activeStepEl = steps.find((s) => Number(s.dataset.wizardStep) === stepNum);
+        if (!activeStepEl) return true;
+
+        const inputs = activeStepEl.querySelectorAll("input, select, textarea");
+        for (const input of inputs) {
+          if (!input.checkValidity()) {
+            input.reportValidity();
+            return false;
+          }
+        }
+        return true;
+      };
+
+      if (btnNext) {
+        btnNext.addEventListener("click", () => {
+          if (validateStep(currentStep)) {
+            showStep(Math.min(currentStep + 1, steps.length));
+          }
+        });
+      }
+
+      if (btnPrev) {
+        btnPrev.addEventListener("click", () => {
+          showStep(Math.max(currentStep - 1, 1));
+        });
+      }
+
+      const formEl = document.getElementById("self-registration-form");
+      if (formEl && btnSubmit) {
+        formEl.addEventListener("submit", () => {
+          btnSubmit.disabled = true;
+          btnSubmit.textContent = "Wird gesendet...";
+        });
+      }
+
+      const firstErrorStepEl = steps.find((s) => s.querySelector(".has-error"));
+      if (firstErrorStepEl) {
+        showStep(Number(firstErrorStepEl.dataset.wizardStep));
+      } else {
+        showStep(1);
+      }
+    })();
+  </script>
+  {% endif %}
 {% endblock %}

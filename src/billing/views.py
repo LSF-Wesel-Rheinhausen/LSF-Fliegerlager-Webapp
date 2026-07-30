@@ -1723,7 +1723,7 @@ def _render_kiosk_login(
         "billing/kiosk_login.html",
         {
             "form": form or KioskLoginForm(),
-            "enrollment_form": enrollment_form or KioskSelfEnrollmentForm(auto_id="id_enrollment_%s"),
+            "enrollment_form": enrollment_form or KioskSelfEnrollmentForm(camp=camp, auto_id="id_enrollment_%s"),
             "camp": camp,
             "is_pre_camp": is_pre_camp,
             "is_post_camp": is_post_camp,
@@ -1772,7 +1772,7 @@ def kiosk_self_register(request, kiosk_mode="private"):
         messages.error(request, "Das Lager ist beendet. Eine Registrierung ist nicht mehr möglich.")
         return redirect(_kiosk_route(kiosk_mode, "login"))
 
-    form = KioskSelfEnrollmentForm(request.POST, auto_id="id_enrollment_%s")
+    form = KioskSelfEnrollmentForm(request.POST, camp=camp, auto_id="id_enrollment_%s")
     access = getattr(request, "kiosk_access", None)
     if access is None:
         return HttpResponseForbidden("Gültiger Lagerzugang erforderlich.")
@@ -2433,14 +2433,28 @@ def _parse_kiosk_checkin_date(value, field_label, participant_name, errors):
 def _validate_kiosk_checkin_dates(target, camp, arrival_date, departure_date, errors):
     if arrival_date and departure_date and departure_date <= arrival_date:
         errors.append(f"Die Abreise für {target.full_name} muss nach der Anreise liegen.")
-    if camp.starts_on and arrival_date and arrival_date < camp.starts_on:
-        errors.append(f"Die Anreise für {target.full_name} liegt vor Lagerbeginn.")
-    if camp.ends_on and arrival_date and arrival_date > camp.ends_on:
-        errors.append(f"Die Anreise für {target.full_name} liegt nach Lagerende.")
-    if camp.starts_on and departure_date and departure_date < camp.starts_on:
-        errors.append(f"Die Abreise für {target.full_name} liegt vor Lagerbeginn.")
-    if camp.ends_on and departure_date and departure_date > camp.ends_on:
-        errors.append(f"Die Abreise für {target.full_name} liegt nach Lagerende.")
+    if camp.starts_on:
+        earliest = camp.starts_on - timedelta(days=4)
+        starts_formatted = camp.starts_on.strftime("%d.%m.%Y")
+        if arrival_date and arrival_date < earliest:
+            errors.append(
+                f"Die Anreise für {target.full_name} liegt mehr als 4 Tage vor Lagerbeginn ({starts_formatted})."
+            )
+        if departure_date and departure_date < earliest:
+            errors.append(
+                f"Die Abreise für {target.full_name} liegt mehr als 4 Tage vor Lagerbeginn ({starts_formatted})."
+            )
+    if camp.ends_on:
+        latest = camp.ends_on + timedelta(days=4)
+        ends_formatted = camp.ends_on.strftime("%d.%m.%Y")
+        if arrival_date and arrival_date > latest:
+            errors.append(
+                f"Die Anreise für {target.full_name} liegt mehr als 4 Tage nach Lagerende ({ends_formatted})."
+            )
+        if departure_date and departure_date > latest:
+            errors.append(
+                f"Die Abreise für {target.full_name} liegt mehr als 4 Tage nach Lagerende ({ends_formatted})."
+            )
 
 
 def _update_kiosk_checkin_dates(request, participant, checkin_participants):

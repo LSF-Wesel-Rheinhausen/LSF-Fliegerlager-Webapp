@@ -1,4 +1,4 @@
-from datetime import date, time
+from datetime import date, time, timedelta
 from decimal import Decimal
 from typing import Any, cast
 
@@ -922,6 +922,19 @@ class KioskSelfEnrollmentForm(forms.ModelForm):
         widget=forms.PasswordInput(attrs={"autocomplete": "new-password", "inputmode": "numeric"}),
     )
 
+    def __init__(self, *args: Any, camp: Camp | None = None, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.camp = camp
+        if camp:
+            if camp.starts_on:
+                earliest = camp.starts_on - timedelta(days=4)
+                self.fields["arrival_date"].widget.attrs["min"] = earliest.isoformat()
+                self.fields["departure_date"].widget.attrs["min"] = earliest.isoformat()
+            if camp.ends_on:
+                latest = camp.ends_on + timedelta(days=4)
+                self.fields["arrival_date"].widget.attrs["max"] = latest.isoformat()
+                self.fields["departure_date"].widget.attrs["max"] = latest.isoformat()
+
     class Meta:
         model = Participant
         fields = [
@@ -955,12 +968,81 @@ class KioskSelfEnrollmentForm(forms.ModelForm):
         }
 
     def clean(self) -> dict[str, Any]:
-        """Require matching PIN values before creating the pending participant."""
+        """Validate matching PIN values and camp arrival/departure date bounds."""
         cleaned_data = super().clean() or {}
         pin = cleaned_data.get("pin")
         pin_repeat = cleaned_data.get("pin_repeat")
         if pin and pin_repeat and pin != pin_repeat:
             self.add_error("pin_repeat", "Die PINs stimmen nicht überein.")
+
+        trivial_pins = {
+            "0000",
+            "1111",
+            "2222",
+            "3333",
+            "4444",
+            "5555",
+            "6666",
+            "7777",
+            "8888",
+            "9999",
+            "1234",
+            "4321",
+            "123456",
+            "654321",
+        }
+        if pin and (pin in trivial_pins or len(set(pin)) == 1):
+            self.add_error(
+                "pin",
+                "Bitte wähle eine sicherere PIN (keine einfachen Zahlenfolgen wie '1234' oder '0000').",
+            )
+
+        arrival_date = cleaned_data.get("arrival_date")
+        departure_date = cleaned_data.get("departure_date")
+
+        if arrival_date and departure_date and departure_date <= arrival_date:
+            self.add_error("departure_date", "Die Abreise muss nach der Anreise liegen.")
+
+        if self.camp:
+            if self.camp.starts_on:
+                earliest = self.camp.starts_on - timedelta(days=4)
+                starts_formatted = self.camp.starts_on.strftime("%d.%m.%Y")
+                if arrival_date and arrival_date < earliest:
+                    self.add_error(
+                        "arrival_date",
+                        (
+                            "Das Anreisedatum darf maximal 4 Tage (halbe Woche) "
+                            f"vor Lagerbeginn ({starts_formatted}) liegen."
+                        ),
+                    )
+                if departure_date and departure_date < earliest:
+                    self.add_error(
+                        "departure_date",
+                        (
+                            "Das Abreisedatum darf maximal 4 Tage (halbe Woche) "
+                            f"vor Lagerbeginn ({starts_formatted}) liegen."
+                        ),
+                    )
+            if self.camp.ends_on:
+                latest = self.camp.ends_on + timedelta(days=4)
+                ends_formatted = self.camp.ends_on.strftime("%d.%m.%Y")
+                if arrival_date and arrival_date > latest:
+                    self.add_error(
+                        "arrival_date",
+                        (
+                            "Das Anreisedatum darf maximal 4 Tage (halbe Woche) "
+                            f"nach Lagerende ({ends_formatted}) liegen."
+                        ),
+                    )
+                if departure_date and departure_date > latest:
+                    self.add_error(
+                        "departure_date",
+                        (
+                            "Das Abreisedatum darf maximal 4 Tage (halbe Woche) "
+                            f"nach Lagerende ({ends_formatted}) liegen."
+                        ),
+                    )
+
         return cleaned_data
 
 

@@ -3072,6 +3072,121 @@ def test_kiosk_self_registration_rejects_mismatched_pin(kiosk_client):
 
 
 @pytest.mark.django_db
+def test_kiosk_self_registration_rejects_trivial_pins(kiosk_client):
+    camp = CampFactory(is_active=True)
+
+    for trivial_pin in ["0000", "1111", "1234", "4321"]:
+        response = kiosk_client.post(
+            reverse("kiosk-self-register"),
+            {
+                "first_name": "Lukas",
+                "last_name": "Neumann",
+                "pin": trivial_pin,
+                "pin_repeat": trivial_pin,
+            },
+        )
+        assert response.status_code == 400
+        assert "sicherere PIN" in response.content.decode("utf-8")
+        assert not Participant.objects.filter(camp=camp, first_name="Lukas", last_name="Neumann").exists()
+
+
+@pytest.mark.django_db
+def test_kiosk_self_registration_allows_dates_within_4_day_buffer(kiosk_client):
+    camp = CampFactory(
+        is_active=True,
+        starts_on=date(2026, 8, 10),
+        ends_on=date(2026, 8, 20),
+    )
+    response = kiosk_client.post(
+        reverse("kiosk-self-register"),
+        {
+            "first_name": "Lukas",
+            "last_name": "Neumann",
+            "arrival_date": "2026-08-07",  # 3 days before start (within 4-day buffer)
+            "departure_date": "2026-08-23",  # 3 days after end (within 4-day buffer)
+            "pin": "2468",
+            "pin_repeat": "2468",
+        },
+    )
+    assert response.status_code == 302
+    p = Participant.objects.get(camp=camp, first_name="Lukas", last_name="Neumann")
+    assert p.arrival_date == date(2026, 8, 7)
+    assert p.departure_date == date(2026, 8, 23)
+
+
+@pytest.mark.django_db
+def test_kiosk_self_registration_rejects_dates_outside_4_day_buffer(kiosk_client):
+    CampFactory(
+        is_active=True,
+        starts_on=date(2026, 8, 10),
+        ends_on=date(2026, 8, 20),
+    )
+    # Arrival 5 days before start
+    resp_early = kiosk_client.post(
+        reverse("kiosk-self-register"),
+        {
+            "first_name": "Anna",
+            "last_name": "Meier",
+            "arrival_date": "2026-08-05",
+            "departure_date": "2026-08-15",
+            "pin": "2468",
+            "pin_repeat": "2468",
+        },
+    )
+    assert resp_early.status_code == 400
+    assert "maximal 4 Tage (halbe Woche) vor Lagerbeginn" in resp_early.content.decode("utf-8")
+
+    # Departure 5 days after end
+    resp_late = kiosk_client.post(
+        reverse("kiosk-self-register"),
+        {
+            "first_name": "Ben",
+            "last_name": "Schulz",
+            "arrival_date": "2026-08-10",
+            "departure_date": "2026-08-26",
+            "pin": "2468",
+            "pin_repeat": "2468",
+        },
+    )
+    assert resp_late.status_code == 400
+    assert "maximal 4 Tage (halbe Woche) nach Lagerende" in resp_late.content.decode("utf-8")
+
+    # Departure before arrival
+    resp_invalid_order = kiosk_client.post(
+        reverse("kiosk-self-register"),
+        {
+            "first_name": "Clara",
+            "last_name": "Weber",
+            "arrival_date": "2026-08-15",
+            "departure_date": "2026-08-12",
+            "pin": "2468",
+            "pin_repeat": "2468",
+        },
+    )
+    assert resp_invalid_order.status_code == 400
+    assert "Die Abreise muss nach der Anreise liegen" in resp_invalid_order.content.decode("utf-8")
+
+
+@pytest.mark.django_db
+def test_kiosk_self_registration_renders_wizard_steps_and_min_max(kiosk_client):
+    CampFactory(
+        is_active=True,
+        starts_on=date(2026, 8, 10),
+        ends_on=date(2026, 8, 20),
+    )
+    response = kiosk_client.get(reverse("kiosk-login"))
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+
+    assert "wizard-dialog" in content
+    assert 'data-wizard-step="1"' in content
+    assert 'data-wizard-step="4"' in content
+    assert 'min="2026-08-06"' in content  # 10th minus 4 days
+    assert 'max="2026-08-24"' in content  # 20th plus 4 days
+    assert "Hinweis zur Frühanreise" in content
+
+
+@pytest.mark.django_db
 def test_kiosk_self_registration_is_persistently_rate_limited(kiosk_client, settings):
     CampFactory(is_active=True)
     settings.KIOSK_REGISTRATION_MAX_ATTEMPTS = 2
