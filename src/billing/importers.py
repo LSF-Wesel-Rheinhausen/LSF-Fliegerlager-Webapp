@@ -167,6 +167,20 @@ def normalize_row(raw, row_number):
     for column in ["is_child", "is_youth_group", "is_companion"]:
         data[column] = parse_bool(data.get(column))
 
+    raw_status = str(data.get("status", "")).strip()
+    if raw_status:
+        from .models import Participant
+
+        valid_choices = Participant.Status.choices
+        matched_status = next(
+            (c[0] for c in valid_choices if c[0] == raw_status or str(c[1]).lower() == raw_status.lower()),
+            None,
+        )
+        if matched_status is None:
+            errors.append(f"Status: Ungültiger Status '{raw_status}'")
+        else:
+            data["status"] = matched_status
+
     if extra_notes:
         if data["notes"]:
             data["notes"] += "\n" + "\n".join(extra_notes)

@@ -838,8 +838,8 @@ class RequestHandler(BaseHTTPRequestHandler):
         logger.info("%s - %s", self.address_string(), message % args)
 
     def authorized(self) -> bool:
-        supplied = self.headers.get("Authorization", "")
-        expected = f"Bearer {TOKEN}"
+        supplied = self.headers.get("Authorization", "").encode("utf-8", "replace")
+        expected = f"Bearer {TOKEN}".encode("utf-8", "replace")
         return hmac.compare_digest(supplied, expected)
 
     def respond(self, status: HTTPStatus, payload: dict[str, Any]) -> None:

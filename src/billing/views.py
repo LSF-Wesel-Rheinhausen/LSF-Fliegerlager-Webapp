@@ -3982,14 +3982,28 @@ def kiosk_home(request, kiosk_mode="private"):
             if _update_kiosk_checkin_dates(request, participant, checkin_participants):
                 return redirect(_kiosk_route(kiosk_mode, "home"))
         elif request.POST.get("action") == "update_attendance_dates":
-            arrival = request.POST.get("arrival_date")
-            departure = request.POST.get("departure_date")
-            if arrival:
-                participant.arrival_date = datetime.strptime(arrival, "%Y-%m-%d").date()
-            if departure:
-                participant.departure_date = datetime.strptime(departure, "%Y-%m-%d").date()
-            participant.save(update_fields=["arrival_date", "departure_date", "updated_at"])
-            messages.success(request, "Anmeldezeitraum wurde aktualisiert.")
+            arrival_str = request.POST.get("arrival_date", "")
+            departure_str = request.POST.get("departure_date", "")
+            try:
+                arrival = datetime.strptime(arrival_str, "%Y-%m-%d").date() if arrival_str else None
+                departure = datetime.strptime(departure_str, "%Y-%m-%d").date() if departure_str else None
+                if arrival and departure and departure < arrival:
+                    messages.error(request, "Das Abreisedatum darf nicht vor dem Anreisedatum liegen.")
+                    return redirect(_kiosk_route(kiosk_mode, "home"))
+                if arrival:
+                    participant.arrival_date = arrival
+                if departure:
+                    participant.departure_date = departure
+                if (
+                    participant.arrival_date
+                    and participant.departure_date
+                    and participant.departure_date >= participant.arrival_date
+                ):
+                    participant.booked_nights = (participant.departure_date - participant.arrival_date).days
+                participant.save(update_fields=["arrival_date", "departure_date", "booked_nights", "updated_at"])
+                messages.success(request, "Anmeldezeitraum wurde aktualisiert.")
+            except (ValueError, TypeError):
+                messages.error(request, "Ungültiges Datumsformat.")
             return redirect(_kiosk_route(kiosk_mode, "home"))
 
     recent_quick_charges = list(

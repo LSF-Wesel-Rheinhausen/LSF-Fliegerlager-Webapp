@@ -96,12 +96,16 @@ def set_user_role(user: Any, role: str) -> None:
 
 def user_role(user: Any) -> str:
     """Return the effective editable application role for a user."""
+    if not hasattr(user, "is_superuser") or not hasattr(user, "groups"):
+        return ""
     if user.is_superuser or user.groups.filter(name=ADMIN_GROUP).exists():
         return ROLE_ADMIN
     if user.groups.filter(name=EDITOR_GROUP).exists():
         return ROLE_EDITOR
     if user.groups.filter(name=HUEBERS_GROUP).exists():
         return ROLE_HUEBERS
+    if not user.groups.exists() and not getattr(user, "is_staff", False):
+        return ""
     return ROLE_EDITOR
 
 
