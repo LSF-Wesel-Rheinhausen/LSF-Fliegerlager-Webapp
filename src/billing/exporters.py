@@ -323,35 +323,43 @@ def camp_workbook_response(camp):
     workbook = Workbook()
     summary = workbook.active
     summary.title = "Abrechnung"
-    summary.append(["Nachname", "Vorname", "Brutto", "Förderung", "Soll", "Gezahlt", "Vorgestreckt", "Offen"])
+    summary.append(
+        safe_csv_row(["Nachname", "Vorname", "Brutto", "Förderung", "Soll", "Gezahlt", "Vorgestreckt", "Offen"])
+    )
     for result in calculate_camp_settlements(camp):
         summary.append(
-            [
-                result.participant.last_name,
-                result.participant.first_name,
-                result.total_gross,
-                result.total_subsidy,
-                result.total_due,
-                result.total_paid,
-                result.total_advanced,
-                result.balance,
-            ]
+            safe_csv_row(
+                [
+                    result.participant.last_name,
+                    result.participant.first_name,
+                    result.total_gross,
+                    result.total_subsidy,
+                    result.total_due,
+                    result.total_paid,
+                    result.total_advanced,
+                    result.balance,
+                ]
+            )
         )
 
     participants = workbook.create_sheet("Teilnehmer")
-    participants.append(["Nachname", "Vorname", "E-Mail", "Telefon", "Status", "Hilfssatz", "Berufssatz", "Nächte"])
+    participants.append(
+        safe_csv_row(["Nachname", "Vorname", "E-Mail", "Telefon", "Status", "Hilfssatz", "Berufssatz", "Nächte"])
+    )
     for participant in Participant.objects.filter(camp=camp):
         participants.append(
-            [
-                participant.last_name,
-                participant.first_name,
-                participant.email,
-                participant.phone,
-                participant.get_status_display(),
-                participant.hilfssatz,
-                participant.berufssatz,
-                participant.actual_nights,
-            ]
+            safe_csv_row(
+                [
+                    participant.last_name,
+                    participant.first_name,
+                    participant.email,
+                    participant.phone,
+                    participant.get_status_display(),
+                    participant.hilfssatz,
+                    participant.berufssatz,
+                    participant.actual_nights,
+                ]
+            )
         )
 
     cost_centers_sheet = workbook.create_sheet("Kostenstellen")
@@ -728,19 +736,23 @@ def settlement_run_workbook_bytes(run: SettlementRun) -> bytes:
     workbook = Workbook()
     summary = workbook.active
     summary.title = "Abrechnung"
-    summary.append(["Teilnehmer", "Status", "Brutto", "Förderung", "Soll", "Gezahlt", "Vorgestreckt", "Offen"])
+    summary.append(
+        safe_csv_row(["Teilnehmer", "Status", "Brutto", "Förderung", "Soll", "Gezahlt", "Vorgestreckt", "Offen"])
+    )
     for snapshot in run.settlements.all():
         summary.append(
-            [
-                snapshot.participant_name,
-                snapshot.data.get("participant", {}).get("status_label", snapshot.participant_status),
-                snapshot.total_gross,
-                snapshot.total_subsidy,
-                snapshot.total_due,
-                snapshot.total_paid,
-                snapshot.total_advanced,
-                snapshot.balance,
-            ]
+            safe_csv_row(
+                [
+                    snapshot.participant_name,
+                    snapshot.data.get("participant", {}).get("status_label", snapshot.participant_status),
+                    snapshot.total_gross,
+                    snapshot.total_subsidy,
+                    snapshot.total_due,
+                    snapshot.total_paid,
+                    snapshot.total_advanced,
+                    snapshot.balance,
+                ]
+            )
         )
 
     cost_centers_sheet = workbook.create_sheet("Kostenstellen")

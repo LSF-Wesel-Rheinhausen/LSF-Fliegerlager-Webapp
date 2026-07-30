@@ -1180,6 +1180,7 @@ class MealBookingForm(forms.Form):
         participant = kwargs.pop("participant", None)
         kwargs.pop("camp", None)
         super().__init__(*args, **kwargs)
+        self.participant = participant
         if participant is not None:
             from .services import camp_meal_dates
 
@@ -1195,12 +1196,13 @@ class MealBookingForm(forms.Form):
                 else:
                     raw_value = self.data.get(self.add_prefix("meal_dates"), [])
                     raw_dates = raw_value if isinstance(raw_value, list | tuple) else [raw_value]
-                selectable_dates = []
+                bound_dates = set()
                 for raw_date in raw_dates:
                     try:
-                        selectable_dates.append(date.fromisoformat(raw_date))
+                        bound_dates.add(date.fromisoformat(raw_date))
                     except (TypeError, ValueError):
                         continue
+                selectable_dates = camp_meal_dates(camp, include_dates=bound_dates)
             else:
                 selectable_dates = camp_meal_dates(camp)
             meal_dates_field.choices = [
@@ -1218,8 +1220,15 @@ class MealBookingForm(forms.Form):
                 ]
 
     def clean_meal_dates(self) -> list[date]:
-        """Return unique selected camp dates in chronological order."""
-        return sorted(set(self.cleaned_data["meal_dates"]))
+        """Return unique selected camp dates in chronological order within camp bounds."""
+        selected_dates = sorted(set(self.cleaned_data["meal_dates"]))
+        if getattr(self, "participant", None) and self.participant.camp:
+            camp = self.participant.camp
+            if camp.starts_on and camp.ends_on and camp.starts_on <= camp.ends_on:
+                invalid_dates = [d for d in selected_dates if d < camp.starts_on or d > camp.ends_on]
+                if invalid_dates:
+                    raise forms.ValidationError("Ausgewählte Daten liegen außerhalb des Lagerzeitraums.")
+        return selected_dates
 
 
 class MealStandardPricesForm(forms.Form):

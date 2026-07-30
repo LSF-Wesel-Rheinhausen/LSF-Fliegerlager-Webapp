@@ -11,7 +11,10 @@ from django.views.decorators.http import require_POST
 
 from .kiosk_access import KIOSK_MODE_SESSION_KEY, KIOSK_PARTICIPANT_SESSION_KEY
 from .models import Participant, PushSubscription
-from .notifications import allowed_categories, queue_participant_notification, queue_user_notification
+from .notifications import (
+    _queue_for_subscriptions,
+    allowed_categories,
+)
 from .pwa_views import pwa_template_context
 from .views import _kiosk_context
 
@@ -297,7 +300,11 @@ def kiosk_notification_preferences(request: HttpRequest, subscription_id: int) -
 def queue_test_notification(owner: Any, *, participant_owner: bool, subscription_id: int) -> None:
     """Queue a harmless test message for one owner-controlled device."""
     subscription = get_object_or_404(PushSubscription, pk=subscription_id, **_owner_filter(owner, participant_owner))
-    category = subscription.categories[0]
+    category = (
+        subscription.categories[0]
+        if subscription.categories
+        else next(iter(allowed_categories(participant_owner=participant_owner)))
+    )
     kwargs = {
         "category": category,
         "title": "Testbenachrichtigung",
@@ -305,10 +312,15 @@ def queue_test_notification(owner: Any, *, participant_owner: bool, subscription
         "target_url": "/kiosk/notifications/" if participant_owner else "/notifications/",
         "dedupe_key": f"test:{subscription.pk}:{int(subscription.updated_at.timestamp())}",
     }
-    if participant_owner:
-        queue_participant_notification(owner, **kwargs)
-    else:
-        queue_user_notification(owner, **kwargs)
+    _queue_for_subscriptions(
+        [subscription],
+        category=kwargs["category"],
+        title=kwargs["title"],
+        body=kwargs["body"],
+        target_url=kwargs["target_url"],
+        dedupe_key=kwargs["dedupe_key"],
+        scheduled_for=None,
+    )
 
 
 @login_required

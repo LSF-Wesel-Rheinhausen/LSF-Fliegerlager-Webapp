@@ -75,7 +75,7 @@
     </section>
   </form>
 
-  <script>
+  <script {% if request.csp_nonce %}nonce="{{ request.csp_nonce }}"{% endif %}>
     document.addEventListener('DOMContentLoaded', function() {
       const selectAll = document.getElementById('select-all-shifts');
       const checkboxes = document.querySelectorAll('.shift-checkbox');

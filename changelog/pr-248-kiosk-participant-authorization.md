@@ -100,7 +100,15 @@
   laufen.
 - Lässt PIN-, Sicherheits-, Identitäts- und Administrationsfunktionen
   ausdrücklich außerhalb der Partner-Vollmacht.
-- Zeigt Partner-Vollmachten im Django-Admin ausschließlich lesend an und
+- Entschärft Formula Injection in XLSX-Exporten durch Maskierung von Formelzeichen (M-4).
+- Berechnet `booked_nights` bei der Datumsaktualisierung neu und speichert es ab, inklusive Eingabevalidierung (B-1, B-2).
+- Bindet das Inline-Script in `shift_manage.html` an den CSP-Nonce (B-4).
+- Liefert für Benutzer ohne zugewiesene Gruppen bei `user_role()` einen leeren String statt fälschlicherweise „Bearbeiter“ zurück (B-6).
+- Validiert den importierten `status`-Wert im CSV-Importer gegen die erlaubten Participant Status Choices (B-7).
+- Erzwingt in `MealBookingForm` die Lagerzeitraumgrenzen beim Validieren ausgewählter Essensdaten (B-8).
+- Verhindert `TypeError` bei Non-ASCII `Authorization`-Headern im Update-Agenten durch Bytes-Konvertierung vor `hmac.compare_digest` (B-9).
+- Verwendet bei Test-Benachrichtigungen einen sicheren Kategorie-Fallback bei leeren Abonnement-Kategorien (B-10).
+- Liefert Partner-Vollmachten im Django-Admin ausschließlich lesend an und
   entzieht bestehenden sowie künftig eingerichteten Standardrollen deren
   Add-, Change- und Delete-Rechte. Nur der auditierte Teilnehmer-Workflow kann
   eine Einladung erstellen oder ihren Consent-Status ändern.
