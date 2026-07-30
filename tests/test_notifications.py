@@ -749,7 +749,12 @@ def test_booking_link_and_linked_booking_events_notify_the_other_participant():
         quantity=1,
         unit_price=Decimal("1.50"),
     )
-    notify_linked_booking(charge, actor=inviter, cancelled=False)
+    notify_linked_booking(
+        charge,
+        actor_id=inviter.pk,
+        actor_display_name=inviter.full_name,
+        cancelled=False,
+    )
 
     assert PushMessage.objects.filter(category="booking_links").count() == 2
     assert PushMessage.objects.filter(body__contains="Wasser").exists()
@@ -782,7 +787,12 @@ def test_linked_booking_cancellation_notifies_original_booker_with_actual_actor(
         unit_price=Decimal("1.50"),
     )
 
-    notify_linked_booking(charge, actor=cancelling_participant, cancelled=True)
+    notify_linked_booking(
+        charge,
+        actor_id=cancelling_participant.pk,
+        actor_display_name=cancelling_participant.full_name,
+        cancelled=True,
+    )
 
     message = PushMessage.objects.get()
     assert message.subscription == subscription

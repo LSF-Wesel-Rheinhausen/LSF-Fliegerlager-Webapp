@@ -34,6 +34,7 @@ from billing.views import (
     _kiosk_checkin_participants,
     _kiosk_meal_targets,
     _linked_booking_participants,
+    _lock_booking_authorization_dependencies,
     _retract_meal_signup,
     _sign_kiosk_meal_retraction,
 )
@@ -242,6 +243,59 @@ def test_quick_booking_snapshots_names_from_freshly_locked_identities(kiosk_clie
 
 
 @pytest.mark.django_db
+def test_dependency_lock_validates_every_snapshot_for_duplicate_participant():
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp, is_child=False, is_companion=False)
+    stale_snapshot = Participant.objects.get(pk=participant.pk)
+    Participant.objects.filter(pk=participant.pk).update(is_child=True)
+    current_snapshot = Participant.objects.get(pk=participant.pk)
+
+    with transaction.atomic():
+        _locked_camp, locked_participants, _locked_family_members = _lock_booking_authorization_dependencies(
+            [stale_snapshot, current_snapshot],
+            camp=camp,
+        )
+
+    assert locked_participants == {}
+
+
+@pytest.mark.django_db
+def test_quick_booking_rejects_camp_deactivated_before_dependency_lock(kiosk_client, monkeypatch):
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp)
+    rule = PriceRuleFactory(camp=camp, kind=PriceRule.Kind.DRINK)
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    original_fetch_all = QuerySet._fetch_all
+    camp_deactivated = False
+
+    def deactivate_camp_before_lock(queryset):
+        nonlocal camp_deactivated
+        was_unfetched = queryset._result_cache is None
+        if was_unfetched and not camp_deactivated and queryset.query.select_for_update and queryset.model is Camp:
+            Camp.objects.filter(pk=camp.pk).update(is_active=False)
+            camp_deactivated = True
+        original_fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", deactivate_camp_before_lock)
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "quick",
+            "quick-price_rule": rule.pk,
+            "quick-quantity": 1,
+            "quick-target": [f"participant-{participant.pk}"],
+        },
+    )
+
+    assert camp_deactivated is True
+    assert response.status_code == 403
+    assert not Charge.objects.exists()
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize("state_change", ["archived", "camp", "is_child", "is_companion"])
 def test_quick_booking_rejects_participant_state_changed_before_dependency_lock(
     kiosk_client,
@@ -298,6 +352,271 @@ def test_quick_booking_rejects_participant_state_changed_before_dependency_lock(
     assert response.status_code == 403
     assert not Charge.objects.exists()
     assert not KioskActionAuditLog.objects.exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("rule_change", ["archived", "price"])
+def test_quick_booking_rejects_effective_rule_changed_before_rule_lock(
+    kiosk_client,
+    monkeypatch,
+    rule_change,
+):
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp, is_child=False, is_companion=False)
+    partner = ParticipantFactory(camp=camp)
+    partner_child = ParticipantFamilyMember.objects.create(
+        guardian=partner,
+        first_name="Kind",
+        last_name="Partner",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    selected_rule = PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=PriceRule.MealType.SNACK,
+        is_default=True,
+        unit_price=Decimal("4.00"),
+        applies_to_children=False,
+        applies_to_adults=True,
+        applies_to_companions=False,
+    )
+    effective_rule = PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=PriceRule.MealType.SNACK,
+        is_default=True,
+        unit_price=Decimal("2.00"),
+        applies_to_children=True,
+        applies_to_adults=False,
+        applies_to_companions=False,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    original_fetch_all = QuerySet._fetch_all
+    rule_changed = False
+
+    def change_rule_before_dependency_lock(queryset):
+        nonlocal rule_changed
+        was_unfetched = queryset._result_cache is None
+        if was_unfetched and not rule_changed and queryset.query.select_for_update and queryset.model is Camp:
+            update = {
+                "archived": {"is_archived": True},
+                "price": {"unit_price": Decimal("3.00")},
+            }[rule_change]
+            PriceRule.objects.filter(pk=effective_rule.pk).update(**update)
+            rule_changed = True
+        original_fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", change_rule_before_dependency_lock)
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "quick",
+            "quick-price_rule": selected_rule.pk,
+            "quick-quantity": 1,
+            "quick-target": [f"family-{partner_child.pk}"],
+        },
+    )
+
+    assert rule_changed is True
+    assert response.status_code == 403
+    assert not Charge.objects.exists()
+    assert not KioskActionAuditLog.objects.exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("rule_change", ["archived", "price"])
+def test_meal_booking_rejects_effective_rule_changed_before_rule_lock(
+    kiosk_client,
+    monkeypatch,
+    rule_change,
+):
+    fixed_now = timezone.make_aware(datetime(2026, 6, 30, 10, 0))
+    monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
+    camp = CampFactory(
+        is_active=True,
+        starts_on=date(2026, 6, 30),
+        ends_on=date(2026, 7, 14),
+    )
+    participant = ParticipantFactory(camp=camp, is_child=False, is_companion=False)
+    rule = PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        is_default=True,
+        unit_price=Decimal("8.00"),
+        applies_to_children=False,
+        applies_to_adults=True,
+        applies_to_companions=False,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    original_fetch_all = QuerySet._fetch_all
+    rule_changed = False
+
+    def change_rule_before_dependency_lock(queryset):
+        nonlocal rule_changed
+        was_unfetched = queryset._result_cache is None
+        if was_unfetched and not rule_changed and queryset.query.select_for_update and queryset.model is Camp:
+            update = {
+                "archived": {"is_archived": True},
+                "price": {"unit_price": Decimal("9.00")},
+            }[rule_change]
+            PriceRule.objects.filter(pk=rule.pk).update(**update)
+            rule_changed = True
+        original_fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", change_rule_before_dependency_lock)
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-meal_dates": ["2026-07-02"],
+            "meal-meal": MealSignup.Meal.DINNER,
+            "meal-variant": MealSignup.Variant.NORMAL,
+            "meal-target": [f"participant-{participant.pk}"],
+            f"meal-variant-participant-{participant.pk}": MealSignup.Variant.NORMAL,
+        },
+    )
+
+    assert rule_changed is True
+    assert response.status_code == 403
+    assert not MealSignup.objects.exists()
+    assert not Charge.objects.exists()
+
+
+@pytest.mark.django_db
+def test_quick_booking_notification_uses_locked_actor_name_snapshot(
+    kiosk_client,
+    django_capture_on_commit_callbacks,
+    settings,
+):
+    settings.WEB_PUSH_ENABLED = True
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Alt")
+    partner = ParticipantFactory(camp=camp)
+    ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    PushSubscription.objects.create(
+        participant=partner,
+        endpoint="https://push.example.test/locked-actor-name",
+        p256dh="key",
+        auth="secret",
+        categories=["booking_links"],
+    )
+    rule = PriceRuleFactory(camp=camp, kind=PriceRule.Kind.DRINK, name="Wasser")
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    with django_capture_on_commit_callbacks() as callbacks:
+        response = kiosk_client.post(
+            reverse("kiosk-home"),
+            {
+                "action": "quick",
+                "quick-price_rule": rule.pk,
+                "quick-quantity": 1,
+                "quick-target": [f"participant-{partner.pk}"],
+            },
+        )
+
+    Participant.objects.filter(pk=participant.pk).update(first_name="AdaNeu")
+    for callback in callbacks:
+        callback()
+
+    assert response.status_code == 302
+    assert len(callbacks) == 1
+    message = PushMessage.objects.get()
+    assert message.body.startswith("Ada Alt hat ")
+
+
+@pytest.mark.django_db
+def test_quick_cancellation_notification_uses_locked_actor_name_snapshot(
+    kiosk_client,
+    django_capture_on_commit_callbacks,
+    monkeypatch,
+    settings,
+):
+    settings.WEB_PUSH_ENABLED = True
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Alt")
+    partner = ParticipantFactory(camp=camp)
+    booking_link = ParticipantBookingLink.objects.create(
+        inviter=participant,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    charge = Charge.objects.create(
+        participant=participant,
+        kiosk_booked_by=partner,
+        kind=Charge.Kind.DRINK,
+        description="Wasser (Kiosk)",
+        quantity=Decimal("1.00"),
+        unit_price=Decimal("1.50"),
+    )
+    KioskActionAuditLog.objects.create(
+        camp=camp,
+        actor_participant=partner,
+        target_participant=participant,
+        booking_link=booking_link,
+        charge=charge,
+        action=KioskActionAuditLog.Action.QUICK_BOOKED,
+        description=f"{charge.booking_reference}: Schnellbuchung erstellt.",
+    )
+    PushSubscription.objects.create(
+        participant=partner,
+        endpoint="https://push.example.test/locked-cancellation-actor-name",
+        p256dh="key",
+        auth="secret",
+        categories=["booking_links"],
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    original_fetch_all = QuerySet._fetch_all
+    actor_renamed = False
+
+    def rename_actor_before_camp_lock(queryset):
+        nonlocal actor_renamed
+        was_unfetched = queryset._result_cache is None
+        if was_unfetched and not actor_renamed and queryset.query.select_for_update and queryset.model is Camp:
+            Participant.objects.filter(pk=participant.pk).update(first_name="AdaWährend")
+            actor_renamed = True
+        original_fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", rename_actor_before_camp_lock)
+
+    with django_capture_on_commit_callbacks() as callbacks:
+        response = kiosk_client.post(
+            reverse("kiosk-home"),
+            {
+                "action": "quick_cancel",
+                "charge_id": charge.pk,
+            },
+        )
+
+    Participant.objects.filter(pk=participant.pk).update(first_name="AdaNachher")
+    for callback in callbacks:
+        callback()
+
+    assert actor_renamed is True
+    assert response.status_code == 302
+    assert len(callbacks) == 1
+    message = PushMessage.objects.get()
+    assert message.body.startswith("AdaWährend Alt hat ")
 
 
 def test_partner_activity_routes_exist_for_both_kiosk_modes():
@@ -1881,6 +2200,7 @@ def test_partner_meal_retraction_confirmation_cannot_be_replayed_after_rebooking
         camp=actor.camp,
         kind=PriceRule.Kind.MEAL,
         meal_type=MealSignup.Meal.DINNER,
+        is_default=True,
         unit_price=Decimal("8.00"),
     )
     target = {
@@ -1954,6 +2274,7 @@ def test_meal_signup_row_locks_exclude_nullable_postgresql_joins(monkeypatch):
         camp=participant.camp,
         kind=PriceRule.Kind.MEAL,
         meal_type=MealSignup.Meal.DINNER,
+        is_default=True,
     )
     postgresql_settings = django_settings.DATABASES["default"].copy()
     postgresql_settings.update(
@@ -2011,6 +2332,7 @@ def test_partner_meal_workflows_lock_camp_and_identities_before_signup_and_autho
         camp=actor.camp,
         kind=PriceRule.Kind.MEAL,
         meal_type=MealSignup.Meal.DINNER,
+        is_default=True,
     )
     target = {
         "kind": "participant",
@@ -2035,6 +2357,7 @@ def test_partner_meal_workflows_lock_camp_and_identities_before_signup_and_autho
                 MealSignup,
                 Participant,
                 ParticipantBookingLink,
+                PriceRule,
             }
         ):
             lock_order_by_workflow[active_workflow].append(queryset.model)
@@ -2063,7 +2386,7 @@ def test_partner_meal_workflows_lock_camp_and_identities_before_signup_and_autho
 
     assert retracted is True
     assert lock_order_by_workflow == {
-        "book": [Camp, Participant, MealSignup, ParticipantBookingLink],
+        "book": [Camp, Participant, PriceRule, MealSignup, ParticipantBookingLink],
         "retract": [Camp, Participant, MealSignup, ParticipantBookingLink],
     }
 
@@ -2615,7 +2938,14 @@ def test_multi_partner_quick_booking_locks_authorizations_in_canonical_order(kio
         if (
             was_unfetched
             and queryset.query.select_for_update
-            and queryset.model in {Participant, ParticipantFamilyMember, ParticipantBookingLink}
+            and queryset.model
+            in {
+                Camp,
+                Participant,
+                ParticipantFamilyMember,
+                ParticipantBookingLink,
+                PriceRule,
+            }
         ):
             lock_events.append(
                 (
@@ -2639,8 +2969,10 @@ def test_multi_partner_quick_booking_locks_authorizations_in_canonical_order(kio
     assert response.status_code == 302
     assert Charge.objects.count() == 2
     assert lock_events == [
+        (Camp, (camp.pk,)),
         (Participant, tuple(sorted((participant.pk, first_partner.pk, second_partner.pk)))),
         (ParticipantFamilyMember, (first_partner_child.pk,)),
+        (PriceRule, (rule.pk,)),
         (ParticipantBookingLink, tuple(sorted((first_link.pk, second_link.pk)))),
     ]
 
@@ -2691,7 +3023,14 @@ def test_partner_quick_cancellation_locks_dependencies_before_authorization(kios
         if (
             was_unfetched
             and queryset.query.select_for_update
-            and queryset.model in {Participant, ParticipantFamilyMember, ParticipantBookingLink}
+            and queryset.model
+            in {
+                Camp,
+                Charge,
+                Participant,
+                ParticipantFamilyMember,
+                ParticipantBookingLink,
+            }
         ):
             lock_events.append(
                 (
@@ -2712,8 +3051,10 @@ def test_partner_quick_cancellation_locks_dependencies_before_authorization(kios
 
     assert response.status_code == 302
     assert lock_events == [
+        (Camp, (camp.pk,)),
         (Participant, tuple(sorted((participant.pk, partner.pk)))),
         (ParticipantFamilyMember, (partner_child.pk,)),
+        (Charge, (charge.pk,)),
         (ParticipantBookingLink, (booking_link.pk,)),
     ]
 

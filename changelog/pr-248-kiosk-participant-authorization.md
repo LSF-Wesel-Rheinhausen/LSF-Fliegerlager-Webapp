@@ -46,15 +46,20 @@
   sperren, damit parallele Gegenoperationen keinen Lock-Zyklus bilden.
 - Sperrt bei allen Partner-Schreibvorgängen zuerst das betroffene Lager und
   danach alle referenzierten Teilnehmer- und Familienzeilen jeweils in
-  stabiler Datenbankreihenfolge. Essensvorgänge sperren beziehungsweise
-  erzeugen erst anschließend sämtliche MealSignup-Zeilen und sperren zuletzt
-  die benötigten Vollmachten. Diese gesperrten Zeilen werden für den gesamten
-  Schreibvorgang wiederverwendet, sodass parallele Abrechnungen, Widerrufe und
-  Buchungen keinen Fremdschlüssel-/Vollmachts-Lockzyklus bilden. Nach dem Lock
-  werden Lageraktivität, Teilnehmer-Lagerzuordnung, Archivstatus, Kind-/
-  Begleitrolle sowie Hauptkonto und Rolle von Familienmitgliedern erneut
-  geprüft; insbesondere kann eine parallele Lagerdeaktivierung keine neue
-  Einladung mehr durchlassen.
+  stabiler Datenbankreihenfolge. Dabei werden alle eingereichten Snapshots
+  derselben Identität geprüft, statt bei doppelten Zielen stillschweigend nur
+  den letzten zu behalten. Anschließend werden sämtliche Preisregeln des
+  Lagers gesperrt und die effektive Regel aus den gesperrten Zielrollen neu
+  aufgelöst. Essensvorgänge sperren beziehungsweise erzeugen erst danach alle
+  MealSignup-Zeilen und sperren zuletzt die benötigten Vollmachten;
+  Schnellstornierungen sperren nach den Identitäten die Charge und danach die
+  Vollmacht. Diese gesperrten Zeilen werden für den gesamten Schreibvorgang
+  wiederverwendet, sodass parallele Abrechnungen, Widerrufe und Buchungen
+  keinen Fremdschlüssel-/Vollmachts-Lockzyklus bilden. Nach dem Lock werden
+  Lageraktivität, Teilnehmer-Lagerzuordnung, Archivstatus, Kind-/Begleitrolle
+  sowie Hauptkonto und Rolle von Familienmitgliedern erneut geprüft; eine
+  parallele Lagerdeaktivierung kann dadurch keinen Kiosk-Write mehr
+  durchlassen.
 - Hält das konkrete Familienziel auch bei Eigenhaushalts-Schnellbuchungen im
   Audit fest, damit ein später verknüpfter Partner bei einer Stornierung
   weiterhin die tatsächlich betroffene Person protokolliert.
@@ -65,8 +70,11 @@
   rückwirkend um; fachliches Entfernen erfolgt weiterhin über die
   Deaktivierung.
 - Erstellt auch Schnellbuchungs-Charges, Rechnungsbeschreibungen und
-  Benachrichtigungen aus den frisch gesperrten Zielobjekten, damit ein Name,
-  der unmittelbar vor dem Lock geändert wurde, überall konsistent erscheint.
+  Benachrichtigungen aus den frisch gesperrten Ziel- und Akteursobjekten,
+  damit ein Name, der unmittelbar vor dem Lock geändert wurde, überall
+  konsistent erscheint. Der Namens-Snapshot wird an den Commit-Callback
+  übergeben und dort nicht aus einer später erneut geladenen Identität
+  rekonstruiert.
 - Bindet jede Check-in-Zeile an ihren signierten Ausgangszustand, schreibt nur
   tatsächlich geänderte Zeilen und weist konkurrierend veränderte Daten ohne
   Teilaktualisierung zurück.
@@ -104,3 +112,6 @@
   Buchungen, Check-in, Widerruf, Benachrichtigungen und append-only Audit.
 - Negativtests für ausstehende, widerrufene und lagerfremde Verknüpfungen sowie
   unzulässige Vollmachtsverwaltung durch Begleitpersonen.
+- Race-Regressionen für doppelte Identitätssnapshots, Lagerdeaktivierung,
+  archivierte oder geänderte Quick-/Essenspreisregeln und Namensänderungen vor
+  beziehungsweise nach den Identitätslocks.

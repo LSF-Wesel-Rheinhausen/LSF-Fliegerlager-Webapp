@@ -224,6 +224,59 @@ def _kiosk_quick_confirmation_payload(
     }
 
 
+def _kiosk_price_rule_state(price_rule: PriceRule) -> tuple[object, ...]:
+    """Return all mutable rule fields that can affect a kiosk booking."""
+    return (
+        price_rule.pk,
+        price_rule.camp_id,
+        price_rule.kind,
+        price_rule.name,
+        price_rule.unit_price,
+        price_rule.foerdersatz,
+        price_rule.meal_type,
+        price_rule.meal_date,
+        price_rule.applies_to_children,
+        price_rule.applies_to_adults,
+        price_rule.applies_to_companions,
+        price_rule.is_default,
+        price_rule.is_archived,
+    )
+
+
+def _lock_kiosk_price_rules(camp: Camp) -> dict[int, PriceRule]:
+    """Lock every camp price rule so effective-rule resolution cannot race an edit."""
+    return {
+        price_rule.pk: price_rule
+        for price_rule in PriceRule.objects.select_for_update(of=("self",)).filter(camp=camp).order_by("pk")
+    }
+
+
+def _revalidate_locked_meal_price_rule(
+    *,
+    locked_price_rules: dict[int, PriceRule],
+    submitted_price_rule: PriceRule,
+    camp: Camp,
+    meal: str,
+    meal_date: date,
+    is_child: bool,
+    is_companion: bool,
+) -> PriceRule:
+    """Return the locked meal rule only if it still matches the submitted snapshot."""
+    current_price_rule = resolve_meal_price_rule(
+        camp,
+        meal,
+        meal_date,
+        is_child=is_child,
+        is_companion=is_companion,
+    )
+    locked_price_rule = locked_price_rules.get(current_price_rule.pk) if current_price_rule is not None else None
+    if locked_price_rule is None or _kiosk_price_rule_state(locked_price_rule) != _kiosk_price_rule_state(
+        submitted_price_rule
+    ):
+        raise PermissionDenied("Die Preisregel wurde zwischenzeitlich geändert.")
+    return locked_price_rule
+
+
 def _sign_kiosk_quick_confirmation(payload: dict[str, object]) -> str:
     """Sign a timestamped quick-booking preview with a fresh one-time nonce."""
     signed_payload = {
@@ -1823,13 +1876,16 @@ def _lock_booking_authorization_dependencies(
     *,
     camp: Camp,
 ) -> tuple[Camp, dict[int, Participant], dict[int, ParticipantFamilyMember]]:
-    """Lock the camp, then revalidate participant and family-member FK targets."""
-    participants_by_id = {participant.pk: participant for participant in participants}
-    participant_ids = sorted(participants_by_id)
-    family_members_by_id = {
-        family_member.pk: family_member for family_member in family_members if family_member is not None
-    }
-    family_member_ids = sorted(family_members_by_id)
+    """Lock the camp, then revalidate every submitted identity snapshot."""
+    participant_snapshots_by_id: dict[int, list[Participant]] = {}
+    for participant in participants:
+        participant_snapshots_by_id.setdefault(participant.pk, []).append(participant)
+    participant_ids = sorted(participant_snapshots_by_id)
+    family_member_snapshots_by_id: dict[int, list[ParticipantFamilyMember]] = {}
+    for family_member in family_members:
+        if family_member is not None:
+            family_member_snapshots_by_id.setdefault(family_member.pk, []).append(family_member)
+    family_member_ids = sorted(family_member_snapshots_by_id)
     locked_camp = Camp.objects.select_for_update(of=("self",)).get(pk=camp.pk)
     locked_participants = {
         participant.pk: participant
@@ -1837,15 +1893,18 @@ def _lock_booking_authorization_dependencies(
         .filter(pk__in=participant_ids)
         .order_by("pk")
     }
-    for participant_id, submitted_participant in participants_by_id.items():
+    for participant_id, submitted_snapshots in participant_snapshots_by_id.items():
         locked_participant = locked_participants.get(participant_id)
         if locked_participant is None:
             continue
         if (
             locked_participant.camp_id != locked_camp.pk
             or locked_participant.archived_at is not None
-            or locked_participant.is_child != submitted_participant.is_child
-            or locked_participant.is_companion != submitted_participant.is_companion
+            or any(
+                locked_participant.is_child != submitted_participant.is_child
+                or locked_participant.is_companion != submitted_participant.is_companion
+                for submitted_participant in submitted_snapshots
+            )
         ):
             locked_participants.pop(participant_id)
     locked_family_members = {}
@@ -1857,17 +1916,22 @@ def _lock_booking_authorization_dependencies(
             .filter(pk__in=family_member_ids)
             .order_by("pk")
         }
-    for family_member_id, submitted_family_member in family_members_by_id.items():
+    for family_member_id, submitted_family_member_snapshots in family_member_snapshots_by_id.items():
         locked_family_member = locked_family_members.get(family_member_id)
         if locked_family_member is None:
             continue
         if (
             not locked_family_member.is_active
-            or locked_family_member.guardian_id != submitted_family_member.guardian_id
-            or locked_family_member.role != submitted_family_member.role
+            or any(
+                locked_family_member.guardian_id != submitted_family_member.guardian_id
+                or locked_family_member.role != submitted_family_member.role
+                for submitted_family_member in submitted_family_member_snapshots
+            )
             or locked_family_member.guardian_id not in locked_participants
         ):
             raise PermissionDenied("Das Familienmitglied ist nicht mehr verfügbar.")
+    if not locked_camp.is_active:
+        return locked_camp, {}, {}
     return locked_camp, locked_participants, locked_family_members
 
 
@@ -2667,10 +2731,20 @@ def _lock_meal_signups_for_bookings(
     return signups_by_key, created_keys
 
 
-def _notify_linked_booking_by_id(charge_id: int, actor_id: int, *, cancelled: bool) -> None:
+def _notify_linked_booking_by_id(
+    charge_id: int,
+    actor_id: int,
+    *,
+    actor_display_name: str,
+    cancelled: bool,
+) -> None:
     charge = Charge.objects.select_related("participant", "kiosk_booked_by").get(pk=charge_id)
-    actor = Participant.objects.get(pk=actor_id)
-    notify_linked_booking(charge, actor=actor, cancelled=cancelled)
+    notify_linked_booking(
+        charge,
+        actor_id=actor_id,
+        actor_display_name=actor_display_name,
+        cancelled=cancelled,
+    )
 
 
 def _book_meal_for_target(
@@ -2688,14 +2762,21 @@ def _book_meal_for_target(
     prelocked_booking_link: ParticipantBookingLink | None = None,
     booking_link_lock_acquired: bool = False,
     dependencies_lock_acquired: bool = False,
+    price_rule_lock_acquired: bool = False,
 ):
     """Book one meal after acquiring dependencies in the global lock order."""
     meal_display = dict(MealSignup.Meal.choices).get(meal, meal)
     target_object = target["object"]
     participant = target_object if target["kind"] == "participant" else target_object.guardian
     family_member = target_object if target["kind"] == "family" else None
-    if (signup_lock_acquired or booking_link_lock_acquired) and not dependencies_lock_acquired:
-        raise ValueError("Vorbereitete MealSignup- oder Vollmachts-Locks benötigen gesperrte Identitäten.")
+    if (signup_lock_acquired or booking_link_lock_acquired) and (
+        not dependencies_lock_acquired or not price_rule_lock_acquired
+    ):
+        raise ValueError(
+            "Vorbereitete MealSignup- oder Vollmachts-Locks benötigen gesperrte Identitäten und Preisregeln."
+        )
+    if dependencies_lock_acquired and not price_rule_lock_acquired:
+        raise ValueError("Gesperrte Identitäten benötigen eine bereits gesperrte Preisregel.")
     if not dependencies_lock_acquired:
         expected_participant_ids = {booked_by.pk, participant.pk}
         expected_family_member_ids = {
@@ -2716,6 +2797,21 @@ def _book_meal_for_target(
         actor_family_member = locked_family_members[actor_family_member.pk] if actor_family_member is not None else None
         family_member = locked_family_members[family_member.pk] if family_member is not None else None
         dependencies_lock_acquired = True
+        locked_price_rules = _lock_kiosk_price_rules(_locked_camp)
+        price_rule = _revalidate_locked_meal_price_rule(
+            locked_price_rules=locked_price_rules,
+            submitted_price_rule=price_rule,
+            camp=_locked_camp,
+            meal=meal,
+            meal_date=meal_date,
+            is_child=family_member.is_child if family_member is not None else participant.is_child,
+            is_companion=(
+                family_member.role == ParticipantFamilyMember.Role.COMPANION
+                if family_member is not None
+                else participant.is_companion
+            ),
+        )
+        price_rule_lock_acquired = True
     existing_signup: MealSignup | None
     if signup_lock_acquired:
         if prelocked_signup is None:
@@ -2813,7 +2909,15 @@ def _book_meal_for_target(
             before=before,
             after=kiosk_meal_signup_audit_snapshot(signup),
         )
-    transaction.on_commit(partial(_notify_linked_booking_by_id, charge.pk, booked_by.pk, cancelled=False))
+    transaction.on_commit(
+        partial(
+            _notify_linked_booking_by_id,
+            charge.pk,
+            booked_by.pk,
+            actor_display_name=booked_by.full_name,
+            cancelled=False,
+        )
+    )
 
 
 def _retract_meal_signup(
@@ -2911,7 +3015,15 @@ def _retract_meal_signup(
     if audit_log is not None and partner_action:
         transaction.on_commit(partial(_notify_kiosk_partner_action_by_id, audit_log.pk))
     elif charge is not None:
-        transaction.on_commit(partial(_notify_linked_booking_by_id, charge.pk, actor.pk, cancelled=True))
+        transaction.on_commit(
+            partial(
+                _notify_linked_booking_by_id,
+                charge.pk,
+                actor.pk,
+                actor_display_name=actor.full_name,
+                cancelled=True,
+            )
+        )
     return True
 
 
@@ -3327,6 +3439,14 @@ def kiosk_home(request, kiosk_mode="private"):
                                 if active_family_member is not None
                                 else None
                             )
+                            locked_price_rules = _lock_kiosk_price_rules(locked_camp)
+                            locked_selected_rule = locked_price_rules.get(rule.pk)
+                            if (
+                                locked_selected_rule is None
+                                or locked_selected_rule.is_archived
+                                or _kiosk_price_rule_state(locked_selected_rule) != _kiosk_price_rule_state(rule)
+                            ):
+                                raise PermissionDenied("Die Preisregel wurde zwischenzeitlich geändert.")
                             locked_resolved_bookings = []
                             for _target, charge_participant, target_family_member, effective_rule in resolved_bookings:
                                 locked_charge_participant = locked_participants[charge_participant.pk]
@@ -3336,12 +3456,35 @@ def kiosk_home(request, kiosk_mode="private"):
                                     else None
                                 )
                                 locked_target = locked_target_family_member or locked_charge_participant
+                                if locked_target_family_member is not None:
+                                    target_is_child = locked_target_family_member.is_child
+                                    target_is_companion = (
+                                        locked_target_family_member.role == ParticipantFamilyMember.Role.COMPANION
+                                    )
+                                else:
+                                    target_is_child = locked_charge_participant.is_child
+                                    target_is_companion = locked_charge_participant.is_companion
+                                current_effective_rule = resolve_quick_booking_price_rule(
+                                    locked_selected_rule,
+                                    occurred_on,
+                                    is_child=target_is_child,
+                                    is_companion=target_is_companion,
+                                )
+                                locked_effective_rule = (
+                                    locked_price_rules.get(current_effective_rule.pk)
+                                    if current_effective_rule is not None
+                                    else None
+                                )
+                                if locked_effective_rule is None or _kiosk_price_rule_state(
+                                    locked_effective_rule
+                                ) != _kiosk_price_rule_state(effective_rule):
+                                    raise PermissionDenied("Die Preisregel wurde zwischenzeitlich geändert.")
                                 locked_resolved_bookings.append(
                                     (
                                         locked_target,
                                         locked_charge_participant,
                                         locked_target_family_member,
-                                        effective_rule,
+                                        locked_effective_rule,
                                     )
                                 )
                             locked_booking_links = _lock_accepted_booking_links(
@@ -3399,7 +3542,13 @@ def kiosk_home(request, kiosk_mode="private"):
                                         after=kiosk_charge_audit_snapshot(charge),
                                     )
                                 transaction.on_commit(
-                                    partial(_notify_linked_booking_by_id, charge.pk, locked_actor.pk, cancelled=False)
+                                    partial(
+                                        _notify_linked_booking_by_id,
+                                        charge.pk,
+                                        locked_actor.pk,
+                                        actor_display_name=locked_actor.full_name,
+                                        cancelled=False,
+                                    )
                                 )
                     except IntegrityError:
                         if (
@@ -3417,9 +3566,8 @@ def kiosk_home(request, kiosk_mode="private"):
             except ValueError:
                 charge_id = None
             with transaction.atomic():
-                charge = (
-                    Charge.objects.select_for_update()
-                    .annotate(
+                submitted_charge = (
+                    Charge.objects.annotate(
                         has_meal_signup=Exists(
                             MealSignup.objects.filter(charge_id=OuterRef("pk")),
                         )
@@ -3436,11 +3584,7 @@ def kiosk_home(request, kiosk_mode="private"):
                     )
                     .first()
                 )
-                if charge is None or not _is_kiosk_quick_charge_cancelable(
-                    charge,
-                    participant,
-                    authorized_participant_ids=linked_participant_id_set,
-                ):
+                if submitted_charge is None:
                     messages.error(request, "Diese Buchung kann nicht mehr storniert werden.")
                 else:
                     creation_audit = (
@@ -3449,56 +3593,112 @@ def kiosk_home(request, kiosk_mode="private"):
                             "target_family_member",
                         )
                         .filter(
-                            charge=charge,
+                            charge=submitted_charge,
                             action=KioskActionAuditLog.Action.QUICK_BOOKED,
                         )
                         .order_by("created_at", "pk")
                         .first()
                     )
-                    booking_link = None
-                    if charge.participant_id != participant.pk:
-                        booking_link = _lock_accepted_booking_links(
-                            participant,
-                            [charge.participant],
-                            family_members=[
-                                active_family_member,
-                                creation_audit.target_family_member if creation_audit is not None else None,
-                            ],
-                        ).get(charge.participant_id)
-                        if booking_link is None:
-                            raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
-                    elif charge.kiosk_booked_by_id != participant.pk:
-                        booking_link = creation_audit.booking_link if creation_audit is not None else None
-                    before = kiosk_charge_audit_snapshot(charge)
-                    charge.deleted_at = timezone.now()
-                    charge.deleted_by = None
-                    charge.save(update_fields=["deleted_at", "deleted_by"])
-                    audit_log = None
-                    partner_action = charge.participant_id != participant.pk
-                    if partner_action or charge.kiosk_booked_by_id != charge.participant_id:
-                        audit_log = create_kiosk_action_audit_log(
-                            camp=participant.camp,
-                            actor_participant=participant,
-                            actor_family_member=active_family_member,
-                            target_participant=charge.participant,
-                            target_family_member=(
-                                creation_audit.target_family_member if creation_audit is not None else None
-                            ),
-                            booking_link=booking_link,
-                            charge=charge,
-                            action=KioskActionAuditLog.Action.QUICK_CANCELLED,
-                            description=f"{charge.booking_reference}: Schnellbuchung storniert.",
-                            before=before,
-                            after=kiosk_charge_audit_snapshot(charge),
+                    submitted_target_family_member = (
+                        creation_audit.target_family_member if creation_audit is not None else None
+                    )
+                    dependency_participants = [participant, submitted_charge.participant]
+                    dependency_family_members = [active_family_member, submitted_target_family_member]
+                    expected_participant_ids = {item.pk for item in dependency_participants}
+                    expected_family_member_ids = {item.pk for item in dependency_family_members if item is not None}
+                    locked_camp, locked_participants, locked_family_members = _lock_booking_authorization_dependencies(
+                        dependency_participants,
+                        dependency_family_members,
+                        camp=participant.camp,
+                    )
+                    if (
+                        set(locked_participants) != expected_participant_ids
+                        or set(locked_family_members) != expected_family_member_ids
+                    ):
+                        raise PermissionDenied("Diese Buchung kann nicht mehr storniert werden.")
+                    locked_actor = locked_participants[participant.pk]
+                    locked_target_participant = locked_participants[submitted_charge.participant_id]
+                    locked_actor_family_member = (
+                        locked_family_members[active_family_member.pk] if active_family_member is not None else None
+                    )
+                    locked_target_family_member = (
+                        locked_family_members[submitted_target_family_member.pk]
+                        if submitted_target_family_member is not None
+                        else None
+                    )
+                    charge = (
+                        Charge.objects.select_for_update(of=("self",))
+                        .annotate(
+                            has_meal_signup=Exists(
+                                MealSignup.objects.filter(charge_id=OuterRef("pk")),
+                            )
                         )
-                    if audit_log is not None and partner_action:
-                        transaction.on_commit(partial(_notify_kiosk_partner_action_by_id, audit_log.pk))
+                        .filter(
+                            pk=submitted_charge.pk,
+                            participant_id=submitted_charge.participant_id,
+                            kiosk_booked_by_id=submitted_charge.kiosk_booked_by_id,
+                            kind__in=[Charge.Kind.DRINK, Charge.Kind.FOOD],
+                            deleted_at__isnull=True,
+                            has_meal_signup=False,
+                        )
+                        .first()
+                    )
+                    if charge is None or not _is_kiosk_quick_charge_cancelable(
+                        charge,
+                        locked_actor,
+                        authorized_participant_ids=linked_participant_id_set,
+                    ):
+                        messages.error(request, "Diese Buchung kann nicht mehr storniert werden.")
                     else:
-                        transaction.on_commit(
-                            partial(_notify_linked_booking_by_id, charge.pk, participant.pk, cancelled=True)
-                        )
-                    messages.success(request, "Buchung wurde storniert.")
-                    return redirect(_kiosk_route(kiosk_mode, "home"))
+                        booking_link = None
+                        if charge.participant_id != locked_actor.pk:
+                            booking_link = _lock_accepted_booking_links(
+                                locked_actor,
+                                [locked_target_participant],
+                                family_members=[
+                                    locked_actor_family_member,
+                                    locked_target_family_member,
+                                ],
+                                dependencies_locked=True,
+                            ).get(charge.participant_id)
+                            if booking_link is None:
+                                raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
+                        elif charge.kiosk_booked_by_id != locked_actor.pk:
+                            booking_link = creation_audit.booking_link if creation_audit is not None else None
+                        before = kiosk_charge_audit_snapshot(charge)
+                        charge.deleted_at = timezone.now()
+                        charge.deleted_by = None
+                        charge.save(update_fields=["deleted_at", "deleted_by"])
+                        audit_log = None
+                        partner_action = charge.participant_id != locked_actor.pk
+                        if partner_action or charge.kiosk_booked_by_id != charge.participant_id:
+                            audit_log = create_kiosk_action_audit_log(
+                                camp=locked_camp,
+                                actor_participant=locked_actor,
+                                actor_family_member=locked_actor_family_member,
+                                target_participant=locked_target_participant,
+                                target_family_member=locked_target_family_member,
+                                booking_link=booking_link,
+                                charge=charge,
+                                action=KioskActionAuditLog.Action.QUICK_CANCELLED,
+                                description=f"{charge.booking_reference}: Schnellbuchung storniert.",
+                                before=before,
+                                after=kiosk_charge_audit_snapshot(charge),
+                            )
+                        if audit_log is not None and partner_action:
+                            transaction.on_commit(partial(_notify_kiosk_partner_action_by_id, audit_log.pk))
+                        else:
+                            transaction.on_commit(
+                                partial(
+                                    _notify_linked_booking_by_id,
+                                    charge.pk,
+                                    locked_actor.pk,
+                                    actor_display_name=locked_actor.full_name,
+                                    cancelled=True,
+                                )
+                            )
+                        messages.success(request, "Buchung wurde storniert.")
+                        return redirect(_kiosk_route(kiosk_mode, "home"))
         elif request.POST.get("action") == "meal":
             meal_form = MealBookingForm(request.POST, participant=participant, prefix="meal")
             if meal_form.is_valid():
@@ -3596,15 +3796,9 @@ def kiosk_home(request, kiosk_mode="private"):
                         locked_booking_family_members = [
                             locked_family_members[member.pk] for member in booking_family_members if member is not None
                         ]
-                        locked_signups, created_signup_keys = _lock_meal_signups_for_bookings(bookings, meal)
-                        locked_booking_links = _lock_accepted_booking_links(
-                            locked_actor,
-                            locked_booking_participants,
-                            family_members=locked_booking_family_members,
-                            dependencies_locked=True,
-                        )
-                        for target, meal_date, variant, price_rule in bookings:
-                            signup_key = _meal_signup_key(target, meal_date, meal)
+                        locked_price_rules = _lock_kiosk_price_rules(_locked_camp)
+                        locked_bookings = []
+                        for target, meal_date, variant, submitted_price_rule in bookings:
                             target_object = target["object"]
                             locked_target_object = (
                                 locked_participants[target_object.pk]
@@ -3612,13 +3806,38 @@ def kiosk_home(request, kiosk_mode="private"):
                                 else locked_family_members[target_object.pk]
                             )
                             locked_target = {**target, "object": locked_target_object}
+                            locked_price_rule = _revalidate_locked_meal_price_rule(
+                                locked_price_rules=locked_price_rules,
+                                submitted_price_rule=submitted_price_rule,
+                                camp=_locked_camp,
+                                meal=meal,
+                                meal_date=meal_date,
+                                is_child=locked_target_object.is_child,
+                                is_companion=(
+                                    locked_target_object.role == ParticipantFamilyMember.Role.COMPANION
+                                    if isinstance(locked_target_object, ParticipantFamilyMember)
+                                    else locked_target_object.is_companion
+                                ),
+                            )
+                            locked_bookings.append((locked_target, meal_date, variant, locked_price_rule))
+                        locked_signups, created_signup_keys = _lock_meal_signups_for_bookings(
+                            locked_bookings,
+                            meal,
+                        )
+                        locked_booking_links = _lock_accepted_booking_links(
+                            locked_actor,
+                            locked_booking_participants,
+                            family_members=locked_booking_family_members,
+                            dependencies_locked=True,
+                        )
+                        for target, meal_date, variant, price_rule in locked_bookings:
+                            signup_key = _meal_signup_key(target, meal_date, meal)
+                            target_object = target["object"]
                             target_participant_id = (
-                                locked_target_object.pk
-                                if target["kind"] == "participant"
-                                else locked_target_object.guardian_id
+                                target_object.pk if target["kind"] == "participant" else target_object.guardian_id
                             )
                             _book_meal_for_target(
-                                locked_target,
+                                target,
                                 meal_date,
                                 meal,
                                 variant,
@@ -3631,6 +3850,7 @@ def kiosk_home(request, kiosk_mode="private"):
                                 prelocked_booking_link=locked_booking_links.get(target_participant_id),
                                 booking_link_lock_acquired=True,
                                 dependencies_lock_acquired=True,
+                                price_rule_lock_acquired=True,
                             )
                     day_label = "Tag" if len(meal_dates) == 1 else "Tage"
                     person_label = "Person" if len(selected_targets) == 1 else "Personen"
