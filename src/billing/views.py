@@ -1998,13 +1998,24 @@ def kiosk_partner_activity(request, kiosk_mode="private"):
                 invitee = booking_link_form.cleaned_data["participant"]
                 booking_link = None
                 with transaction.atomic():
-                    pair_locked = _lock_booking_link_participant_pair(participant, invitee)
-                    pair_filter = Q(inviter=participant, invitee=invitee) | Q(
-                        inviter=invitee,
-                        invitee=participant,
+                    locked_pair_participants = _lock_booking_link_participant_pair(participant, invitee)
+                    locked_inviter = locked_pair_participants.get(participant.pk)
+                    locked_invitee = locked_pair_participants.get(invitee.pk)
+                    pair_is_active = (
+                        locked_inviter is not None
+                        and locked_invitee is not None
+                        and locked_inviter.archived_at is None
+                        and locked_invitee.archived_at is None
+                        and locked_inviter.camp_id == participant.camp_id
+                        and locked_invitee.camp_id == participant.camp_id
+                        and Camp.objects.filter(pk=participant.camp_id, is_active=True).exists()
+                    )
+                    pair_filter = Q(inviter_id=participant.pk, invitee_id=invitee.pk) | Q(
+                        inviter_id=invitee.pk,
+                        invitee_id=participant.pk,
                     )
                     active_link_exists = (
-                        pair_locked
+                        pair_is_active
                         and ParticipantBookingLink.objects.filter(
                             pair_filter,
                             status__in=[
@@ -2013,20 +2024,25 @@ def kiosk_partner_activity(request, kiosk_mode="private"):
                             ],
                         ).exists()
                     )
-                    if not pair_locked or active_link_exists:
+                    if not pair_is_active:
+                        booking_link_form.add_error(
+                            "participant",
+                            "Der Teilnehmer ist nicht mehr verfügbar.",
+                        )
+                    elif active_link_exists:
                         booking_link_form.add_error(
                             "participant",
                             "Zwischen diesen Teilnehmern besteht bereits eine offene Verknüpfung.",
                         )
                     else:
                         booking_link = ParticipantBookingLink.objects.create(
-                            inviter=participant,
-                            invitee=invitee,
+                            inviter=locked_inviter,
+                            invitee=locked_invitee,
                         )
                         create_kiosk_action_audit_log(
                             camp=participant.camp,
-                            actor_participant=participant,
-                            target_participant=invitee,
+                            actor_participant=locked_inviter,
+                            target_participant=locked_invitee,
                             booking_link=booking_link,
                             action=KioskActionAuditLog.Action.LINK_INVITED,
                             description="Partner-Vollmacht angefragt.",
@@ -2034,7 +2050,7 @@ def kiosk_partner_activity(request, kiosk_mode="private"):
                             after={"status": booking_link.status},
                         )
                         transaction.on_commit(
-                            partial(_notify_booking_link_by_id, booking_link.pk, "invited", participant.pk)
+                            partial(_notify_booking_link_by_id, booking_link.pk, "invited", locked_inviter.pk)
                         )
                 if booking_link is not None:
                     messages.success(request, "Einladung zur Partner-Vollmacht wurde gesendet.")

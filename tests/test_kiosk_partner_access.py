@@ -90,6 +90,49 @@ def test_camp_with_kiosk_audit_history_cannot_be_deleted():
     assert KioskActionAuditLog.objects.filter(pk=audit_log.pk).exists()
 
 
+@pytest.mark.django_db
+def test_family_members_with_actor_or_target_audit_history_cannot_be_deleted():
+    participant = ParticipantFactory()
+    actor_family_member = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Akteur",
+        last_name="Muster",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    target_family_member = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Ziel",
+        last_name="Muster",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    actor_audit = KioskActionAuditLog.objects.create(
+        camp=participant.camp,
+        actor_participant=participant,
+        actor_family_member=actor_family_member,
+        target_participant=participant,
+        action=KioskActionAuditLog.Action.QUICK_BOOKED,
+        description="Schnellbuchung erstellt.",
+    )
+    target_audit = KioskActionAuditLog.objects.create(
+        camp=participant.camp,
+        actor_participant=participant,
+        target_participant=participant,
+        target_family_member=target_family_member,
+        action=KioskActionAuditLog.Action.QUICK_BOOKED,
+        description="Schnellbuchung erstellt.",
+    )
+
+    with pytest.raises(ProtectedError):
+        actor_family_member.delete()
+    with pytest.raises(ProtectedError):
+        target_family_member.delete()
+
+    actor_audit.refresh_from_db()
+    target_audit.refresh_from_db()
+    assert actor_audit.actor_family_member == actor_family_member
+    assert target_audit.target_family_member == target_family_member
+
+
 def test_partner_activity_routes_exist_for_both_kiosk_modes():
     assert resolve("/kiosk/partners/").url_name == "kiosk-partner-activity"
     assert resolve("/central/kiosk/partners/").url_name == "central-kiosk-partner-activity"
@@ -370,6 +413,49 @@ def test_pending_partner_invitation_cannot_be_accepted_after_invitee_is_archived
     assert invitee_archived is True
     assert response.status_code == 200
     assert invitation.status == ParticipantBookingLink.Status.PENDING
+    assert not KioskActionAuditLog.objects.exists()
+
+
+@pytest.mark.django_db
+def test_partner_invitation_cannot_be_created_after_invitee_is_archived_before_pair_lock(
+    kiosk_client,
+    monkeypatch,
+):
+    camp = CampFactory(is_active=True)
+    inviter = ParticipantFactory(camp=camp)
+    invitee = ParticipantFactory(camp=camp)
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = inviter.pk
+    session.save()
+    original_fetch_all = QuerySet._fetch_all
+    invitee_archived = False
+
+    def archive_invitee_before_pair_lock(queryset):
+        nonlocal invitee_archived
+        was_unfetched = queryset._result_cache is None
+        if (
+            was_unfetched
+            and not invitee_archived
+            and queryset.query.select_for_update
+            and queryset.model is Participant
+        ):
+            invitee_archived = True
+            Participant.objects.filter(pk=invitee.pk).update(archived_at=timezone.now())
+        original_fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", archive_invitee_before_pair_lock)
+
+    response = kiosk_client.post(
+        reverse("kiosk-partner-activity"),
+        {
+            "action": "booking_link_invite",
+            "link-participant": invitee.pk,
+        },
+    )
+
+    assert invitee_archived is True
+    assert response.status_code == 200
+    assert not ParticipantBookingLink.objects.exists()
     assert not KioskActionAuditLog.objects.exists()
 
 

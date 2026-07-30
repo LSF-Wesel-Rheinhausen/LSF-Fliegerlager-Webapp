@@ -832,7 +832,7 @@ class KioskActionAuditLog(models.Model):
     )
     actor_family_member = models.ForeignKey(
         ParticipantFamilyMember,
-        on_delete=models.SET_NULL,
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
         related_name="performed_kiosk_action_audit_logs",
@@ -845,7 +845,7 @@ class KioskActionAuditLog(models.Model):
     )
     target_family_member = models.ForeignKey(
         ParticipantFamilyMember,
-        on_delete=models.SET_NULL,
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
         related_name="received_kiosk_action_audit_logs",

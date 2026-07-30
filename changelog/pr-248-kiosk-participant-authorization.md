@@ -51,11 +51,15 @@
   gesamten Schreibvorgang wiederverwendet, sodass auch parallele Widerrufe
   keinen Fremdschlüssel-/Vollmachts-Lockzyklus bilden. Nach dem Lock werden
   Aktivstatus, Hauptkonto und preisrelevante Rolle jedes Familienmitglieds
-  erneut geprüft; auch die annehmende Seite einer Einladung muss dann noch
-  aktiv sein.
+  erneut geprüft; bei Erstellung und Annahme einer Einladung müssen auch die
+  frisch gesperrten Teilnehmerzeilen noch aktiv und demselben Lager zugeordnet
+  sein.
 - Hält das konkrete Familienziel auch bei Eigenhaushalts-Schnellbuchungen im
   Audit fest, damit ein später verknüpfter Partner bei einer Stornierung
   weiterhin die tatsächlich betroffene Person protokolliert.
+- Schützt Familienmitglieder mit vorhandener Audit-Historie vor dem Löschen,
+  damit die protokollierte Akteurs- und Zielidentität dauerhaft erhalten
+  bleibt; fachliches Entfernen erfolgt weiterhin über die Deaktivierung.
 - Bindet jede Check-in-Zeile an ihren signierten Ausgangszustand, schreibt nur
   tatsächlich geänderte Zeilen und weist konkurrierend veränderte Daten ohne
   Teilaktualisierung zurück.
