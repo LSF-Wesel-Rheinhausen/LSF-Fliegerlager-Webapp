@@ -3249,3 +3249,129 @@ dialog::backdrop {
     font-size: 1.6rem;
   }
 }
+
+/* Multi-Step Wizard Dialog (#254) */
+.wizard-dialog {
+  max-width: 540px;
+  width: 92%;
+  border: none;
+  border-radius: var(--radius, 12px);
+  padding: 1.5rem;
+  background: var(--panel, #ffffff);
+  box-shadow: var(--shadow-lg, 0 10px 25px rgba(0, 0, 0, 0.15));
+}
+
+.wizard-header {
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+
+.wizard-title {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text, #111827);
+}
+
+.wizard-subtitle {
+  margin: 0 0 1rem 0;
+  font-size: 0.875rem;
+  color: var(--muted, #6b7280);
+}
+
+.wizard-progress {
+  display: flex;
+  justify-content: space-between;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  position: relative;
+  gap: 0.25rem;
+}
+
+.wizard-progress::before {
+  content: "";
+  position: absolute;
+  top: 14px;
+  left: 20px;
+  right: 20px;
+  height: 2px;
+  background: var(--border, #e5e7eb);
+  z-index: 0;
+}
+
+.wizard-progress__step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+  flex: 1;
+}
+
+.wizard-progress__num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--panel, #ffffff);
+  border: 2px solid var(--border, #d1d5db);
+  color: var(--muted, #6b7280);
+  font-size: 0.8rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease-in-out;
+}
+
+.wizard-progress__label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted, #6b7280);
+  margin-top: 0.25rem;
+  text-align: center;
+}
+
+.wizard-progress__step.is-active .wizard-progress__num {
+  border-color: var(--accent, #1f5d42);
+  background: var(--accent, #1f5d42);
+  color: #ffffff;
+}
+
+.wizard-progress__step.is-active .wizard-progress__label {
+  color: var(--accent, #1f5d42);
+}
+
+.wizard-progress__step.is-completed .wizard-progress__num {
+  border-color: var(--accent, #1f5d42);
+  background: var(--accent-light, #e8f5e9);
+  color: var(--accent, #1f5d42);
+}
+
+.wizard-step__title {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.wizard-step__desc {
+  margin: 0 0 1rem 0;
+  font-size: 0.875rem;
+  color: var(--muted, #6b7280);
+}
+
+.wizard-footer {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border, #e5e7eb);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.wizard-footer__nav {
+  display: flex;
+  gap: 0.5rem;
+}
