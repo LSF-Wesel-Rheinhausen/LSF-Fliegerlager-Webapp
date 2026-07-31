@@ -131,3 +131,58 @@ def test_login_rate_limiting_resets_after_window_expires(client):
         )
         assert response.status_code == 302
         assert response.url == "/camps/"
+
+
+@pytest.mark.django_db
+def test_successful_login_does_not_increment_failures(client):
+    from billing.models import LoginAttempt
+
+    UserFactory(username="validuser", password="valid-password")
+
+    # Perform 4 successful logins
+    for _ in range(4):
+        response = client.post(
+            "/login/",
+            {"username": "validuser", "password": "valid-password"},
+        )
+        assert response.status_code == 302
+
+    # Should not have recorded any failure attempts
+    assert LoginAttempt.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_empty_form_fields_do_not_increment_failures(client):
+    from billing.models import LoginAttempt
+
+    UserFactory(username="someuser")
+
+    # Post empty form multiple times
+    for _ in range(5):
+        response = client.post("/login/", {"username": "", "password": ""})
+        assert response.status_code == 200
+
+    # No failure attempts recorded since no authentication was attempted
+    assert LoginAttempt.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_login_rate_limiting_whitespace_normalized(client):
+    UserFactory(username="spaceuser", password="valid-password")
+
+    # 5 failed attempts with trailing/leading spaces in username
+    for _ in range(5):
+        client.post(
+            "/login/",
+            {"username": "  spaceuser  ", "password": "wrong-password"},
+            REMOTE_ADDR="192.168.2.1",
+        )
+
+    # Attempt with clean username from another IP should still be blocked
+    response = client.post(
+        "/login/",
+        {"username": "spaceuser", "password": "valid-password"},
+        REMOTE_ADDR="10.0.0.50",
+    )
+    assert response.status_code == 200
+    assert "Zu viele Fehlversuche" in response.content.decode("utf-8")
