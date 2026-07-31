@@ -56,3 +56,78 @@ def test_login_rate_limiting_blocks_by_username_across_different_ips(client):
     )
     assert response.status_code == 200
     assert "Zu viele Fehlversuche" in response.content.decode("utf-8")
+
+
+@pytest.mark.django_db
+def test_login_rate_limiting_username_is_case_insensitive(client):
+    UserFactory(username="AliceAdmin", password="valid-password")
+
+    # 5 failed attempts with mixed case username
+    for _ in range(5):
+        response = client.post(
+            "/login/",
+            {"username": "AliceAdmin", "password": "wrong-password"},
+            REMOTE_ADDR="192.168.1.1",
+        )
+        assert response.status_code == 200
+
+    # Attempt with lowercase username from a different IP should still be blocked
+    response = client.post(
+        "/login/",
+        {"username": "aliceadmin", "password": "valid-password"},
+        REMOTE_ADDR="10.0.0.1",
+    )
+    assert response.status_code == 200
+    assert "Zu viele Fehlversuche" in response.content.decode("utf-8")
+
+
+@pytest.mark.django_db
+def test_login_rate_limiting_different_users_not_blocked(client):
+    UserFactory(username="user1", password="valid-password")
+    UserFactory(username="user2", password="valid-password")
+
+    # 5 failed attempts for user1 from IP 1
+    for _ in range(5):
+        client.post(
+            "/login/",
+            {"username": "user1", "password": "wrong-password"},
+            REMOTE_ADDR="192.168.1.10",
+        )
+
+    # user2 from IP 2 should NOT be blocked
+    response = client.post(
+        "/login/",
+        {"username": "user2", "password": "valid-password"},
+        REMOTE_ADDR="192.168.1.20",
+    )
+    assert response.status_code == 302
+    assert response.url == "/camps/"
+
+
+@pytest.mark.django_db
+def test_login_rate_limiting_resets_after_window_expires(client):
+    from datetime import timedelta
+    from unittest.mock import patch
+
+    from django.utils import timezone
+
+    UserFactory(username="timeuser", password="valid-password")
+    initial_time = timezone.now()
+
+    # 5 failed attempts at initial time
+    with patch("billing.kiosk_security.timezone.now", return_value=initial_time):
+        for _ in range(5):
+            client.post(
+                "/login/",
+                {"username": "timeuser", "password": "wrong-password"},
+            )
+
+    # Fast forward time by 6 minutes (> 300 seconds window)
+    future_time = initial_time + timedelta(minutes=6)
+    with patch("billing.kiosk_security.timezone.now", return_value=future_time):
+        response = client.post(
+            "/login/",
+            {"username": "timeuser", "password": "valid-password"},
+        )
+        assert response.status_code == 302
+        assert response.url == "/camps/"
