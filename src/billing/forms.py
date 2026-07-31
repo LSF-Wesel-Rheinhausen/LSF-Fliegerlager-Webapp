@@ -93,6 +93,22 @@ class EmailOrUsernameAuthenticationForm(AuthenticationForm):
         label="Passwort", strip=False, widget=forms.PasswordInput(attrs={"autocomplete": "current-password"})
     )
 
+    def clean(self):
+        from .kiosk_security import check_login_rate_limit, consume_login_failure
+
+        if self.request and not check_login_rate_limit(self.request):
+            raise ValidationError(
+                "Zu viele Fehlversuche. Bitte versuche es in fünf Minuten erneut.",
+                code="rate_limited",
+            )
+
+        try:
+            return super().clean()
+        except ValidationError as e:
+            if self.request and e.code == "invalid_login":
+                consume_login_failure(self.request)
+            raise
+
 
 class DailySettlementBackupSettingsForm(forms.ModelForm):
     """Edit the singleton daily settlement backup schedule."""

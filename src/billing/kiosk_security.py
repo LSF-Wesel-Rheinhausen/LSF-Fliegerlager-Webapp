@@ -74,3 +74,37 @@ def consume_kiosk_registration_attempt(request: HttpRequest, access: CampKioskAc
         attempt_state.attempt_timestamps = recent_attempts
         attempt_state.save(update_fields=["attempt_timestamps", "updated_at"])
         return True
+
+
+def check_login_rate_limit(request: HttpRequest) -> bool:
+    """Return True if the client is allowed to attempt a login."""
+    from .models import LoginAttempt
+
+    now = timezone.now()
+    cutoff = now.timestamp() - 300  # 5 minutes window
+    client_key = kiosk_client_key(request)
+
+    attempt_state = LoginAttempt.objects.filter(client_key=client_key).first()
+    if not attempt_state:
+        return True
+
+    recent_failures = _recent_attempts(attempt_state.failure_timestamps, cutoff=cutoff)
+    return len(recent_failures) < 5
+
+
+def consume_login_failure(request: HttpRequest) -> None:
+    """Record a failed login attempt for the client."""
+    from .models import LoginAttempt
+
+    now = timezone.now()
+    cutoff = now.timestamp() - 300
+    LoginAttempt.objects.filter(updated_at__lt=now - timedelta(seconds=300)).delete()
+
+    with transaction.atomic():
+        attempt_state, _created = LoginAttempt.objects.select_for_update().get_or_create(
+            client_key=kiosk_client_key(request),
+        )
+        recent_failures = _recent_attempts(attempt_state.failure_timestamps, cutoff=cutoff)
+        recent_failures.append(now.timestamp())
+        attempt_state.failure_timestamps = recent_failures
+        attempt_state.save(update_fields=["failure_timestamps", "updated_at"])

@@ -199,6 +199,19 @@ class EmailDelivery(TimeStampedModel):
         return f"E-Mail-Zustellung {self.pk} ({self.get_status_display()})"
 
 
+class LoginAttempt(TimeStampedModel):
+    """Store failed login timestamps to rate-limit brute-force attacks."""
+
+    client_key = models.CharField(max_length=256, unique=True)
+    failure_timestamps = models.JSONField(default=list)
+
+    class Meta:
+        ordering = ["-updated_at"]
+
+    def __str__(self):
+        return f"Login Attempts (Client {self.client_key[:8]})"
+
+
 class UserProfile(TimeStampedModel):
     """Store editable application metadata for a Django user account."""
 
