@@ -1,6 +1,8 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
+from django.db import transaction
+from django.utils import timezone
 
 from .models import (
     BookingAuditLog,
@@ -26,6 +28,11 @@ from .models import (
     Shift,
     ShiftAssignment,
     UserProfile,
+)
+from .services import (
+    charge_audit_snapshot,
+    create_booking_delete_audit_log,
+    restore_booking_from_audit_log,
 )
 
 admin.site.unregister(User)
@@ -143,11 +150,64 @@ class ChargeAdmin(admin.ModelAdmin):
     list_filter = ("kind", "deleted_at")
     search_fields = ("id", "description", "participant__first_name", "participant__last_name")
     readonly_fields = ("deleted_at", "deleted_by")
+    actions = ["soft_delete_selected_charges", "restore_selected_charges"]
 
     @admin.display(description="Buchungsnr.", ordering="id")
     def booking_reference(self, charge: Charge) -> str:
         """Return the formatted booking reference for the admin changelist."""
         return charge.booking_reference
+
+    @admin.action(description="Ausgewählte Buchungen als gelöscht markieren (Soft-Delete)")
+    def soft_delete_selected_charges(self, request, queryset):
+        active_charges = list(queryset.filter(deleted_at__isnull=True))
+        if not active_charges:
+            self.message_user(request, "Keine aktiven Buchungen zum Löschen ausgewählt.", level="warning")
+            return
+        now = timezone.now()
+        with transaction.atomic():
+            for charge in active_charges:
+                before = charge_audit_snapshot(charge)
+                create_booking_delete_audit_log(charge, before, request.user)
+                charge.deleted_at = now
+                charge.deleted_by = request.user
+                charge.save(update_fields=["deleted_at", "deleted_by"])
+        self.message_user(request, f"{len(active_charges)} Buchung(en) wurden als gelöscht markiert.")
+
+    @admin.action(description="Ausgewählte gelöschte Buchungen wiederherstellen")
+    def restore_selected_charges(self, request, queryset):
+        deleted_charges = list(queryset.filter(deleted_at__isnull=False))
+        if not deleted_charges:
+            self.message_user(request, "Keine gelöschten Buchungen zur Wiederherstellung ausgewählt.", level="warning")
+            return
+        restored_count = 0
+        with transaction.atomic():
+            for charge in deleted_charges:
+                audit_log = (
+                    BookingAuditLog.objects.filter(charge=charge, action=BookingAuditLog.Action.DELETED)
+                    .order_by("-created_at")
+                    .first()
+                )
+                if audit_log:
+                    try:
+                        restore_booking_from_audit_log(audit_log, request.user)
+                        restored_count += 1
+                    except Exception:
+                        continue
+                else:
+                    before = charge_audit_snapshot(charge)
+                    charge.deleted_at = None
+                    charge.deleted_by = None
+                    charge.save(update_fields=["deleted_at", "deleted_by"])
+                    BookingAuditLog.objects.create(
+                        participant=charge.participant,
+                        charge=charge,
+                        changed_by=request.user,
+                        action=BookingAuditLog.Action.RESTORED,
+                        before=before,
+                        after=charge_audit_snapshot(charge),
+                    )
+                    restored_count += 1
+        self.message_user(request, f"{restored_count} Buchung(en) wurden wiederhergestellt.")
 
 
 @admin.register(BookingAuditLog)
@@ -156,6 +216,24 @@ class BookingAuditLogAdmin(admin.ModelAdmin):
     list_filter = ("action", "created_at")
     search_fields = ("charge__description", "participant__first_name", "participant__last_name")
     readonly_fields = ("participant", "charge", "action", "changed_by", "before", "after", "created_at")
+    actions = ["restore_charges_from_audit_log"]
+
+    @admin.action(description="Ausgewählte Buchungen aus Audit-Protokoll wiederherstellen")
+    def restore_charges_from_audit_log(self, request, queryset):
+        deletion_logs = list(queryset.filter(action=BookingAuditLog.Action.DELETED))
+        if not deletion_logs:
+            self.message_user(request, "Keine Löschungs-Protokolleinträge ausgewählt.", level="warning")
+            return
+        restored_count = 0
+        with transaction.atomic():
+            for log in deletion_logs:
+                if log.charge and log.charge.deleted_at is not None:
+                    try:
+                        restore_booking_from_audit_log(log, request.user)
+                        restored_count += 1
+                    except Exception:
+                        continue
+        self.message_user(request, f"{restored_count} Buchung(en) wurden aus dem Audit-Protokoll wiederhergestellt.")
 
 
 admin.site.register(Payment)

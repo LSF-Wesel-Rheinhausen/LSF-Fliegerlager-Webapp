@@ -1083,6 +1083,41 @@ def charge_delete(request: HttpRequest, charge_id: int) -> HttpResponse:
 
 @admin_required
 @require_POST
+def charge_batch_delete(request: HttpRequest, participant_id: int) -> HttpResponse:
+    """Soft-delete multiple charges for a participant atomically."""
+    participant = get_object_or_404(Participant, pk=participant_id)
+    raw_ids = request.POST.getlist("selected_charges")
+    selected_ids: list[int] = []
+    for raw in raw_ids:
+        try:
+            selected_ids.append(int(raw))
+        except (ValueError, TypeError):
+            continue
+
+    if not selected_ids:
+        messages.warning(request, "Keine Buchungen zum Löschen ausgewählt.")
+        return redirect("participant-detail", participant_id=participant.pk)
+
+    charges = list(Charge.objects.filter(participant=participant, pk__in=selected_ids, deleted_at__isnull=True))
+    if not charges:
+        messages.warning(request, "Keine gültigen Buchungen zum Löschen gefunden.")
+        return redirect("participant-detail", participant_id=participant.pk)
+
+    now = timezone.now()
+    with transaction.atomic():
+        for charge in charges:
+            before = charge_audit_snapshot(charge)
+            create_booking_delete_audit_log(charge, before, request.user)
+            charge.deleted_at = now
+            charge.deleted_by_id = request.user.pk
+            charge.save(update_fields=["deleted_at", "deleted_by"])
+
+    messages.success(request, f"{len(charges)} Buchung(en) wurden gelöscht und protokolliert.")
+    return redirect("participant-detail", participant_id=participant.pk)
+
+
+@admin_required
+@require_POST
 def booking_audit_restore(request: HttpRequest, audit_log_id: int) -> HttpResponse:
     """Restore a deleted booking from a deletion audit entry."""
     audit_log = get_object_or_404(
@@ -1101,6 +1136,49 @@ def booking_audit_restore(request: HttpRequest, audit_log_id: int) -> HttpRespon
 
     messages.success(request, f"Buchung „{restored_charge.description}“ wurde wiederhergestellt.")
     return redirect("participant-detail", participant_id=restored_charge.participant_id)
+
+
+@admin_required
+@require_POST
+def booking_audit_batch_restore(request: HttpRequest, participant_id: int) -> HttpResponse:
+    """Restore multiple deleted charges from audit logs for a participant atomically."""
+    participant = get_object_or_404(Participant, pk=participant_id)
+    raw_ids = request.POST.getlist("selected_audit_logs")
+    selected_ids: list[int] = []
+    for raw in raw_ids:
+        try:
+            selected_ids.append(int(raw))
+        except (ValueError, TypeError):
+            continue
+
+    if not selected_ids:
+        messages.warning(request, "Keine Protokolleinträge zur Wiederherstellung ausgewählt.")
+        return redirect("participant-detail", participant_id=participant.pk)
+
+    audit_logs = list(
+        BookingAuditLog.objects.select_related("participant", "charge").filter(
+            participant=participant,
+            pk__in=selected_ids,
+            action=BookingAuditLog.Action.DELETED,
+        )
+    )
+
+    restored_count = 0
+    with transaction.atomic():
+        for log in audit_logs:
+            if log.charge and log.charge.deleted_at is not None:
+                try:
+                    restore_booking_from_audit_log(log, request.user)
+                    restored_count += 1
+                except ValidationError:
+                    continue
+
+    if restored_count > 0:
+        messages.success(request, f"{restored_count} Buchung(en) wurden wiederhergestellt.")
+    else:
+        messages.warning(request, "Keine Buchungen konnten wiederhergestellt werden.")
+
+    return redirect("participant-detail", participant_id=participant.pk)
 
 
 @editor_required
