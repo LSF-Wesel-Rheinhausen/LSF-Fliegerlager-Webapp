@@ -96,7 +96,8 @@ class EmailOrUsernameAuthenticationForm(AuthenticationForm):
     def clean(self):
         from .kiosk_security import check_login_rate_limit, consume_login_failure
 
-        if self.request and not check_login_rate_limit(self.request):
+        raw_username = str(self.data.get("username", ""))
+        if self.request and not check_login_rate_limit(self.request, username=raw_username):
             raise ValidationError(
                 "Zu viele Fehlversuche. Bitte versuche es in fünf Minuten erneut.",
                 code="rate_limited",
@@ -106,7 +107,7 @@ class EmailOrUsernameAuthenticationForm(AuthenticationForm):
             return super().clean()
         except ValidationError as e:
             if self.request and e.code == "invalid_login":
-                consume_login_failure(self.request)
+                consume_login_failure(self.request, username=raw_username)
             raise
 
 

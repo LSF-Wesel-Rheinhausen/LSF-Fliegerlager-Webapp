@@ -76,35 +76,65 @@ def consume_kiosk_registration_attempt(request: HttpRequest, access: CampKioskAc
         return True
 
 
-def check_login_rate_limit(request: HttpRequest) -> bool:
-    """Return True if the client is allowed to attempt a login."""
+def login_user_key(username: str) -> str:
+    """Hash a normalized username without retaining PII in rate-limit records."""
+    normalized = username.strip().lower()
+    if not normalized:
+        return ""
+    return salted_hmac(
+        "billing.login-rate-limit.username.v1",
+        normalized,
+        algorithm="sha256",
+    ).hexdigest()
+
+
+def check_login_rate_limit(request: HttpRequest, username: str = "") -> bool:
+    """Return True if the client IP and username are allowed to attempt a login."""
     from .models import LoginAttempt
 
     now = timezone.now()
     cutoff = now.timestamp() - 300  # 5 minutes window
-    client_key = kiosk_client_key(request)
+    ip_key = f"ip:{kiosk_client_key(request)}"
 
-    attempt_state = LoginAttempt.objects.filter(client_key=client_key).first()
-    if not attempt_state:
-        return True
+    ip_attempt = LoginAttempt.objects.filter(client_key=ip_key).first()
+    if ip_attempt:
+        recent_ip_failures = _recent_attempts(ip_attempt.failure_timestamps, cutoff=cutoff)
+        if len(recent_ip_failures) >= 5:
+            return False
 
-    recent_failures = _recent_attempts(attempt_state.failure_timestamps, cutoff=cutoff)
-    return len(recent_failures) < 5
+    if username:
+        user_key_hash = login_user_key(username)
+        if user_key_hash:
+            user_key = f"user:{user_key_hash}"
+            user_attempt = LoginAttempt.objects.filter(client_key=user_key).first()
+            if user_attempt:
+                recent_user_failures = _recent_attempts(user_attempt.failure_timestamps, cutoff=cutoff)
+                if len(recent_user_failures) >= 5:
+                    return False
+
+    return True
 
 
-def consume_login_failure(request: HttpRequest) -> None:
-    """Record a failed login attempt for the client."""
+def consume_login_failure(request: HttpRequest, username: str = "") -> None:
+    """Record a failed login attempt for the client IP and targeted username."""
     from .models import LoginAttempt
 
     now = timezone.now()
     cutoff = now.timestamp() - 300
     LoginAttempt.objects.filter(updated_at__lt=now - timedelta(seconds=300)).delete()
 
+    keys_to_update = [f"ip:{kiosk_client_key(request)}"]
+    if username:
+        user_key_hash = login_user_key(username)
+        if user_key_hash:
+            keys_to_update.append(f"user:{user_key_hash}")
+
     with transaction.atomic():
-        attempt_state, _created = LoginAttempt.objects.select_for_update().get_or_create(
-            client_key=kiosk_client_key(request),
-        )
-        recent_failures = _recent_attempts(attempt_state.failure_timestamps, cutoff=cutoff)
-        recent_failures.append(now.timestamp())
-        attempt_state.failure_timestamps = recent_failures
-        attempt_state.save(update_fields=["failure_timestamps", "updated_at"])
+        for key in keys_to_update:
+            attempt_state, _created = LoginAttempt.objects.select_for_update().get_or_create(
+                client_key=key,
+            )
+            recent_failures = _recent_attempts(attempt_state.failure_timestamps, cutoff=cutoff)
+            recent_failures.append(now.timestamp())
+            attempt_state.failure_timestamps = recent_failures
+            attempt_state.save(update_fields=["failure_timestamps", "updated_at"])
