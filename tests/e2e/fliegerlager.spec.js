@@ -1301,3 +1301,20 @@ test("Admin can batch delete and restore booking charges via table checkboxes", 
   await expect(chargeCell1).toBeVisible();
   await expect(chargeCell2).toBeVisible();
 });
+
+test("Login rate limiting blocks user after repeated failed attempts", async ({ page }) => {
+  await page.goto("/login/");
+  await page.getByLabel("Benutzername oder E-Mail").fill("admin");
+
+  // Submit 5 failed password attempts
+  for (let i = 0; i < 5; i++) {
+    await page.getByLabel("Passwort").fill("wrong-password");
+    await page.getByRole("button", { name: "Anmelden" }).click();
+  }
+
+  // 6th attempt should show rate limit error message
+  await page.getByLabel("Passwort").fill("wrong-password");
+  await page.getByRole("button", { name: "Anmelden" }).click();
+
+  await expect(page.getByText("Zu viele Fehlversuche. Bitte versuche es in fünf Minuten erneut.")).toBeVisible();
+});
