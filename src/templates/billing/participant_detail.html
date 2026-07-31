@@ -77,64 +77,88 @@
   </section>
 
   <section class="panel stack">
-    <div class="toolbar compact-toolbar">
-      <div>
-        <h2>Buchungen</h2>
-        <p>Manuelle Kosten sowie Kiosk-Buchungen für Getränke und Essen.</p>
+    <form method="post" action="{% url 'charge-batch-delete' participant.pk %}">
+      {% csrf_token %}
+      <div class="toolbar compact-toolbar">
+        <div>
+          <h2>Buchungen</h2>
+          <p>Manuelle Kosten sowie Kiosk-Buchungen für Getränke und Essen.</p>
+        </div>
+        <div class="actions">
+          {% if user|can_manage_users %}
+            <button
+              type="submit"
+              id="btn-batch-delete-charges"
+              class="button button-danger"
+              disabled
+              onclick="return confirm('Ausgewählte Buchungen wirklich löschen?');"
+            >
+              Ausgewählte löschen (<span id="selected-charges-count">0</span>)
+            </button>
+          {% endif %}
+          {% if not participant.is_archived %}
+            <button
+              id="manual-charge-dialog-trigger"
+              type="button"
+              class="button"
+              aria-haspopup="dialog"
+            >
+              Buchung hinzufügen
+            </button>
+          {% endif %}
+        </div>
       </div>
-      {% if not participant.is_archived %}
-        <button
-          id="manual-charge-dialog-trigger"
-          type="button"
-          class="button"
-          aria-haspopup="dialog"
-        >
-          Buchung hinzufügen
-        </button>
-      {% endif %}
-    </div>
-    <table class="responsive-record-table">
-      <thead>
-        <tr>
-          <th>Nr.</th><th>Art</th><th>Beschreibung</th><th>Menge</th><th>Einzelpreis</th><th>Fördersatz</th><th>Summe</th><th>Datum</th><th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for charge in charges %}
+      <table class="responsive-record-table">
+        <thead>
           <tr>
-            <td data-label="Nr.">{{ charge.booking_reference }}</td>
-            <td data-label="Art">{{ charge.get_kind_display }}</td>
-            <td data-label="Beschreibung">{{ charge.description }}</td>
-            <td data-label="Menge">{{ charge.quantity }}</td>
-            <td data-label="Einzelpreis">{{ charge.unit_price|money_eur }}</td>
-            <td data-label="Fördersatz">{{ charge.foerdersatz|percent }}</td>
-            <td data-label="Summe">{{ charge.total|money_eur }}</td>
-            <td data-label="Datum">{{ charge.occurred_on|default:"-" }}</td>
-            <td data-label="Aktionen">
+            {% if user|can_manage_users %}
+              <th style="width: 36px; text-align: center;">
+                <input type="checkbox" id="select-all-charges" aria-label="Alle Buchungen auswählen">
+              </th>
+            {% endif %}
+            <th>Nr.</th><th>Art</th><th>Beschreibung</th><th>Menge</th><th>Einzelpreis</th><th>Fördersatz</th><th>Summe</th><th>Datum</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for charge in charges %}
+            <tr>
               {% if user|can_manage_users %}
-                <div class="row-actions">
-                  <a href="{% url 'charge-edit' charge.pk %}">Bearbeiten</a>
-                  <form method="post" action="{% url 'charge-delete' charge.pk %}">
-                    {% csrf_token %}
+                <td data-label="Auswahl" style="text-align: center;">
+                  <input type="checkbox" name="selected_charges" value="{{ charge.pk }}" class="charge-checkbox" aria-label="Buchung {{ charge.booking_reference }} auswählen">
+                </td>
+              {% endif %}
+              <td data-label="Nr.">{{ charge.booking_reference }}</td>
+              <td data-label="Art">{{ charge.get_kind_display }}</td>
+              <td data-label="Beschreibung">{{ charge.description }}</td>
+              <td data-label="Menge">{{ charge.quantity }}</td>
+              <td data-label="Einzelpreis">{{ charge.unit_price|money_eur }}</td>
+              <td data-label="Fördersatz">{{ charge.foerdersatz|percent }}</td>
+              <td data-label="Summe">{{ charge.total|money_eur }}</td>
+              <td data-label="Datum">{{ charge.occurred_on|default:"-" }}</td>
+              <td data-label="Aktionen">
+                {% if user|can_manage_users %}
+                  <div class="row-actions">
+                    <a href="{% url 'charge-edit' charge.pk %}">Bearbeiten</a>
                     <button
                       type="submit"
+                      formaction="{% url 'charge-delete' charge.pk %}"
                       class="button-link button-link-danger"
                       onclick="return confirm('Diese Buchung wirklich löschen?');"
                     >
                       Löschen
                     </button>
-                  </form>
-                </div>
-              {% else %}
-                -
-              {% endif %}
-            </td>
-          </tr>
-        {% empty %}
-          <tr><td colspan="9">Keine Buchungen vorhanden.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+                  </div>
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="{% if user|can_manage_users %}10{% else %}9{% endif %}">Keine Buchungen vorhanden.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </form>
   </section>
 
   <section class="panel stack">
@@ -159,69 +183,100 @@
   </section>
 
   <section class="panel stack">
-    <h2>Änderungsprotokoll</h2>
-    <table class="responsive-record-table">
-      <thead>
-        <tr>
-          <th>Zeitpunkt</th><th>Bearbeiter</th><th>Buchung</th><th>Vorher</th><th>Nachher</th><th>Aktion</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for log in audit_logs %}
+    <form method="post" action="{% url 'booking-audit-batch-restore' participant.pk %}">
+      {% csrf_token %}
+      <div class="toolbar compact-toolbar">
+        <div>
+          <h2>Änderungsprotokoll</h2>
+          <p>Protokoll aller Buchungsänderungen und Wiederherstellung gelöschter Einträge.</p>
+        </div>
+        {% if user|can_manage_users %}
+          <button
+            type="submit"
+            id="btn-batch-restore-audit"
+            class="button"
+            disabled
+            onclick="return confirm('Ausgewählte Buchungen wirklich wiederherstellen?');"
+          >
+            Ausgewählte wiederherstellen (<span id="selected-audit-count">0</span>)
+          </button>
+        {% endif %}
+      </div>
+      <table class="responsive-record-table">
+        <thead>
           <tr>
-            <td data-label="Zeitpunkt">{{ log.created_at }}</td>
-            <td data-label="Bearbeiter">{{ log.changed_by.email|default:log.changed_by.username|default:"System" }}</td>
-            <td data-label="Buchung">
-              {% if log.charge %}
-                {{ log.charge.description }}
-              {% else %}
-                {{ log.before.description }}
-              {% endif %}
-            </td>
-            <td data-label="Vorher">
-              {% if log.action == "restored" %}
-                -
-              {% else %}
-                {{ log.before.booking_reference|default:"-" }} ·
-                {{ log.before.kind }} · {{ log.before.description }} ·
-                {{ log.before.quantity }} x {{ log.before.unit_price }} ·
-                Fördersatz {{ log.before.foerdersatz|percent }}
-              {% endif %}
-            </td>
-            <td data-label="Nachher">
-              {% if log.action == "deleted" %}
-                Gelöscht
-              {% elif log.action == "restored" %}
-                Wiederhergestellt
-              {% else %}
-                {{ log.after.booking_reference|default:"-" }} ·
-                {{ log.after.kind }} · {{ log.after.description }} ·
-                {{ log.after.quantity }} x {{ log.after.unit_price }} ·
-                Fördersatz {{ log.after.foerdersatz|percent }}
-              {% endif %}
-            </td>
-            <td data-label="Aktion">
-              {% if user|can_manage_users and log.action == "deleted" and log.charge.deleted_at and log.participant %}
-                <form method="post" action="{% url 'booking-audit-restore' log.pk %}">
-                  {% csrf_token %}
-                  <button
-                    type="submit"
-                    class="button-link"
-                    onclick="return confirm('Diese Buchung wiederherstellen?');"
-                  >
-                    Wiederherstellen
-                  </button>
-                </form>
-              {% else %}
-                -
-              {% endif %}
-            </td>
+            {% if user|can_manage_users %}
+              <th style="width: 36px; text-align: center;">
+                <input type="checkbox" id="select-all-audit-logs" aria-label="Alle gelöschten Buchungen auswählen">
+              </th>
+            {% endif %}
+            <th>Zeitpunkt</th><th>Bearbeiter</th><th>Buchung</th><th>Vorher</th><th>Nachher</th><th>Aktion</th>
           </tr>
-        {% empty %}
-          <tr><td colspan="6">Noch keine Änderungen an Buchungen protokolliert.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {% for log in audit_logs %}
+            <tr>
+              {% if user|can_manage_users %}
+                <td data-label="Auswahl" style="text-align: center;">
+                  {% if log.action == "deleted" and log.charge.deleted_at and log.participant %}
+                    <input type="checkbox" name="selected_audit_logs" value="{{ log.pk }}" class="audit-log-checkbox" aria-label="Gelöschte Buchung {{ log.charge.description }} auswählen">
+                  {% endif %}
+                </td>
+              {% endif %}
+              <td data-label="Zeitpunkt">{{ log.created_at }}</td>
+              <td data-label="Bearbeiter">{{ log.changed_by.email|default:log.changed_by.username|default:"System" }}</td>
+              <td data-label="Buchung">
+                {% if log.charge %}
+                  {{ log.charge.description }}
+                {% else %}
+                  {{ log.before.description }}
+                {% endif %}
+              </td>
+              <td data-label="Vorher">
+                {% if log.action == "restored" %}
+                  -
+                {% else %}
+                  {{ log.before.booking_reference|default:"-" }} ·
+                  {{ log.before.kind }} · {{ log.before.description }} ·
+                  {{ log.before.quantity }} x {{ log.before.unit_price }} ·
+                  Fördersatz {{ log.before.foerdersatz|percent }}
+                {% endif %}
+              </td>
+              <td data-label="Nachher">
+                {% if log.action == "deleted" %}
+                  Gelöscht
+                {% elif log.action == "restored" %}
+                  Wiederhergestellt
+                {% else %}
+                  {{ log.after.booking_reference|default:"-" }} ·
+                  {{ log.after.kind }} · {{ log.after.description }} ·
+                  {{ log.after.quantity }} x {{ log.after.unit_price }} ·
+                  Fördersatz {{ log.after.foerdersatz|percent }}
+                {% endif %}
+              </td>
+              <td data-label="Aktion">
+                {% if user|can_manage_users and log.action == "deleted" and log.charge.deleted_at and log.participant %}
+                  <form method="post" action="{% url 'booking-audit-restore' log.pk %}" style="display: inline;">
+                    {% csrf_token %}
+                    <button
+                      type="submit"
+                      class="button-link"
+                      onclick="return confirm('Diese Buchung wiederherstellen?');"
+                    >
+                      Wiederherstellen
+                    </button>
+                  </form>
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="{% if user|can_manage_users %}7{% else %}6{% endif %}">Noch keine Änderungen an Buchungen protokolliert.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </form>
   </section>
 
   {% if not participant.is_archived %}
@@ -306,6 +361,44 @@
             errorTarget?.focus();
           }
         {% endif %}
+
+        const setupBatchSelection = (selectAllId, checkboxClass, btnId, countId) => {
+          const selectAllEl = document.getElementById(selectAllId);
+          const btnEl = document.getElementById(btnId);
+          const countEl = document.getElementById(countId);
+          if (!selectAllEl || !btnEl || !countEl) return;
+
+          const getCheckboxes = () => Array.from(document.querySelectorAll(`.${checkboxClass}`));
+
+          const updateState = () => {
+            const boxes = getCheckboxes();
+            const checked = boxes.filter((c) => c.checked);
+            countEl.textContent = String(checked.length);
+            btnEl.disabled = checked.length === 0;
+            if (boxes.length > 0) {
+              selectAllEl.checked = checked.length === boxes.length;
+              selectAllEl.indeterminate = checked.length > 0 && checked.length < boxes.length;
+            }
+          };
+
+          selectAllEl.addEventListener("change", (e) => {
+            getCheckboxes().forEach((c) => {
+              c.checked = e.target.checked;
+            });
+            updateState();
+          });
+
+          document.addEventListener("change", (e) => {
+            if (e.target && e.target.classList.contains(checkboxClass)) {
+              updateState();
+            }
+          });
+
+          updateState();
+        };
+
+        setupBatchSelection("select-all-charges", "charge-checkbox", "btn-batch-delete-charges", "selected-charges-count");
+        setupBatchSelection("select-all-audit-logs", "audit-log-checkbox", "btn-batch-restore-audit", "selected-audit-count");
       })();
     </script>
   {% endif %}

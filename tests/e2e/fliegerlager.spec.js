@@ -1237,3 +1237,67 @@ for (const viewport of [
     await assertNoUnexpectedOverflow(page);
   });
 }
+
+test("Admin can batch delete and restore booking charges via table checkboxes", async ({ page }) => {
+  await loginAsAdmin(page);
+  await createCamp(page, "Batch-Lager");
+
+  await page.getByRole("link", { name: "Preise verwalten" }).first().click();
+  await page.getByRole("button", { name: "Getränk anlegen" }).click();
+  const priceDialog = page.locator("dialog#price-rule-dialog");
+  await priceDialog.getByLabel("Name / Bezeichnung").fill("Cola");
+  await priceDialog.getByLabel("Einzelpreis (EUR)").fill("2.50");
+  await priceDialog.getByRole("button", { name: "Speichern", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Preisregel wurde gespeichert.");
+  await page.getByRole("link", { name: "Zurück zum Lager" }).click();
+
+  await createParticipant(page, "Batch", "Tester");
+
+  // Add 2 manual charges
+  const manualChargeDialog = page.getByRole("dialog", { name: "Manuelle Buchung" });
+
+  await page.getByRole("button", { name: "Buchung hinzufügen" }).click();
+  await manualChargeDialog.getByLabel("Preisregel auswählen").selectOption({ index: 0 });
+  await manualChargeDialog.getByLabel("Notiz (optional)").fill("Batch Pos 1");
+  await manualChargeDialog.getByRole("button", { name: "Buchen" }).click();
+
+  await page.getByRole("button", { name: "Buchung hinzufügen" }).click();
+  await manualChargeDialog.getByLabel("Preisregel auswählen").selectOption({ index: 0 });
+  await manualChargeDialog.getByLabel("Notiz (optional)").fill("Batch Pos 2");
+  await manualChargeDialog.getByRole("button", { name: "Buchen" }).click();
+
+  const chargeCell1 = page.locator('td[data-label="Beschreibung"]').filter({ hasText: "Batch Pos 1" });
+  const chargeCell2 = page.locator('td[data-label="Beschreibung"]').filter({ hasText: "Batch Pos 2" });
+
+  await expect(chargeCell1).toBeVisible();
+  await expect(chargeCell2).toBeVisible();
+
+  // Select all via header checkbox
+  const selectAllCharges = page.locator("#select-all-charges");
+  await selectAllCharges.check();
+
+  const batchDeleteBtn = page.locator("#btn-batch-delete-charges");
+  await expect(batchDeleteBtn).toBeEnabled();
+  await expect(page.locator("#selected-charges-count")).toHaveText("2");
+
+  // Accept confirm dialog and click batch delete
+  page.once("dialog", (dialog) => dialog.accept());
+  await batchDeleteBtn.click();
+
+  await expect(page.getByText("2 Buchung(en) wurden gelöscht")).toBeVisible();
+
+  // Select all audit logs via header checkbox and batch restore
+  const selectAllAudit = page.locator("#select-all-audit-logs");
+  await selectAllAudit.check();
+
+  const batchRestoreBtn = page.locator("#btn-batch-restore-audit");
+  await expect(batchRestoreBtn).toBeEnabled();
+  await expect(page.locator("#selected-audit-count")).toHaveText("2");
+
+  page.once("dialog", (dialog) => dialog.accept());
+  await batchRestoreBtn.click();
+
+  await expect(page.getByText("2 Buchung(en) wurden wiederhergestellt")).toBeVisible();
+  await expect(chargeCell1).toBeVisible();
+  await expect(chargeCell2).toBeVisible();
+});

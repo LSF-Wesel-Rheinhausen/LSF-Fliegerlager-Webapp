@@ -1,0 +1,3 @@
+- Implemented batch deletion (soft-delete) and batch restoration of booking charges in participant detail view and Django Admin interface (#252).
+- Added table header "Select All" checkboxes and individual row checkboxes for charges and audit log tables.
+- Added admin bulk actions `soft_delete_selected_charges`, `restore_selected_charges`, and `restore_charges_from_audit_log`.
