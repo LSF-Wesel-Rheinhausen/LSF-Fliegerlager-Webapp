@@ -94,6 +94,13 @@ proxy_set_header X-Forwarded-For $remote_addr;
 Angehängte Weiterleitungsketten wie bei `$proxy_add_x_forwarded_for` werden absichtlich nicht vertraut. Der App-Port
 darf für Clients nicht unter Umgehung des konfigurierten Proxys erreichbar sein.
 
+### Rate Limiting & Härtung für Go-Live (Fail2ban / Reverse Proxy)
+
+Die Anwendung schützt Logins (Standard-Login & Kiosk-PIN) anwendungsseitig vor Brute-Force-Angriffen (Sperre nach 5 Fehlversuchen für 5 Minuten). Für den produktiven Einsatz im öffentlichen Internet wird eine ergänzende Härtung auf Infrastruktur-Ebene empfohlen:
+
+- **Reverse Proxy Rate Limiting (Nginx / Traefik):** Richte auf dem Reverse Proxy ein Zonen-Rate-Limiting für `/login/` ein (z. B. `limit_req_zone` in Nginx), um automatisierte Bot-Anfragen direkt am Proxy abzufangen, bevor sie Python-Worker belasten.
+- **Fail2ban (Host-Ebene):** Auf dem Deployment-Host kann `fail2ban` installiert werden, um die Access-Logs des Reverse Proxys auf wiederholte HTTP 429/401-Fehler zu überwachen und angreifende Client-IPs direkt per Linux-Firewall (`iptables`/`nftables`) zu sperren.
+
 ## Authelia Trusted-Header-SSO
 
 Optional kann Authelia bereits vorhandene Django-Benutzer ueber deren eindeutige E-Mail-Adresse anmelden:
