@@ -186,3 +186,76 @@ def test_login_rate_limiting_whitespace_normalized(client):
     )
     assert response.status_code == 200
     assert "Zu viele Fehlversuche" in response.content.decode("utf-8")
+
+
+@pytest.mark.django_db
+def test_login_rate_limiting_with_email_address(client):
+    UserFactory(username="emailuser", email="emailuser@example.org", password="valid-password")
+
+    # 5 failed attempts using email address
+    for i in range(5):
+        client.post(
+            "/login/",
+            {"username": "emailuser@example.org", "password": "wrong-password"},
+            REMOTE_ADDR=f"10.1.1.{i + 1}",
+        )
+
+    # 6th attempt with email address should be blocked
+    response = client.post(
+        "/login/",
+        {"username": "emailuser@example.org", "password": "valid-password"},
+        REMOTE_ADDR="10.1.1.99",
+    )
+    assert response.status_code == 200
+    assert "Zu viele Fehlversuche" in response.content.decode("utf-8")
+
+
+@pytest.mark.django_db
+def test_login_rate_limiting_trusted_proxy_header(client, settings):
+    settings.KIOSK_ACCESS_TRUSTED_PROXY_ADDRESSES = ["172.18.0.2"]
+    UserFactory(username="proxyuser", password="valid-password")
+
+    # 5 failed attempts through a trusted proxy with different forwarded IPs
+    for _ in range(5):
+        client.post(
+            "/login/",
+            {"username": "proxyuser", "password": "wrong-password"},
+            REMOTE_ADDR="172.18.0.2",
+            HTTP_X_FORWARDED_FOR="198.51.100.42",
+        )
+
+    # 6th attempt from the same forwarded IP via proxy should be blocked
+    response = client.post(
+        "/login/",
+        {"username": "otheruser", "password": "valid-password"},
+        REMOTE_ADDR="172.18.0.2",
+        HTTP_X_FORWARDED_FOR="198.51.100.42",
+    )
+    assert response.status_code == 200
+    assert "Zu viele Fehlversuche" in response.content.decode("utf-8")
+
+
+@pytest.mark.django_db
+def test_old_login_attempts_are_purged_on_new_failures(client):
+    from datetime import timedelta
+    from unittest.mock import patch
+
+    from django.utils import timezone
+
+    from billing.models import LoginAttempt
+
+    UserFactory(username="olduser", password="valid-password")
+    old_time = timezone.now() - timedelta(minutes=10)
+
+    # Create an old attempt in DB
+    with patch("billing.kiosk_security.timezone.now", return_value=old_time):
+        client.post("/login/", {"username": "olduser", "password": "wrong-password"})
+
+    assert LoginAttempt.objects.count() > 0
+
+    # New failed attempt today should clean up old expired attempts
+    client.post("/login/", {"username": "olduser", "password": "wrong-password"})
+
+    # Old records older than 5 mins should be deleted
+    old_records = LoginAttempt.objects.filter(updated_at__lt=timezone.now() - timedelta(minutes=5))
+    assert old_records.count() == 0
