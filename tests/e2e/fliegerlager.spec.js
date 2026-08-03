@@ -433,8 +433,11 @@ test("Admin creates and edits a manual booking and sees the change log", async (
 
   await expect(page.getByRole("heading", { name: "Ada Lovelace" })).toBeVisible();
   await expect(page.getByText("Buchung wurde gespeichert und protokolliert.")).toBeVisible();
-  await expect(page.getByRole("cell", { name: "Cola korrigiert" }).first()).toBeVisible();
-  await expect(page.getByRole("cell", { name: "7,50 €" })).toBeVisible();
+  const updatedBookingRow = bookings.getByRole("row").filter({
+    has: page.getByRole("cell", { name: /Cola korrigiert$/ }),
+  });
+  await expect(updatedBookingRow.getByRole("cell", { name: /Cola korrigiert$/ })).toBeVisible();
+  await expect(updatedBookingRow.getByRole("cell", { name: /7,50 €$/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Änderungsprotokoll" })).toBeVisible();
   await expect(page.getByText("Cola · 2.00 x 2.50")).toBeVisible();
   await expect(page.getByText("Cola korrigiert · 3.00 x 2.50")).toBeVisible();

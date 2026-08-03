@@ -2,38 +2,42 @@ name: DAST ZAP Scan
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
     paths-ignore:
-      - 'graphify-out/**'
-      - '**.md'
-      - 'docs/**'
+      - "graphify-out/**"
+      - "**.md"
+      - "docs/**"
   pull_request:
-    branches: [ "main" ]
+    branches:
+      - main
     paths-ignore:
-      - 'graphify-out/**'
-      - '**.md'
-      - 'docs/**'
+      - "graphify-out/**"
+      - "**.md"
+      - "docs/**"
   schedule:
-    - cron: '0 5 * * 1'
+    - cron: "0 5 * * 1"
 
 permissions:
   contents: read
-  actions: write
-  issues: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   zap_scan:
+    name: OWASP ZAP baseline scan
     runs-on: ubuntu-latest
-    name: OWASP ZAP Baseline Scan
+    timeout-minutes: 15
+
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Build and Start Application
+      - name: Build and start application
         run: |
-          # Build test image
           docker build -t lsf-webapp:test .
-          # Run the production entrypoint so ZAP scans Gunicorn and WhiteNoise, not Django's dev static handler.
           docker run -d \
             -p 8000:8000 \
             --name lsf-webapp \
@@ -41,13 +45,28 @@ jobs:
             -e DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1 \
             -e DJANGO_SECRET_KEY=test-only-zap-secret-with-more-than-fifty-characters-1234567890 \
             lsf-webapp:test
-          # Wait for the server to be ready
-          sleep 10
 
-      - name: ZAP Baseline Scan
+      - name: Wait for application health
+        run: |
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error --max-time 2 http://127.0.0.1:8000/healthz/ > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs lsf-webapp
+          exit 1
+
+      - name: ZAP baseline scan
         uses: zaproxy/action-baseline@v0.15.0
         with:
-          target: 'http://localhost:8000'
-          rules_file_name: '.zap/rules.tsv'
-          artifact_name: 'zap-scan'
-          cmd_options: '-a'
+          target: "http://localhost:8000"
+          rules_file_name: ".zap/rules.tsv"
+          artifact_name: "zap-scan"
+          cmd_options: "-a"
+          allow_issue_writing: false
+          fail_action: false
+
+      - name: Stop application
+        if: always()
+        run: docker rm --force lsf-webapp || true
