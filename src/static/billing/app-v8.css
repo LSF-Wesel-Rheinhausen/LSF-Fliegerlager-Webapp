@@ -2753,6 +2753,10 @@ input[type="date"] {
     -webkit-overflow-scrolling: touch;
   }
 
+  .kiosk-nav {
+    display: none;
+  }
+
   .kiosk-mobile-bottom-nav {
     position: fixed;
     bottom: 0;
@@ -2762,7 +2766,7 @@ input[type="date"] {
     display: flex;
     justify-content: space-around;
     align-items: center;
-    background: var(--surface);
+    background: var(--panel);
     border-top: 1px solid var(--line);
     padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
     box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
