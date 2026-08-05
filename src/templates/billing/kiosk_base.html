@@ -63,6 +63,30 @@
       {% endfor %}
       {% block content %}{% endblock %}
     </main>
+    {% if participant and kiosk_mode == "private" %}
+      <nav class="kiosk-mobile-bottom-nav" aria-label="Mobile Navigation">
+        <a href="{{ kiosk_urls.home }}" class="kiosk-mobile-bottom-nav__item">
+          <span class="kiosk-mobile-bottom-nav__icon" aria-hidden="true">🏠</span>
+          <span class="kiosk-mobile-bottom-nav__label">Kiosk</span>
+        </a>
+        <a href="{{ kiosk_urls.shifts }}" class="kiosk-mobile-bottom-nav__item">
+          <span class="kiosk-mobile-bottom-nav__icon" aria-hidden="true">📋</span>
+          <span class="kiosk-mobile-bottom-nav__label">Dienste</span>
+        </a>
+        <a href="{{ kiosk_urls.partner_activity }}" class="kiosk-mobile-bottom-nav__item">
+          <span class="kiosk-mobile-bottom-nav__icon" aria-hidden="true">🤝</span>
+          <span class="kiosk-mobile-bottom-nav__label">Partner</span>
+        </a>
+        <a href="{% url 'user-guide' %}" class="kiosk-mobile-bottom-nav__item">
+          <span class="kiosk-mobile-bottom-nav__icon" aria-hidden="true">❓</span>
+          <span class="kiosk-mobile-bottom-nav__label">Hilfe</span>
+        </a>
+        <a href="{{ kiosk_urls.logout }}" class="kiosk-mobile-bottom-nav__item">
+          <span class="kiosk-mobile-bottom-nav__icon" aria-hidden="true">🚪</span>
+          <span class="kiosk-mobile-bottom-nav__label">Abmelden</span>
+        </a>
+      </nav>
+    {% endif %}
     {% if kiosk_mode == "private" and not kiosk_access_prompt %}
       {% include "includes/pwa_install_dialog.html" %}
     {% endif %}

@@ -1478,3 +1478,31 @@ test("Mobile Kiosk: checkmark for completed shifts is not horizontally distorted
   expect(checkBox.width).toEqual(checkBox.height);
   expect(checkBox.width).toBe(32);
 });
+
+test("Mobile Kiosk: fixed bottom navigation bar is present and functional on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await setupFirstAdmin(page);
+  await createCamp(page, "Bottom Nav Mobile Camp", 0, 4);
+  await createParticipant(page, "Nav", "Tester", "", "1234");
+  await logout(page);
+
+  await openKiosk(page, "/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Nav Tester" });
+  await page.getByLabel("PIN:", { exact: true }).fill("1234");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await expect(page).toHaveURL(/.*\/kiosk\//);
+
+  const bottomNav = page.locator(".kiosk-mobile-bottom-nav");
+  await expect(bottomNav).toBeVisible();
+
+  // Verify fixed position at bottom
+  const position = await bottomNav.evaluate((el) => window.getComputedStyle(el).position);
+  expect(position).toBe("fixed");
+
+  // Verify navigation items exist
+  await expect(bottomNav.getByRole("link", { name: "Kiosk" })).toBeVisible();
+  await expect(bottomNav.getByRole("link", { name: "Dienste" })).toBeVisible();
+  await expect(bottomNav.getByRole("link", { name: "Partner" })).toBeVisible();
+  await expect(bottomNav.getByRole("link", { name: "Hilfe" })).toBeVisible();
+  await expect(bottomNav.getByRole("link", { name: "Abmelden" })).toBeVisible();
+});
