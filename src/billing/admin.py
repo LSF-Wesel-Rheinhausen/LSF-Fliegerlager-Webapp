@@ -4,6 +4,7 @@ from django.contrib.auth.models import User
 from django.db import transaction
 from django.utils import timezone
 
+from .forms import ExpenseAdminForm
 from .models import (
     BookingAuditLog,
     Camp,
@@ -237,7 +238,13 @@ class BookingAuditLogAdmin(admin.ModelAdmin):
 
 
 admin.site.register(Payment)
-admin.site.register(Expense)
+
+
+@admin.register(Expense)
+class ExpenseAdmin(admin.ModelAdmin):
+    form = ExpenseAdminForm
+
+
 admin.site.register(DailySettlementBackupSettings)
 
 
