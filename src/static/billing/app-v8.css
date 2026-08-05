@@ -1749,6 +1749,13 @@ textarea {
   border-bottom: 1px solid var(--line);
 }
 
+.kiosk-partner-authorization {
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .kiosk-dialog-summary {
   max-width: 340px;
   margin: 0 auto;
