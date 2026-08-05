@@ -89,6 +89,7 @@ from .models import (
     Participant,
     ParticipantBookingLink,
     ParticipantFamilyMember,
+    ParticipantPin,
     PriceRule,
     Settlement,
     SettlementRun,
@@ -1206,6 +1207,18 @@ def pin_reset(request, participant_id):
             request,
             "Teilnehmer-PIN wurde gesperrt. Vor der nächsten Anmeldung muss eine neue PIN gesetzt werden.",
         )
+    return redirect("participant-detail", participant_id=participant.pk)
+
+
+@admin_required
+def pin_unlock(request, participant_id):
+    participant = get_object_or_404(Participant, pk=participant_id, archived_at__isnull=True)
+    if request.method == "POST":
+        with transaction.atomic():
+            pin, _ = ParticipantPin.objects.get_or_create(participant=participant)
+            pin.unlock_pin(changed_by=request.user)
+            pin.save()
+        messages.success(request, "Timeout wurde zurückgesetzt.")
     return redirect("participant-detail", participant_id=participant.pk)
 
 

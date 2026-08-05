@@ -154,6 +154,7 @@ urlpatterns = [
     path("participants/<int:participant_id>/payments/new/", views.payment_create, name="payment-create"),
     path("participants/<int:participant_id>/pin/set/", views.pin_set, name="pin-set"),
     path("participants/<int:participant_id>/pin/reset/", views.pin_reset, name="pin-reset"),
+    path("participants/<int:participant_id>/pin/unlock/", views.pin_unlock, name="pin-unlock"),
     path("camps/<int:camp_id>/prices/", views.price_rules_manage, name="price-rules-manage"),
     path("camps/<int:camp_id>/prices/new/", views.price_rule_create, name="price-rule-create"),
     path("prices/<int:price_rule_id>/edit/", views.price_rule_edit, name="price-rule-edit"),

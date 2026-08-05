@@ -534,6 +534,11 @@ class ParticipantPin(TimeStampedModel):
         self.locked_until = None
         self.changed_by = changed_by
 
+    def unlock_pin(self, changed_by=None):
+        self.failed_attempts = 0
+        self.locked_until = None
+        self.changed_by = changed_by
+
     @property
     def is_locked(self):
         return self.locked_until is not None and self.locked_until > timezone.now()
@@ -614,6 +619,11 @@ class ParticipantFamilyMemberPin(TimeStampedModel):
         """Force the companion to choose a new kiosk PIN."""
         self.pin_hash = ""
         self.must_set_pin = True
+        self.failed_attempts = 0
+        self.locked_until = None
+
+    def unlock_pin(self) -> None:
+        """Reset failed attempts and clear temporary lockout."""
         self.failed_attempts = 0
         self.locked_until = None
 
