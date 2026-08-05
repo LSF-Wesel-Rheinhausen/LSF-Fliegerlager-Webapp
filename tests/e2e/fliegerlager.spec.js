@@ -1455,3 +1455,26 @@ test("Mobile Kiosk: check-in date selection does not overflow container on mobil
   const clientWidth = await page.evaluate(() => document.documentElement.clientWidth);
   expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
 });
+
+test("Mobile Kiosk: checkmark for completed shifts is not horizontally distorted on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await setupFirstAdmin(page);
+  await createCamp(page, "Shifts Mobile Camp", 0, 4);
+  await createParticipant(page, "Shift", "Master", "", "1234");
+  await logout(page);
+
+  await openKiosk(page, "/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Shift Master" });
+  await page.getByLabel("PIN:", { exact: true }).fill("1234");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await expect(page).toHaveURL(/.*\/kiosk\//);
+
+  await page.goto("/kiosk/shifts/");
+  const checkIcon = page.locator(".shift-progress__check");
+  await expect(checkIcon).toBeVisible();
+
+  // Assert checkmark circle is perfectly 1:1 ratio and not squished horizontally
+  const checkBox = await checkIcon.boundingBox();
+  expect(checkBox.width).toEqual(checkBox.height);
+  expect(checkBox.width).toBe(32);
+});
