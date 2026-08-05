@@ -170,7 +170,7 @@
               {% endif %}
             </td>
             <td>
-              <div class="button-group">
+              <div class="row-actions">
                 <a href="{% url 'shared-expense-approve' expense.pk %}" class="button button-small">Genehmigen &amp; Umlegen</a>
                 <button type="button" class="button button-small button-danger" data-open-reject-dialog data-expense-id="{{ expense.pk }}" data-expense-desc="{{ expense.description }}">Ablehnen</button>
               </div>

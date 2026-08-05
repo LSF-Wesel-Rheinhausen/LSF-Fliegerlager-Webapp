@@ -3048,12 +3048,12 @@ dialog::backdrop {
 }
 
 .button-group {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  align-items: center;
+  display: grid;
   gap: 8px;
-  min-width: max-content;
+}
+
+.button-group .button {
+  width: 100%;
 }
 
 
