@@ -6,6 +6,7 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, SetPasswordForm, UserCreationForm
 from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import UploadedFile
 from django.core.validators import FileExtensionValidator, RegexValidator
 from django.db import models, transaction
 from django.utils.formats import number_format
@@ -54,6 +55,7 @@ HEIC_BRANDS = frozenset(
     }
 )
 RECEIPT_HEADER_SIZE = 64
+MAX_HEIF_FTYP_BOX_SIZE = 4096
 validate_kiosk_camp_pin = RegexValidator(
     regex=r"\A[0-9]{6,12}\Z",
     message="Die Lager-PIN muss aus 6 bis 12 Ziffern bestehen.",
@@ -86,12 +88,17 @@ def _matches_receipt_signature(extension: str, header: bytes) -> bool:
     return False
 
 
-def _read_receipt_header(upload: Any) -> bytes:
+def _read_receipt_header(upload: Any, extension: str) -> bytes:
     try:
         original_position = upload.tell()
         upload.seek(0)
         try:
             header = upload.read(RECEIPT_HEADER_SIZE)
+            if extension == "heic" and len(header) >= 8 and header[4:8] == b"ftyp":
+                box_size = int.from_bytes(header[:4], byteorder="big")
+                if RECEIPT_HEADER_SIZE < box_size <= MAX_HEIF_FTYP_BOX_SIZE:
+                    upload.seek(0)
+                    header = upload.read(box_size)
         finally:
             upload.seek(original_position)
     except (AttributeError, OSError, ValueError) as error:
@@ -118,7 +125,7 @@ def validate_receipt_upload(upload: Any) -> Any:
     if content_type and content_type not in RECEIPT_CONTENT_TYPES_BY_EXTENSION[extension]:
         raise ValidationError("Der Dateityp des Rechnungsbelegs wird nicht unterstützt.")
 
-    if not _matches_receipt_signature(extension, _read_receipt_header(upload)):
+    if not _matches_receipt_signature(extension, _read_receipt_header(upload, extension)):
         raise ValidationError("Der Dateiinhalt passt nicht zum Dateityp des Rechnungsbelegs.")
 
     return upload
@@ -695,7 +702,8 @@ class ExpenseAdminForm(forms.ModelForm):
     """Apply receipt boundary validation to Django's administrative expense form."""
 
     def clean_receipt(self) -> Any:
-        return validate_receipt_upload(self.cleaned_data.get("receipt"))
+        receipt = self.cleaned_data.get("receipt")
+        return validate_receipt_upload(receipt) if isinstance(receipt, UploadedFile) else receipt
 
     class Meta:
         model = Expense
@@ -720,7 +728,8 @@ class ExpenseAdminForm(forms.ModelForm):
 class ExpenseForm(forms.ModelForm):
     def clean_receipt(self) -> Any:
         """Validate the optional receipt upload attached to an administrative expense."""
-        return validate_receipt_upload(self.cleaned_data.get("receipt"))
+        receipt = self.cleaned_data.get("receipt")
+        return validate_receipt_upload(receipt) if isinstance(receipt, UploadedFile) else receipt
 
     class Meta:
         model = Expense
@@ -749,7 +758,8 @@ class ExpenseForm(forms.ModelForm):
 class SharedExpenseRequestForm(forms.ModelForm):
     def clean_receipt(self) -> Any:
         """Validate the optional receipt upload attached to a kiosk expense request."""
-        return validate_receipt_upload(self.cleaned_data.get("receipt"))
+        receipt = self.cleaned_data.get("receipt")
+        return validate_receipt_upload(receipt) if isinstance(receipt, UploadedFile) else receipt
 
     class Meta:
         model = Expense

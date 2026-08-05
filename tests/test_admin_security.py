@@ -1,6 +1,7 @@
 import pytest
 from django.contrib import admin
 from django.contrib.auth.models import Permission
+from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
@@ -66,6 +67,43 @@ def test_expense_admin_rejects_spoofed_receipt_content(client):
     assert response.status_code == 200
     assert "Dateiinhalt passt nicht zum Dateityp" in response.content.decode()
     assert not Expense.objects.filter(description="Manipulierter Beleg").exists()
+
+
+@pytest.mark.django_db
+def test_expense_admin_allows_metadata_update_with_legacy_receipt(client, settings, tmp_path):
+    settings.MEDIA_ROOT = tmp_path
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp)
+    expense = Expense.objects.create(
+        camp=camp,
+        participant=participant,
+        category="Verbrauchsmaterial",
+        description="Alter Beleg",
+        amount="12.50",
+        status=Expense.Status.PENDING,
+        allocation_method=Expense.AllocationMethod.NONE,
+    )
+    expense.receipt.save("legacy.pdf", ContentFile(b"legacy receipt without signature"))
+    client.force_login(SuperUserFactory())
+
+    response = client.post(
+        reverse("admin:billing_expense_change", args=[expense.pk]),
+        {
+            "camp": camp.pk,
+            "participant": participant.pk,
+            "category": "Verbrauchsmaterial",
+            "description": "Aktualisierte Metadaten",
+            "amount": "12.50",
+            "status": Expense.Status.PENDING,
+            "allocation_method": Expense.AllocationMethod.NONE,
+            "_save": "Speichern",
+        },
+    )
+
+    assert response.status_code == 302
+    expense.refresh_from_db()
+    assert expense.description == "Aktualisierte Metadaten"
+    assert expense.receipt.name.endswith("legacy.pdf")
 
 
 @pytest.mark.django_db

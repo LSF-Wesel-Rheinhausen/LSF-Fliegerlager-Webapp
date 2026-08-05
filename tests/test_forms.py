@@ -29,6 +29,7 @@ from tests.factories import CampFactory, ParticipantFactory, SuperUserFactory
         ("rechnung.png", "image/png", b"\x89PNG\r\n\x1a\n"),
         ("rechnung.heic", "image/heic", b"\x00\x00\x00\x18ftypheic\x00\x00\x00\x00mif1heic"),
         ("rechnung.heic", "image/heif", b"\x00\x00\x00\x18ftypmif1\x00\x00\x00\x00heicmif1"),
+        ("rechnung.heic", "image/heic", b"\x00\x00\x00\x50ftypheic\x00\x00\x00\x00" + b"mif1" * 16),
     ],
 )
 def test_validate_receipt_upload_accepts_matching_file_signatures(filename, content_type, content):
