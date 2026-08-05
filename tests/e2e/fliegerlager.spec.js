@@ -1422,13 +1422,23 @@ test("Mobile Kiosk: partner authorization text does not overflow container on mo
   await page.getByRole("button", { name: "Anmelden", exact: true }).click();
   await expect(page).toHaveURL(/.*\/kiosk\//);
 
-  const authScope = page.locator(".kiosk-partner-authorization");
+  await page.goto("/kiosk/partners/");
+  const authScope = page.locator(".kiosk-partner-authorization").first();
   await expect(authScope).toBeVisible();
 
   // Verify container bounds and no horizontal overflow out of screen
   const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
   const clientWidth = await page.evaluate(() => document.documentElement.clientWidth);
   expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+
+  // Accept invitation
+  await page.getByRole("button", { name: "Annehmen" }).click();
+  await expect(page.getByText("Einladung angenommen")).toBeVisible();
+
+  // Verify accepted state overflow
+  const acceptedScroll = await page.evaluate(() => document.documentElement.scrollWidth);
+  const acceptedClient = await page.evaluate(() => document.documentElement.clientWidth);
+  expect(acceptedScroll).toBeLessThanOrEqual(acceptedClient);
 });
 
 test("Mobile Kiosk: check-in date selection does not overflow container on mobile", async ({ page }) => {
@@ -1511,4 +1521,27 @@ test("Mobile Kiosk: fixed bottom navigation bar is present and functional on mob
   await expect(bottomNav.getByRole("link", { name: "Partner" })).toBeVisible();
   await expect(bottomNav.getByRole("link", { name: "Hilfe" })).toBeVisible();
   await expect(bottomNav.getByRole("link", { name: "Abmelden" })).toBeVisible();
+});
+
+test("Mobile Kiosk: bottom navigation bar hides shifts in post-camp mode", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await setupFirstAdmin(page);
+  // Create a camp that ended in the past (offset -10 days, duration 5 days -> ended 5 days ago)
+  await createCamp(page, "Post Nav Mobile Camp", -10, 5);
+  await createParticipant(page, "PostNav", "Tester", "", "1234");
+  await logout(page);
+
+  await openKiosk(page, "/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "PostNav Tester" });
+  await page.getByLabel("PIN:", { exact: true }).fill("1234");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await expect(page).toHaveURL(/.*\/kiosk\//);
+
+  const bottomNav = page.locator(".kiosk-mobile-bottom-nav");
+  await expect(bottomNav).toBeVisible();
+
+  // Verify "Dienste" is hidden since the camp is over
+  await expect(bottomNav.getByRole("link", { name: "Kiosk" })).toBeVisible();
+  await expect(bottomNav.getByRole("link", { name: "Dienste" })).toHaveCount(0);
+  await expect(bottomNav.getByRole("link", { name: "Partner" })).toBeVisible();
 });
