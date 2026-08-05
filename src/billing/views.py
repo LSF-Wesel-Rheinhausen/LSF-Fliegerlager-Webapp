@@ -2541,6 +2541,16 @@ def _parse_kiosk_checkin_date(value, field_label, participant_name, errors):
         return None
     parsed = parse_date(stripped_value)
     if parsed is None:
+        import re
+        from datetime import datetime
+
+        match = re.match(r"^(\d{2})[\. ](\d{2})[\. ](\d{4})$", stripped_value)
+        if match:
+            try:
+                parsed = datetime(int(match.group(3)), int(match.group(2)), int(match.group(1))).date()
+            except ValueError:
+                pass
+    if parsed is None:
         errors.append(f"{field_label} für {participant_name} ist kein gültiges Datum.")
     return parsed
 

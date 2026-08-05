@@ -1904,7 +1904,8 @@ textarea {
 }
 
 .dialog-field input,
-input[type="date"] {
+input[type="date"],
+input[placeholder="DD.MM.YYYY"] {
   width: 100%;
   max-width: 100%;
   min-width: 0;
