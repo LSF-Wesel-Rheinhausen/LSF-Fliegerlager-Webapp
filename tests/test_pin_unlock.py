@@ -152,10 +152,28 @@ def test_admin_user_login_lockout_unlock(client):
 
 
 @pytest.mark.django_db
+def test_camp_kiosk_access_pin_change_clears_attempt_blocks(client):
+    from billing.models import CampKioskAccess, CampKioskAccessAttempt
+    from tests.factories import CampFactory
+
+    camp = CampFactory()
+    admin = SuperUserFactory()
+    access = CampKioskAccess.objects.create(camp=camp, pin_hash="old_hash")
+    CampKioskAccessAttempt.objects.create(access=access, client_key="some_key", failure_timestamps=[123456.0] * 5)
+
+    client.force_login(admin)
+    url = reverse("camp-kiosk-access-settings", kwargs={"camp_id": camp.pk})
+    response = client.post(url, {"pin": "123456", "pin_repeat": "123456"})
+
+    assert response.status_code == 302
+    assert not CampKioskAccessAttempt.objects.filter(access=access).exists()
+
+
+@pytest.mark.django_db
 def test_user_list_shows_unlock_button_when_user_locked_out(client):
     from billing.kiosk_security import consume_login_failure
 
-    _target_user = UserFactory(username="locked_admin")
+    UserFactory(username="locked_admin")
     admin = SuperUserFactory()
 
     req = client.get("/").wsgi_request
