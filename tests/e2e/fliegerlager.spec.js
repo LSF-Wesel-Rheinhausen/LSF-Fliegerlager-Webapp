@@ -1433,7 +1433,7 @@ test("Mobile Kiosk: partner authorization text does not overflow container on mo
 
   // Accept invitation
   await page.getByRole("button", { name: "Annehmen" }).click();
-  await expect(page.getByText("Einladung angenommen")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Vollmacht widerrufen" })).toBeVisible();
 
   // Verify accepted state overflow
   const acceptedScroll = await page.evaluate(() => document.documentElement.scrollWidth);
