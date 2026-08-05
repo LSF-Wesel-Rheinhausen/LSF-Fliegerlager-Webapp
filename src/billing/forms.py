@@ -94,7 +94,7 @@ class EmailOrUsernameAuthenticationForm(AuthenticationForm):
     )
 
     def clean(self):
-        from .kiosk_security import check_login_rate_limit, consume_login_failure
+        from .kiosk_security import check_login_rate_limit, clear_login_rate_limit, consume_login_failure
 
         raw_username = str(self.data.get("username", ""))
         if self.request and not check_login_rate_limit(self.request, username=raw_username):
@@ -104,7 +104,10 @@ class EmailOrUsernameAuthenticationForm(AuthenticationForm):
             )
 
         try:
-            return super().clean()
+            cleaned_data = super().clean()
+            if self.request:
+                clear_login_rate_limit(raw_username, request=self.request)
+            return cleaned_data
         except ValidationError as e:
             if self.request and e.code == "invalid_login":
                 consume_login_failure(self.request, username=raw_username)

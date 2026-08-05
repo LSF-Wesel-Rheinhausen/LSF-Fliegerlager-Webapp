@@ -667,7 +667,7 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
   await expect(page.getByText("Apfelsaft gebucht.")).toBeVisible();
   await expect(page.locator("dialog#meal-calendar-dialog")).toBeHidden();
 
-  await page.getByRole("link", { name: "Abmelden" }).click();
+  await page.getByRole("link", { name: "Abmelden" }).first().click();
   await expect(page).toHaveURL(/.*\/kiosk\/login\//);
 });
 
@@ -693,7 +693,7 @@ test("Partner meal retraction requires explicit confirmation", async ({ page }) 
   await page.locator("dialog#kiosk-menu-dialog").getByRole("link", { name: /Partner & Aktivitäten/ }).click();
   await page.getByLabel("Teilnehmer einladen").selectOption({ label: "Grace Hopper" });
   await page.getByRole("button", { name: "Partner einladen" }).click();
-  await page.getByRole("link", { name: "Abmelden" }).click();
+  await page.getByRole("link", { name: "Abmelden" }).first().click();
 
   await openKiosk(page, "/kiosk/login/");
   await page.getByLabel("Teilnehmer").selectOption({ label: "Grace Hopper" });
@@ -713,7 +713,7 @@ test("Partner meal retraction requires explicit confirmation", async ({ page }) 
   await graceMealDialog.getByRole("button", { name: "Essensanmeldung speichern" }).click();
   await expect(page.getByText("Essensanmeldung wurde für 1 Tag und 1 Person gespeichert.")).toBeVisible();
   await page.keyboard.press("Escape");
-  await page.getByRole("link", { name: "Abmelden" }).click();
+  await page.getByRole("link", { name: "Abmelden" }).first().click();
 
   await openKiosk(page, "/kiosk/login/");
   await page.getByLabel("Teilnehmer").selectOption({ label: "Ada Lovelace" });
@@ -793,7 +793,7 @@ test("Kiosk masonry and expense cards stay responsive and accessible", async ({ 
   await page.getByLabel("Zahlungsdatum").fill(dateInputValue(new Date()));
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(page.getByText("Antrag auf Gemeinschaftsausgabe eingereicht.")).toBeVisible();
-  await page.getByRole("link", { name: "Abmelden" }).click();
+  await page.getByRole("link", { name: "Abmelden" }).first().click();
 
   await loginAsAdmin(page);
   await page.getByRole("link", { name: campName, exact: true }).click();
@@ -1187,7 +1187,7 @@ test("Daily shift template and kiosk shift flow", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Angebot zurückziehen" })).toBeVisible();
 
   await page.getByRole("link", { name: "Zurück" }).click();
-  await page.getByRole("link", { name: "Abmelden" }).click();
+  await page.getByRole("link", { name: "Abmelden" }).first().click();
 });
 
 for (const viewport of VIEWPORTS) {
@@ -1302,7 +1302,7 @@ test("Admin can batch delete and restore booking charges via table checkboxes", 
   await expect(chargeCell2).toBeVisible();
 });
 
-test("Login rate limiting blocks user after repeated failed attempts", async ({ page }) => {
+test("Login rate limiting blocks user after repeated failed attempts", async ({ page }, testInfo) => {
   await setupFirstAdmin(page);
   await logout(page);
 
@@ -1322,6 +1322,12 @@ test("Login rate limiting blocks user after repeated failed attempts", async ({ 
   await page.getByRole("button", { name: "Anmelden", exact: true }).click();
 
   await expect(page.getByText("Zu viele Fehlversuche. Bitte versuche es in fünf Minuten erneut.")).toBeVisible();
+
+  // Clear rate limits so we don't break subsequent tests on the same IP
+  require("child_process").execSync(
+    '.venv/bin/python src/manage.py shell -c "from billing.models import LoginAttempt; LoginAttempt.objects.all().delete()"',
+    { env: { ...process.env, DATABASE_URL: `sqlite:///tmp/e2e_${testInfo.workerIndex}.sqlite3` } }
+  );
 });
 
 test("Admin can unlock participant PIN timeout after kiosk lockout", async ({ page }) => {
@@ -1407,7 +1413,7 @@ test("Mobile Kiosk: partner authorization text does not overflow container on mo
   await page.goto("/kiosk/partners/");
   await page.locator("select[name='link-participant']").selectOption({ index: 1 });
   await page.getByRole("button", { name: "Partner einladen" }).click();
-  await page.getByRole("link", { name: "Abmelden" }).click();
+  await page.getByRole("link", { name: "Abmelden" }).first().click();
 
   // Login Bob to see pending invitation
   await openKiosk(page, "/kiosk/login/");

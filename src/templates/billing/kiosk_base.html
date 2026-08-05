@@ -69,10 +69,12 @@
           <span class="kiosk-mobile-bottom-nav__icon" aria-hidden="true">🏠</span>
           <span class="kiosk-mobile-bottom-nav__label">Kiosk</span>
         </a>
-        <a href="{{ kiosk_urls.shifts }}" class="kiosk-mobile-bottom-nav__item">
-          <span class="kiosk-mobile-bottom-nav__icon" aria-hidden="true">📋</span>
-          <span class="kiosk-mobile-bottom-nav__label">Dienste</span>
-        </a>
+        {% if not is_post_camp %}
+          <a href="{{ kiosk_urls.shifts }}" class="kiosk-mobile-bottom-nav__item">
+            <span class="kiosk-mobile-bottom-nav__icon" aria-hidden="true">📋</span>
+            <span class="kiosk-mobile-bottom-nav__label">Dienste</span>
+          </a>
+        {% endif %}
         <a href="{{ kiosk_urls.partner_activity }}" class="kiosk-mobile-bottom-nav__item">
           <span class="kiosk-mobile-bottom-nav__icon" aria-hidden="true">🤝</span>
           <span class="kiosk-mobile-bottom-nav__label">Partner</span>

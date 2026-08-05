@@ -707,7 +707,7 @@ def user_unlock(request: HttpRequest, user_id: int) -> HttpResponse:
     """Reset failed login attempt rate limits for an application user."""
     managed_user = get_object_or_404(User, pk=user_id)
     _require_superuser_for_superuser_account(request, managed_user)
-    clear_login_rate_limit(managed_user.username)
+    clear_login_rate_limit(managed_user.username, request=request)
     logger.info("Admin '%s' reset login rate-limit timeout for user '%s'.", request.user, managed_user.username)
     messages.success(request, f"Timeout für '{managed_user.username}' wurde zurückgesetzt.")
     return redirect("user-list")
