@@ -6,6 +6,13 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_app_container_defaults_to_production_mode() -> None:
+    dockerfile = (PROJECT_ROOT / "Dockerfile").read_text(encoding="utf-8")
+
+    assert "    DJANGO_DEBUG=0 \\\n" in dockerfile
+    assert "DJANGO_SECRET_KEY=" not in dockerfile
+
+
 @pytest.mark.parametrize("compose_path", ["docker-compose.yml", "deploy/docker-compose.example.yml"])
 def test_background_workers_disable_inherited_http_healthcheck(compose_path: str) -> None:
     configuration = yaml.safe_load((PROJECT_ROOT / compose_path).read_text(encoding="utf-8"))

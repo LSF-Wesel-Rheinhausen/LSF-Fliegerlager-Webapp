@@ -845,7 +845,8 @@ def test_kiosk_shared_expense_upload_shows_receipt_link_and_serves_file(kiosk_cl
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session.save()
 
-    receipt = SimpleUploadedFile("rechnung.pdf", b"test receipt", content_type="application/pdf")
+    receipt_content = b"%PDF-1.7\ntest receipt"
+    receipt = SimpleUploadedFile("rechnung.pdf", receipt_content, content_type="application/pdf")
     response = kiosk_client.post(
         reverse("kiosk-shared-expense-request"),
         {
@@ -872,7 +873,7 @@ def test_kiosk_shared_expense_upload_shows_receipt_link_and_serves_file(kiosk_cl
         assert Path(expense.receipt.path).exists()
         file_response = kiosk_client.get(receipt_url)
         assert file_response.status_code == 200
-        assert b"".join(file_response.streaming_content) == b"test receipt"
+        assert b"".join(file_response.streaming_content) == receipt_content
     finally:
         expense.receipt.delete(save=False)
 

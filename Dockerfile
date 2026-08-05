@@ -26,6 +26,7 @@ LABEL org.opencontainers.image.title="LSF Fliegerlager Webapp" \
       io.lsf-fliegerlager.changelog="${APP_CHANGELOG}"
 
 ENV PATH="/opt/venv/bin:$PATH" \
+    DJANGO_DEBUG=0 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     APP_VERSION="${APP_VERSION}" \

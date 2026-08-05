@@ -1536,7 +1536,7 @@ def expense_receipt_download(request: HttpRequest, expense_id: int) -> FileRespo
 
     return FileResponse(
         expense.receipt.open("rb"),
-        as_attachment=False,
+        as_attachment=True,
         filename=receipt_name.rsplit("/", 1)[-1],
     )
 

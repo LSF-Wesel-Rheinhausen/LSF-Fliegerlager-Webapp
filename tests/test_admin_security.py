@@ -1,11 +1,12 @@
 import pytest
 from django.contrib import admin
 from django.contrib.auth.models import Permission
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
-from billing.models import ParticipantFamilyMemberPin, ParticipantPin
+from billing.models import Expense, ParticipantFamilyMemberPin, ParticipantPin
 from billing.roles import bootstrap_default_roles
-from tests.factories import GroupFactory, SuperUserFactory, UserFactory
+from tests.factories import CampFactory, GroupFactory, ParticipantFactory, SuperUserFactory, UserFactory
 
 
 @pytest.fixture
@@ -35,6 +36,36 @@ def test_app_admin_only_accesses_non_sensitive_billing_models(client):
 def test_pin_hash_models_are_not_registered_in_django_admin():
     assert admin.site.is_registered(ParticipantPin) is False
     assert admin.site.is_registered(ParticipantFamilyMemberPin) is False
+
+
+@pytest.mark.django_db
+def test_expense_admin_rejects_spoofed_receipt_content(client):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp)
+    client.force_login(SuperUserFactory())
+
+    response = client.post(
+        reverse("admin:billing_expense_add"),
+        {
+            "camp": camp.pk,
+            "participant": participant.pk,
+            "category": "Verbrauchsmaterial",
+            "description": "Manipulierter Beleg",
+            "amount": "12.50",
+            "receipt": SimpleUploadedFile(
+                "rechnung.pdf",
+                b"<script>alert(1)</script>",
+                content_type="application/pdf",
+            ),
+            "status": Expense.Status.PENDING,
+            "allocation_method": Expense.AllocationMethod.NONE,
+            "_save": "Speichern",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Dateiinhalt passt nicht zum Dateityp" in response.content.decode()
+    assert not Expense.objects.filter(description="Manipulierter Beleg").exists()
 
 
 @pytest.mark.django_db

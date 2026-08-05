@@ -34,12 +34,71 @@ PERCENT_PLACES = Decimal("0.01")
 MAX_IMPORT_FILE_SIZE = 5 * 1024 * 1024
 MAX_RECEIPT_FILE_SIZE = 5 * 1024 * 1024
 ALLOWED_RECEIPT_EXTENSIONS = {"pdf", "jpg", "jpeg", "png", "heic"}
-ALLOWED_RECEIPT_CONTENT_TYPES = {"application/pdf", "image/jpeg", "image/png", "image/heic", "image/heif"}
+RECEIPT_CONTENT_TYPES_BY_EXTENSION = {
+    "pdf": frozenset({"application/pdf"}),
+    "jpg": frozenset({"image/jpeg"}),
+    "jpeg": frozenset({"image/jpeg"}),
+    "png": frozenset({"image/png"}),
+    "heic": frozenset({"image/heic", "image/heif"}),
+}
+HEIC_BRANDS = frozenset(
+    {
+        b"heic",
+        b"heix",
+        b"hevc",
+        b"hevx",
+        b"heim",
+        b"heis",
+        b"hevm",
+        b"hevs",
+    }
+)
+RECEIPT_HEADER_SIZE = 64
 validate_kiosk_camp_pin = RegexValidator(
     regex=r"\A[0-9]{6,12}\Z",
     message="Die Lager-PIN muss aus 6 bis 12 Ziffern bestehen.",
     code="invalid_kiosk_camp_pin",
 )
+
+
+def _matches_heif_signature(header: bytes) -> bool:
+    if len(header) < 16 or header[4:8] != b"ftyp":
+        return False
+
+    box_size = int.from_bytes(header[:4], byteorder="big")
+    if box_size < 16 or box_size % 4 != 0 or box_size > len(header):
+        return False
+
+    brands = {header[8:12]}
+    brands.update(header[offset : offset + 4] for offset in range(16, min(box_size, len(header)), 4))
+    return not brands.isdisjoint(HEIC_BRANDS)
+
+
+def _matches_receipt_signature(extension: str, header: bytes) -> bool:
+    if extension == "pdf":
+        return header.startswith(b"%PDF-")
+    if extension in {"jpg", "jpeg"}:
+        return header.startswith(b"\xff\xd8\xff")
+    if extension == "png":
+        return header.startswith(b"\x89PNG\r\n\x1a\n")
+    if extension == "heic":
+        return _matches_heif_signature(header)
+    return False
+
+
+def _read_receipt_header(upload: Any) -> bytes:
+    try:
+        original_position = upload.tell()
+        upload.seek(0)
+        try:
+            header = upload.read(RECEIPT_HEADER_SIZE)
+        finally:
+            upload.seek(original_position)
+    except (AttributeError, OSError, ValueError) as error:
+        raise ValidationError("Der Rechnungsbeleg konnte nicht gelesen werden.") from error
+    if not isinstance(header, bytes):
+        raise ValidationError("Der Rechnungsbeleg konnte nicht gelesen werden.")
+    return header
 
 
 def validate_receipt_upload(upload: Any) -> Any:
@@ -54,9 +113,13 @@ def validate_receipt_upload(upload: Any) -> Any:
     if extension not in ALLOWED_RECEIPT_EXTENSIONS:
         raise ValidationError("Erlaubte Dateitypen: PDF, JPG, PNG oder HEIC.")
 
-    content_type = getattr(upload, "content_type", "")
-    if content_type and content_type not in ALLOWED_RECEIPT_CONTENT_TYPES:
+    raw_content_type = getattr(upload, "content_type", "")
+    content_type = str(raw_content_type).lower() if raw_content_type else ""
+    if content_type and content_type not in RECEIPT_CONTENT_TYPES_BY_EXTENSION[extension]:
         raise ValidationError("Der Dateityp des Rechnungsbelegs wird nicht unterstützt.")
+
+    if not _matches_receipt_signature(extension, _read_receipt_header(upload)):
+        raise ValidationError("Der Dateiinhalt passt nicht zum Dateityp des Rechnungsbelegs.")
 
     return upload
 
@@ -626,6 +689,32 @@ EXPENSE_CATEGORY_CHOICES = [
     ("Verbrauchsmaterial", "Verbrauchsmaterial"),
     ("Miete/sonstiges", "Miete/sonstiges"),
 ]
+
+
+class ExpenseAdminForm(forms.ModelForm):
+    """Apply receipt boundary validation to Django's administrative expense form."""
+
+    def clean_receipt(self) -> Any:
+        return validate_receipt_upload(self.cleaned_data.get("receipt"))
+
+    class Meta:
+        model = Expense
+        fields = [
+            "camp",
+            "participant",
+            "category",
+            "description",
+            "amount",
+            "receipt",
+            "paid_on",
+            "reimbursable",
+            "status",
+            "rejection_reason",
+            "allocation_method",
+            "cost_center",
+            "approved_at",
+            "approved_by",
+        ]
 
 
 class ExpenseForm(forms.ModelForm):
