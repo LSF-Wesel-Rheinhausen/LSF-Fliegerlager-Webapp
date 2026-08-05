@@ -797,7 +797,7 @@ test("Kiosk masonry and expense cards stay responsive and accessible", async ({ 
 
   await loginAsAdmin(page);
   await page.getByRole("link", { name: campName, exact: true }).click();
-  await page.getByRole("button", { name: "Ablehnen" }).click({ force: true });
+  await page.getByRole("button", { name: "Ablehnen" }).click();
   await page.getByLabel("Begründung (Pflichtfeld)").fill(
     "Der eingereichte Nachweis ist nicht lesbar. Bitte reiche einen neuen Beleg mit vollständigem Betrag ein."
   );
@@ -1314,6 +1314,7 @@ test("Login rate limiting blocks user after repeated failed attempts", async ({ 
     await page.locator("#id_username").fill("admin");
     await page.locator("#id_password").fill("wrong-password");
     await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+    await expect(page.locator("#id_password")).toBeEmpty();
   }
 
   // 6th attempt should show rate limit error message
