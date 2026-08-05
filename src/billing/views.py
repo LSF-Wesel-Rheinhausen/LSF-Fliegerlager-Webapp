@@ -74,7 +74,11 @@ from .kiosk_access import (
     KIOSK_PARTICIPANT_SESSION_KEY,
     clear_kiosk_identity_session,
 )
-from .kiosk_security import consume_kiosk_registration_attempt
+from .kiosk_security import (
+    clear_login_rate_limit,
+    consume_kiosk_registration_attempt,
+    is_login_locked_out,
+)
 from .models import (
     BookingAuditLog,
     Camp,
@@ -89,6 +93,7 @@ from .models import (
     Participant,
     ParticipantBookingLink,
     ParticipantFamilyMember,
+    ParticipantPin,
     PriceRule,
     Settlement,
     SettlementRun,
@@ -691,8 +696,21 @@ def user_list(request: HttpRequest) -> HttpResponse:
             phone = managed_user.profile.phone
         except ObjectDoesNotExist:
             phone = ""
-        user_rows.append({"user": managed_user, "role": role, "phone": phone})
+        is_locked = is_login_locked_out(managed_user.username)
+        user_rows.append({"user": managed_user, "role": role, "phone": phone, "is_locked_out": is_locked})
     return render(request, "billing/user_list.html", {"user_rows": user_rows})
+
+
+@admin_required
+@require_POST
+def user_unlock(request: HttpRequest, user_id: int) -> HttpResponse:
+    """Reset failed login attempt rate limits for an application user."""
+    managed_user = get_object_or_404(User, pk=user_id)
+    _require_superuser_for_superuser_account(request, managed_user)
+    clear_login_rate_limit(managed_user.username)
+    logger.info("Admin '%s' reset login rate-limit timeout for user '%s'.", request.user, managed_user.username)
+    messages.success(request, f"Timeout für '{managed_user.username}' wurde zurückgesetzt.")
+    return redirect("user-list")
 
 
 @admin_required
@@ -742,6 +760,7 @@ def user_password_reset(request: HttpRequest, user_id: int) -> HttpResponse:
     form = UserPasswordResetForm(managed_user, request.POST or None)
     if request.method == "POST" and form.is_valid():
         form.save()
+        clear_login_rate_limit(managed_user.username)
         messages.success(request, "Passwort wurde neu gesetzt.")
         return redirect("user-list")
     return render(request, "billing/form.html", {"form": form, "title": "Passwort neu setzen"})
@@ -1206,6 +1225,24 @@ def pin_reset(request, participant_id):
             request,
             "Teilnehmer-PIN wurde gesperrt. Vor der nächsten Anmeldung muss eine neue PIN gesetzt werden.",
         )
+    return redirect("participant-detail", participant_id=participant.pk)
+
+
+@admin_required
+@require_POST
+def pin_unlock(request, participant_id):
+    participant = get_object_or_404(Participant, pk=participant_id, archived_at__isnull=True)
+    with transaction.atomic():
+        pin, _ = ParticipantPin.objects.get_or_create(participant=participant)
+        pin.unlock_pin(changed_by=request.user)
+        pin.save()
+    logger.info(
+        "Admin '%s' reset PIN timeout for participant '%s' (ID %s).",
+        request.user,
+        participant.full_name,
+        participant.pk,
+    )
+    messages.success(request, "Timeout wurde zurückgesetzt.")
     return redirect("participant-detail", participant_id=participant.pk)
 
 
