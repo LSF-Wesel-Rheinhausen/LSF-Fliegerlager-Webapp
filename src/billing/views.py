@@ -702,13 +702,14 @@ def user_list(request: HttpRequest) -> HttpResponse:
 
 
 @admin_required
+@require_POST
 def user_unlock(request: HttpRequest, user_id: int) -> HttpResponse:
     """Reset failed login attempt rate limits for an application user."""
     managed_user = get_object_or_404(User, pk=user_id)
     _require_superuser_for_superuser_account(request, managed_user)
-    if request.method == "POST":
-        clear_login_rate_limit(managed_user.username)
-        messages.success(request, f"Timeout für '{managed_user.username}' wurde zurückgesetzt.")
+    clear_login_rate_limit(managed_user.username)
+    logger.info("Admin '%s' reset login rate-limit timeout for user '%s'.", request.user, managed_user.username)
+    messages.success(request, f"Timeout für '{managed_user.username}' wurde zurückgesetzt.")
     return redirect("user-list")
 
 
@@ -1228,14 +1229,20 @@ def pin_reset(request, participant_id):
 
 
 @admin_required
+@require_POST
 def pin_unlock(request, participant_id):
     participant = get_object_or_404(Participant, pk=participant_id, archived_at__isnull=True)
-    if request.method == "POST":
-        with transaction.atomic():
-            pin, _ = ParticipantPin.objects.get_or_create(participant=participant)
-            pin.unlock_pin(changed_by=request.user)
-            pin.save()
-        messages.success(request, "Timeout wurde zurückgesetzt.")
+    with transaction.atomic():
+        pin, _ = ParticipantPin.objects.get_or_create(participant=participant)
+        pin.unlock_pin(changed_by=request.user)
+        pin.save()
+    logger.info(
+        "Admin '%s' reset PIN timeout for participant '%s' (ID %s).",
+        request.user,
+        participant.full_name,
+        participant.pk,
+    )
+    messages.success(request, "Timeout wurde zurückgesetzt.")
     return redirect("participant-detail", participant_id=participant.pk)
 
 

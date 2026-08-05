@@ -188,6 +188,7 @@ def camp_kiosk_access_settings(request: HttpRequest, camp_id: int) -> HttpRespon
             access, _created = CampKioskAccess.objects.select_for_update().get_or_create(camp=camp)
             access.set_pin(form.cleaned_data["pin"], changed_by=cast(User, request.user))
             access.save()
+            CampKioskAccessAttempt.objects.filter(access=access).delete()
         messages.success(request, "Lager-PIN gespeichert. Alle bisherigen Lagerzugänge wurden widerrufen.")
         return redirect("camp-kiosk-access-settings", camp_id=camp.pk)
 
@@ -214,6 +215,7 @@ def camp_kiosk_access_revoke(request: HttpRequest, camp_id: int) -> HttpResponse
         if access is not None:
             access.revoke_all(changed_by=cast(User, request.user))
             access.save()
+            CampKioskAccessAttempt.objects.filter(access=access).delete()
     if access is None:
         messages.warning(request, "Für dieses Lager ist noch keine Lager-PIN eingerichtet.")
     else:

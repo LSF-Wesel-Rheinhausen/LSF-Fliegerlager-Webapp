@@ -186,3 +186,40 @@ def test_user_list_shows_unlock_button_when_user_locked_out(client):
 
     assert response.status_code == 200
     assert "Timeout zurücksetzen" in response.content.decode("utf-8")
+
+
+@pytest.mark.django_db
+def test_pin_unlock_rejects_get_request(client):
+    admin = SuperUserFactory()
+    participant = ParticipantFactory()
+    client.force_login(admin)
+    url = reverse("pin-unlock", kwargs={"participant_id": participant.pk})
+    response = client.get(url)
+    assert response.status_code == 405
+
+
+@pytest.mark.django_db
+def test_user_unlock_rejects_get_request(client):
+    admin = SuperUserFactory()
+    user = UserFactory()
+    client.force_login(admin)
+    url = reverse("user-unlock", kwargs={"user_id": user.pk})
+    response = client.get(url)
+    assert response.status_code == 405
+
+
+@pytest.mark.django_db
+def test_user_unlock_logs_action(client, caplog):
+    import logging
+
+    admin = SuperUserFactory(username="admin_user")
+    target = UserFactory(username="target_user")
+    client.force_login(admin)
+    url = reverse("user-unlock", kwargs={"user_id": target.pk})
+
+    with caplog.at_level(logging.INFO):
+        response = client.post(url)
+
+    assert response.status_code == 302
+    assert "target_user" in caplog.text
+    assert "admin_user" in caplog.text
