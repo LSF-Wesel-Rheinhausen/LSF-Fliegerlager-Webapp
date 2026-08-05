@@ -2487,6 +2487,10 @@ input[type="date"] {
   }
 }
 
+.kiosk-mobile-bottom-nav {
+  display: none;
+}
+
 @media (max-width: 780px) {
   .deployment-grid,
   .metadata-list div {
@@ -2741,11 +2745,6 @@ input[type="date"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-.kiosk-mobile-bottom-nav {
-  display: none;
-}
-
-@media (max-width: 767px) {
   table {
     display: block;
     width: 100%;
