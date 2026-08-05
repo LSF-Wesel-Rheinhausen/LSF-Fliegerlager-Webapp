@@ -1324,8 +1324,10 @@ test("Login rate limiting blocks user after repeated failed attempts", async ({ 
   await expect(page.getByText("Zu viele Fehlversuche. Bitte versuche es in fünf Minuten erneut.")).toBeVisible();
 
   // Clear rate limits so we don't break subsequent tests on the same IP
+  const fs = require("fs");
+  const pythonBin = fs.existsSync(".venv/bin/python") ? ".venv/bin/python" : "python";
   require("child_process").execSync(
-    '.venv/bin/python src/manage.py shell -c "from billing.models import LoginAttempt; LoginAttempt.objects.all().delete()"',
+    `${pythonBin} src/manage.py shell -c "from billing.models import LoginAttempt; LoginAttempt.objects.all().delete()"`,
     { env: { ...process.env, DATABASE_URL: `sqlite:///tmp/e2e_${testInfo.workerIndex}.sqlite3` } }
   );
 });
