@@ -47,9 +47,18 @@
             {% else %}
               <span class="status-badge status-badge--muted">Inaktiv</span>
             {% endif %}
+            {% if row.is_locked_out %}
+              <span class="status-badge status-badge--warning">Gesperrt</span>
+            {% endif %}
           </td>
           <td>
             <div class="actions">
+              {% if row.is_locked_out %}
+                <form method="post" action="{% url 'user-unlock' row.user.pk %}">
+                  {% csrf_token %}
+                  <button type="submit" class="button button-secondary">Timeout zurücksetzen</button>
+                </form>
+              {% endif %}
               <a class="button button-secondary" href="{% url 'user-edit' row.user.pk %}">Bearbeiten</a>
               <a class="button button-secondary" href="{% url 'user-password-reset' row.user.pk %}">Passwort</a>
             </div>

@@ -125,3 +125,46 @@ def test_participant_family_member_pin_unlock_pin_method():
     assert not pin.is_locked
     assert pin.locked_until is None
     assert pin.failed_attempts == 0
+
+
+@pytest.mark.django_db
+def test_admin_user_login_lockout_unlock(client):
+    from billing.kiosk_security import check_login_rate_limit, consume_login_failure
+
+    target_user = UserFactory(username="target_admin")
+    admin = SuperUserFactory()
+
+    req = client.get("/").wsgi_request
+    for _ in range(5):
+        consume_login_failure(req, username="target_admin")
+
+    assert not check_login_rate_limit(req, username="target_admin")
+
+    client.force_login(admin)
+    url = reverse("user-unlock", kwargs={"user_id": target_user.pk})
+    response = client.post(url)
+
+    assert response.status_code == 302
+    assert response.url == reverse("user-list")
+
+    req_other_ip = client.get("/", REMOTE_ADDR="10.0.0.99").wsgi_request
+    assert check_login_rate_limit(req_other_ip, username="target_admin")
+
+
+@pytest.mark.django_db
+def test_user_list_shows_unlock_button_when_user_locked_out(client):
+    from billing.kiosk_security import consume_login_failure
+
+    _target_user = UserFactory(username="locked_admin")
+    admin = SuperUserFactory()
+
+    req = client.get("/").wsgi_request
+    for _ in range(5):
+        consume_login_failure(req, username="locked_admin")
+
+    client.force_login(admin)
+    url = reverse("user-list")
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert "Timeout zurücksetzen" in response.content.decode("utf-8")

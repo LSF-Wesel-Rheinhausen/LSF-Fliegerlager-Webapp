@@ -83,6 +83,7 @@ urlpatterns = [
     path("users/new/", views.user_create, name="user-create"),
     path("users/<int:user_id>/edit/", views.user_edit, name="user-edit"),
     path("users/<int:user_id>/password/", views.user_password_reset, name="user-password-reset"),
+    path("users/<int:user_id>/unlock/", views.user_unlock, name="user-unlock"),
     path("deployment/update/", views.deployment_update, name="deployment-update"),
     path(
         "deployment/update/status/",

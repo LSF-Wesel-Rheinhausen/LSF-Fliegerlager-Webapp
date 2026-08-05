@@ -138,3 +138,33 @@ def consume_login_failure(request: HttpRequest, username: str = "") -> None:
             recent_failures.append(now.timestamp())
             attempt_state.failure_timestamps = recent_failures
             attempt_state.save(update_fields=["failure_timestamps", "updated_at"])
+
+
+def is_login_locked_out(username: str) -> bool:
+    """Return True if the specified username is currently locked out by rate limiting."""
+    from .models import LoginAttempt
+
+    if not username:
+        return False
+    user_key_hash = login_user_key(username)
+    if not user_key_hash:
+        return False
+    user_key = f"user:{user_key_hash}"
+    user_attempt = LoginAttempt.objects.filter(client_key=user_key).first()
+    if user_attempt:
+        cutoff = timezone.now().timestamp() - 300
+        recent_failures = _recent_attempts(user_attempt.failure_timestamps, cutoff=cutoff)
+        return len(recent_failures) >= 5
+    return False
+
+
+def clear_login_rate_limit(username: str) -> None:
+    """Clear failed login rate-limit records for a targeted username."""
+    from .models import LoginAttempt
+
+    if not username:
+        return
+    user_key_hash = login_user_key(username)
+    if user_key_hash:
+        user_key = f"user:{user_key_hash}"
+        LoginAttempt.objects.filter(client_key=user_key).delete()
