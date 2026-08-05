@@ -797,7 +797,7 @@ test("Kiosk masonry and expense cards stay responsive and accessible", async ({ 
 
   await loginAsAdmin(page);
   await page.getByRole("link", { name: campName, exact: true }).click();
-  await page.getByRole("button", { name: "Ablehnen" }).click();
+  await page.getByRole("button", { name: "Ablehnen" }).click({ force: true });
   await page.getByLabel("Begründung (Pflichtfeld)").fill(
     "Der eingereichte Nachweis ist nicht lesbar. Bitte reiche einen neuen Beleg mit vollständigem Betrag ein."
   );

@@ -3053,6 +3053,7 @@ dialog::backdrop {
   flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
+  min-width: max-content;
 }
 
 
