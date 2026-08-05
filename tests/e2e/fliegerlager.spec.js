@@ -1360,3 +1360,31 @@ test("Admin can unlock participant PIN timeout after kiosk lockout", async ({ pa
   await page.getByRole("button", { name: "Anmelden", exact: true }).click();
   await expect(page).toHaveURL(/.*\/kiosk\//);
 });
+
+test("Mobile Kiosk: summary invoice dialog and archived settlements do not overflow viewport and are scrollable", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await setupFirstAdmin(page);
+  await createCamp(page, "Rechnung Mobile Camp", 0, 4);
+  await createParticipant(page, "Invoice", "Tester", "", "1234");
+  await logout(page);
+
+  await openKiosk(page, "/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Invoice Tester" });
+  await page.getByLabel("PIN:", { exact: true }).fill("1234");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await expect(page).toHaveURL(/.*\/kiosk\//);
+
+  // Open summary invoice dialog
+  await page.getByRole("button", { name: "Details öffnen" }).click();
+  const summaryDialog = page.locator("dialog#summary-dialog");
+  await expect(summaryDialog).toBeVisible();
+
+  // Verify no horizontal overflow beyond viewport
+  const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  const clientWidth = await page.evaluate(() => document.documentElement.clientWidth);
+  expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+
+  // Verify dialog is constrained in height
+  const dialogBox = await summaryDialog.boundingBox();
+  expect(dialogBox.height).toBeLessThanOrEqual(667);
+});
