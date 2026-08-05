@@ -1323,3 +1323,40 @@ test("Login rate limiting blocks user after repeated failed attempts", async ({ 
 
   await expect(page.getByText("Zu viele Fehlversuche. Bitte versuche es in fünf Minuten erneut.")).toBeVisible();
 });
+
+test("Admin can unlock participant PIN timeout after kiosk lockout", async ({ page }) => {
+  await setupFirstAdmin(page);
+  await createCamp(page, "PIN Unlock Camp");
+  await createParticipant(page, "Lockout", "Test", "", "4321");
+  const participantUrl = page.url();
+  await logout(page);
+
+  await openKiosk(page, "/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Lockout Test" });
+
+  // Fail PIN 5 times
+  for (let i = 0; i < 5; i++) {
+    await page.getByLabel("PIN:", { exact: true }).fill("9999");
+    await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  }
+
+  // 6th attempt shows locked message
+  await page.getByLabel("PIN:", { exact: true }).fill("9999");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await expect(page.getByText("Zu viele Fehlversuche. Bitte warte fünf Minuten und versuche es erneut.")).toBeVisible();
+
+  // Admin logs in and unlocks participant
+  await loginAsAdmin(page);
+  await page.goto(participantUrl);
+  await expect(page.getByRole("button", { name: "Timeout zurücksetzen" })).toBeVisible();
+  await page.getByRole("button", { name: "Timeout zurücksetzen" }).click();
+  await expect(page.getByText("Timeout wurde zurückgesetzt.")).toBeVisible();
+  await logout(page);
+
+  // Kiosk PIN login succeeds with correct PIN now
+  await openKiosk(page, "/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Lockout Test" });
+  await page.getByLabel("PIN:", { exact: true }).fill("4321");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await expect(page).toHaveURL(/.*\/kiosk\//);
+});
