@@ -34,9 +34,9 @@
             {% endif %}
           </span>
         </a>
+        {% include "includes/theme_toggle.html" %}
       </div>
       <div class="kiosk-header-actions">
-        {% include "includes/theme_toggle.html" %}
         {% if kiosk_mode == "private" and not kiosk_access_prompt %}
           <button class="button button-secondary" type="button" data-pwa-install hidden>Installieren</button>
         {% endif %}

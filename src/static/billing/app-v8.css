@@ -947,6 +947,8 @@ textarea {
   flex: 1 1 auto;
   min-width: 0;
   justify-content: center;
+  align-items: center;
+  gap: 16px;
 }
 
 .kiosk-brand {
@@ -2572,14 +2574,8 @@ input[type="date"] {
     align-items: stretch;
   }
 
-  .topbar .kiosk-nav,
   .kiosk-menu {
     grid-template-columns: 1fr;
-  }
-
-  .topbar .kiosk-nav {
-    display: grid;
-    width: 100%;
   }
 
   .kiosk-topbar {
