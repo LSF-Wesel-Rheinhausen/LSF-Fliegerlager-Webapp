@@ -138,6 +138,7 @@ def test_expense_receipt_download_allows_editor(client, editor_user, permission_
         response = client.get(reverse("expense-receipt", args=[expense.pk]))
 
         assert response.status_code == 200
+        assert response["Content-Disposition"].startswith('attachment; filename="rechnung')
         assert b"".join(response.streaming_content) == b"editor receipt"
     finally:
         expense.receipt.delete(save=False)

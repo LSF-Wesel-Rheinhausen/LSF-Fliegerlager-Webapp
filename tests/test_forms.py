@@ -2,11 +2,65 @@ from datetime import date, time
 from decimal import Decimal
 
 import pytest
+from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
 
-from billing.forms import CampForm, FirstAdminSetupForm, KioskLoginForm, ParticipantForm, UserCreateForm, UserEditForm
+from billing.forms import (
+    CampForm,
+    FirstAdminSetupForm,
+    KioskLoginForm,
+    ParticipantForm,
+    UserCreateForm,
+    UserEditForm,
+    validate_receipt_upload,
+)
 from billing.models import ParticipantFamilyMember
 from billing.roles import ROLE_EDITOR
 from tests.factories import CampFactory, ParticipantFactory, SuperUserFactory
+
+
+@pytest.mark.parametrize(
+    ("filename", "content_type", "content"),
+    [
+        ("rechnung.pdf", "application/pdf", b"%PDF-1.7\n"),
+        ("rechnung.pdf", None, b"%PDF-1.7\n"),
+        ("rechnung.jpg", "image/jpeg", b"\xff\xd8\xff\xe0"),
+        ("rechnung.jpeg", "image/jpeg", b"\xff\xd8\xff\xe1"),
+        ("rechnung.png", "image/png", b"\x89PNG\r\n\x1a\n"),
+        ("rechnung.heic", "image/heic", b"\x00\x00\x00\x18ftypheic\x00\x00\x00\x00mif1heic"),
+        ("rechnung.heic", "image/heif", b"\x00\x00\x00\x18ftypmif1\x00\x00\x00\x00heicmif1"),
+        ("rechnung.heic", "image/heic", b"\x00\x00\x00\x50ftypheic\x00\x00\x00\x00" + b"mif1" * 16),
+    ],
+)
+def test_validate_receipt_upload_accepts_matching_file_signatures(filename, content_type, content):
+    upload = SimpleUploadedFile(filename, content, content_type=content_type)
+
+    assert validate_receipt_upload(upload) is upload
+
+
+@pytest.mark.parametrize(
+    ("filename", "content_type", "content"),
+    [
+        ("rechnung.pdf", "application/pdf", b"<script>alert(1)</script>"),
+        ("rechnung.jpg", "image/jpeg", b"not a jpeg"),
+        ("rechnung.png", "image/png", b""),
+        ("rechnung.heic", "image/heic", b"\x00\x00\x00\x08ftyp"),
+        ("rechnung.heic", "image/heic", b"\x00\x00\x00\x18ftypheic\x00\x00\x00\x00"),
+        ("rechnung.heic", "image/heic", b"\x00\x00\x00\x18ftypavif\x00\x00\x00\x00mif1avif"),
+    ],
+)
+def test_validate_receipt_upload_rejects_spoofed_file_contents(filename, content_type, content):
+    upload = SimpleUploadedFile(filename, content, content_type=content_type)
+
+    with pytest.raises(ValidationError, match="Dateiinhalt passt nicht zum Dateityp"):
+        validate_receipt_upload(upload)
+
+
+def test_validate_receipt_upload_rejects_mime_type_mismatching_extension():
+    upload = SimpleUploadedFile("rechnung.pdf", b"%PDF-1.7\n", content_type="image/png")
+
+    with pytest.raises(ValidationError, match="Dateityp des Rechnungsbelegs wird nicht unterstützt"):
+        validate_receipt_upload(upload)
 
 
 @pytest.mark.django_db
