@@ -141,7 +141,7 @@ function dateInputValue(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return `${day}.${month}.${year}`;
 }
 
 function germanDate(date) {
@@ -428,7 +428,7 @@ test("Admin creates and edits a manual booking and sees the change log", async (
   await expect(page.getByRole("heading", { name: "Buchung bearbeiten" })).toBeVisible();
   await page.getByLabel("Beschreibung").fill("Cola korrigiert");
   await page.getByLabel("Menge").fill("3");
-  await page.getByLabel("Datum").fill("2026-07-01");
+  await page.getByLabel("Datum").fill("01.07.2026");
   await page.getByRole("button", { name: "Speichern" }).click();
 
   await expect(page.getByRole("heading", { name: "Ada Lovelace" })).toBeVisible();
@@ -1018,7 +1018,7 @@ test("Finance flow: payments and expenses", async ({ page }) => {
 
   await page.getByRole("link", { name: "Zahlung erfassen" }).click();
   await page.getByLabel("Betrag").fill("50.00");
-  await page.locator("#id_paid_on").fill("2026-07-01");
+  await page.locator("#id_paid_on").fill("01.07.2026");
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(page.getByText("Zahlung wurde gespeichert.")).toBeVisible();
 
@@ -1030,7 +1030,7 @@ test("Finance flow: payments and expenses", async ({ page }) => {
   await page.locator("#id_category").selectOption({ label: "Verbrauchsmaterial" });
   await page.getByLabel("Beschreibung").fill("Stifte");
   await page.getByLabel("Betrag").fill("15.50");
-  await page.locator("#id_paid_on").fill("2026-07-01");
+  await page.locator("#id_paid_on").fill("01.07.2026");
   await page.getByRole("button", { name: "Speichern" }).click();
 
   await expect(page.getByText("Auslage wurde gespeichert.")).toBeVisible();
@@ -1518,12 +1518,36 @@ test("Mobile Kiosk: fixed bottom navigation bar is present and functional on mob
   const position = await bottomNav.evaluate((el) => window.getComputedStyle(el).position);
   expect(position).toBe("fixed");
 
+  // Verify top navigation is hidden on mobile
+  const topNav = page.locator(".kiosk-nav");
+  await expect(topNav).toBeHidden();
+
   // Verify navigation items exist
   await expect(bottomNav.getByRole("link", { name: "Kiosk" })).toBeVisible();
   await expect(bottomNav.getByRole("link", { name: "Dienste" })).toBeVisible();
   await expect(bottomNav.getByRole("link", { name: "Partner" })).toBeVisible();
   await expect(bottomNav.getByRole("link", { name: "Hilfe" })).toBeVisible();
   await expect(bottomNav.getByRole("link", { name: "Abmelden" })).toBeVisible();
+});
+
+test("Desktop Kiosk: top navigation is present and bottom navigation is hidden", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await setupFirstAdmin(page);
+  await createCamp(page, "Desktop Nav Camp", 0, 4);
+  await createParticipant(page, "DeskNav", "Tester", "", "1234");
+  await logout(page);
+
+  await openKiosk(page, "/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "DeskNav Tester" });
+  await page.getByLabel("PIN:", { exact: true }).fill("1234");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await expect(page).toHaveURL(/.*\/kiosk\//);
+
+  const topNav = page.locator(".kiosk-nav");
+  await expect(topNav).toBeVisible();
+
+  const bottomNav = page.locator(".kiosk-mobile-bottom-nav");
+  await expect(bottomNav).toBeHidden();
 });
 
 test("Mobile Kiosk: bottom navigation bar hides shifts in post-camp mode", async ({ page }) => {

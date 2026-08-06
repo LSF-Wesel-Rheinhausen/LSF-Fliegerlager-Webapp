@@ -291,7 +291,7 @@ class CampForm(forms.ModelForm):
                 attrs={
                     "type": "text",
                     "placeholder": "DD.MM.YYYY",
-                    "pattern": r"\\d{2}[\\. ]\\d{2}[\\. ]\\d{4}",
+                    "pattern": r"\d{2}[\. ]\d{2}[\. ]\d{4}",
                     "inputmode": "numeric",
                 },
             ),
@@ -300,7 +300,7 @@ class CampForm(forms.ModelForm):
                 attrs={
                     "type": "text",
                     "placeholder": "DD.MM.YYYY",
-                    "pattern": r"\\d{2}[\\. ]\\d{2}[\\. ]\\d{4}",
+                    "pattern": r"\d{2}[\. ]\d{2}[\. ]\d{4}",
                     "inputmode": "numeric",
                 },
             ),
@@ -377,7 +377,7 @@ class ParticipantForm(forms.ModelForm):
                 attrs={
                     "type": "text",
                     "placeholder": "DD.MM.YYYY",
-                    "pattern": r"\\d{2}[\\. ]\\d{2}[\\. ]\\d{4}",
+                    "pattern": r"\d{2}[\. ]\d{2}[\. ]\d{4}",
                     "inputmode": "numeric",
                 },
             ),
@@ -386,7 +386,7 @@ class ParticipantForm(forms.ModelForm):
                 attrs={
                     "type": "text",
                     "placeholder": "DD.MM.YYYY",
-                    "pattern": r"\\d{2}[\\. ]\\d{2}[\\. ]\\d{4}",
+                    "pattern": r"\d{2}[\. ]\d{2}[\. ]\d{4}",
                     "inputmode": "numeric",
                 },
             ),
@@ -598,7 +598,7 @@ class ChargeForm(forms.ModelForm):
                 attrs={
                     "type": "text",
                     "placeholder": "DD.MM.YYYY",
-                    "pattern": r"\\d{2}[\\. ]\\d{2}[\\. ]\\d{4}",
+                    "pattern": r"\d{2}[\. ]\d{2}[\. ]\d{4}",
                     "inputmode": "numeric",
                 },
             )
@@ -668,7 +668,7 @@ class PaymentForm(forms.ModelForm):
                 attrs={
                     "type": "text",
                     "placeholder": "DD.MM.YYYY",
-                    "pattern": r"\\d{2}[\\. ]\\d{2}[\\. ]\\d{4}",
+                    "pattern": r"\d{2}[\. ]\d{2}[\. ]\d{4}",
                     "inputmode": "numeric",
                 },
             )
@@ -706,7 +706,7 @@ class ExpenseForm(forms.ModelForm):
                 attrs={
                     "type": "text",
                     "placeholder": "DD.MM.YYYY",
-                    "pattern": r"\\d{2}[\\. ]\\d{2}[\\. ]\\d{4}",
+                    "pattern": r"\d{2}[\. ]\d{2}[\. ]\d{4}",
                     "inputmode": "numeric",
                 },
             ),
@@ -741,7 +741,7 @@ class SharedExpenseRequestForm(forms.ModelForm):
                 attrs={
                     "type": "text",
                     "placeholder": "DD.MM.YYYY",
-                    "pattern": r"\\d{2}[\\. ]\\d{2}[\\. ]\\d{4}",
+                    "pattern": r"\d{2}[\. ]\d{2}[\. ]\d{4}",
                     "inputmode": "numeric",
                 },
             ),
@@ -1055,7 +1055,7 @@ class KioskSelfEnrollmentForm(forms.ModelForm):
                 attrs={
                     "type": "text",
                     "placeholder": "DD.MM.YYYY",
-                    "pattern": r"\\d{2}[\\. ]\\d{2}[\\. ]\\d{4}",
+                    "pattern": r"\d{2}[\. ]\d{2}[\. ]\d{4}",
                     "inputmode": "numeric",
                 },
             ),
@@ -1064,7 +1064,7 @@ class KioskSelfEnrollmentForm(forms.ModelForm):
                 attrs={
                     "type": "text",
                     "placeholder": "DD.MM.YYYY",
-                    "pattern": r"\\d{2}[\\. ]\\d{2}[\\. ]\\d{4}",
+                    "pattern": r"\d{2}[\. ]\d{2}[\. ]\d{4}",
                     "inputmode": "numeric",
                 },
             ),
@@ -1528,7 +1528,7 @@ class ShiftForm(forms.ModelForm):
                 attrs={
                     "type": "text",
                     "placeholder": "DD.MM.YYYY",
-                    "pattern": r"\\d{2}[\\. ]\\d{2}[\\. ]\\d{4}",
+                    "pattern": r"\d{2}[\. ]\d{2}[\. ]\d{4}",
                     "inputmode": "numeric",
                 },
             ),
