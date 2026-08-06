@@ -2549,6 +2549,7 @@ def _parse_kiosk_checkin_date(value, field_label, participant_name, errors):
             try:
                 parsed = datetime(int(match.group(3)), int(match.group(2)), int(match.group(1))).date()
             except ValueError:
+                # Das Datum ist ungültig (z.B. 31.02.), parsed bleibt None und der Error wird unten gefangen
                 pass
     if parsed is None:
         errors.append(f"{field_label} für {participant_name} ist kein gültiges Datum.")
