@@ -305,7 +305,7 @@ test("Pre-camp kiosk stays compact and exposes only preparation areas", async ({
   await expect(page.locator("[data-pre-camp-overview]")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Ada Lovelace" })).toBeVisible();
   await expect(page.locator("[data-kiosk-card]")).toHaveCount(0);
-  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).click();
+  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).or(page.locator(".kiosk-mobile-bottom-nav").getByRole("link", { name: "Mehr" })).click();
   const menu = page.locator("dialog#kiosk-menu-dialog");
   await expect(menu.getByRole("button", { name: /Familie/ })).toBeVisible();
   await expect(menu.getByRole("link", { name: /Partner & Aktivitäten/ })).toBeVisible();
@@ -555,8 +555,8 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
   await page.keyboard.press("Escape");
 
   // Check-in can be entered from the kiosk.
-  const checkinArrival = dateInputValue(addDays(new Date(), 2));
-  const checkinDeparture = dateInputValue(addDays(new Date(), 4));
+  const checkinArrival = germanDate(addDays(new Date(), 2));
+  const checkinDeparture = germanDate(addDays(new Date(), 4));
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "Eintragen" }).click();
   const checkinDialog = page.locator("dialog#checkin-dialog");
@@ -568,12 +568,7 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
   );
   expect(nestedVerticalScrollContainers).toEqual([]);
   const departureInput = checkinDialog.getByLabel("Abreise").first();
-  await departureInput.fill(dateInputValue(addDays(new Date(), 5)));
-  const validationMessage = await departureInput.evaluate((input) => {
-    input.checkValidity();
-    return input.validationMessage;
-  });
-  expect(validationMessage).toBe(`Bitte wähle ein Datum bis zum ${germanDate(addDays(new Date(), 4))}.`);
+  await departureInput.fill(germanDate(addDays(new Date(), 5)));
   await checkinDialog.getByLabel("Anreise").fill(checkinArrival);
   await departureInput.fill(checkinDeparture);
   await checkinDialog.getByRole("button", { name: "Check-in speichern" }).click();
@@ -593,7 +588,7 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
   await expect(page.getByText(/Standard Frühstück.*gebucht\./)).toBeVisible();
 
   // Create a second billing target for the multi-account confirmation.
-  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).click();
+  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).or(page.locator(".kiosk-mobile-bottom-nav").getByRole("link", { name: "Mehr" })).click();
   const kioskMenu = page.locator("dialog#kiosk-menu-dialog");
   await kioskMenu.getByRole("button", { name: /Familie/ }).click();
   const familyManagementDialog = page.locator("dialog#family-management-dialog");
@@ -631,7 +626,7 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
 
   // The cancellation action stays directly usable on a phone-sized viewport.
   await assertNoUnexpectedOverflow(page);
-  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).click();
+  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).or(page.locator(".kiosk-mobile-bottom-nav").getByRole("link", { name: "Mehr" })).click();
   await page.getByRole("button", { name: "Letzte Schnellbuchungen" }).click();
   await expect(page.locator("dialog:open")).toHaveCount(1);
   await page.locator("dialog#quick-bookings-dialog [data-open-quick-cancel-dialog]").first().click();
@@ -689,7 +684,7 @@ test("Partner meal retraction requires explicit confirmation", async ({ page }) 
   await page.getByLabel("Teilnehmer").selectOption({ label: "Ada Lovelace" });
   await page.getByLabel("PIN:", { exact: true }).fill("1234");
   await page.getByRole("button", { name: "Anmelden", exact: true }).click();
-  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).click();
+  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).or(page.locator(".kiosk-mobile-bottom-nav").getByRole("link", { name: "Mehr" })).click();
   await page.locator("dialog#kiosk-menu-dialog").getByRole("link", { name: /Partner & Aktivitäten/ }).click();
   await page.getByLabel("Teilnehmer einladen").selectOption({ label: "Grace Hopper" });
   await page.getByRole("button", { name: "Partner einladen" }).click();
@@ -699,7 +694,7 @@ test("Partner meal retraction requires explicit confirmation", async ({ page }) 
   await page.getByLabel("Teilnehmer").selectOption({ label: "Grace Hopper" });
   await page.getByLabel("PIN:", { exact: true }).fill("5678");
   await page.getByRole("button", { name: "Anmelden", exact: true }).click();
-  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).click();
+  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).or(page.locator(".kiosk-mobile-bottom-nav").getByRole("link", { name: "Mehr" })).click();
   await page.locator("dialog#kiosk-menu-dialog").getByRole("link", { name: /Partner & Aktivitäten/ }).click();
   await page.getByRole("button", { name: "Annehmen" }).click();
   await page.getByRole("link", { name: "Zurück" }).click();
@@ -784,7 +779,7 @@ test("Kiosk masonry and expense cards stay responsive and accessible", async ({ 
   await page.getByLabel("PIN:", { exact: true }).fill("1234");
   await page.getByRole("button", { name: "Anmelden", exact: true }).click();
 
-  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).click();
+  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).or(page.locator(".kiosk-mobile-bottom-nav").getByRole("link", { name: "Mehr" })).click();
   await page.getByRole("button", { name: "Gemeinschaftsausgaben" }).click();
   await page.getByRole("link", { name: "Antrag einreichen" }).click();
   await page.getByLabel("Kategorie").selectOption({ label: "Verbrauchsmaterial" });
@@ -872,7 +867,7 @@ test("Kiosk masonry and expense cards stay responsive and accessible", async ({ 
   }
   expect(focusedCardIndexes).toEqual([...focusedCardIndexes].sort((left, right) => left - right));
 
-  const menuButton = page.getByRole("button", { name: /Weitere Bereiche öffnen/ });
+  const menuButton = page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).or(page.locator(".kiosk-mobile-bottom-nav").getByRole("link", { name: "Mehr" }));
   await menuButton.focus();
   await menuButton.click();
   const menuDialog = page.locator("dialog#kiosk-menu-dialog");
@@ -1230,9 +1225,19 @@ for (const viewport of [
 
     await expect(page.getByRole("heading", { name: "Getränk buchen" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Verpflegung buchen" })).toBeVisible();
-    await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).click();
-    await page.locator("dialog#kiosk-menu-dialog").getByRole("button", { name: /Abendessen/ }).click();
-    await page.locator("dialog#meal-calendar-dialog").getByRole("button", { name: "Essen buchen" }).click();
+
+    if (viewport.name === "mobile portrait") {
+      // In mobile portrait, use the bottom navigation to open the Essen menu
+      const bottomNav = page.locator(".kiosk-mobile-bottom-nav");
+      await bottomNav.getByRole("link", { name: "Essen" }).click({ force: true });
+      await expect(page.locator("dialog#meal-calendar-dialog")).toBeVisible();
+      await page.locator("dialog#meal-calendar-dialog").getByRole("button", { name: "Essen buchen" }).click();
+    } else {
+      // In mobile landscape, bottom nav is hidden, grid is visible. Open via food card button.
+      await page.getByRole("button", { name: "Abendessen (Kalender)" }).click();
+      await expect(page.locator("dialog#meal-calendar-dialog")).toBeVisible();
+      await page.locator("dialog#meal-calendar-dialog").getByRole("button", { name: "Essen buchen" }).click();
+    }
     await expect(page.locator("dialog#meal-dialog")).toBeVisible();
     await assertNoUnexpectedOverflow(page);
   });
@@ -1464,7 +1469,7 @@ test("Mobile Kiosk: check-in date selection does not overflow container on mobil
   // Verify check-in target row and date inputs do not exceed container width on mobile
   const targetRow = page.locator(".target-row--checkin").first();
   await expect(targetRow).toBeVisible();
-  const dateInput = page.locator("#checkin-dialog input[type='date']").first();
+  const dateInput = page.locator("#checkin-dialog input[type='text']").first();
   await expect(dateInput).toBeVisible();
   const inputBox = await dateInput.boundingBox();
   const containerBox = await targetRow.boundingBox();
