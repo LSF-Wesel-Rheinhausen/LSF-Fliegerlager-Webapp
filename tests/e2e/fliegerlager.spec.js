@@ -1528,6 +1528,29 @@ test("Mobile Kiosk: fixed bottom navigation bar is present and functional on mob
   await expect(bottomNav.getByRole("link", { name: "Essen" })).toBeVisible();
   await expect(bottomNav.getByRole("link", { name: "Mehr" })).toBeVisible();
   await expect(bottomNav.getByRole("link", { name: "Abmelden" })).toBeVisible();
+
+  // Test toggling the "Mehr" menu
+  const mehrButton = bottomNav.getByRole("link", { name: "Mehr" });
+  await mehrButton.click();
+  const menuDialog = page.locator("dialog#kiosk-menu-dialog");
+  await expect(menuDialog).toBeVisible();
+
+  // Clicking "Mehr" again should close the menu
+  await mehrButton.click({ force: true });
+  await expect(menuDialog).not.toBeVisible();
+
+  // Clicking "Essen" while "Mehr" menu is open should close the menu and open Essen
+  await mehrButton.click();
+  await expect(menuDialog).toBeVisible();
+  const essenButton = bottomNav.getByRole("link", { name: "Essen" });
+  await essenButton.click({ force: true });
+  await expect(menuDialog).not.toBeVisible();
+  const mealDialog = page.locator("dialog#meal-calendar-dialog");
+  await expect(mealDialog).toBeVisible();
+
+  // Clean up by closing meal dialog
+  await essenButton.click({ force: true });
+  await expect(mealDialog).not.toBeVisible();
 });
 
 test("Desktop Kiosk: top navigation is present and bottom navigation is hidden", async ({ page }) => {
