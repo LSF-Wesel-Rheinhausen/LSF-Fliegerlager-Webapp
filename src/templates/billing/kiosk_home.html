@@ -1298,12 +1298,24 @@
         if (window.location.hash === "#menu") {
           if (kioskMenuDialog && !kioskMenuDialog.open) {
             openDialog(kioskMenuDialog);
-            history.replaceState(null, null, ' ');
           }
         }
       };
       window.addEventListener("hashchange", checkHashAndOpenMenu);
       checkHashAndOpenMenu();
+
+      kioskMenuDialog?.addEventListener("close", () => {
+        if (window.location.hash === "#menu") {
+          history.replaceState(null, null, window.location.pathname);
+        }
+      });
+
+      document.querySelector(".kiosk-mobile-bottom-nav__item[href$='#menu']")?.addEventListener("click", (e) => {
+        if (kioskMenuDialog && kioskMenuDialog.open) {
+          e.preventDefault();
+          kioskMenuDialog.close();
+        }
+      });
 
       document.querySelectorAll("[data-open-quick-cancel-dialog]").forEach((button) => {
         button.addEventListener("click", () => {
