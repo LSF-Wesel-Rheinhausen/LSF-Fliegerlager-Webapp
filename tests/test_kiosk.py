@@ -58,6 +58,7 @@ def test_kiosk_user_guide_points_menu_only_sections_to_menu(kiosk_client):
     assert "Anreise und Abreise" in content
     assert "aktive Begleitpersonen beider Hauptkonten" in content
     assert "mit ihrer eigenen PIN ausüben" in content
+    assert "Menü → Eigene PIN ändern" in content
     assert "strikt getrennt" not in content
     assert "scrolle auf der Startseite" not in content
     for animation in ("login", "drinks", "meals", "family", "shifts"):
@@ -286,6 +287,180 @@ def test_companion_cannot_create_another_companion_for_guardian(kiosk_client):
         first_name="Katherine",
         last_name="Johnson",
     ).exists()
+
+
+@pytest.mark.django_db
+def test_kiosk_participant_can_change_own_pin_and_must_log_in_again(kiosk_client):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    participant.pin.set_pin("2468")
+    participant.pin.save()
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "pin_change",
+            "pin-current_pin": "2468",
+            "pin-pin": "8642",
+            "pin-pin_repeat": "8642",
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.url == reverse("kiosk-login")
+    participant.pin.refresh_from_db()
+    assert participant.pin.check_pin("8642") is True
+    assert participant.pin.check_pin("2468") is False
+    assert KIOSK_PARTICIPANT_SESSION_KEY not in kiosk_client.session
+    assert KIOSK_FAMILY_MEMBER_SESSION_KEY not in kiosk_client.session
+
+
+@pytest.mark.django_db
+def test_kiosk_companion_can_change_only_own_pin(kiosk_client):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    participant.pin.set_pin("9753")
+    participant.pin.save()
+    companion = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Grace",
+        last_name="Hopper",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    companion.pin.set_pin("2468")
+    companion.pin.save()
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "pin_change",
+            "pin-current_pin": "2468",
+            "pin-pin": "8642",
+            "pin-pin_repeat": "8642",
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.url == reverse("kiosk-login")
+    companion.pin.refresh_from_db()
+    participant.pin.refresh_from_db()
+    assert companion.pin.check_pin("8642") is True
+    assert participant.pin.check_pin("9753") is True
+
+
+@pytest.mark.django_db
+def test_kiosk_pin_change_rejects_wrong_current_pin_and_counts_attempt(kiosk_client):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    participant.pin.set_pin("2468")
+    participant.pin.save()
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "pin_change",
+            "pin-current_pin": "9999",
+            "pin-pin": "8642",
+            "pin-pin_repeat": "8642",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Die aktuelle PIN ist nicht korrekt." in response.content.decode("utf-8")
+    assert b'id="pin-change-dialog" data-auto-open-dialog' in response.content
+    participant.pin.refresh_from_db()
+    assert participant.pin.failed_attempts == 1
+    assert participant.pin.check_pin("2468") is True
+    assert KIOSK_PARTICIPANT_SESSION_KEY in kiosk_client.session
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("new_pin", "pin_repeat", "error_text"),
+    [
+        ("1234", "1234", "sicherere PIN"),
+        ("abcd", "abcd", "4 bis 12 Ziffern"),
+        ("2468", "2468", "von der aktuellen PIN unterscheiden"),
+        ("8642", "9753", "PINs stimmen nicht überein"),
+    ],
+)
+def test_kiosk_pin_change_rejects_invalid_new_pin(kiosk_client, new_pin, pin_repeat, error_text):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    participant.pin.set_pin("2468")
+    participant.pin.save()
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "pin_change",
+            "pin-current_pin": "2468",
+            "pin-pin": new_pin,
+            "pin-pin_repeat": pin_repeat,
+        },
+    )
+
+    assert response.status_code == 200
+    assert error_text in response.content.decode("utf-8")
+    participant.pin.refresh_from_db()
+    assert participant.pin.check_pin("2468") is True
+    assert KIOSK_PARTICIPANT_SESSION_KEY in kiosk_client.session
+
+
+@pytest.mark.django_db
+def test_kiosk_pin_change_is_available_after_camp(kiosk_client):
+    camp = CampFactory(
+        is_active=True,
+        starts_on=timezone.localdate() - timedelta(days=2),
+        ends_on=timezone.localdate() - timedelta(days=1),
+    )
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    participant.pin.set_pin("2468")
+    participant.pin.save()
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "pin_change",
+            "pin-current_pin": "2468",
+            "pin-pin": "8642",
+            "pin-pin_repeat": "8642",
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.url == reverse("kiosk-login")
+    participant.pin.refresh_from_db()
+    assert participant.pin.check_pin("8642") is True
+
+
+@pytest.mark.django_db
+def test_kiosk_home_renders_own_pin_change_dialog(kiosk_client):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    participant.pin.set_pin("2468")
+    participant.pin.save()
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.get(reverse("kiosk-home"))
+
+    assert response.status_code == 200
+    assert b"Eigene PIN \xc3\xa4ndern" in response.content
+    assert b'id="pin-change-dialog"' in response.content
+    assert b'name="pin-current_pin"' in response.content
 
 
 @pytest.mark.django_db
