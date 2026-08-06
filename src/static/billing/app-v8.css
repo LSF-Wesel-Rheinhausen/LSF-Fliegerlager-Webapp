@@ -2771,6 +2771,11 @@ input[placeholder="DD.MM.YYYY"] {
     -webkit-overflow-scrolling: touch;
   }
 
+  .participant-settlements .table-responsive {
+    min-width: 0;
+    max-width: 100%;
+  }
+
   .kiosk-nav {
     display: none !important;
   }

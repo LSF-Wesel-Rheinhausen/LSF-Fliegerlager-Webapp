@@ -233,6 +233,18 @@ test("Admin completes setup, login, camp workflow and logout", async ({ page }) 
   await expect(page.locator(".participant-settlements").getByRole("table")).toBeVisible();
   await expect(page.getByRole("link", { name: "Dienste verwalten" })).toHaveCount(0);
 
+  await page.setViewportSize({ width: 390, height: 844 });
+  const settlementLayout = await page.locator(".participant-settlements").evaluate((panel) => {
+    const table = panel.querySelector("table");
+    return {
+      panelClientWidth: panel.clientWidth,
+      panelScrollWidth: panel.scrollWidth,
+      tableClientWidth: table.clientWidth,
+      tableScrollWidth: table.scrollWidth,
+    };
+  });
+  expect(settlementLayout.panelScrollWidth).toBeLessThanOrEqual(settlementLayout.panelClientWidth + 1);
+  expect(settlementLayout.tableScrollWidth).toBeGreaterThan(settlementLayout.tableClientWidth);
   await assertNoUnexpectedOverflow(page);
   await logout(page);
   await expect(page).toHaveURL(/\/login\/?$/);
