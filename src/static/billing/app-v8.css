@@ -2906,8 +2906,13 @@ dialog {
 }
 
 .kiosk-dialog {
-  max-height: calc(100vh - 32px);
-  overflow: auto;
+  max-height: calc(100dvh - 2rem);
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  overflow-x: hidden;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
 }
 
 .kiosk-dialog--compact {
@@ -2916,10 +2921,15 @@ dialog {
 }
 
 .kiosk-dialog--wide {
-  width: min(1120px, calc(100vw - 32px));
-  max-width: min(1120px, calc(100vw - 32px));
-  max-height: calc(100vh - 32px);
-  overflow: auto;
+  width: min(1120px, calc(100vw - 2rem));
+  max-width: min(1120px, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  overflow-x: hidden;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
 }
 
 dialog::backdrop {
