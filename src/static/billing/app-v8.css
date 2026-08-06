@@ -2751,7 +2751,7 @@ input[placeholder="DD.MM.YYYY"] {
   }
 
   .kiosk-nav {
-    display: none;
+    display: none !important;
   }
 
   .kiosk-mobile-bottom-nav {

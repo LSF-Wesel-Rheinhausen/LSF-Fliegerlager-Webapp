@@ -1995,8 +1995,8 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/forms.py": {
-    "mtime": 1785943371.5585108,
-    "ast_hash": "e632cb30114a1eaeeb9fda496dea5d45",
+    "mtime": 1785963767.1133094,
+    "ast_hash": "426fcb459ffbdf9897b6b152d197c893",
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/importers.py": {
@@ -2390,8 +2390,8 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/views.py": {
-    "mtime": 1785954414.0455241,
-    "ast_hash": "7700b415ddde60d8693cf6038fc1ec0b",
+    "mtime": 1785963767.1160614,
+    "ast_hash": "6b078b324f9e16193e9684a08be2346d",
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/config/__init__.py": {
@@ -2420,8 +2420,8 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/config/settings.py": {
-    "mtime": 1785923820.3221536,
-    "ast_hash": "45ee7050f46f0d7fd4bbc0ed4f3511ac",
+    "mtime": 1785963705.6860814,
+    "ast_hash": "01cfa665541fde9b62dea6408eaac75e",
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/config/sso.py": {
@@ -3610,8 +3610,8 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/kiosk_home.html": {
-    "mtime": 1785923820.3256528,
-    "ast_hash": "dcdb867949eacdd39c58b1ab515a6f15",
+    "mtime": 1785963595.3730528,
+    "ast_hash": "b0a4fc294b62890b38b9c873ca908465",
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/kiosk_login.html": {
@@ -3660,13 +3660,13 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/price_rule_table.html": {
-    "mtime": 1781718540.623772,
-    "ast_hash": "9a5d6830661ed393af396999a29a023e",
+    "mtime": 1785963731.8312755,
+    "ast_hash": "5a6c99c297b7d24f9c3dec14797deaee",
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/price_rules_manage.html": {
-    "mtime": 1784803175.2024934,
-    "ast_hash": "9c893b49c5beefd9cfa5a4f47d9743fc",
+    "mtime": 1785963725.430266,
+    "ast_hash": "ce067816fa82a9f165043c9f5ea3290c",
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/settlement_email_compose.html": {
