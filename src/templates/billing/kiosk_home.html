@@ -1294,6 +1294,17 @@
         openDialog(kioskMenuDialog, event.currentTarget)
       );
 
+      const checkHashAndOpenMenu = () => {
+        if (window.location.hash === "#menu") {
+          if (kioskMenuDialog && !kioskMenuDialog.open) {
+            openDialog(kioskMenuDialog);
+            history.replaceState(null, null, ' ');
+          }
+        }
+      };
+      window.addEventListener("hashchange", checkHashAndOpenMenu);
+      checkHashAndOpenMenu();
+
       document.querySelectorAll("[data-open-quick-cancel-dialog]").forEach((button) => {
         button.addEventListener("click", () => {
           quickCancelChargeId.value = button.dataset.chargeId || "";

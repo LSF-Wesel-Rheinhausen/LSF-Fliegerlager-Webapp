@@ -79,9 +79,9 @@
           <span class="kiosk-mobile-bottom-nav__icon" aria-hidden="true">🤝</span>
           <span class="kiosk-mobile-bottom-nav__label">Partner</span>
         </a>
-        <a href="{% url 'user-guide' %}" class="kiosk-mobile-bottom-nav__item">
-          <span class="kiosk-mobile-bottom-nav__icon" aria-hidden="true">❓</span>
-          <span class="kiosk-mobile-bottom-nav__label">Hilfe</span>
+        <a href="{{ kiosk_urls.home }}#menu" class="kiosk-mobile-bottom-nav__item">
+          <span class="kiosk-mobile-bottom-nav__icon" aria-hidden="true">☰</span>
+          <span class="kiosk-mobile-bottom-nav__label">Mehr</span>
         </a>
         <a href="{{ kiosk_urls.logout }}" class="kiosk-mobile-bottom-nav__item">
           <span class="kiosk-mobile-bottom-nav__icon" aria-hidden="true">🚪</span>
