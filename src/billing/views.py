@@ -105,6 +105,7 @@ from .notifications import (
     notify_expense_submitted,
     notify_kiosk_partner_action,
     notify_linked_booking,
+    notify_participant_registration_submitted,
     notify_shift_exchange,
 )
 from .permissions import (
@@ -525,6 +526,11 @@ def _notify_shift_exchange_by_id(
         actor=Participant.objects.get(pk=actor_id),
         previous_participant=previous_participant,
     )
+
+
+def _notify_participant_registration_submitted_by_id(participant_id: int) -> None:
+    """Load a committed kiosk registration before queuing administrative notifications."""
+    notify_participant_registration_submitted(Participant.objects.select_related("camp").get(pk=participant_id))
 
 
 @superuser_required
@@ -1921,6 +1927,7 @@ def kiosk_self_register(request, kiosk_mode="private"):
             participant.save()
             participant.pin.set_pin(form.cleaned_data["pin"])
             participant.pin.save()
+            transaction.on_commit(partial(_notify_participant_registration_submitted_by_id, participant.pk))
 
         messages.success(
             request,

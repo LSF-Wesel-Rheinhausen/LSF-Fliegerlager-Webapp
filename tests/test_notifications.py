@@ -15,6 +15,7 @@ from billing.models import (
     Charge,
     Expense,
     MealSignup,
+    Participant,
     ParticipantBookingLink,
     PushMessage,
     PushSubscription,
@@ -320,8 +321,93 @@ def test_notification_settings_show_only_current_owners_devices(client):
     assert b"Mein Laptop" in response.content
     assert b"Fremdes Ger\xc3\xa4t" not in response.content
     assert b"Umbenennen" in response.content
+    assert b"Neue Anmeldegenehmigungen" in response.content
     assert hashlib.sha256(b"https://push.example.test/mine").hexdigest().encode() in response.content
     assert b"https://push.example.test/mine" not in response.content
+
+
+@pytest.mark.django_db
+def test_self_registration_notifies_opted_in_admin_after_commit(
+    kiosk_client,
+    django_capture_on_commit_callbacks,
+):
+    camp = CampFactory(is_active=True, name="Sommerlager")
+    admin = UserFactory(is_superuser=True)
+    enabled = PushSubscription.objects.create(
+        user=admin,
+        endpoint="https://push.example.test/enrollment-admin",
+        p256dh="key",
+        auth="secret",
+        categories=["enrollments_admin"],
+    )
+    PushSubscription.objects.create(
+        user=admin,
+        endpoint="https://push.example.test/enrollment-disabled-category",
+        p256dh="key",
+        auth="secret",
+        categories=["expenses_admin"],
+    )
+    regular_user = UserFactory()
+    PushSubscription.objects.create(
+        user=regular_user,
+        endpoint="https://push.example.test/enrollment-non-admin",
+        p256dh="key",
+        auth="secret",
+        categories=["enrollments_admin"],
+    )
+
+    with django_capture_on_commit_callbacks(execute=True):
+        response = kiosk_client.post(
+            reverse("kiosk-self-register"),
+            {
+                "first_name": "Lukas",
+                "last_name": "Neumann",
+                "email": "lukas@example.test",
+                "phone": "0170123456",
+                "pin": "2468",
+                "pin_repeat": "2468",
+            },
+        )
+
+    assert response.status_code == 302
+    participant = Participant.objects.get(camp=camp, first_name="Lukas", last_name="Neumann")
+    message = PushMessage.objects.get()
+    assert message.subscription == enabled
+    assert message.category == "enrollments_admin"
+    assert message.title == "Neue Registrierungsanfrage"
+    assert message.body == "Lukas Neumann wartet für Sommerlager auf Freigabe."
+    assert message.target_url == f"/camps/{camp.pk}/#pending-registrations"
+    assert message.dedupe_key == f"participant-registration:{participant.pk}:pending"
+
+
+@pytest.mark.django_db
+def test_invalid_self_registration_does_not_notify_admin(
+    kiosk_client,
+    django_capture_on_commit_callbacks,
+):
+    CampFactory(is_active=True)
+    admin = UserFactory(is_superuser=True)
+    PushSubscription.objects.create(
+        user=admin,
+        endpoint="https://push.example.test/invalid-enrollment-admin",
+        p256dh="key",
+        auth="secret",
+        categories=["enrollments_admin"],
+    )
+
+    with django_capture_on_commit_callbacks(execute=True):
+        response = kiosk_client.post(
+            reverse("kiosk-self-register"),
+            {
+                "first_name": "Lukas",
+                "last_name": "Neumann",
+                "pin": "2468",
+                "pin_repeat": "8642",
+            },
+        )
+
+    assert response.status_code == 400
+    assert PushMessage.objects.count() == 0
 
 
 @pytest.mark.django_db
