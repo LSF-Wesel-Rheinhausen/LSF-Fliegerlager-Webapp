@@ -460,6 +460,11 @@ test("Admin creates and edits a manual booking and sees the change log", async (
     clientWidth: panel.clientWidth,
     scrollWidth: panel.scrollWidth,
   }));
+  const bookingLayout = await bookings.evaluate((panel) => ({
+    clientWidth: panel.clientWidth,
+    scrollWidth: panel.scrollWidth,
+  }));
+  expect(bookingLayout.scrollWidth).toBeLessThanOrEqual(bookingLayout.clientWidth + 1);
   expect(auditLayout.scrollWidth).toBeLessThanOrEqual(auditLayout.clientWidth + 1);
   expect(browserErrors).toEqual([]);
   expect(failedRequests).toEqual([]);

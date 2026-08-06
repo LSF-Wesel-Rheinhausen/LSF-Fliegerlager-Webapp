@@ -3319,10 +3319,13 @@ dialog::backdrop {
   margin: 0;
 }
 
+.booking-records-form .responsive-record-table,
 .booking-audit-form .responsive-record-table {
   table-layout: fixed;
 }
 
+.booking-records-form .responsive-record-table th,
+.booking-records-form .responsive-record-table td,
 .booking-audit-form .responsive-record-table th,
 .booking-audit-form .responsive-record-table td {
   min-width: 0;
