@@ -1424,3 +1424,34 @@ test("Mobile Kiosk: partner authorization text does not overflow container on mo
   const clientWidth = await page.evaluate(() => document.documentElement.clientWidth);
   expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
 });
+
+test("Mobile Kiosk: check-in date selection does not overflow container on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await setupFirstAdmin(page);
+  await createCamp(page, "Checkin Mobile Camp", 0, 4);
+  await createParticipant(page, "Checkin", "Tester", "", "1234");
+  await logout(page);
+
+  await openKiosk(page, "/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Checkin Tester" });
+  await page.getByLabel("PIN:", { exact: true }).fill("1234");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await expect(page).toHaveURL(/.*\/kiosk\//);
+
+  await page.getByRole("button", { name: "Eintragen" }).click();
+  const checkinDialog = page.locator("dialog#checkin-dialog");
+  await expect(checkinDialog).toBeVisible();
+
+  // Verify check-in target row and date inputs do not exceed container width on mobile
+  const targetRow = page.locator(".target-row--checkin").first();
+  await expect(targetRow).toBeVisible();
+  const dateInput = page.locator("#checkin-dialog input[type='date']").first();
+  await expect(dateInput).toBeVisible();
+  const inputBox = await dateInput.boundingBox();
+  const containerBox = await targetRow.boundingBox();
+  expect(inputBox.x + inputBox.width).toBeLessThanOrEqual(containerBox.x + containerBox.width + 2);
+
+  const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  const clientWidth = await page.evaluate(() => document.documentElement.clientWidth);
+  expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+});

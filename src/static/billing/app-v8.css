@@ -1894,6 +1894,21 @@ textarea {
   align-items: end;
 }
 
+.dialog-field {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+}
+
+.dialog-field input,
+input[type="date"] {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
 .checkin-target-list {
   max-height: none;
   overflow-y: visible;
