@@ -535,25 +535,6 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
   expect(sessionCookie).toBeDefined();
   expect(sessionCookie.expires).toBeGreaterThan(Date.now() / 1000);
 
-  // Existing meal-deadline notifications still use the legacy hash deep link.
-  await page.goto("/kiosk/#meal-calendar");
-  const mealCalendarDialog = page.locator("dialog#meal-calendar-dialog");
-  await expect(mealCalendarDialog).toBeVisible();
-  await expect(page).toHaveURL(/.*\/kiosk\/$/);
-  await mealCalendarDialog.locator(".meal-status-day--empty").first().click();
-  const mealDayDetail = page.locator('dialog[id^="meal-day-detail-"]:visible');
-  await expect(mealDayDetail).toBeVisible();
-  await mealDayDetail.getByRole("button", { name: "Essen für diesen Tag buchen" }).click();
-  const directMealDialog = page.locator("dialog#meal-dialog");
-  await expect(directMealDialog).toBeVisible();
-  await expect(directMealDialog.locator("[data-meal-date-checkbox]:checked")).toHaveCount(1);
-  await expect(directMealDialog.locator("#meal-step-persons")).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(mealDayDetail).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(mealCalendarDialog).toBeVisible();
-  await page.keyboard.press("Escape");
-
   // Check-in can be entered from the kiosk.
   const checkinArrival = germanDate(addDays(new Date(), 2));
   const checkinDeparture = germanDate(addDays(new Date(), 4));
@@ -664,6 +645,57 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
 
   await page.getByRole("link", { name: "Abmelden" }).first().click();
   await expect(page).toHaveURL(/.*\/kiosk\/login\//);
+});
+
+test("Meal booking shows one contextual back action", async ({ page }) => {
+  await setupFirstAdmin(page);
+  const campName = await createCamp(page, "Kalender Navigation", 0, 4);
+  await createParticipant(page, "Marie", "Curie", "", "1234");
+
+  await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
+  await page.getByRole("link", { name: campName, exact: true }).click();
+  await page.getByRole("link", { name: "Preise verwalten" }).first().click();
+  await page.locator('input[name="meal-dinner_adult_price"]').fill("7.00");
+  await page.getByRole("button", { name: "Standardpreise speichern" }).click();
+  await logout(page);
+
+  await openKiosk(page, "/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Marie Curie" });
+  await page.getByLabel("PIN:", { exact: true }).fill("1234");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+
+  // Existing meal-deadline notifications still use the legacy hash deep link.
+  await page.goto("/kiosk/#meal-calendar");
+  const mealCalendarDialog = page.locator("dialog#meal-calendar-dialog");
+  await expect(mealCalendarDialog).toBeVisible();
+  await expect(page).toHaveURL(/.*\/kiosk\/$/);
+  const openMealDay = mealCalendarDialog.locator(".meal-status-day--empty").first();
+  await expect(openMealDay).toContainText("7,00 €");
+  await openMealDay.click();
+
+  const mealDayDetail = page.locator('dialog[id^="meal-day-detail-"]:visible');
+  await expect(mealDayDetail).toBeVisible();
+  await mealDayDetail.getByRole("button", { name: "Essen für diesen Tag buchen" }).click();
+
+  const mealDialog = page.locator("dialog#meal-dialog");
+  await expect(mealDialog.locator("[data-meal-date-checkbox]:checked")).toHaveCount(1);
+  await expect(mealDialog.locator("#meal-step-persons")).toBeVisible();
+  await expect(mealDialog.locator("#meal-dialog-close")).toBeHidden();
+  await expect(mealDialog.getByRole("button", { name: "Zurück", exact: true })).toHaveCount(1);
+  await mealDialog.locator("#meal-back-to-dates").click();
+  await expect(mealDayDetail).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await mealCalendarDialog.getByRole("button", { name: "Essen buchen" }).click();
+  await expect(mealDialog.locator("#meal-step-date")).toBeVisible();
+  await expect(mealDialog.locator("#meal-dialog-close")).toBeVisible();
+  await mealDialog.locator("input[data-meal-date-checkbox]:not([disabled])").first().check();
+  await mealDialog.getByRole("button", { name: "Weiter" }).click();
+  await expect(mealDialog.locator("#meal-dialog-close")).toBeHidden();
+  await expect(mealDialog.getByRole("button", { name: "Zurück", exact: true })).toHaveCount(1);
+  await mealDialog.locator("#meal-back-to-dates").click();
+  await expect(mealDialog.locator("#meal-step-date")).toBeVisible();
+  await expect(mealDialog.locator("#meal-dialog-close")).toBeVisible();
 });
 
 test("Partner meal retraction requires explicit confirmation", async ({ page }) => {

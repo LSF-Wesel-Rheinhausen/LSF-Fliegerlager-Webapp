@@ -1935,7 +1935,7 @@ input[placeholder="DD.MM.YYYY"] {
 .meal-status-day {
   display: grid;
   gap: 4px;
-  min-height: 88px;
+  min-height: 124px;
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -1970,6 +1970,27 @@ input[placeholder="DD.MM.YYYY"] {
   font-weight: 800;
   line-height: 1.2;
   overflow-wrap: anywhere;
+}
+
+.meal-status-day__offer {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding-top: 5px;
+  border-top: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+}
+
+.meal-status-day__meal {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.meal-status-day__price {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
 }
 
 .meal-status-day--booked,
