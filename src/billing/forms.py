@@ -62,8 +62,8 @@ validate_kiosk_camp_pin = RegexValidator(
     code="invalid_kiosk_camp_pin",
 )
 validate_personal_kiosk_pin = RegexValidator(
-    regex=r"\A[0-9]{4,12}\Z",
-    message="Die PIN muss aus 4 bis 12 Ziffern bestehen.",
+    regex=r"\A[0-9]{4,10}\Z",
+    message="Die PIN muss aus 4 bis 10 Ziffern bestehen.",
     code="invalid_personal_kiosk_pin",
 )
 TRIVIAL_PERSONAL_PINS = frozenset(
@@ -940,7 +940,7 @@ class ParticipantPinForm(forms.Form):
     pin = forms.CharField(
         label="Neue PIN",
         min_length=4,
-        max_length=12,
+        max_length=10,
         strip=True,
         widget=forms.PasswordInput(attrs={"autocomplete": "new-password", "inputmode": "numeric"}),
     )
@@ -1100,14 +1100,14 @@ class KioskFamilyMemberPinForm(forms.Form):
     pin = forms.CharField(
         label="Neuer PIN",
         min_length=4,
-        max_length=12,
+        max_length=10,
         strip=True,
         widget=forms.PasswordInput(attrs={"autocomplete": "new-password", "inputmode": "numeric"}),
     )
     pin_repeat = forms.CharField(
         label="PIN wiederholen",
         min_length=4,
-        max_length=12,
+        max_length=10,
         strip=True,
         widget=forms.PasswordInput(attrs={"autocomplete": "new-password", "inputmode": "numeric"}),
     )
@@ -1127,7 +1127,7 @@ class KioskPinChangeForm(forms.Form):
     current_pin = forms.CharField(
         label="Aktuelle PIN",
         min_length=4,
-        max_length=12,
+        max_length=10,
         strip=True,
         widget=forms.PasswordInput(attrs={"autocomplete": "current-password", "inputmode": "numeric"}),
     )
@@ -1136,7 +1136,7 @@ class KioskPinChangeForm(forms.Form):
         strip=True,
         validators=[validate_personal_kiosk_pin],
         widget=forms.PasswordInput(
-            attrs={"autocomplete": "new-password", "inputmode": "numeric", "minlength": "4", "maxlength": "12"}
+            attrs={"autocomplete": "new-password", "inputmode": "numeric", "minlength": "4", "maxlength": "10"}
         ),
     )
     pin_repeat = forms.CharField(
@@ -1144,7 +1144,7 @@ class KioskPinChangeForm(forms.Form):
         strip=True,
         validators=[validate_personal_kiosk_pin],
         widget=forms.PasswordInput(
-            attrs={"autocomplete": "new-password", "inputmode": "numeric", "minlength": "4", "maxlength": "12"}
+            attrs={"autocomplete": "new-password", "inputmode": "numeric", "minlength": "4", "maxlength": "10"}
         ),
     )
 

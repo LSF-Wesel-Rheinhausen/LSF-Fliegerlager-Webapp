@@ -740,10 +740,45 @@ test("Kiosk user can change their own PIN and log in with the new PIN", async ({
 
   await expect(page).toHaveURL(/\/kiosk\/login\/$/);
   await expect(page.getByText("Deine PIN wurde geändert. Bitte melde dich erneut an.")).toBeVisible();
+  await expect(page.getByLabel("Teilnehmer")).toBeVisible();
   await page.getByLabel("Teilnehmer").selectOption({ label: "Marie Curie" });
   await page.getByLabel("PIN:", { exact: true }).fill("8642");
   await page.getByRole("button", { name: "Anmelden", exact: true }).click();
   await expect(page).toHaveURL(/\/kiosk\/$/);
+});
+
+test("Kiosk user sees validation errors when changing PIN incorrectly", async ({ page }) => {
+  await setupFirstAdmin(page);
+  await createCamp(page, "PIN-Fehler-Validierung", 0, 4);
+  await createParticipant(page, "Marie", "Curie", "", "2468");
+  await logout(page);
+
+  await openKiosk(page, "/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Marie Curie" });
+  await page.getByLabel("PIN:", { exact: true }).fill("2468");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+
+  await page.getByRole("button", { name: "Weitere Bereiche öffnen" }).click();
+  await page.getByRole("button", { name: "Eigene PIN ändern" }).click();
+  const pinDialog = page.locator("dialog#pin-change-dialog");
+  await expect(pinDialog).toBeVisible();
+
+  await pinDialog.getByLabel("Aktuelle PIN").fill("9999");
+  await pinDialog.getByLabel("Neue PIN:", { exact: true }).fill("8642");
+  await pinDialog.getByLabel("Neue PIN wiederholen").fill("8642");
+  await pinDialog.getByRole("button", { name: "PIN ändern" }).click();
+  await expect(pinDialog).toBeVisible();
+  await expect(pinDialog.getByText("Die aktuelle PIN ist nicht korrekt.")).toBeVisible();
+
+  await pinDialog.getByLabel("Aktuelle PIN").fill("2468");
+  await pinDialog.getByLabel("Neue PIN:", { exact: true }).fill("8642");
+  await pinDialog.getByLabel("Neue PIN wiederholen").fill("9753");
+  await pinDialog.getByRole("button", { name: "PIN ändern" }).click();
+  await expect(pinDialog).toBeVisible();
+  await expect(pinDialog.getByText("Die PINs stimmen nicht überein.")).toBeVisible();
+
+  await pinDialog.getByRole("button", { name: "Schließen" }).click();
+  await expect(pinDialog).not.toBeVisible();
 });
 
 test("Meal booking shows one contextual back action", async ({ page }) => {
