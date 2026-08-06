@@ -1626,6 +1626,18 @@ test("Mobile Kiosk: fixed bottom navigation bar is present and functional on mob
   const position = await bottomNav.evaluate((el) => window.getComputedStyle(el).position);
   expect(position).toBe("fixed");
 
+  const bottomSpacing = await bottomNav.evaluate((el) => {
+    const styles = window.getComputedStyle(el);
+    const bounds = el.getBoundingClientRect();
+    return {
+      paddingBottom: Number.parseFloat(styles.paddingBottom),
+      bottom: bounds.bottom,
+      viewportHeight: window.innerHeight,
+    };
+  });
+  expect(bottomSpacing.paddingBottom).toBeGreaterThanOrEqual(12);
+  expect(bottomSpacing.bottom).toBe(bottomSpacing.viewportHeight);
+
   // Verify top navigation is hidden on mobile
   const topNav = page.locator(".kiosk-nav");
   await expect(topNav).toBeHidden();
