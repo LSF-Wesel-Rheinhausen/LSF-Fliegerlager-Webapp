@@ -2770,7 +2770,8 @@ input[placeholder="DD.MM.YYYY"] {
 
   #kiosk-menu-dialog::backdrop,
   #meal-calendar-dialog::backdrop {
-    bottom: calc(64px + env(safe-area-inset-bottom));
+    -webkit-mask-image: linear-gradient(to bottom, black 0%, black calc(100% - 68px - env(safe-area-inset-bottom)), transparent calc(100% - 68px - env(safe-area-inset-bottom)));
+    mask-image: linear-gradient(to bottom, black 0%, black calc(100% - 68px - env(safe-area-inset-bottom)), transparent calc(100% - 68px - env(safe-area-inset-bottom)));
   }
 
   .kiosk-mobile-bottom-nav {

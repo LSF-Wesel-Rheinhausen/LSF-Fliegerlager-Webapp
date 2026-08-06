@@ -205,6 +205,21 @@
               event.clientX > rect.right
             ) {
               event.target.close();
+
+              // If they clicked the inert bottom nav area, trigger the underlying button
+              const elementsUnder = document.elementsFromPoint(event.clientX, event.clientY);
+              const navItem = elementsUnder.find(el => el.closest && el.closest('.kiosk-mobile-bottom-nav__item'));
+              if (navItem) {
+                const target = navItem.closest('.kiosk-mobile-bottom-nav__item');
+                const isMenuToggle = target.getAttribute('href')?.endsWith('#menu') && event.target.id === 'kiosk-menu-dialog';
+                const isEssenToggle = target.getAttribute('href')?.endsWith('#essen') && event.target.id === 'meal-calendar-dialog';
+
+                if (!isMenuToggle && !isEssenToggle) {
+                  // Use a short timeout so the dialog finishes closing and the inert state is removed
+                  setTimeout(() => target.click(), 10);
+                }
+              }
+
               return;
             }
           }
