@@ -1590,8 +1590,10 @@ test("Mobile Kiosk: bottom navigation bar hides shifts in post-camp mode", async
   const bottomNav = page.locator(".kiosk-mobile-bottom-nav");
   await expect(bottomNav).toBeVisible();
 
-  // Verify "Dienste" is hidden since the camp is over
+  // Verify "Dienste" and "Essen" are hidden since the camp is over
   await expect(bottomNav.getByRole("link", { name: "Kiosk" })).toBeVisible();
   await expect(bottomNav.getByRole("link", { name: "Dienste" })).toHaveCount(0);
+  await expect(bottomNav.getByRole("link", { name: "Essen" })).toHaveCount(0);
+  await expect(bottomNav.getByRole("link", { name: "Mehr" })).toBeVisible();
 
 });
