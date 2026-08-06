@@ -1518,6 +1518,7 @@ test("Admin can unlock participant PIN timeout after kiosk lockout", async ({ pa
   for (let i = 0; i < 5; i++) {
     await page.getByLabel("PIN:", { exact: true }).fill("9999");
     await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+    await expect(page.getByText("Teilnehmer oder PIN ist ungültig.")).toBeVisible();
   }
 
   // 6th attempt shows locked message
