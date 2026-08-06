@@ -35,6 +35,7 @@ self.addEventListener("push", (event) => {
   const data = event.data ? event.data.json() : {};
   event.waitUntil(self.registration.showNotification(data.title || "Fliegerlager", {
     body: data.body || "Es gibt eine neue Nachricht.",
+    lang: "de-DE",
     icon: "/static/billing/icons/icon-192.png",
     badge: "/static/billing/icons/icon-192.png",
     data: {url: data.url || "/"},
