@@ -1388,3 +1388,39 @@ test("Mobile Kiosk: summary invoice dialog and archived settlements do not overf
   const dialogBox = await summaryDialog.boundingBox();
   expect(dialogBox.height).toBeLessThanOrEqual(667);
 });
+
+test("Mobile Kiosk: partner authorization text does not overflow container on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await setupFirstAdmin(page);
+  const campName = await createCamp(page, "Partner Mobile Camp", 0, 4);
+  const campUrl = page.url();
+  await createParticipant(page, "Alice", "Partner", "", "1234");
+  await page.goto(campUrl);
+  await createParticipant(page, "Bob", "Partner", "", "5678");
+
+  // Invite Bob from Alice
+  await openKiosk(page, "/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Alice Partner" });
+  await page.getByLabel("PIN:", { exact: true }).fill("1234");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await expect(page).toHaveURL(/.*\/kiosk\//);
+  await page.goto("/kiosk/partners/");
+  await page.locator("select[name='link-participant']").selectOption({ index: 1 });
+  await page.getByRole("button", { name: "Partner einladen" }).click();
+  await page.getByRole("link", { name: "Abmelden" }).click();
+
+  // Login Bob to see pending invitation
+  await openKiosk(page, "/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Bob Partner" });
+  await page.getByLabel("PIN:", { exact: true }).fill("5678");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await expect(page).toHaveURL(/.*\/kiosk\//);
+
+  const authScope = page.locator(".kiosk-partner-authorization");
+  await expect(authScope).toBeVisible();
+
+  // Verify container bounds and no horizontal overflow out of screen
+  const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  const clientWidth = await page.evaluate(() => document.documentElement.clientWidth);
+  expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+});
