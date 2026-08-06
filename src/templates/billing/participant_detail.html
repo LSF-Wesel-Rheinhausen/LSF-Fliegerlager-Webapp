@@ -36,7 +36,7 @@
           <button type="submit">PIN sperren</button>
         </form>
       {% endif %}
-      <a class="button" href="{% url 'export-participant-pdf' participant.pk %}" target="_blank" rel="noopener">Einzelabrechnung als PDF öffnen</a>
+      <a class="button" href="{% url 'export-participant-pdf' participant.pk %}" target="_blank" rel="noopener" data-pdf-preview="true">Einzelabrechnung als PDF öffnen</a>
     </div>
   </div>
 
@@ -179,7 +179,7 @@
             <td>{{ snapshot.run.created_at }}</td>
             <td>{{ snapshot.total_due|money_eur }}</td>
             <td>{{ snapshot.balance|money_eur }}</td>
-            <td><a href="{% url 'settlement-snapshot-pdf' snapshot.pk %}" target="_blank" rel="noopener">PDF</a></td>
+            <td><a href="{% url 'settlement-snapshot-pdf' snapshot.pk %}" target="_blank" rel="noopener" data-pdf-preview="true">PDF</a></td>
           </tr>
         {% empty %}
           <tr><td colspan="6">Noch keine gespeicherte Abrechnung vorhanden.</td></tr>

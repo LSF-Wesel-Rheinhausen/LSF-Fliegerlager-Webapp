@@ -3061,7 +3061,15 @@ def test_kiosk_show_invoices_setting_toggle(kiosk_client):
 
     response_active = kiosk_client.get(reverse("kiosk-home"))
     assert response_active.status_code == 200
-    assert "Meine Rechnungen" in response_active.content.decode("utf-8")
+    content = response_active.content.decode("utf-8")
+    assert "Meine Rechnungen" in content
+    assert 'data-pdf-preview="true"' in content
+    assert 'id="global-pdf-dialog"' in content
+
+    pdf_response = kiosk_client.get(reverse("kiosk-current-settlement-pdf"))
+    assert pdf_response.status_code == 200
+    assert pdf_response["X-Frame-Options"] == "SAMEORIGIN"
+    assert "frame-ancestors 'self'" in pdf_response["Content-Security-Policy"]
 
 
 @pytest.mark.django_db

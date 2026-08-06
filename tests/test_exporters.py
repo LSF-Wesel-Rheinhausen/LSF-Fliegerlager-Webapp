@@ -377,6 +377,8 @@ def test_participant_pdf_export_returns_pdf_preview(client, export_dataset):
     assert response.status_code == 200
     assert response["Content-Type"] == "application/pdf"
     assert response["Content-Disposition"] == f'inline; filename="abrechnung-{participant.pk}.pdf"'
+    assert response["X-Frame-Options"] == "SAMEORIGIN"
+    assert "frame-ancestors 'self'" in response["Content-Security-Policy"]
     assert response.content.startswith(b"%PDF-")
 
 

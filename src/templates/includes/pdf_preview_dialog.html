@@ -1,0 +1,13 @@
+<dialog id="global-pdf-dialog" class="pdf-dialog" aria-labelledby="global-pdf-dialog-title">
+  <div class="dialog-heading">
+    <h2 id="global-pdf-dialog-title">PDF-Vorschau</h2>
+    <form method="dialog">
+      <button type="submit" class="button button-secondary">Schließen</button>
+    </form>
+  </div>
+  <iframe id="global-pdf-iframe" class="pdf-dialog__viewer" src="about:blank" title="PDF-Vorschau"></iframe>
+  <p class="hint pdf-dialog__fallback">
+    Falls die Vorschau nicht dargestellt wird:
+    <a href="#" target="_blank" rel="noopener" data-pdf-open-external>PDF direkt öffnen</a>
+  </p>
+</dialog>

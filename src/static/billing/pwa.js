@@ -6,7 +6,11 @@
   const installDialog = document.querySelector("[data-pwa-install-dialog]");
   const nativeInstallButton = installDialog?.querySelector("[data-pwa-native-install]");
   const installStatus = installDialog?.querySelector("[data-pwa-install-status]");
+  const pdfDialog = document.getElementById("global-pdf-dialog");
+  const pdfFrame = document.getElementById("global-pdf-iframe");
+  const pdfExternalLink = pdfDialog?.querySelector("[data-pdf-open-external]");
   let installPrompt;
+  let pdfTrigger;
 
   const isIos = () =>
     /iPad|iPhone|iPod/.test(navigator.userAgent) ||
@@ -96,5 +100,31 @@
     setInstallStatus("App installiert.");
     updateInstallState();
     installDialog?.close();
+  });
+
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest("a[data-pdf-preview]");
+    if (!link || !pdfDialog || !pdfFrame || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+
+    const pdfUrl = new URL(link.href, window.location.href);
+    if (pdfUrl.origin !== window.location.origin) return;
+
+    event.preventDefault();
+    pdfTrigger = link;
+    pdfFrame.src = pdfUrl.href;
+    if (pdfExternalLink) pdfExternalLink.href = pdfUrl.href;
+    pdfDialog.showModal();
+  });
+
+  pdfDialog?.addEventListener("click", (event) => {
+    if (event.target === pdfDialog) pdfDialog.close();
+  });
+
+  pdfDialog?.addEventListener("close", () => {
+    if (pdfFrame) pdfFrame.src = "about:blank";
+    if (pdfExternalLink) pdfExternalLink.href = "#";
+    const trigger = pdfTrigger;
+    pdfTrigger = undefined;
+    window.requestAnimationFrame(() => trigger?.focus());
   });
 })();
