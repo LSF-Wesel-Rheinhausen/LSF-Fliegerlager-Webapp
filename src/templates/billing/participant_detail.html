@@ -189,7 +189,7 @@
   </section>
 
   <section class="panel stack">
-    <form method="post" action="{% url 'booking-audit-batch-restore' participant.pk %}">
+    <form class="booking-audit-form" method="post" action="{% url 'booking-audit-batch-restore' participant.pk %}">
       {% csrf_token %}
       <div class="toolbar compact-toolbar">
         <div>

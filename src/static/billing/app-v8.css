@@ -3286,6 +3286,17 @@ dialog::backdrop {
   color: var(--text);
 }
 
+.booking-audit-form .responsive-record-table {
+  table-layout: fixed;
+}
+
+.booking-audit-form .responsive-record-table th,
+.booking-audit-form .responsive-record-table td {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 780px) {
   .responsive-record-table {
     display: block;

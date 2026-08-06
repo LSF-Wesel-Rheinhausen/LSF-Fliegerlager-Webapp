@@ -350,6 +350,8 @@ test("Admin registers and signs in with a passkey", async ({ context, page }) =>
 });
 
 test("Admin creates and edits a manual booking and sees the change log", async ({ page }) => {
+  const correctedDescription =
+    "Cola korrigiert mit ausführlicher Sonderkostbeschreibung und zusätzlicher Dokumentation für das Änderungsprotokoll";
   const { browserErrors, failedRequests } = trackPageIssues(page);
   await setupFirstAdmin(page);
   await createCamp(page);
@@ -426,18 +428,27 @@ test("Admin creates and edits a manual booking and sees the change log", async (
   await expect(bookingRow.getByRole("cell", { name: /5,00 €$/ })).toBeVisible();
   await bookingRow.getByRole("link", { name: "Bearbeiten", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Buchung bearbeiten" })).toBeVisible();
-  await page.getByLabel("Beschreibung").fill("Cola korrigiert");
+  await page.getByLabel("Beschreibung").fill(correctedDescription);
   await page.getByLabel("Menge").fill("3");
   await page.getByLabel("Datum").fill("01.07.2026");
   await page.getByRole("button", { name: "Speichern" }).click();
 
+  await page.setViewportSize({ width: 1280, height: 800 });
   await expect(page.getByRole("heading", { name: "Ada Lovelace" })).toBeVisible();
   await expect(page.getByText("Buchung wurde gespeichert und protokolliert.")).toBeVisible();
-  await expect(page.getByRole("cell", { name: "Cola korrigiert" }).first()).toBeVisible();
+  await expect(page.getByRole("cell", { name: correctedDescription }).first()).toBeVisible();
   await expect(page.getByRole("cell", { name: "7,50 €" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Änderungsprotokoll" })).toBeVisible();
   await expect(page.getByText("Cola · 2.00 x 2.50")).toBeVisible();
-  await expect(page.getByText("Cola korrigiert · 3.00 x 2.50")).toBeVisible();
+  await expect(page.getByText(`${correctedDescription} · 3.00 x 2.50`)).toBeVisible();
+  const auditPanel = page.locator("section.panel").filter({
+    has: page.getByRole("heading", { name: "Änderungsprotokoll" }),
+  });
+  const auditLayout = await auditPanel.evaluate((panel) => ({
+    clientWidth: panel.clientWidth,
+    scrollWidth: panel.scrollWidth,
+  }));
+  expect(auditLayout.scrollWidth).toBeLessThanOrEqual(auditLayout.clientWidth + 1);
   expect(browserErrors).toEqual([]);
   expect(failedRequests).toEqual([]);
 });
