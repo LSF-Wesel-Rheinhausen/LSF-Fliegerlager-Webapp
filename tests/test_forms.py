@@ -10,11 +10,12 @@ from billing.forms import (
     FirstAdminSetupForm,
     KioskLoginForm,
     ParticipantForm,
+    ParticipantRegistrationApprovalForm,
     UserCreateForm,
     UserEditForm,
     validate_receipt_upload,
 )
-from billing.models import ParticipantFamilyMember
+from billing.models import Participant, ParticipantFamilyMember
 from billing.roles import ROLE_EDITOR
 from tests.factories import CampFactory, ParticipantFactory, SuperUserFactory
 
@@ -247,6 +248,86 @@ def test_participant_form_accepts_arrival_and_departure_dates():
     participant = form.save(commit=False)
     assert participant.arrival_date.isoformat() == "2026-07-01"
     assert participant.departure_date.isoformat() == "2026-07-10"
+
+
+def test_participant_subsidy_rates_default_to_zero():
+    participant = Participant()
+
+    assert participant.hilfssatz == Decimal("0.0000")
+    assert participant.berufssatz == Decimal("0.0000")
+
+
+@pytest.mark.django_db
+def test_registration_approval_requires_both_rates_for_youth_group():
+    participant = ParticipantFactory(is_youth_group=True)
+    form = ParticipantRegistrationApprovalForm(
+        data={
+            "is_youth_group": "on",
+            "price_attributes_confirmed": "on",
+        },
+        instance=participant,
+    )
+
+    assert not form.is_valid()
+    assert form.errors["hilfssatz"] == ["Bitte gib den Hilfssatz für die Jugendgruppe ein."]
+    assert form.errors["berufssatz"] == ["Bitte gib den Berufssatz für die Jugendgruppe ein."]
+
+
+@pytest.mark.django_db
+def test_registration_approval_accepts_zero_and_fractional_youth_group_rates():
+    participant = ParticipantFactory(is_youth_group=True)
+    form = ParticipantRegistrationApprovalForm(
+        data={
+            "is_youth_group": "on",
+            "hilfssatz": "0",
+            "berufssatz": "0.3300",
+            "price_attributes_confirmed": "on",
+        },
+        instance=participant,
+    )
+
+    assert form.is_valid(), form.errors
+    approved_participant = form.save()
+    assert approved_participant.hilfssatz == Decimal("0")
+    assert approved_participant.berufssatz == Decimal("0.3300")
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("field_name", "invalid_value"),
+    [("hilfssatz", "-0.0001"), ("berufssatz", "1.0001")],
+)
+def test_registration_approval_rejects_youth_group_rates_outside_unit_interval(field_name, invalid_value):
+    participant = ParticipantFactory(is_youth_group=True)
+    data = {
+        "is_youth_group": "on",
+        "hilfssatz": "0.5000",
+        "berufssatz": "0.3300",
+        "price_attributes_confirmed": "on",
+    }
+    data[field_name] = invalid_value
+    form = ParticipantRegistrationApprovalForm(data=data, instance=participant)
+
+    assert not form.is_valid()
+    assert field_name in form.errors
+
+
+@pytest.mark.django_db
+def test_registration_approval_preserves_rates_when_non_youth_group_fields_are_omitted():
+    participant = ParticipantFactory(
+        is_youth_group=False,
+        hilfssatz=Decimal("0.5000"),
+        berufssatz=Decimal("0.3300"),
+    )
+    form = ParticipantRegistrationApprovalForm(
+        data={"price_attributes_confirmed": "on"},
+        instance=participant,
+    )
+
+    assert form.is_valid(), form.errors
+    approved_participant = form.save()
+    assert approved_participant.hilfssatz == Decimal("0.5000")
+    assert approved_participant.berufssatz == Decimal("0.3300")
 
 
 @pytest.mark.django_db

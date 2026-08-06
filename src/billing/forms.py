@@ -1252,6 +1252,8 @@ class KioskSelfEnrollmentForm(forms.ModelForm):
 class ParticipantRegistrationApprovalForm(forms.ModelForm):
     """Require an explicit administrative decision on price-relevant attributes."""
 
+    RATE_FIELDS = ("hilfssatz", "berufssatz")
+
     price_attributes_confirmed = forms.BooleanField(
         label="Preisrelevante Angaben geprüft",
         help_text="Kind, Jugendgruppe und Begleitperson wurden vor der Freigabe kontrolliert.",
@@ -1260,12 +1262,44 @@ class ParticipantRegistrationApprovalForm(forms.ModelForm):
 
     class Meta:
         model = Participant
-        fields = ["is_child", "is_youth_group", "is_companion"]
+        fields = ["is_child", "is_youth_group", "is_companion", "hilfssatz", "berufssatz"]
         labels = {
             "is_child": "Kind",
             "is_youth_group": "Jugendgruppe",
             "is_companion": "Begleitperson",
+            "hilfssatz": "Hilfssatz",
+            "berufssatz": "Berufssatz",
         }
+        widgets = {
+            "hilfssatz": forms.NumberInput(attrs={"step": "0.0001", "min": "0", "max": "1"}),
+            "berufssatz": forms.NumberInput(attrs={"step": "0.0001", "min": "0", "max": "1"}),
+        }
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        for field_name in self.RATE_FIELDS:
+            self.fields[field_name].required = False
+
+    def clean(self) -> dict[str, Any]:
+        """Require both subsidy factors only for youth-group participants."""
+        cleaned_data = super().clean() or {}
+        if cleaned_data.get("is_youth_group"):
+            rate_labels = {
+                "hilfssatz": "Hilfssatz",
+                "berufssatz": "Berufssatz",
+            }
+            for field_name in self.RATE_FIELDS:
+                if cleaned_data.get(field_name) is None:
+                    self.add_error(
+                        field_name,
+                        f"Bitte gib den {rate_labels[field_name]} für die Jugendgruppe ein.",
+                    )
+            return cleaned_data
+
+        for field_name in self.RATE_FIELDS:
+            if cleaned_data.get(field_name) is None:
+                cleaned_data[field_name] = getattr(self.instance, field_name)
+        return cleaned_data
 
 
 class QuickBookingForm(forms.Form):

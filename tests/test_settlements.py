@@ -70,7 +70,11 @@ def test_settlement_groups_matching_bookings_and_keeps_all_references():
 
 @pytest.mark.django_db
 def test_settlement_grouping_preserves_per_booking_rounding():
-    participant = ParticipantFactory(is_youth_group=True)
+    participant = ParticipantFactory(
+        is_youth_group=True,
+        hilfssatz=Decimal("1.0000"),
+        berufssatz=Decimal("1.0000"),
+    )
     booking_date = date(2026, 7, 28)
     for _ in range(2):
         ChargeFactory(

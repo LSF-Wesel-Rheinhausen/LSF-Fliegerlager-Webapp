@@ -81,7 +81,7 @@
     <section id="pending-registrations" class="panel" style="margin-bottom: 1.5rem; border-left: 4px solid var(--accent);">
       <h2 style="font-size: 1.25rem; margin-bottom: 0.5rem;">⏳ Offene Registrierungsanfragen ({{ pending_registration_rows|length }})</h2>
       <p style="color: var(--muted); font-size: 0.9rem;">Prüfe vor der Freigabe die PIN-Einrichtung und alle preisrelevanten Merkmale.</p>
-      <table>
+      <table class="responsive-record-table pending-registration-table">
         <thead>
           <tr>
             <th>Name</th>
@@ -96,16 +96,17 @@
           {% for row in pending_registration_rows %}
             {% with p=row.participant approval_form=row.approval_form %}
             <tr>
-              <td><strong>{{ p.full_name }}</strong></td>
-              <td>{{ p.email|default:"-" }}</td>
-              <td>{{ p.phone|default:"-" }}</td>
-              <td>
+              <td data-label="Name"><strong>{{ p.full_name }}</strong></td>
+              <td data-label="E-Mail">{{ p.email|default:"-" }}</td>
+              <td data-label="Telefon">{{ p.phone|default:"-" }}</td>
+              <td data-label="Anreise / Abreise">
                 {% if p.arrival_date %}{{ p.arrival_date|date:"d.m.Y" }}{% else %}-{% endif %}
                 bis
                 {% if p.departure_date %}{{ p.departure_date|date:"d.m.Y" }}{% else %}-{% endif %}
               </td>
-              <td>{{ p.created_at|date:"d.m.Y H:i" }}</td>
-              <td>
+              <td data-label="Eingereicht am">{{ p.created_at|date:"d.m.Y H:i" }}</td>
+              <td data-label="Aktionen" class="responsive-record-table__actions">
+                <div class="stack">
                 <form method="post" action="{% url 'participant-approve-registration' camp.pk p.pk %}">
                   {% csrf_token %}
                   <fieldset>
@@ -115,13 +116,37 @@
                       Kind
                     </label>
                     <label for="approval-{{ p.pk }}-is-youth-group">
-                      <input id="approval-{{ p.pk }}-is-youth-group" type="checkbox" name="is_youth_group"{% if approval_form.is_youth_group.value %} checked{% endif %}>
+                      <input
+                        id="approval-{{ p.pk }}-is-youth-group"
+                        type="checkbox"
+                        name="is_youth_group"
+                        data-youth-group-toggle="approval-{{ p.pk }}-rates"
+                        aria-controls="approval-{{ p.pk }}-rates"
+                        {% if approval_form.is_youth_group.value %}checked{% endif %}
+                      >
                       Jugendgruppe
                     </label>
                     <label for="approval-{{ p.pk }}-is-companion">
                       <input id="approval-{{ p.pk }}-is-companion" type="checkbox" name="is_companion"{% if approval_form.is_companion.value %} checked{% endif %}>
                       Begleitperson
                     </label>
+                  </fieldset>
+                  <fieldset
+                    id="approval-{{ p.pk }}-rates"
+                    class="stack"
+                    data-youth-group-rates
+                    {% if not approval_form.is_youth_group.value %}hidden{% endif %}
+                  >
+                    <legend>Fördersätze</legend>
+                    <label for="{{ approval_form.hilfssatz.id_for_label }}">
+                      {{ approval_form.hilfssatz.label }}
+                      {{ approval_form.hilfssatz }}
+                    </label>
+                    <label for="{{ approval_form.berufssatz.id_for_label }}">
+                      {{ approval_form.berufssatz.label }}
+                      {{ approval_form.berufssatz }}
+                    </label>
+                    <p class="hint">Werte von 0 bis 1. Nur bei Jugendgruppe erforderlich.</p>
                   </fieldset>
                   <p>
                     {% if p.pin.pin_hash and not p.pin.must_set_pin %}
@@ -143,6 +168,7 @@
                   {% csrf_token %}
                   <button type="submit" class="button button-small button-danger" onclick="return confirm('Möchtest du diese Registrierungsanfrage wirklich ablehnen und löschen?');">❌ Ablehnen</button>
                 </form>
+                </div>
               </td>
             </tr>
             {% endwith %}
@@ -415,6 +441,21 @@
       button.addEventListener("click", () => {
         document.getElementById(button.dataset.dialogOpen)?.showModal();
       });
+    });
+
+    document.querySelectorAll("[data-youth-group-toggle]").forEach((checkbox) => {
+      const rates = document.getElementById(checkbox.dataset.youthGroupToggle);
+      if (!rates) return;
+      const inputs = rates.querySelectorAll("input");
+      const syncYouthGroupRates = () => {
+        rates.hidden = !checkbox.checked;
+        checkbox.setAttribute("aria-expanded", String(checkbox.checked));
+        inputs.forEach((input) => {
+          input.required = checkbox.checked;
+        });
+      };
+      checkbox.addEventListener("change", syncYouthGroupRates);
+      syncYouthGroupRates();
     });
 
     const dialog = document.getElementById("reject-dialog");

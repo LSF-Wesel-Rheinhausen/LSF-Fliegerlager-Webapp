@@ -3333,6 +3333,11 @@ dialog::backdrop {
   overflow-wrap: anywhere;
 }
 
+.pending-registration-table [data-youth-group-rates] label {
+  display: grid;
+  gap: 4px;
+}
+
 @media (max-width: 780px) {
   .pdf-dialog {
     width: calc(100vw - 1rem);
@@ -3412,6 +3417,10 @@ dialog::backdrop {
   .responsive-record-table__actions .button,
   .responsive-record-table td[data-label="Aktionen"] .row-actions {
     min-width: 0;
+  }
+
+  .pending-registration-table .responsive-record-table__actions {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .topbar nav .theme-toggle,

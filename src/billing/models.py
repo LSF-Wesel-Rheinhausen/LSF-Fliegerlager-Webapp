@@ -440,14 +440,14 @@ class Participant(TimeStampedModel):
     hilfssatz = models.DecimalField(
         max_digits=6,
         decimal_places=4,
-        default=Decimal("1.0000"),
+        default=Decimal("0.0000"),
         validators=[MinValueValidator(Decimal("0")), MaxValueValidator(Decimal("1"))],
         help_text="0 bis 1, zum Beispiel 0,5000.",
     )
     berufssatz = models.DecimalField(
         max_digits=6,
         decimal_places=4,
-        default=Decimal("1.0000"),
+        default=Decimal("0.0000"),
         validators=[MinValueValidator(Decimal("0")), MaxValueValidator(Decimal("1"))],
         help_text="0 bis 1, zum Beispiel 0,3300.",
     )

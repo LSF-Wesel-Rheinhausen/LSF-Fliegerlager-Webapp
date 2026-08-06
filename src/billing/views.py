@@ -824,7 +824,10 @@ def camp_detail(request, camp_id):
     pending_registration_rows = [
         {
             "participant": pending_participant,
-            "approval_form": ParticipantRegistrationApprovalForm(instance=pending_participant),
+            "approval_form": ParticipantRegistrationApprovalForm(
+                instance=pending_participant,
+                auto_id=f"approval-{pending_participant.pk}-%s",
+            ),
         }
         for pending_participant in pending_registrations
     ]
@@ -884,6 +887,8 @@ def approve_participant_registration(request, camp_id, participant_id):
                 "is_child",
                 "is_youth_group",
                 "is_companion",
+                "hilfssatz",
+                "berufssatz",
                 "status",
                 "updated_at",
             ]

@@ -3289,6 +3289,11 @@ def test_admin_approval_requires_pin_and_explicit_price_attribute_confirmation(k
     assert detail_response.status_code == 200
     assert f'id="approval-{p.pk}-confirmed"' in detail_content
     assert "Preisrelevante Angaben geprüft" in detail_content
+    assert f'id="approval-{p.pk}-hilfssatz"' in detail_content
+    assert f'id="approval-{p.pk}-berufssatz"' in detail_content
+    assert "Nur bei Jugendgruppe erforderlich" in detail_content
+    assert 'class="responsive-record-table pending-registration-table"' in detail_content
+    assert 'data-label="Aktionen"' in detail_content
     assert "PIN fehlt – Freigabe ist gesperrt" in detail_content
 
     response = kiosk_client.post(
@@ -3296,6 +3301,8 @@ def test_admin_approval_requires_pin_and_explicit_price_attribute_confirmation(k
         {
             "is_child": "on",
             "is_youth_group": "on",
+            "hilfssatz": "0.5000",
+            "berufssatz": "0.3300",
             "price_attributes_confirmed": "on",
         },
     )
@@ -3323,6 +3330,8 @@ def test_admin_approval_requires_pin_and_explicit_price_attribute_confirmation(k
         {
             "is_child": "on",
             "is_youth_group": "on",
+            "hilfssatz": "0.5000",
+            "berufssatz": "0.3300",
             "price_attributes_confirmed": "on",
         },
     )
@@ -3333,6 +3342,8 @@ def test_admin_approval_requires_pin_and_explicit_price_attribute_confirmation(k
     assert p.is_child is True
     assert p.is_youth_group is True
     assert p.is_companion is False
+    assert p.hilfssatz == Decimal("0.5000")
+    assert p.berufssatz == Decimal("0.3300")
 
     # Now visible in kiosk login dropdown
     login_page = kiosk_client.get(reverse("kiosk-login"))
