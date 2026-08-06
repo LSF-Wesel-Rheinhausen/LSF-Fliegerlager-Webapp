@@ -1525,7 +1525,7 @@ test("Mobile Kiosk: fixed bottom navigation bar is present and functional on mob
   // Verify navigation items exist
   await expect(bottomNav.getByRole("link", { name: "Kiosk" })).toBeVisible();
   await expect(bottomNav.getByRole("link", { name: "Dienste" })).toBeVisible();
-  await expect(bottomNav.getByRole("link", { name: "Partner" })).toBeVisible();
+  await expect(bottomNav.getByRole("link", { name: "Essen" })).toBeVisible();
   await expect(bottomNav.getByRole("link", { name: "Mehr" })).toBeVisible();
   await expect(bottomNav.getByRole("link", { name: "Abmelden" })).toBeVisible();
 });
@@ -1570,5 +1570,5 @@ test("Mobile Kiosk: bottom navigation bar hides shifts in post-camp mode", async
   // Verify "Dienste" is hidden since the camp is over
   await expect(bottomNav.getByRole("link", { name: "Kiosk" })).toBeVisible();
   await expect(bottomNav.getByRole("link", { name: "Dienste" })).toHaveCount(0);
-  await expect(bottomNav.getByRole("link", { name: "Partner" })).toBeVisible();
+
 });

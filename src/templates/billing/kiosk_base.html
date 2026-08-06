@@ -75,10 +75,12 @@
             <span class="kiosk-mobile-bottom-nav__label">Dienste</span>
           </a>
         {% endif %}
-        <a href="{{ kiosk_urls.partner_activity }}" class="kiosk-mobile-bottom-nav__item">
-          <span class="kiosk-mobile-bottom-nav__icon" aria-hidden="true">🤝</span>
-          <span class="kiosk-mobile-bottom-nav__label">Partner</span>
-        </a>
+        {% if not is_pre_camp and not is_post_camp %}
+          <a href="{{ kiosk_urls.home }}#essen" class="kiosk-mobile-bottom-nav__item">
+            <span class="kiosk-mobile-bottom-nav__icon" aria-hidden="true">🍽️</span>
+            <span class="kiosk-mobile-bottom-nav__label">Essen</span>
+          </a>
+        {% endif %}
         <a href="{{ kiosk_urls.home }}#menu" class="kiosk-mobile-bottom-nav__item">
           <span class="kiosk-mobile-bottom-nav__icon" aria-hidden="true">☰</span>
           <span class="kiosk-mobile-bottom-nav__label">Mehr</span>
@@ -194,6 +196,19 @@
 
         document.querySelectorAll("dialog").forEach(bind);
         document.addEventListener("click", (event) => {
+          if (event.target.tagName === "DIALOG") {
+            const rect = event.target.getBoundingClientRect();
+            if (
+              event.clientY < rect.top ||
+              event.clientY > rect.bottom ||
+              event.clientX < rect.left ||
+              event.clientX > rect.right
+            ) {
+              event.target.close();
+              return;
+            }
+          }
+
           const closeButton = event.target.closest("[data-close-dialog]");
           if (closeButton) closeButton.closest("dialog")?.close();
 

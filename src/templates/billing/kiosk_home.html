@@ -163,7 +163,7 @@
     </form>
     <nav class="kiosk-menu" aria-label="Kiosk-Bereiche">
       {% if not is_pre_camp and not is_post_camp %}
-        <button type="button" class="kiosk-menu__item" data-dialog-target="meal-calendar-dialog">
+        <button type="button" class="kiosk-menu__item hide-on-mobile" data-dialog-target="meal-calendar-dialog">
           <span>Abendessen (Kalender)</span>
           <small>Abendessen nach Lagertag buchen und verwalten.</small>
         </button>
@@ -1294,10 +1294,15 @@
         openDialog(kioskMenuDialog, event.currentTarget)
       );
 
+      const mealCalendarDialog = document.getElementById("meal-calendar-dialog");
       const checkHashAndOpenMenu = () => {
         if (window.location.hash === "#menu") {
           if (kioskMenuDialog && !kioskMenuDialog.open) {
             openDialog(kioskMenuDialog);
+          }
+        } else if (window.location.hash === "#essen") {
+          if (mealCalendarDialog && !mealCalendarDialog.open) {
+            openDialog(mealCalendarDialog);
           }
         }
       };
@@ -1310,10 +1315,23 @@
         }
       });
 
+      mealCalendarDialog?.addEventListener("close", () => {
+        if (window.location.hash === "#essen") {
+          history.replaceState(null, null, window.location.pathname);
+        }
+      });
+
       document.querySelector(".kiosk-mobile-bottom-nav__item[href$='#menu']")?.addEventListener("click", (e) => {
         if (kioskMenuDialog && kioskMenuDialog.open) {
           e.preventDefault();
           kioskMenuDialog.close();
+        }
+      });
+
+      document.querySelector(".kiosk-mobile-bottom-nav__item[href$='#essen']")?.addEventListener("click", (e) => {
+        if (mealCalendarDialog && mealCalendarDialog.open) {
+          e.preventDefault();
+          mealCalendarDialog.close();
         }
       });
 
