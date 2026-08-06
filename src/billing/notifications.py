@@ -37,6 +37,7 @@ PARTICIPANT_CATEGORIES: dict[str, str] = {
 }
 ADMIN_CATEGORIES: dict[str, str] = {
     "expenses_admin": "Neue Auslagenanträge",
+    "enrollments_admin": "Neue Anmeldegenehmigungen",
     "open_shifts_admin": "Offene Dienste",
     "meal_orders_admin": "Offene Essensbestellungen",
 }
@@ -169,6 +170,21 @@ def notify_expense_submitted(expense: Expense) -> None:
             body=f"{participant.full_name} hat eine Auslage über {expense.amount:.2f} EUR eingereicht.",
             target_url=f"/expenses/{expense.pk}/approve/",
             dedupe_key=f"expense:{expense.pk}:pending",
+        )
+
+
+def notify_participant_registration_submitted(participant: Participant) -> None:
+    """Notify administrators that a kiosk registration awaits approval."""
+    if participant.status != Participant.Status.PENDING_APPROVAL:
+        return
+    for user in _administrative_users():
+        queue_user_notification(
+            user,
+            category="enrollments_admin",
+            title="Neue Registrierungsanfrage",
+            body=f"{participant.full_name} wartet für {participant.camp.name} auf Freigabe.",
+            target_url=f"/camps/{participant.camp_id}/#pending-registrations",
+            dedupe_key=f"participant-registration:{participant.pk}:pending",
         )
 
 
