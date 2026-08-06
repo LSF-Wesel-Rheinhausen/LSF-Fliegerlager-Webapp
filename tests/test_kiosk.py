@@ -1232,7 +1232,7 @@ def test_kiosk_meal_calendar_renders_all_camp_days_with_menu_and_participant_pri
     fixed_now = timezone.make_aware(datetime(2026, 6, 30, 10, 0))
     monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
     monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
-    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 3))
+    camp = CampFactory(starts_on=date(2026, 6, 30), ends_on=date(2026, 7, 3))
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     PriceRuleFactory(
         camp=camp,
@@ -1258,10 +1258,14 @@ def test_kiosk_meal_calendar_renders_all_camp_days_with_menu_and_participant_pri
 
     assert response.status_code == 200
     content = response.content.decode()
+    calendar_start = content.index('<div class="meal-status-calendar"')
+    calendar_end = content.index("</div>", calendar_start)
+    status_calendar = content[calendar_start:calendar_end]
     assert 'data-meal-date="2026-07-01"' in content
     assert 'data-meal-date="2026-07-02"' in content
     assert 'data-meal-date="2026-07-03"' in content
-    assert "Pasta mit Salat" in content
+    assert "Pasta mit Salat" in status_calendar
+    assert "7,00 €" in status_calendar
     assert "Menü" in content
     assert "7,00 €" in content
 
@@ -1373,6 +1377,12 @@ def test_kiosk_meal_day_detail_opens_booking_for_the_selected_date(kiosk_client,
         name="Abendessen",
         unit_price=Decimal("7.00"),
     )
+    MealPlanEntry.objects.create(
+        camp=camp,
+        meal_date=meal_date,
+        meal=MealSignup.Meal.DINNER,
+        description="Kartoffelsuppe mit Brot",
+    )
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session.save()
@@ -1389,7 +1399,39 @@ def test_kiosk_meal_day_detail_opens_booking_for_the_selected_date(kiosk_client,
     assert 'data-meal-date="2026-07-02"' in day_detail
     assert 'data-meal="dinner"' in day_detail
     assert 'data-meal-label="Abendessen"' in day_detail
+    assert "Kartoffelsuppe mit Brot" in day_detail
+    assert "Preis: 7,00 €" in day_detail
+    assert 'id="meal-dialog-close"' in content
     assert "über “Essen buchen”" not in day_detail
+
+
+@pytest.mark.django_db
+def test_kiosk_meal_day_detail_uses_price_rule_name_and_shows_free_price(kiosk_client, monkeypatch):
+    _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 7, 1, 10, 0)))
+    meal_date = date(2026, 7, 2)
+    camp = CampFactory(starts_on=meal_date, ends_on=meal_date)
+    participant = ParticipantFactory(camp=camp)
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        is_default=True,
+        name="Kostenloses Abendessen",
+        unit_price=Decimal("0.00"),
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.get(reverse("kiosk-home"))
+
+    content = response.content.decode()
+    detail_start = content.index('id="meal-day-detail-2026-07-02"')
+    detail_end = content.index("</dialog>", detail_start)
+    day_detail = content[detail_start:detail_end]
+    assert response.status_code == 200
+    assert "Kostenloses Abendessen" in day_detail
+    assert "Preis: 0,00 €" in day_detail
 
 
 @pytest.mark.django_db
