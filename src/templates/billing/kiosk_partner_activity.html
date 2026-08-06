@@ -43,7 +43,7 @@
                 <strong>Aktueller Saldo</strong>
                 <span>{{ account.summary.balance|money_eur }}</span>
               </div>
-              <a class="button button-secondary" href="{{ account.live_pdf_url }}" target="_blank" rel="noopener">
+              <a class="button button-secondary" href="{{ account.live_pdf_url }}" target="_blank" rel="noopener" data-pdf-preview="true">
                 Live-Abrechnung als PDF
               </a>
             </div>
@@ -60,7 +60,7 @@
             {% if account.settlements %}
               <div class="form-actions">
                 {% for item in account.settlements %}
-                  <a class="button button-ghost" href="{{ item.pdf_url }}" target="_blank" rel="noopener">
+                  <a class="button button-ghost" href="{{ item.pdf_url }}" target="_blank" rel="noopener" data-pdf-preview="true">
                     Finale Abrechnung vom {{ item.snapshot.run.created_at|date:"d.m.Y H:i" }}
                   </a>
                 {% endfor %}

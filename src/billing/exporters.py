@@ -23,6 +23,7 @@ PDF_SUMMARY_FINAL_SPACING = 4
 PDF_PAYMENT_TOP_SPACING = 30
 PDF_PAYMENT_DEBIT_BOX_HEIGHT = 65
 PDF_PAYMENT_CREDIT_BOX_HEIGHT = 70
+PDF_PREVIEW_CONTENT_SECURITY_POLICY = "default-src 'none'; frame-ancestors 'self'"
 
 
 def safe_csv_cell(value: Any) -> Any:
@@ -670,6 +671,12 @@ def _draw_payment_instructions(pdf, y, camp, balance):
     return y
 
 
+def _allow_same_origin_pdf_preview(response: HttpResponse) -> HttpResponse:
+    response["X-Frame-Options"] = "SAMEORIGIN"
+    response["Content-Security-Policy"] = PDF_PREVIEW_CONTENT_SECURITY_POLICY
+    return response
+
+
 def participant_pdf_response(participant):
     result = calculate_participant_settlement(participant)
     output = BytesIO()
@@ -722,7 +729,7 @@ def participant_pdf_response(participant):
 
     response = HttpResponse(output.getvalue(), content_type="application/pdf")
     response["Content-Disposition"] = f'inline; filename="abrechnung-{participant.pk}.pdf"'
-    return response
+    return _allow_same_origin_pdf_preview(response)
 
 
 def settlement_run_csv(run: SettlementRun) -> HttpResponse:
@@ -840,4 +847,4 @@ def settlement_snapshot_pdf_response(snapshot: Settlement) -> HttpResponse:
         raise ValueError("Historical settlement PDF requires a versioned run.")
     response = HttpResponse(settlement_snapshot_pdf_bytes(snapshot), content_type="application/pdf")
     response["Content-Disposition"] = f'inline; filename="abrechnung-{snapshot.pk}-v{run.version}.pdf"'
-    return response
+    return _allow_same_origin_pdf_preview(response)

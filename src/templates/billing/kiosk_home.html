@@ -80,13 +80,13 @@
       {% if participant.camp.show_kiosk_invoices %}
       {% if latest_settlement %}
         <div style="margin-bottom: 1.25rem;">
-          <a href="{% url 'kiosk-settlement-pdf' latest_settlement.pk %}" class="button button-primary" target="_blank" rel="noopener">
+          <a href="{% url 'kiosk-settlement-pdf' latest_settlement.pk %}" class="button button-primary" target="_blank" rel="noopener" data-pdf-preview="true">
             📄 Letzte Abrechnung herunterladen ({{ latest_settlement.run.created_at|date:"d.m.Y" }} · {{ latest_settlement.balance|abs_value|money_eur }})
           </a>
         </div>
       {% else %}
         <div style="margin-bottom: 1.25rem;">
-          <a href="{% url 'kiosk-current-settlement-pdf' %}" class="button button-primary" target="_blank" rel="noopener">
+          <a href="{% url 'kiosk-current-settlement-pdf' %}" class="button button-primary" target="_blank" rel="noopener" data-pdf-preview="true">
             📄 Aktuelle Abrechnung herunterladen (PDF)
           </a>
         </div>
@@ -101,7 +101,7 @@
             {% for item in archived_settlements %}
               <li style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.5rem 0; border-bottom: 1px solid var(--line);">
                 <span>{{ item.run.camp.name }} · {{ item.run.created_at|date:"d.m.Y H:i" }} ({{ item.balance|abs_value|money_eur }})</span>
-                <a href="{% url 'kiosk-settlement-pdf' item.pk %}" class="button button-small button-secondary" target="_blank" rel="noopener">PDF</a>
+                <a href="{% url 'kiosk-settlement-pdf' item.pk %}" class="button button-small button-secondary" target="_blank" rel="noopener" data-pdf-preview="true">PDF</a>
               </li>
             {% endfor %}
           </ul>
@@ -117,11 +117,11 @@
     <section class="panel kiosk-card">
       <h2 style="font-size: 1.25rem; margin-bottom: 0.5rem;">📄 Meine Rechnungen & Dokumente</h2>
       <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center;">
-        <a href="{% url 'kiosk-current-settlement-pdf' %}" class="button button-secondary" target="_blank" rel="noopener">
+        <a href="{% url 'kiosk-current-settlement-pdf' %}" class="button button-secondary" target="_blank" rel="noopener" data-pdf-preview="true">
           Aktuelle Live-Abrechnung (PDF)
         </a>
         {% if latest_settlement %}
-          <a href="{% url 'kiosk-settlement-pdf' latest_settlement.pk %}" class="button button-ghost" target="_blank" rel="noopener">
+          <a href="{% url 'kiosk-settlement-pdf' latest_settlement.pk %}" class="button button-ghost" target="_blank" rel="noopener" data-pdf-preview="true">
             Letzte Abrechnung ({{ latest_settlement.run.created_at|date:"d.m.Y" }})
           </a>
         {% endif %}
@@ -133,7 +133,7 @@
           </summary>
           <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
             {% for item in archived_settlements %}
-              <a href="{% url 'kiosk-settlement-pdf' item.pk %}" class="button button-small button-ghost" target="_blank" rel="noopener">
+              <a href="{% url 'kiosk-settlement-pdf' item.pk %}" class="button button-small button-ghost" target="_blank" rel="noopener" data-pdf-preview="true">
                 {{ item.run.camp.name }} ({{ item.run.created_at|date:"d.m.Y" }})
               </a>
             {% endfor %}

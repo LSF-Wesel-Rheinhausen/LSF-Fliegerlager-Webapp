@@ -49,7 +49,7 @@ def test_base_layout_renders_favicon(client):
 
 
 @pytest.mark.django_db
-def test_pdf_links_open_directly_without_embedded_preview(client):
+def test_pdf_links_use_a_closable_embedded_preview_with_external_fallback(client):
     participant = ParticipantFactory()
     client.force_login(SuperUserFactory())
 
@@ -57,7 +57,9 @@ def test_pdf_links_open_directly_without_embedded_preview(client):
 
     assert response.status_code == 200
     content = response.content.decode("utf-8")
+    assert 'data-pdf-preview="true"' in content
+    assert 'id="global-pdf-dialog"' in content
+    assert 'id="global-pdf-iframe"' in content
+    assert "data-pdf-open-external" in content
     assert 'target="_blank"' in content
     assert 'rel="noopener"' in content
-    assert "data-pdf-popup" not in content
-    assert "global-pdf-iframe" not in content

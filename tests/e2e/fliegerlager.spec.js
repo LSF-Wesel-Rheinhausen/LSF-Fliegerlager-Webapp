@@ -465,6 +465,49 @@ test("Admin creates and edits a manual booking and sees the change log", async (
   expect(failedRequests).toEqual([]);
 });
 
+test("PWA PDF preview opens in a closable wrapper without leaving the app", async ({ page }) => {
+  const { browserErrors, failedRequests } = trackPageIssues(page);
+  await setupFirstAdmin(page);
+  await createCamp(page, "PDF Vorschau");
+  await createParticipant(page, "Ada", "Lovelace");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const previewLink = page.getByRole("link", { name: "Einzelabrechnung als PDF öffnen" });
+  const participantUrl = page.url();
+  const pdfResponsePromise = page.waitForResponse((response) => response.url().endsWith("/export/settlement.pdf"));
+  await previewLink.click();
+
+  const pdfResponse = await pdfResponsePromise;
+  expect(pdfResponse.headers()["x-frame-options"]).toBe("SAMEORIGIN");
+  expect(pdfResponse.headers()["content-security-policy"]).toContain("frame-ancestors 'self'");
+  const previewDialog = page.locator("#global-pdf-dialog");
+  await expect(page.getByRole("dialog", { name: "PDF-Vorschau" })).toBeVisible();
+  await expect(previewDialog).toBeVisible();
+  const dialogBounds = await previewDialog.boundingBox();
+  expect(dialogBounds).not.toBeNull();
+  expect(dialogBounds.x).toBeGreaterThanOrEqual(0);
+  expect(dialogBounds.y).toBeGreaterThanOrEqual(0);
+  expect(dialogBounds.x + dialogBounds.width).toBeLessThanOrEqual(391);
+  expect(dialogBounds.y + dialogBounds.height).toBeLessThanOrEqual(845);
+  await expect(previewDialog.locator("iframe")).toHaveAttribute("src", /\/export\/settlement\.pdf$/);
+  await expect(page).toHaveURL(participantUrl);
+  expect(browserErrors).toEqual([]);
+
+  await previewDialog.getByRole("button", { name: "Schließen" }).click();
+  await expect(previewDialog).toBeHidden();
+  await expect(previewLink).toBeFocused();
+  await expect(previewDialog.locator("iframe")).toHaveAttribute("src", "about:blank");
+  expect(browserErrors).toEqual([]);
+  expect(
+    failedRequests.filter(
+      (failure) =>
+        !failure.includes("/export/settlement.pdf") ||
+        (!failure.includes("ERR_ABORTED") && !failure.includes("Frame load interrupted")),
+    ),
+    "Nur das absichtliche Abbrechen der entfernten PDF-Vorschau ist zulässig",
+  ).toEqual([]);
+});
+
 test("Admin archives a participant and creates a versioned settlement run", async ({ page }) => {
   await setupFirstAdmin(page);
   const campName = await createCamp(page, "Abrechnungslager");

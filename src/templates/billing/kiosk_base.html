@@ -94,6 +94,7 @@
     {% if kiosk_mode == "private" and not kiosk_access_prompt %}
       {% include "includes/pwa_install_dialog.html" %}
     {% endif %}
+    {% include "includes/pdf_preview_dialog.html" %}
     {% if kiosk_autologout %}
       <script nonce="{{ request.csp_nonce }}">
         (() => {
