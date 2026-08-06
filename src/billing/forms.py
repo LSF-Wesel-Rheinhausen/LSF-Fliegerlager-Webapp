@@ -94,7 +94,7 @@ class EmailOrUsernameAuthenticationForm(AuthenticationForm):
     )
 
     def clean(self):
-        from .kiosk_security import check_login_rate_limit, consume_login_failure
+        from .kiosk_security import check_login_rate_limit, clear_login_rate_limit, consume_login_failure
 
         raw_username = str(self.data.get("username", ""))
         if self.request and not check_login_rate_limit(self.request, username=raw_username):
@@ -104,7 +104,10 @@ class EmailOrUsernameAuthenticationForm(AuthenticationForm):
             )
 
         try:
-            return super().clean()
+            cleaned_data = super().clean()
+            if self.request:
+                clear_login_rate_limit(raw_username, request=self.request)
+            return cleaned_data
         except ValidationError as e:
             if self.request and e.code == "invalid_login":
                 consume_login_failure(self.request, username=raw_username)
@@ -283,8 +286,24 @@ class CampForm(forms.ModelForm):
             "show_kiosk_invoices": "Rechnungen im Kiosk anzeigen",
         }
         widgets = {
-            "starts_on": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
-            "ends_on": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+            "starts_on": forms.DateInput(
+                format="%d.%m.%Y",
+                attrs={
+                    "type": "text",
+                    "placeholder": "DD.MM.YYYY",
+                    "pattern": r"\d{2}[\. ]\d{2}[\. ]\d{4}",
+                    "inputmode": "numeric",
+                },
+            ),
+            "ends_on": forms.DateInput(
+                format="%d.%m.%Y",
+                attrs={
+                    "type": "text",
+                    "placeholder": "DD.MM.YYYY",
+                    "pattern": r"\d{2}[\. ]\d{2}[\. ]\d{4}",
+                    "inputmode": "numeric",
+                },
+            ),
             "meal_booking_cutoff_time": forms.TimeInput(attrs={"type": "time"}),
         }
 
@@ -353,8 +372,24 @@ class ParticipantForm(forms.ModelForm):
         widgets = {
             "hilfssatz": forms.NumberInput(attrs={"step": "0.0001", "min": "0", "max": "1"}),
             "berufssatz": forms.NumberInput(attrs={"step": "0.0001", "min": "0", "max": "1"}),
-            "arrival_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
-            "departure_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+            "arrival_date": forms.DateInput(
+                format="%d.%m.%Y",
+                attrs={
+                    "type": "text",
+                    "placeholder": "DD.MM.YYYY",
+                    "pattern": r"\d{2}[\. ]\d{2}[\. ]\d{4}",
+                    "inputmode": "numeric",
+                },
+            ),
+            "departure_date": forms.DateInput(
+                format="%d.%m.%Y",
+                attrs={
+                    "type": "text",
+                    "placeholder": "DD.MM.YYYY",
+                    "pattern": r"\d{2}[\. ]\d{2}[\. ]\d{4}",
+                    "inputmode": "numeric",
+                },
+            ),
         }
 
     def clean(self) -> dict[str, Any]:
@@ -557,7 +592,17 @@ class ChargeForm(forms.ModelForm):
             "foerdersatz": "Fördersatz (%)",
             "occurred_on": "Datum",
         }
-        widgets = {"occurred_on": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"})}
+        widgets = {
+            "occurred_on": forms.DateInput(
+                format="%d.%m.%Y",
+                attrs={
+                    "type": "text",
+                    "placeholder": "DD.MM.YYYY",
+                    "pattern": r"\d{2}[\. ]\d{2}[\. ]\d{4}",
+                    "inputmode": "numeric",
+                },
+            )
+        }
 
 
 class _ManualPriceRuleChoiceField(forms.ModelChoiceField):
@@ -617,7 +662,17 @@ class PaymentForm(forms.ModelForm):
             "method": "Zahlungsart",
             "note": "Notiz",
         }
-        widgets = {"paid_on": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"})}
+        widgets = {
+            "paid_on": forms.DateInput(
+                format="%d.%m.%Y",
+                attrs={
+                    "type": "text",
+                    "placeholder": "DD.MM.YYYY",
+                    "pattern": r"\d{2}[\. ]\d{2}[\. ]\d{4}",
+                    "inputmode": "numeric",
+                },
+            )
+        }
 
 
 EXPENSE_CATEGORY_CHOICES = [
@@ -646,7 +701,15 @@ class ExpenseForm(forms.ModelForm):
             "reimbursable": "Erstattungsfähig",
         }
         widgets = {
-            "paid_on": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+            "paid_on": forms.DateInput(
+                format="%d.%m.%Y",
+                attrs={
+                    "type": "text",
+                    "placeholder": "DD.MM.YYYY",
+                    "pattern": r"\d{2}[\. ]\d{2}[\. ]\d{4}",
+                    "inputmode": "numeric",
+                },
+            ),
             "category": forms.Select(choices=EXPENSE_CATEGORY_CHOICES),
             "receipt": forms.FileInput(
                 attrs={
@@ -673,7 +736,15 @@ class SharedExpenseRequestForm(forms.ModelForm):
             "paid_on": "Zahlungsdatum",
         }
         widgets = {
-            "paid_on": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+            "paid_on": forms.DateInput(
+                format="%d.%m.%Y",
+                attrs={
+                    "type": "text",
+                    "placeholder": "DD.MM.YYYY",
+                    "pattern": r"\d{2}[\. ]\d{2}[\. ]\d{4}",
+                    "inputmode": "numeric",
+                },
+            ),
             "category": forms.Select(choices=EXPENSE_CATEGORY_CHOICES),
             "receipt": forms.FileInput(
                 attrs={
@@ -979,8 +1050,24 @@ class KioskSelfEnrollmentForm(forms.ModelForm):
             "notes": "Anmerkung (optional)",
         }
         widgets = {
-            "arrival_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
-            "departure_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+            "arrival_date": forms.DateInput(
+                format="%d.%m.%Y",
+                attrs={
+                    "type": "text",
+                    "placeholder": "DD.MM.YYYY",
+                    "pattern": r"\d{2}[\. ]\d{2}[\. ]\d{4}",
+                    "inputmode": "numeric",
+                },
+            ),
+            "departure_date": forms.DateInput(
+                format="%d.%m.%Y",
+                attrs={
+                    "type": "text",
+                    "placeholder": "DD.MM.YYYY",
+                    "pattern": r"\d{2}[\. ]\d{2}[\. ]\d{4}",
+                    "inputmode": "numeric",
+                },
+            ),
             "notes": forms.Textarea(attrs={"rows": 2}),
         }
 
@@ -1436,7 +1523,15 @@ class ShiftForm(forms.ModelForm):
             "required_slots": "Benötigte Helfer",
         }
         widgets = {
-            "date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+            "date": forms.DateInput(
+                format="%d.%m.%Y",
+                attrs={
+                    "type": "text",
+                    "placeholder": "DD.MM.YYYY",
+                    "pattern": r"\d{2}[\. ]\d{2}[\. ]\d{4}",
+                    "inputmode": "numeric",
+                },
+            ),
             "start_time": forms.TimeInput(attrs={"type": "time"}),
             "end_time": forms.TimeInput(attrs={"type": "time"}),
         }

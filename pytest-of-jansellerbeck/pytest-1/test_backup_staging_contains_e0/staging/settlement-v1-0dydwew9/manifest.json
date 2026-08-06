@@ -1,0 +1,20 @@
+{
+  "kind": "daily_settlement_backup",
+  "created_at": "2026-07-30T12:22:07.303730+00:00",
+  "camp": {
+    "id": 1,
+    "name": "Fliegerlager",
+    "year": 2025
+  },
+  "settlement_run": {
+    "id": 1,
+    "version": 1,
+    "run_type": "daily_backup"
+  },
+  "participant_count": 1,
+  "files": [
+    "abrechnung-2025-v1.csv",
+    "abrechnung-2025-v1.xlsx",
+    "pdf/abrechnung-1-v1.pdf"
+  ]
+}

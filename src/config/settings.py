@@ -146,6 +146,12 @@ TIME_ZONE = "Europe/Berlin"
 USE_I18N = True
 USE_TZ = True
 
+DATE_INPUT_FORMATS = [
+    "%d.%m.%Y",
+    "%d %m %Y",
+    "%Y-%m-%d",
+]
+
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"] if (BASE_DIR / "static").exists() else []

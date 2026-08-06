@@ -32,12 +32,12 @@ def test_camp_form_saves_meal_booking_cutoff_time():
 
 
 @pytest.mark.django_db
-def test_camp_form_renders_dates_in_iso_format():
+def test_camp_form_renders_dates_in_dd_mm_yyyy_format():
     camp = CampFactory(starts_on=date(2026, 8, 1), ends_on=date(2026, 8, 15))
     form = CampForm(instance=camp)
     html = str(form["starts_on"])
-    assert 'value="2026-08-01"' in html
-    assert 'value="2026-08-15"' in str(form["ends_on"])
+    assert 'value="01.08.2026"' in html
+    assert 'value="15.08.2026"' in str(form["ends_on"])
 
 
 @pytest.mark.django_db
@@ -219,13 +219,13 @@ def test_participant_form_rejects_departure_before_arrival():
 
 
 @pytest.mark.django_db
-def test_participant_form_renders_date_inputs_with_iso_values():
+def test_participant_form_renders_date_inputs_with_dd_mm_yyyy_values():
     participant = ParticipantFactory(arrival_date=date(2026, 7, 1), departure_date=date(2026, 7, 10))
 
     content = ParticipantForm(instance=participant).as_p()
 
-    assert 'name="arrival_date" value="2026-07-01"' in content
-    assert 'name="departure_date" value="2026-07-10"' in content
+    assert 'name="arrival_date" value="01.07.2026"' in content
+    assert 'name="departure_date" value="10.07.2026"' in content
 
 
 @pytest.mark.django_db

@@ -34,9 +34,9 @@
             {% endif %}
           </span>
         </a>
+        {% include "includes/theme_toggle.html" %}
       </div>
       <div class="kiosk-header-actions">
-        {% include "includes/theme_toggle.html" %}
         {% if kiosk_mode == "private" and not kiosk_access_prompt %}
           <button class="button button-secondary" type="button" data-pwa-install hidden>Installieren</button>
         {% endif %}
@@ -63,6 +63,34 @@
       {% endfor %}
       {% block content %}{% endblock %}
     </main>
+    {% if participant and kiosk_mode == "private" %}
+      <nav class="kiosk-mobile-bottom-nav" aria-label="Mobile Navigation">
+        <a href="{{ kiosk_urls.home }}" class="kiosk-mobile-bottom-nav__item">
+          <span class="kiosk-mobile-bottom-nav__icon" aria-hidden="true">🏠</span>
+          <span class="kiosk-mobile-bottom-nav__label">Kiosk</span>
+        </a>
+        {% if not is_post_camp %}
+          <a href="{{ kiosk_urls.shifts }}" class="kiosk-mobile-bottom-nav__item">
+            <span class="kiosk-mobile-bottom-nav__icon" aria-hidden="true">📋</span>
+            <span class="kiosk-mobile-bottom-nav__label">Dienste</span>
+          </a>
+        {% endif %}
+        {% if not is_pre_camp and not is_post_camp %}
+          <a href="{{ kiosk_urls.home }}#essen" class="kiosk-mobile-bottom-nav__item">
+            <span class="kiosk-mobile-bottom-nav__icon" aria-hidden="true">🍽️</span>
+            <span class="kiosk-mobile-bottom-nav__label">Essen</span>
+          </a>
+        {% endif %}
+        <a href="{{ kiosk_urls.home }}#menu" class="kiosk-mobile-bottom-nav__item">
+          <span class="kiosk-mobile-bottom-nav__icon" aria-hidden="true">☰</span>
+          <span class="kiosk-mobile-bottom-nav__label">Mehr</span>
+        </a>
+        <a href="{{ kiosk_urls.logout }}" class="kiosk-mobile-bottom-nav__item">
+          <span class="kiosk-mobile-bottom-nav__icon" aria-hidden="true">🚪</span>
+          <span class="kiosk-mobile-bottom-nav__label">Abmelden</span>
+        </a>
+      </nav>
+    {% endif %}
     {% if kiosk_mode == "private" and not kiosk_access_prompt %}
       {% include "includes/pwa_install_dialog.html" %}
     {% endif %}
@@ -168,6 +196,34 @@
 
         document.querySelectorAll("dialog").forEach(bind);
         document.addEventListener("click", (event) => {
+          if (event.target.tagName === "DIALOG") {
+            const rect = event.target.getBoundingClientRect();
+            if (
+              event.clientY < rect.top ||
+              event.clientY > rect.bottom ||
+              event.clientX < rect.left ||
+              event.clientX > rect.right
+            ) {
+              event.target.close();
+
+              // If they clicked the inert bottom nav area, trigger the underlying button
+              const elementsUnder = document.elementsFromPoint(event.clientX, event.clientY);
+              const navItem = elementsUnder.find(el => el.closest && el.closest('.kiosk-mobile-bottom-nav__item'));
+              if (navItem) {
+                const target = navItem.closest('.kiosk-mobile-bottom-nav__item');
+                const isMenuToggle = target.getAttribute('href')?.endsWith('#menu') && event.target.id === 'kiosk-menu-dialog';
+                const isEssenToggle = target.getAttribute('href')?.endsWith('#essen') && event.target.id === 'meal-calendar-dialog';
+
+                if (!isMenuToggle && !isEssenToggle) {
+                  // Use a short timeout so the dialog finishes closing and the inert state is removed
+                  setTimeout(() => target.click(), 10);
+                }
+              }
+
+              return;
+            }
+          }
+
           const closeButton = event.target.closest("[data-close-dialog]");
           if (closeButton) closeButton.closest("dialog")?.close();
 

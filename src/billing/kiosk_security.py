@@ -158,13 +158,16 @@ def is_login_locked_out(username: str) -> bool:
     return False
 
 
-def clear_login_rate_limit(username: str) -> None:
-    """Clear failed login rate-limit records for a targeted username."""
+def clear_login_rate_limit(username: str = "", request: HttpRequest | None = None) -> None:
+    """Clear failed login rate-limit records for a targeted username and optional request IP."""
     from .models import LoginAttempt
 
-    if not username:
-        return
-    user_key_hash = login_user_key(username)
-    if user_key_hash:
-        user_key = f"user:{user_key_hash}"
-        LoginAttempt.objects.filter(client_key=user_key).delete()
+    if username:
+        user_key_hash = login_user_key(username)
+        if user_key_hash:
+            user_key = f"user:{user_key_hash}"
+            LoginAttempt.objects.filter(client_key=user_key).delete()
+
+    if request:
+        ip_key = f"ip:{kiosk_client_key(request)}"
+        LoginAttempt.objects.filter(client_key=ip_key).delete()

@@ -946,7 +946,9 @@ textarea {
   display: flex;
   flex: 1 1 auto;
   min-width: 0;
-  justify-content: center;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
 }
 
 .kiosk-brand {
@@ -1902,7 +1904,8 @@ textarea {
 }
 
 .dialog-field input,
-input[type="date"] {
+input[type="date"],
+input[placeholder="DD.MM.YYYY"] {
   width: 100%;
   max-width: 100%;
   min-width: 0;
@@ -2487,6 +2490,10 @@ input[type="date"] {
   }
 }
 
+.kiosk-mobile-bottom-nav {
+  display: none;
+}
+
 @media (max-width: 780px) {
   .deployment-grid,
   .metadata-list div {
@@ -2568,14 +2575,8 @@ input[type="date"] {
     align-items: stretch;
   }
 
-  .topbar .kiosk-nav,
   .kiosk-menu {
     grid-template-columns: 1fr;
-  }
-
-  .topbar .kiosk-nav {
-    display: grid;
-    width: 100%;
   }
 
   .kiosk-topbar {
@@ -2583,7 +2584,7 @@ input[type="date"] {
   }
 
   .kiosk-topbar__brand {
-    justify-content: stretch;
+    justify-content: space-between;
     width: 100%;
   }
 
@@ -2747,6 +2748,76 @@ input[type="date"] {
     max-width: 100%;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+  }
+
+  .kiosk-nav {
+    display: none !important;
+  }
+
+  .hide-on-mobile {
+    display: none !important;
+  }
+
+  #kiosk-menu-dialog,
+  #meal-calendar-dialog {
+    margin-top: auto;
+    margin-bottom: calc(64px + env(safe-area-inset-bottom));
+    width: 100%;
+    max-width: 100%;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  #kiosk-menu-dialog::backdrop,
+  #meal-calendar-dialog::backdrop {
+    -webkit-mask-image: linear-gradient(to bottom, black 0%, black calc(100% - 68px - env(safe-area-inset-bottom)), transparent calc(100% - 68px - env(safe-area-inset-bottom)));
+    mask-image: linear-gradient(to bottom, black 0%, black calc(100% - 68px - env(safe-area-inset-bottom)), transparent calc(100% - 68px - env(safe-area-inset-bottom)));
+  }
+
+  .kiosk-mobile-bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    background: var(--panel);
+    border-top: 1px solid var(--line);
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+  }
+
+  .kiosk-mobile-bottom-nav__item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: var(--radius);
+    transition: color 0.15s ease, background-color 0.15s ease;
+    min-width: 54px;
+  }
+
+  .kiosk-mobile-bottom-nav__item:hover,
+  .kiosk-mobile-bottom-nav__item:focus-visible {
+    color: var(--primary);
+    background: color-mix(in srgb, var(--primary) 8%, transparent);
+  }
+
+  .kiosk-mobile-bottom-nav__icon {
+    font-size: 1.25rem;
+    line-height: 1;
+  }
+
+  .kiosk-page {
+    padding-bottom: calc(68px + env(safe-area-inset-bottom));
   }
 }
 
@@ -3004,6 +3075,8 @@ dialog::backdrop {
 .button-group .button {
   width: 100%;
 }
+
+
 
 .table-actions {
   display: flex;

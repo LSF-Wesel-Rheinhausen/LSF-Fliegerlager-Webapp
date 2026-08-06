@@ -707,7 +707,7 @@ def user_unlock(request: HttpRequest, user_id: int) -> HttpResponse:
     """Reset failed login attempt rate limits for an application user."""
     managed_user = get_object_or_404(User, pk=user_id)
     _require_superuser_for_superuser_account(request, managed_user)
-    clear_login_rate_limit(managed_user.username)
+    clear_login_rate_limit(managed_user.username, request=request)
     logger.info("Admin '%s' reset login rate-limit timeout for user '%s'.", request.user, managed_user.username)
     messages.success(request, f"Timeout für '{managed_user.username}' wurde zurückgesetzt.")
     return redirect("user-list")
@@ -2540,6 +2540,17 @@ def _parse_kiosk_checkin_date(value, field_label, participant_name, errors):
     if not stripped_value:
         return None
     parsed = parse_date(stripped_value)
+    if parsed is None:
+        import re
+        from datetime import datetime
+
+        match = re.match(r"^(\d{2})[\. ](\d{2})[\. ](\d{4})$", stripped_value)
+        if match:
+            try:
+                parsed = datetime(int(match.group(3)), int(match.group(2)), int(match.group(1))).date()
+            except ValueError:
+                # Das Datum ist ungültig (z.B. 31.02.), parsed bleibt None und der Error wird unten gefangen
+                pass
     if parsed is None:
         errors.append(f"{field_label} für {participant_name} ist kein gültiges Datum.")
     return parsed

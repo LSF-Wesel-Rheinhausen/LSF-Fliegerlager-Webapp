@@ -163,7 +163,7 @@
     </form>
     <nav class="kiosk-menu" aria-label="Kiosk-Bereiche">
       {% if not is_pre_camp and not is_post_camp %}
-        <button type="button" class="kiosk-menu__item" data-dialog-target="meal-calendar-dialog">
+        <button type="button" class="kiosk-menu__item hide-on-mobile" data-dialog-target="meal-calendar-dialog">
           <span>Abendessen (Kalender)</span>
           <small>Abendessen nach Lagertag buchen und verwalten.</small>
         </button>
@@ -978,11 +978,11 @@
               <input
                 id="arrival-date-{{ checkin_target.token }}"
                 name="arrival_date_{{ checkin_target.token }}"
-                type="date"
+                type="text"
+                pattern="\d{2}[\. ]\d{2}[\. ]\d{4}"
+                placeholder="DD.MM.YYYY"
                 inputmode="numeric"
-                value="{{ checkin_target.object.arrival_date|date:'Y-m-d' }}"
-                {% if checkin_target.camp.starts_on %}min="{{ checkin_target.camp.starts_on|date:'Y-m-d' }}"{% endif %}
-                {% if checkin_target.camp.ends_on %}max="{{ checkin_target.camp.ends_on|date:'Y-m-d' }}"{% endif %}
+                value="{{ checkin_target.object.arrival_date|date:'d.m.Y' }}"
                 {% if checkin_target.camp.starts_on %}data-min-date-label="{{ checkin_target.camp.starts_on|date:'d.m.Y' }}"{% endif %}
                 {% if checkin_target.camp.ends_on %}data-max-date-label="{{ checkin_target.camp.ends_on|date:'d.m.Y' }}"{% endif %}
               >
@@ -992,11 +992,11 @@
               <input
                 id="departure-date-{{ checkin_target.token }}"
                 name="departure_date_{{ checkin_target.token }}"
-                type="date"
+                type="text"
+                pattern="\d{2}[\. ]\d{2}[\. ]\d{4}"
+                placeholder="DD.MM.YYYY"
                 inputmode="numeric"
-                value="{{ checkin_target.object.departure_date|date:'Y-m-d' }}"
-                {% if checkin_target.camp.starts_on %}min="{{ checkin_target.camp.starts_on|date:'Y-m-d' }}"{% endif %}
-                {% if checkin_target.camp.ends_on %}max="{{ checkin_target.camp.ends_on|date:'Y-m-d' }}"{% endif %}
+                value="{{ checkin_target.object.departure_date|date:'d.m.Y' }}"
                 {% if checkin_target.camp.starts_on %}data-min-date-label="{{ checkin_target.camp.starts_on|date:'d.m.Y' }}"{% endif %}
                 {% if checkin_target.camp.ends_on %}data-max-date-label="{{ checkin_target.camp.ends_on|date:'d.m.Y' }}"{% endif %}
               >
@@ -1121,13 +1121,11 @@
       const mealSelectedDate = document.getElementById("meal-selected-date");
       const familyDialog = document.getElementById("family-dialog");
       const checkinDialog = document.getElementById("checkin-dialog");
-      checkinDialog?.querySelectorAll('input[type="date"]').forEach((input) => {
+      checkinDialog?.querySelectorAll('input[placeholder="DD.MM.YYYY"]').forEach((input) => {
         const updateDateValidityMessage = () => {
           input.setCustomValidity("");
-          if (input.validity.rangeUnderflow && input.dataset.minDateLabel) {
-            input.setCustomValidity(`Bitte wähle ein Datum ab dem ${input.dataset.minDateLabel}.`);
-          } else if (input.validity.rangeOverflow && input.dataset.maxDateLabel) {
-            input.setCustomValidity(`Bitte wähle ein Datum bis zum ${input.dataset.maxDateLabel}.`);
+          if (input.validity.patternMismatch) {
+            input.setCustomValidity(`Bitte gib das Datum im Format DD.MM.YYYY ein.`);
           }
         };
         input.addEventListener("input", updateDateValidityMessage);
@@ -1295,6 +1293,47 @@
       document.querySelector("[data-open-kiosk-menu]")?.addEventListener("click", (event) =>
         openDialog(kioskMenuDialog, event.currentTarget)
       );
+
+      const mealCalendarDialog = document.getElementById("meal-calendar-dialog");
+      const checkHashAndOpenMenu = () => {
+        if (window.location.hash === "#menu") {
+          if (kioskMenuDialog && !kioskMenuDialog.open) {
+            openDialog(kioskMenuDialog);
+          }
+        } else if (window.location.hash === "#essen") {
+          if (mealCalendarDialog && !mealCalendarDialog.open) {
+            openDialog(mealCalendarDialog);
+          }
+        }
+      };
+      window.addEventListener("hashchange", checkHashAndOpenMenu);
+      checkHashAndOpenMenu();
+
+      kioskMenuDialog?.addEventListener("close", () => {
+        if (window.location.hash === "#menu") {
+          history.replaceState(null, null, window.location.pathname);
+        }
+      });
+
+      mealCalendarDialog?.addEventListener("close", () => {
+        if (window.location.hash === "#essen") {
+          history.replaceState(null, null, window.location.pathname);
+        }
+      });
+
+      document.querySelector(".kiosk-mobile-bottom-nav__item[href$='#menu']")?.addEventListener("click", (e) => {
+        if (kioskMenuDialog && kioskMenuDialog.open) {
+          e.preventDefault();
+          kioskMenuDialog.close();
+        }
+      });
+
+      document.querySelector(".kiosk-mobile-bottom-nav__item[href$='#essen']")?.addEventListener("click", (e) => {
+        if (mealCalendarDialog && mealCalendarDialog.open) {
+          e.preventDefault();
+          mealCalendarDialog.close();
+        }
+      });
 
       document.querySelectorAll("[data-open-quick-cancel-dialog]").forEach((button) => {
         button.addEventListener("click", () => {
