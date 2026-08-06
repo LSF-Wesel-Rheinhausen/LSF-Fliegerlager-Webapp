@@ -1,0 +1,1 @@
+* Behoben: Bei Personen, die sowohl Jugendgruppe als auch Begleitperson sind, wird die Lagerpauschale (und damit die Förderung) nun wieder korrekt berechnet. Zuvor wurde die Regel ignoriert, wenn in den Einstellungen der Preisregel "Gilt für Erwachsene" nicht angehakt war.

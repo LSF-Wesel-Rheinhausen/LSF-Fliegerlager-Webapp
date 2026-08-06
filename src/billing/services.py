@@ -338,11 +338,11 @@ def calculate_meal_overview(camp: Camp) -> list[MealOverviewDay]:
 
 
 def _rule_applies(rule, participant):
-    if participant.is_child and not rule.applies_to_children:
-        return False
-    if not participant.is_child and not rule.applies_to_adults:
-        return False
-    return True
+    if participant.is_child:
+        return rule.applies_to_children
+    if participant.is_companion:
+        return rule.applies_to_companions
+    return rule.applies_to_adults
 
 
 def resolve_meal_price_rule(camp: Camp, meal: str, meal_date: date, *, is_child: bool, is_companion: bool = False):
