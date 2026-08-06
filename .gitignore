@@ -19,6 +19,7 @@ __pycache__/
 .env.*
 !.env.example
 .pytest_cache/
+pytest-of-*/
 .mypy_cache/
 .ruff_cache/
 .coverage
