@@ -687,6 +687,7 @@ class PriceRule(TimeStampedModel):
         MEAL = "meal", "Verpflegung"
         DRINK = "drink", "Getränk"
         OTHER = "other", "Sonstiges"
+        DONATION = "donation", "Spende"
 
     class MealType(models.TextChoices):
         BREAKFAST = "breakfast", "Frühstück"
