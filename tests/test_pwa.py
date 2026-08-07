@@ -152,6 +152,7 @@ def test_pwa_manifests_are_surface_specific(client, route_name, expected_scope, 
     manifest = json.loads(response.content)
     assert manifest["scope"] == expected_scope
     assert manifest["start_url"] == expected_start
+    assert manifest["lang"] == "de-DE"
     assert {icon["sizes"] for icon in manifest["icons"]} >= {"192x192", "512x512"}
     assert next(icon for icon in manifest["icons"] if icon["sizes"] == "192x192")["purpose"] == "any"
     assert all(expected_icon in icon["src"] for icon in manifest["icons"])
@@ -169,9 +170,9 @@ def test_pwa_surfaces_use_distinct_install_icons(client):
 @pytest.mark.parametrize(
     ("route_name", "expected_scope", "expected_cache_name"),
     [
-        ("pwa-worker-admin", "/", "fliegerlager-admin-v29"),
-        ("pwa-worker-kiosk", "/kiosk/", "fliegerlager-kiosk-v29"),
-        ("pwa-worker-central", "/central/kiosk/", "fliegerlager-central-v29"),
+        ("pwa-worker-admin", "/", "fliegerlager-admin-v30"),
+        ("pwa-worker-kiosk", "/kiosk/", "fliegerlager-kiosk-v30"),
+        ("pwa-worker-central", "/central/kiosk/", "fliegerlager-central-v30"),
     ],
 )
 def test_service_workers_have_explicit_scopes(client, route_name, expected_scope, expected_cache_name):

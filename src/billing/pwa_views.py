@@ -4,7 +4,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.templatetags.static import static
 
-PWA_CACHE_VERSION = 29
+PWA_CACHE_VERSION = 30
 
 PWA_SURFACES: dict[str, dict[str, str]] = {
     "admin": {
@@ -63,7 +63,7 @@ def manifest(_request: HttpRequest, surface: str) -> JsonResponse:
             "display": "standalone",
             "background_color": "#f7f7f5",
             "theme_color": "#1f5d42",
-            "lang": "de",
+            "lang": "de-DE",
             "icons": icons,
         },
         content_type="application/manifest+json",
