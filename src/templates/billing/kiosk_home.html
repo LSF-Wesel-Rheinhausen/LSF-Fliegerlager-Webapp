@@ -1471,6 +1471,20 @@
       openRequestedMealCalendar();
       document.querySelectorAll("[data-auto-open-dialog]").forEach((dialog) => openDialog(dialog));
 
+      const donateDialog = document.getElementById('donate-dialog');
+      if (donateDialog) {
+        document.querySelectorAll('[data-open-donate-dialog]').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            openDialog(donateDialog, e.currentTarget);
+          });
+        });
+        document.querySelectorAll('[data-close-donate-dialog]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            donateDialog.close();
+          });
+        });
+      }
+
     })();
   </script>
 
@@ -1517,21 +1531,4 @@
   </script>
   {% endif %}
 
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      const donateDialog = document.getElementById('donate-dialog');
-      if (donateDialog) {
-        document.querySelectorAll('[data-open-donate-dialog]').forEach(btn => {
-          btn.addEventListener('click', () => {
-            donateDialog.showModal();
-          });
-        });
-        document.querySelectorAll('[data-close-donate-dialog]').forEach(btn => {
-          btn.addEventListener('click', () => {
-            donateDialog.close();
-          });
-        });
-      }
-    });
-  </script>
 {% endblock %}
