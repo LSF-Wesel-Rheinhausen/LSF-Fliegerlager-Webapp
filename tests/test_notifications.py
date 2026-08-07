@@ -777,7 +777,7 @@ def test_scheduled_shift_reminder_uses_one_hour_lead_and_deduplicates():
     generate_scheduled_notifications(now=now + timedelta(minutes=5))
 
     message = PushMessage.objects.get(category="shifts")
-    assert "Mittagsdienst" in message.body
+    assert '"Mittagsdienst"' in message.body
     assert message.dedupe_key == f"shift:{shift.pk}:participant:{participant.pk}:reminder"
 
 
@@ -1262,3 +1262,80 @@ def test_information_compose_includes_participants_without_email_and_allows_edit
     assert PushMessage.objects.filter(
         category="announcement", title="Push an Alle", subscription__participant=p_no_email
     ).exists()
+
+
+@pytest.mark.django_db
+def test_notify_shift_exchange_offered():
+    camp = CampFactory(is_active=True)
+    actor = ParticipantFactory(camp=camp)
+    other = ParticipantFactory(camp=camp)
+    PushSubscription.objects.create(
+        participant=other,
+        endpoint="https://push.example.test/other",
+        p256dh="key",
+        auth="secret",
+        categories=["shifts"],
+    )
+    shift = Shift.objects.create(
+        camp=camp,
+        name="Mittagsdienst",
+        date=date(2026, 7, 20),
+        required_slots=1,
+    )
+    assignment = ShiftAssignment.objects.create(shift=shift, participant=actor)
+    from billing.notifications import notify_shift_exchange
+
+    notify_shift_exchange(assignment, event="offered", actor=actor)
+    message = PushMessage.objects.get(category="shifts")
+    assert '"Mittagsdienst"' in message.body
+
+
+@pytest.mark.django_db
+def test_notify_shift_exchange_taken():
+    camp = CampFactory(is_active=True)
+    actor = ParticipantFactory(camp=camp)
+    previous = ParticipantFactory(camp=camp)
+    PushSubscription.objects.create(
+        participant=previous,
+        endpoint="https://push.example.test/prev",
+        p256dh="key",
+        auth="secret",
+        categories=["shifts"],
+    )
+    shift = Shift.objects.create(
+        camp=camp,
+        name="Abenddienst",
+        date=date(2026, 7, 20),
+        required_slots=1,
+    )
+    assignment = ShiftAssignment.objects.create(shift=shift, participant=actor)
+    from billing.notifications import notify_shift_exchange
+
+    notify_shift_exchange(assignment, event="taken", actor=actor, previous_participant=previous)
+    message = PushMessage.objects.get(category="shifts")
+    assert '"Abenddienst"' in message.body
+
+
+@pytest.mark.django_db
+def test_scheduled_open_shifts_admin_notification():
+    now = timezone.make_aware(timezone.datetime(2026, 7, 20, 10, 0))
+    camp = CampFactory(is_active=True)
+    admin = UserFactory(is_superuser=True)
+    PushSubscription.objects.create(
+        user=admin,
+        endpoint="https://push.example.test/admin",
+        p256dh="key",
+        auth="secret",
+        categories=["open_shifts_admin"],
+    )
+    Shift.objects.create(
+        camp=camp,
+        name="Frühstück",
+        date=now.date(),
+        required_slots=1,
+    )
+    from billing.notifications import generate_scheduled_notifications
+
+    generate_scheduled_notifications(now=now)
+    message = PushMessage.objects.get(category="open_shifts_admin")
+    assert '"Frühstück"' in message.body
