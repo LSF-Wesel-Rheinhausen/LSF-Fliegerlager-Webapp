@@ -1114,6 +1114,31 @@
 
 {% endblock %}
 {% block scripts %}
+
+  <dialog id="donate-dialog" class="kiosk-dialog" aria-labelledby="donate-dialog-title">
+    <div class="kiosk-dialog__content">
+      <div class="kiosk-dialog__header">
+        <h2 id="donate-dialog-title">Spenden</h2>
+        <button class="kiosk-dialog__close" type="button" aria-label="Schließen" data-close-donate-dialog>×</button>
+      </div>
+      <form method="post" action="{% url 'kiosk-home' %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="donate">
+        <div class="kiosk-dialog__body">
+          <p>Vielen Dank, dass du uns unterstützen möchtest!</p>
+          <div class="form-group" style="margin-top: 1rem;">
+            <label for="donation_amount" style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Betrag in €</label>
+            <input type="number" id="donation_amount" name="donation_amount" step="0.01" min="0.01" value="{% if is_post_camp and summary.balance < 0 %}{{ summary.balance|abs_value|unlocalize }}{% endif %}" required style="font-size: 1.25rem; padding: 0.75rem; width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: var(--radius);">
+          </div>
+        </div>
+        <div class="kiosk-dialog__footer" style="margin-top: 1.5rem; display: flex; gap: 0.5rem; justify-content: flex-end;">
+          <button type="button" class="button button-secondary" data-close-donate-dialog>Abbrechen</button>
+          <button type="submit" class="button button-primary">Spenden eintragen</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
   <script nonce="{{ request.csp_nonce }}">
     (() => {
       const masonryGrid = document.querySelector("[data-kiosk-masonry]");
@@ -1488,29 +1513,6 @@
     })();
   </script>
 
-  <dialog id="donate-dialog" class="kiosk-dialog" aria-labelledby="donate-dialog-title">
-    <div class="kiosk-dialog__content">
-      <div class="kiosk-dialog__header">
-        <h2 id="donate-dialog-title">Spenden</h2>
-        <button class="kiosk-dialog__close" type="button" aria-label="Schließen" data-close-donate-dialog>×</button>
-      </div>
-      <form method="post" action="{% url 'kiosk-home' %}">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="donate">
-        <div class="kiosk-dialog__body">
-          <p>Vielen Dank, dass du uns unterstützen möchtest!</p>
-          <div class="form-group" style="margin-top: 1rem;">
-            <label for="donation_amount" style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Betrag in €</label>
-            <input type="number" id="donation_amount" name="donation_amount" step="0.01" min="0.01" value="{% if is_post_camp and summary.balance < 0 %}{{ summary.balance|abs_value|unlocalize }}{% endif %}" required style="font-size: 1.25rem; padding: 0.75rem; width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: var(--radius);">
-          </div>
-        </div>
-        <div class="kiosk-dialog__footer" style="margin-top: 1.5rem; display: flex; gap: 0.5rem; justify-content: flex-end;">
-          <button type="button" class="button button-secondary" data-close-donate-dialog>Abbrechen</button>
-          <button type="submit" class="button button-primary">Spenden eintragen</button>
-        </div>
-      </form>
-    </div>
-  </dialog>
 
   {% if show_party_animation %}
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
