@@ -56,7 +56,7 @@ class SecurityHeadersMiddleware:
         """Return the CSP value for a request-scoped nonce."""
         directives: dict[str, tuple[str, ...]] = {
             "default-src": ("'self'",),
-            "script-src": ("'self'", f"'nonce-{nonce}'"),
+            "script-src": ("'self'", f"'nonce-{nonce}'", "https://cdn.jsdelivr.net"),
             "script-src-attr": ("'unsafe-inline'",),
             "style-src": ("'self'", f"'nonce-{nonce}'"),
             "style-src-attr": ("'unsafe-inline'",),

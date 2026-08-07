@@ -1781,3 +1781,34 @@ test("Mobile Kiosk: bottom navigation bar hides shifts in post-camp mode", async
   await expect(bottomNav.getByRole("link", { name: "Mehr" })).toBeVisible();
 
 });
+
+test("Kiosk: Participant can open donate dialog, enter amount and see confetti", async ({ page }) => {
+  await setupFirstAdmin(page);
+  await createCamp(page, "Donate Camp", -10, 5); // post-camp
+  await createParticipant(page, "Donate", "Tester", "", "1234");
+  await logout(page);
+
+  await openKiosk(page, "/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Donate Tester" });
+  await page.getByLabel("PIN:", { exact: true }).fill("1234");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await expect(page).toHaveURL(/.*\/kiosk\//);
+
+  // Click the donate button
+  await page.getByRole("button", { name: "Spenden" }).click();
+
+  // Dialog should be open
+  const dialog = page.locator("#donate-dialog");
+  await expect(dialog).toBeVisible();
+
+  // Fill amount and submit
+  await dialog.getByLabel("Betrag in €").fill("10.50");
+  await dialog.getByRole("button", { name: "Spenden eintragen" }).click();
+
+  // Should show success message
+  await expect(page.locator(".messages .success")).toContainText("Vielen Dank für deine Spende von 10.50 €!");
+
+  // Check if confetti canvas is present (indicates animation triggered)
+  const confettiCanvas = page.locator("canvas").first();
+  await expect(confettiCanvas).toBeAttached();
+});

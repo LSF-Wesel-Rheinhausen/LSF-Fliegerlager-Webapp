@@ -1515,8 +1515,8 @@
 
 
   {% if show_party_animation %}
-  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-  <script>
+  <script nonce="{{ request.csp_nonce }}" src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <script nonce="{{ request.csp_nonce }}">
     document.addEventListener("DOMContentLoaded", function() {
       var duration = 3 * 1000;
       var animationEnd = Date.now() + duration;
