@@ -47,6 +47,7 @@ from .forms import (
     KioskFamilyMemberForm,
     KioskFamilyMemberPinForm,
     KioskLoginForm,
+    KioskPinChangeForm,
     KioskSelfEnrollmentForm,
     ManualChargeForm,
     MealBookingForm,
@@ -93,6 +94,7 @@ from .models import (
     Participant,
     ParticipantBookingLink,
     ParticipantFamilyMember,
+    ParticipantFamilyMemberPin,
     ParticipantPin,
     PriceRule,
     Settlement,
@@ -161,8 +163,10 @@ PRE_CAMP_KIOSK_ACTIONS = frozenset(
         "family_member_create",
         "family_member_deactivate",
         "family_member_pin_set",
+        "pin_change",
     }
 )
+POST_CAMP_KIOSK_ACTIONS = frozenset({"pin_change"})
 GUARDIAN_ONLY_KIOSK_ACTIONS = frozenset(
     {
         "family_member_create",
@@ -3473,17 +3477,34 @@ def kiosk_home(request, kiosk_mode="private"):
     family_member_form = KioskFamilyMemberForm(prefix="family")
     family_member_pin_form = None
     family_member_pin_member_id = None
+    actor_pin = active_family_member.pin if active_family_member is not None else participant.pin
+    pin_change_form = KioskPinChangeForm(pin_record=actor_pin, prefix="pin")
     quick_confirmation = None
     if request.method == "POST":
-        if is_post_camp:
+        action = request.POST.get("action")
+        if is_post_camp and action not in POST_CAMP_KIOSK_ACTIONS:
             messages.error(request, "Das Lager ist beendet. Änderungen sind nicht mehr möglich.")
             return redirect(_kiosk_route(kiosk_mode, "home"))
-        if is_pre_camp and request.POST.get("action") not in PRE_CAMP_KIOSK_ACTIONS:
+        if is_pre_camp and action not in PRE_CAMP_KIOSK_ACTIONS:
             messages.error(request, "Diese Funktion ist erst ab Lagerbeginn verfügbar.")
             return redirect(_kiosk_route(kiosk_mode, "home"))
-        if active_family_member is not None and request.POST.get("action") in GUARDIAN_ONLY_KIOSK_ACTIONS:
+        if active_family_member is not None and action in GUARDIAN_ONLY_KIOSK_ACTIONS:
             return HttpResponseForbidden("Nur Hauptteilnehmer dürfen Familienmitglieder verwalten.")
-        if request.POST.get("action") == "quick":
+        if action == "pin_change":
+            pin_model = ParticipantFamilyMemberPin if active_family_member is not None else ParticipantPin
+            pin_changed = False
+            with transaction.atomic():
+                locked_pin = pin_model.objects.select_for_update().get(pk=actor_pin.pk)
+                pin_change_form = KioskPinChangeForm(request.POST, pin_record=locked_pin, prefix="pin")
+                if pin_change_form.is_valid():
+                    locked_pin.set_pin(pin_change_form.cleaned_data["pin"])
+                    locked_pin.save()
+                    pin_changed = True
+            if pin_changed:
+                _clear_kiosk_session(request)
+                messages.success(request, "Deine PIN wurde geändert. Bitte melde dich erneut an.")
+                return redirect(_kiosk_route(kiosk_mode, "login"))
+        elif action == "quick":
             quick_form = QuickBookingForm(
                 request.POST,
                 participant=participant,
@@ -4248,6 +4269,7 @@ def kiosk_home(request, kiosk_mode="private"):
         "family_member_form": family_member_form,
         "family_member_pin_form": family_member_pin_form,
         "family_member_pin_member_id": family_member_pin_member_id,
+        "pin_change_form": pin_change_form,
         "recent_quick_charges": recent_quick_charges,
         "meal_signups": meal_signups,
         "meal_calendar_days": meal_calendar_days,

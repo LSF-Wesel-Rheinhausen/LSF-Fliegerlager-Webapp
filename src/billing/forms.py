@@ -61,6 +61,34 @@ validate_kiosk_camp_pin = RegexValidator(
     message="Die Lager-PIN muss aus 6 bis 12 Ziffern bestehen.",
     code="invalid_kiosk_camp_pin",
 )
+validate_personal_kiosk_pin = RegexValidator(
+    regex=r"\A[0-9]{4,10}\Z",
+    message="Die PIN muss aus 4 bis 10 Ziffern bestehen.",
+    code="invalid_personal_kiosk_pin",
+)
+TRIVIAL_PERSONAL_PINS = frozenset(
+    {
+        "0000",
+        "1111",
+        "2222",
+        "3333",
+        "4444",
+        "5555",
+        "6666",
+        "7777",
+        "8888",
+        "9999",
+        "1234",
+        "4321",
+        "123456",
+        "654321",
+    }
+)
+
+
+def _is_trivial_personal_pin(pin: str) -> bool:
+    """Return whether a personal kiosk PIN is an unsafe repeated or sequential value."""
+    return pin in TRIVIAL_PERSONAL_PINS or len(set(pin)) == 1
 
 
 def _matches_heif_signature(header: bytes) -> bool:
@@ -912,7 +940,7 @@ class ParticipantPinForm(forms.Form):
     pin = forms.CharField(
         label="Neue PIN",
         min_length=4,
-        max_length=12,
+        max_length=10,
         strip=True,
         widget=forms.PasswordInput(attrs={"autocomplete": "new-password", "inputmode": "numeric"}),
     )
@@ -1072,14 +1100,14 @@ class KioskFamilyMemberPinForm(forms.Form):
     pin = forms.CharField(
         label="Neuer PIN",
         min_length=4,
-        max_length=12,
+        max_length=10,
         strip=True,
         widget=forms.PasswordInput(attrs={"autocomplete": "new-password", "inputmode": "numeric"}),
     )
     pin_repeat = forms.CharField(
         label="PIN wiederholen",
         min_length=4,
-        max_length=12,
+        max_length=10,
         strip=True,
         widget=forms.PasswordInput(attrs={"autocomplete": "new-password", "inputmode": "numeric"}),
     )
@@ -1090,6 +1118,67 @@ class KioskFamilyMemberPinForm(forms.Form):
         pin_repeat = cleaned_data.get("pin_repeat")
         if pin and pin_repeat and pin != pin_repeat:
             raise forms.ValidationError("Die PINs stimmen nicht überein.", code="pin_mismatch")
+        return cleaned_data
+
+
+class KioskPinChangeForm(forms.Form):
+    """Validate a personal PIN change for the authenticated kiosk actor."""
+
+    current_pin = forms.CharField(
+        label="Aktuelle PIN",
+        min_length=4,
+        max_length=10,
+        strip=True,
+        widget=forms.PasswordInput(attrs={"autocomplete": "current-password", "inputmode": "numeric"}),
+    )
+    pin = forms.CharField(
+        label="Neue PIN",
+        strip=True,
+        validators=[validate_personal_kiosk_pin],
+        widget=forms.PasswordInput(
+            attrs={"autocomplete": "new-password", "inputmode": "numeric", "minlength": "4", "maxlength": "10"}
+        ),
+    )
+    pin_repeat = forms.CharField(
+        label="Neue PIN wiederholen",
+        strip=True,
+        validators=[validate_personal_kiosk_pin],
+        widget=forms.PasswordInput(
+            attrs={"autocomplete": "new-password", "inputmode": "numeric", "minlength": "4", "maxlength": "10"}
+        ),
+    )
+
+    def __init__(self, *args: Any, pin_record: ParticipantPin | ParticipantFamilyMemberPin, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.pin_record = pin_record
+
+    def clean(self) -> dict[str, Any]:
+        cleaned_data = super().clean() or {}
+        current_pin = cleaned_data.get("current_pin")
+        pin = cleaned_data.get("pin")
+        pin_repeat = cleaned_data.get("pin_repeat")
+
+        current_pin_is_valid = False
+        if current_pin:
+            if self.pin_record.is_locked:
+                self.add_error(
+                    "current_pin",
+                    "Zu viele Fehlversuche. Bitte warte fünf Minuten und versuche es erneut.",
+                )
+            elif not self.pin_record.check_pin(current_pin):
+                self.add_error("current_pin", "Die aktuelle PIN ist nicht korrekt.")
+            else:
+                current_pin_is_valid = True
+
+        if pin and pin_repeat and pin != pin_repeat:
+            self.add_error("pin_repeat", "Die PINs stimmen nicht überein.")
+        if pin and _is_trivial_personal_pin(pin):
+            self.add_error(
+                "pin",
+                "Bitte wähle eine sicherere PIN (keine einfachen Zahlenfolgen wie '1234' oder '0000').",
+            )
+        if current_pin_is_valid and pin and pin == current_pin:
+            self.add_error("pin", "Die neue PIN muss sich von der aktuellen PIN unterscheiden.")
         return cleaned_data
 
 
@@ -1178,23 +1267,7 @@ class KioskSelfEnrollmentForm(forms.ModelForm):
         if pin and pin_repeat and pin != pin_repeat:
             self.add_error("pin_repeat", "Die PINs stimmen nicht überein.")
 
-        trivial_pins = {
-            "0000",
-            "1111",
-            "2222",
-            "3333",
-            "4444",
-            "5555",
-            "6666",
-            "7777",
-            "8888",
-            "9999",
-            "1234",
-            "4321",
-            "123456",
-            "654321",
-        }
-        if pin and (pin in trivial_pins or len(set(pin)) == 1):
+        if pin and _is_trivial_personal_pin(pin):
             self.add_error(
                 "pin",
                 "Bitte wähle eine sicherere PIN (keine einfachen Zahlenfolgen wie '1234' oder '0000').",

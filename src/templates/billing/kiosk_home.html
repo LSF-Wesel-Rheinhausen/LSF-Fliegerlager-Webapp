@@ -192,6 +192,10 @@
         <span>Hilfe</span>
         <small>Anleitungen zu den wichtigsten Kiosk-Abläufen öffnen.</small>
       </a>
+      <button type="button" class="kiosk-menu__item" data-dialog-target="pin-change-dialog">
+        <span>Eigene PIN ändern</span>
+        <small>Persönliche PIN sicher aktualisieren.</small>
+      </button>
       <button type="button" class="kiosk-menu__item" data-dialog-target="contact-dialog">
         <span>Kontakt Lagerleitung</span>
         <small>Ansprechpersonen und Kontaktdaten anzeigen.</small>
@@ -203,6 +207,37 @@
         </a>
       {% endif %}
     </nav>
+  </dialog>
+
+  <dialog id="pin-change-dialog"{% if pin_change_form.errors %} data-auto-open-dialog{% endif %} class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="pin-change-dialog-title">
+    <div class="dialog-heading">
+      <div>
+        <h2 id="pin-change-dialog-title">Eigene PIN ändern</h2>
+        <p class="dialog-heading__meta">Bestätige zuerst deine aktuelle PIN. Anschließend wirst du abgemeldet.</p>
+      </div>
+      <button type="button" class="button button-secondary" data-close-dialog>Schließen</button>
+    </div>
+    <form method="post" class="form-grid">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="pin_change">
+      {{ pin_change_form.non_field_errors }}
+      <p>
+        {{ pin_change_form.current_pin.label_tag }}
+        {{ pin_change_form.current_pin }}
+        {{ pin_change_form.current_pin.errors }}
+      </p>
+      <p>
+        {{ pin_change_form.pin.label_tag }}
+        {{ pin_change_form.pin }}
+        {{ pin_change_form.pin.errors }}
+      </p>
+      <p>
+        {{ pin_change_form.pin_repeat.label_tag }}
+        {{ pin_change_form.pin_repeat }}
+        {{ pin_change_form.pin_repeat.errors }}
+      </p>
+      <button type="submit">PIN ändern</button>
+    </form>
   </dialog>
 
   {% if not is_pre_camp and not is_post_camp %}
