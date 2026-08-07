@@ -86,6 +86,12 @@
           <p style="margin-bottom: 1rem;">Möchtest du dein verbleibendes Guthaben dem Verein spenden?</p>
           <button type="button" class="button button-primary" data-open-donate-dialog>Jetzt spenden</button>
         </div>
+      {% else %}
+        <div style="margin: 1.5rem 0; padding: 1.5rem; background: var(--panel); border: 2px dashed var(--primary); border-radius: var(--radius); text-align: center;">
+          <h3 style="margin-top: 0;">Spenden</h3>
+          <p style="margin-bottom: 1rem;">Möchtest du den Verein mit einer Spende unterstützen? Der Betrag wird einfach auf deine Endabrechnung aufgeschlagen.</p>
+          <button type="button" class="button button-primary" data-open-donate-dialog>Jetzt spenden</button>
+        </div>
       {% endif %}
 
       {% if participant.camp.show_kiosk_invoices %}
