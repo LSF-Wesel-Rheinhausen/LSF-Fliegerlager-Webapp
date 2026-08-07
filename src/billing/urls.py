@@ -99,6 +99,7 @@ urlpatterns = [
     ),
     path("help/", views.user_guide, name="user-guide"),
     path("help/admin/", views.admin_guide, name="admin-guide"),
+    path("api/debug/ip/", views.debug_ip, name="debug-ip"),
     path("", views.kiosk_root, name="kiosk-root"),
     path("offline/", pwa_views.offline, name="pwa-offline"),
     path("manifest.webmanifest", pwa_views.manifest, {"surface": "admin"}, name="pwa-manifest-admin"),

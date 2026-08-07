@@ -4497,3 +4497,23 @@ def user_guide(request: HttpRequest) -> HttpResponse:
 def admin_guide(request: HttpRequest) -> HttpResponse:
     """Render the built-in admin documentation."""
     return render(request, "billing/admin_guide.html")
+
+
+@login_required
+def debug_ip(request: HttpRequest) -> HttpResponse:
+    """Debug endpoint to check proxy IPs and headers."""
+    if not request.user.is_staff:
+        from django.http import HttpResponseForbidden
+
+        return HttpResponseForbidden("Only staff can view this.")
+
+    headers_of_interest = [
+        "HTTP_X_FORWARDED_FOR",
+        "HTTP_X_REAL_IP",
+        "HTTP_CF_CONNECTING_IP",
+        "REMOTE_ADDR",
+        "HTTP_FORWARDED",
+        "HTTP_HOST",
+    ]
+    data = {k: request.META.get(k) for k in headers_of_interest}
+    return JsonResponse(data)
