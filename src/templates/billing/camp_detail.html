@@ -240,7 +240,7 @@
         </tbody>
       </table>
       {% for code, data in cost_centers.items %}
-        <dialog id="cost-center-dialog-{{ forloop.counter }}" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="cost-center-dialog-title-{{ forloop.counter }}">
+        <dialog id="cost-center-dialog-{{ forloop.counter }}" closedby="any" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="cost-center-dialog-title-{{ forloop.counter }}">
           <form method="dialog" class="dialog-heading">
             <h2 id="cost-center-dialog-title-{{ forloop.counter }}">{{ data.label }}</h2>
             <button type="submit" class="button button-secondary">Schließen</button>
@@ -418,7 +418,7 @@
     </section>
   {% endif %}
 
-  <dialog id="reject-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="reject-dialog-title">
+  <dialog id="reject-dialog" closedby="any" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="reject-dialog-title">
     <form method="dialog" class="dialog-heading">
       <h2 id="reject-dialog-title">Antrag ablehnen</h2>
       <button class="button button-secondary">Abbrechen</button>

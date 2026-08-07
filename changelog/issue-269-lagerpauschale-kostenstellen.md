@@ -1,0 +1,2 @@
+- **Feature**: Lagerpauschale wird in der Kostenstellenauswertung als eigene Position "Lagerpauschale (Unterkunft/Verpflegung - sonstiges, Fahrtkosten, Verbrauchsmaterial, Miete/sonstiges)" zusammengefasst, wobei alle zugehörigen Einnahmen und Ausgaben gegengerechnet werden.
+- **UI**: Dialoge in der Kostenstellenauswertung unterstützen nun das native Light-Dismiss (Schließen per Klick auf den Hintergrund) mithilfe des `closedby="any"`-Attributs.

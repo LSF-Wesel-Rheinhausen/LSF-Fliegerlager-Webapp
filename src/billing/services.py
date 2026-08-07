@@ -1227,6 +1227,26 @@ def get_cost_center_evaluation(camp):
         for code, label in Expense.CostCenter.choices
     }
 
+    CAMP_FLAT_COST_CENTERS = {
+        Expense.CostCenter.FOOD_OTHER,
+        Expense.CostCenter.TRAVEL,
+        Expense.CostCenter.MATERIALS,
+        Expense.CostCenter.RENT_OTHER,
+    }
+
+    evaluation["camp_flat"] = {
+        "label": (
+            "Lagerpauschale (Unterkunft/Verpflegung - sonstiges, Fahrtkosten, Verbrauchsmaterial, Miete/sonstiges)"
+        ),
+        "income": Decimal("0.00"),
+        "expense_total": Decimal("0.00"),
+        "balance": Decimal("0.00"),
+        "income_count": 0,
+        "expense_count": 0,
+        "income_details": [],
+        "expense_details": [],
+    }
+
     expenses = Expense.objects.filter(
         camp=camp,
         allocation_method=Expense.AllocationMethod.COST_CENTER,
@@ -1235,8 +1255,9 @@ def get_cost_center_evaluation(camp):
 
     for exp in expenses:
         code = exp.cost_center or "without_cost_center"
-        if code not in evaluation:
-            evaluation[code] = {
+        target_code = "camp_flat" if code in CAMP_FLAT_COST_CENTERS else code
+        if target_code not in evaluation:
+            evaluation[target_code] = {
                 "label": "Ohne Kostenstelle",
                 "income": Decimal("0.00"),
                 "expense_total": Decimal("0.00"),
@@ -1247,9 +1268,9 @@ def get_cost_center_evaluation(camp):
                 "expense_details": [],
             }
 
-        evaluation[code]["expense_total"] += exp.amount
-        evaluation[code]["expense_count"] += 1
-        evaluation[code]["expense_details"].append(exp)
+        evaluation[target_code]["expense_total"] += exp.amount
+        evaluation[target_code]["expense_count"] += 1
+        evaluation[target_code]["expense_details"].append(exp)
 
     meal_cost_centers = {
         MealSignup.Meal.BREAKFAST: Expense.CostCenter.FOOD_BREAKFAST,
@@ -1273,6 +1294,20 @@ def get_cost_center_evaluation(camp):
         evaluation[code]["income"] += amount
         evaluation[code]["income_count"] += 1
         evaluation[code]["income_details"].append(signup)
+
+    camp_flat_charges = (
+        Charge.objects.filter(
+            participant__camp=camp,
+            kind=Charge.Kind.CAMP_FLAT,
+            deleted_at__isnull=True,
+        )
+        .select_related("participant")
+        .order_by("participant__last_name", "participant__first_name", "occurred_on")
+    )
+    for charge in camp_flat_charges:
+        evaluation["camp_flat"]["income"] += charge.total
+        evaluation["camp_flat"]["income_count"] += 1
+        evaluation["camp_flat"]["income_details"].append(charge)
 
     for data in evaluation.values():
         data["balance"] = data["income"] - data["expense_total"]
