@@ -1806,7 +1806,7 @@ test("Kiosk: Participant can open donate dialog, enter amount and see confetti",
   await dialog.getByRole("button", { name: "Spenden eintragen" }).click();
 
   // Should show success message
-  await expect(page.locator(".messages .success")).toContainText("Vielen Dank für deine Spende von 10.50 €!");
+  await expect(page.locator(".message.success")).toContainText("Vielen Dank für deine Spende von 10.50 €!");
 
   // Check if confetti canvas is present (indicates animation triggered)
   const confettiCanvas = page.locator("canvas").first();
