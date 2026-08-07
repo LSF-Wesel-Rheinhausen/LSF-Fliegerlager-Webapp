@@ -166,7 +166,7 @@ PRE_CAMP_KIOSK_ACTIONS = frozenset(
         "pin_change",
     }
 )
-POST_CAMP_KIOSK_ACTIONS = frozenset({"pin_change"})
+POST_CAMP_KIOSK_ACTIONS = frozenset({"pin_change", "donate"})
 GUARDIAN_ONLY_KIOSK_ACTIONS = frozenset(
     {
         "family_member_create",
@@ -4250,6 +4250,7 @@ def kiosk_home(request, kiosk_mode="private"):
     latest_settlement = historic_settlements[0] if historic_settlements else None
     archived_settlements = historic_settlements[1:] if len(historic_settlements) > 1 else []
     days_until_start = participant.camp.days_until_start()
+    show_party_animation = request.session.pop("show_party_animation", False)
 
     context = {
         "participant": participant,
@@ -4260,6 +4261,7 @@ def kiosk_home(request, kiosk_mode="private"):
         "summary": participant_kiosk_summary(participant),
         "is_pre_camp": is_pre_camp,
         "is_post_camp": is_post_camp,
+        "show_party_animation": show_party_animation,
         "days_until_start": days_until_start,
         "historic_settlements": historic_settlements,
         "latest_settlement": latest_settlement,

@@ -1,5 +1,5 @@
 {% extends "billing/kiosk_base.html" %}
-{% load billing_format %}
+{% load billing_format l10n %}
 {% block title %}Kiosk{% endblock %}
 {% block kiosk_nav %}
   <button
@@ -66,7 +66,10 @@
         <div class="kiosk-summary-card__meta">
           <p>Gezahlt, Förderung und Auslagen werden im Dialog detailliert angezeigt.</p>
         </div>
-        <button type="button" class="button" data-open-summary-dialog>Details öffnen</button>
+        <div style="display: flex; gap: 0.5rem; justify-content: center; margin-top: 1rem;">
+          <button type="button" class="button" data-open-summary-dialog>Details öffnen</button>
+          <button type="button" class="button button-secondary" data-open-donate-dialog>Spenden</button>
+        </div>
       </aside>{% endif %}
     </section>
   {% endif %}
@@ -76,6 +79,14 @@
       <span class="kiosk-hero__eyebrow">🏁 Lager beendet</span>
       <h2 style="margin: 0.25rem 0 0.5rem; font-size: 1.5rem;">Das Fliegerlager {{ participant.camp.name }} ist beendet</h2>
       <p style="margin-bottom: 1rem;">Vielen Dank für deine Teilnahme! Nach Lagerende sind keine Änderungen mehr möglich.</p>
+
+      {% if summary.balance < 0 %}
+        <div style="margin: 1.5rem 0; padding: 1.5rem; background: var(--panel); border: 2px dashed var(--primary); border-radius: var(--radius); text-align: center;">
+          <h3 style="margin-top: 0;">Du hast noch Guthaben! ({{ summary.balance|abs_value|money_eur }})</h3>
+          <p style="margin-bottom: 1rem;">Möchtest du dein verbleibendes Guthaben dem Verein spenden?</p>
+          <button type="button" class="button button-primary" data-open-donate-dialog>Jetzt spenden</button>
+        </div>
+      {% endif %}
 
       {% if participant.camp.show_kiosk_invoices %}
       {% if latest_settlement %}
@@ -1455,5 +1466,66 @@
       document.querySelectorAll("[data-auto-open-dialog]").forEach((dialog) => openDialog(dialog));
 
     })();
+  </script>
+
+  <dialog id="donate-dialog" class="kiosk-dialog" aria-labelledby="donate-dialog-title">
+    <div class="kiosk-dialog__content">
+      <div class="kiosk-dialog__header">
+        <h2 id="donate-dialog-title">Spenden</h2>
+        <button class="kiosk-dialog__close" type="button" aria-label="Schließen" data-close-donate-dialog>×</button>
+      </div>
+      <form method="post" action="{% url 'kiosk-home' %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="donate">
+        <div class="kiosk-dialog__body">
+          <p>Vielen Dank, dass du uns unterstützen möchtest!</p>
+          <div class="form-group" style="margin-top: 1rem;">
+            <label for="donation_amount" style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Betrag in €</label>
+            <input type="number" id="donation_amount" name="donation_amount" step="0.01" min="0.01" value="{% if is_post_camp and summary.balance < 0 %}{{ summary.balance|abs_value|unlocalize }}{% endif %}" required style="font-size: 1.25rem; padding: 0.75rem; width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: var(--radius);">
+          </div>
+        </div>
+        <div class="kiosk-dialog__footer" style="margin-top: 1.5rem; display: flex; gap: 0.5rem; justify-content: flex-end;">
+          <button type="button" class="button button-secondary" data-close-donate-dialog>Abbrechen</button>
+          <button type="submit" class="button button-primary">Spenden eintragen</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  {% if show_party_animation %}
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      var duration = 3 * 1000;
+      var animationEnd = Date.now() + duration;
+      var defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 10000 };
+      function randomInRange(min, max) { return Math.random() * (max - min) + min; }
+      var interval = setInterval(function() {
+        var timeLeft = animationEnd - Date.now();
+        if (timeLeft <= 0) { return clearInterval(interval); }
+        var particleCount = 50 * (timeLeft / duration);
+        confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } }));
+        confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } }));
+      }, 250);
+    });
+  </script>
+  {% endif %}
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const donateDialog = document.getElementById('donate-dialog');
+      if (donateDialog) {
+        document.querySelectorAll('[data-open-donate-dialog]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            donateDialog.showModal();
+          });
+        });
+        document.querySelectorAll('[data-close-donate-dialog]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            donateDialog.close();
+          });
+        });
+      }
+    });
   </script>
 {% endblock %}
