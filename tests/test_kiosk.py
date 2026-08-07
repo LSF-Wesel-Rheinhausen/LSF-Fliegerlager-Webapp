@@ -3624,3 +3624,61 @@ def test_admin_cannot_reject_registered_participant_through_registration_action(
 
     assert response.status_code == 404
     assert Participant.objects.filter(pk=participant.pk).exists()
+
+
+@pytest.mark.django_db
+def test_kiosk_donation_creates_charge(kiosk_client):
+    from decimal import Decimal
+
+    from django.urls import reverse
+
+    from billing.models import Charge
+    from billing.views import KIOSK_PARTICIPANT_SESSION_KEY
+    from tests.factories import CampFactory, ParticipantFactory
+
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp)
+
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "donate",
+            "donation_amount": "15,50",
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.url == reverse("kiosk-home")
+
+    charge = Charge.objects.filter(participant=participant, kind=Charge.Kind.DONATION).last()
+    assert charge is not None
+    assert charge.unit_price == Decimal("15.50")
+    assert charge.kiosk_booked_by == participant
+
+
+@pytest.mark.django_db
+def test_kiosk_donation_invalid_amount(kiosk_client):
+    from django.urls import reverse
+
+    from billing.models import Charge
+    from billing.views import KIOSK_PARTICIPANT_SESSION_KEY
+    from tests.factories import CampFactory, ParticipantFactory
+
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp)
+
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {"action": "donate", "donation_amount": "-5"},
+    )
+
+    assert response.status_code == 302
+    assert not Charge.objects.filter(participant=participant, kind=Charge.Kind.DONATION).exists()

@@ -4,7 +4,7 @@ import logging
 import uuid
 from collections.abc import Iterable
 from datetime import date, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from functools import partial
 from typing import Any
 
@@ -4177,6 +4177,35 @@ def kiosk_home(request, kiosk_mode="private"):
                 messages.success(request, "Anmeldezeitraum wurde aktualisiert.")
             except (ValueError, TypeError):
                 messages.error(request, "Ungültiges Datumsformat.")
+            return redirect(_kiosk_route(kiosk_mode, "home"))
+        elif action == "donate":
+            try:
+                amount = Decimal(request.POST.get("donation_amount", "0").replace(",", "."))
+                if amount > 0:
+                    with transaction.atomic():
+                        Charge.objects.create(
+                            participant=participant,
+                            kind=Charge.Kind.DONATION,
+                            description="Spende am Kiosk",
+                            quantity=1,
+                            unit_price=amount,
+                            kiosk_booked_by=default_booking_target,
+                            occurred_on=timezone.localdate(),
+                        )
+                        create_kiosk_action_audit_log(
+                            camp=participant.camp,
+                            action=KioskActionAuditLog.Action.QUICK_BOOKED,
+                            actor_participant=participant if active_family_member is None else None,
+                            actor_family_member=active_family_member,
+                            target_participant=participant,
+                            description=f"Spende erfasst (Betrag: {amount:.2f} €)",
+                        )
+                    messages.success(request, f"Vielen Dank für deine Spende von {amount:.2f} €!")
+                    request.session["show_party_animation"] = True
+                else:
+                    messages.error(request, "Bitte einen Betrag größer als 0 eingeben.")
+            except (ValueError, InvalidOperation):
+                messages.error(request, "Ungültiger Betrag eingegeben.")
             return redirect(_kiosk_route(kiosk_mode, "home"))
 
     recent_quick_charges = list(
