@@ -1,0 +1,4 @@
+- **Feature**: Lagerpauschale wird in der Kostenstellenauswertung als eigene Position "Lagerpauschale (Unterkunft/Verpflegung - sonstiges, Fahrtkosten, Verbrauchsmaterial, Miete/sonstiges)" zusammengefasst, wobei alle zugehörigen Einnahmen und Ausgaben gegengerechnet werden.
+- **UI**: Dialoge in der Kostenstellenauswertung unterstützen nun das native Light-Dismiss (Schließen per Klick auf den Hintergrund) mithilfe des `closedby="any"`-Attributs.
+- **Bugfix**: In der Auswertung werden bei der Lagerpauschale nun die reinen Brutto-Einnahmen ohne Fördersatz-Abzug gewertet und die fehlenden Anzeige-Informationen (Datum, Betrag) im UI behoben.
+- **Feature**: Eine neue Kostenstelle "Förderungen" summiert alle vergebenen Subventionen als Ausgaben und verrechnet sie mit den gesammelten "Spenden" (`Charge.Kind.DONATION`), welche als Einnahme gebucht werden können.

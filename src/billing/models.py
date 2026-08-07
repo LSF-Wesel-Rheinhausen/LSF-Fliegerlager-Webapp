@@ -687,6 +687,7 @@ class PriceRule(TimeStampedModel):
         MEAL = "meal", "Verpflegung"
         DRINK = "drink", "Getränk"
         OTHER = "other", "Sonstiges"
+        DONATION = "donation", "Spende"
 
     class MealType(models.TextChoices):
         BREAKFAST = "breakfast", "Frühstück"
@@ -734,6 +735,7 @@ class Charge(TimeStampedModel):
         FOOD = "food", "Verpflegung"
         DRINK = "drink", "Getränke"
         OTHER = "other", "Sonstige Kosten"
+        DONATION = "donation", "Spende"
 
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="charges")
     kind = models.CharField(max_length=20, choices=Kind.choices)

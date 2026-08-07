@@ -240,7 +240,7 @@
         </tbody>
       </table>
       {% for code, data in cost_centers.items %}
-        <dialog id="cost-center-dialog-{{ forloop.counter }}" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="cost-center-dialog-title-{{ forloop.counter }}">
+        <dialog id="cost-center-dialog-{{ forloop.counter }}" closedby="any" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="cost-center-dialog-title-{{ forloop.counter }}">
           <form method="dialog" class="dialog-heading">
             <h2 id="cost-center-dialog-title-{{ forloop.counter }}">{{ data.label }}</h2>
             <button type="submit" class="button button-secondary">Schließen</button>
@@ -265,15 +265,22 @@
                   </tr>
                 </thead>
                 <tbody>
-                  {% for signup in data.income_details %}
+                  {% for item in data.income_details %}
                     <tr>
-                      <td>{{ signup.meal_date|date:"d.m.Y" }}</td>
-                      <td>
-                        {{ signup.participant.full_name }}
-                        {% if signup.family_member %}für {{ signup.family_member.full_name }}{% endif %}
-                      </td>
-                      <td>{{ signup.get_meal_display }}</td>
-                      <td class="number">{{ signup.charge.total|floatformat:2 }} €</td>
+                      {% if code == 'camp_flat' or code == 'subsidies' %}
+                        <td>{{ item.date|date:"d.m.Y"|default:"-" }}</td>
+                        <td>{{ item.participant.full_name }}</td>
+                        <td>{{ item.description }}</td>
+                        <td class="number">{{ item.total|floatformat:2 }} €</td>
+                      {% else %}
+                        <td>{{ item.meal_date|date:"d.m.Y" }}</td>
+                        <td>
+                          {{ item.participant.full_name }}
+                          {% if item.family_member %}für {{ item.family_member.full_name }}{% endif %}
+                        </td>
+                        <td>{{ item.get_meal_display }}</td>
+                        <td class="number">{{ item.charge.total|floatformat:2 }} €</td>
+                      {% endif %}
                     </tr>
                   {% endfor %}
                 </tbody>
@@ -418,7 +425,7 @@
     </section>
   {% endif %}
 
-  <dialog id="reject-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="reject-dialog-title">
+  <dialog id="reject-dialog" closedby="any" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="reject-dialog-title">
     <form method="dialog" class="dialog-heading">
       <h2 id="reject-dialog-title">Antrag ablehnen</h2>
       <button class="button button-secondary">Abbrechen</button>
