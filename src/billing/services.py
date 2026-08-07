@@ -1247,6 +1247,17 @@ def get_cost_center_evaluation(camp):
         "expense_details": [],
     }
 
+    evaluation["subsidies"] = {
+        "label": "Förderungen",
+        "income": Decimal("0.00"),
+        "expense_total": Decimal("0.00"),
+        "balance": Decimal("0.00"),
+        "income_count": 0,
+        "expense_count": 0,
+        "income_details": [],
+        "expense_details": [],
+    }
+
     expenses = Expense.objects.filter(
         camp=camp,
         allocation_method=Expense.AllocationMethod.COST_CENTER,
@@ -1295,6 +1306,7 @@ def get_cost_center_evaluation(camp):
         evaluation[code]["income_count"] += 1
         evaluation[code]["income_details"].append(signup)
 
+    # 1. Manual CAMP_FLAT charges
     camp_flat_charges = (
         Charge.objects.filter(
             participant__camp=camp,
@@ -1307,7 +1319,89 @@ def get_cost_center_evaluation(camp):
     for charge in camp_flat_charges:
         evaluation["camp_flat"]["income"] += charge.total
         evaluation["camp_flat"]["income_count"] += 1
-        evaluation["camp_flat"]["income_details"].append(charge)
+        evaluation["camp_flat"]["income_details"].append(
+            {
+                "date": charge.occurred_on,
+                "participant": charge.participant,
+                "description": charge.description or charge.get_kind_display(),
+                "total": charge.total,
+            }
+        )
+
+    # 2. Automated CAMP_FLAT from rules
+    active_participants = Participant.objects.filter(
+        camp=camp,
+        status__in=[Participant.Status.REGISTERED, Participant.Status.ACTIVE, Participant.Status.SETTLED],
+    ).select_related("camp")
+    default_rules = list(PriceRule.objects.filter(camp=camp, is_default=True))
+    camp_flat_rules = [rule for rule in default_rules if rule.kind == PriceRule.Kind.CAMP_FLAT]
+
+    for participant in active_participants:
+        matching_rules = [
+            rule
+            for rule in camp_flat_rules
+            if rule.camp_flat_duration == participant_camp_flat_duration(participant)
+            and rule.camp_flat_role == participant_camp_flat_role(participant)
+        ]
+        if not matching_rules:
+            matching_rules = [
+                rule for rule in camp_flat_rules if rule.camp_flat_duration == "" and rule.camp_flat_role == ""
+            ]
+
+        for rule in matching_rules:
+            if not _rule_applies(rule, participant):
+                continue
+            gross = rule.unit_price
+
+            evaluation["camp_flat"]["income"] += gross
+            evaluation["camp_flat"]["income_count"] += 1
+            evaluation["camp_flat"]["income_details"].append(
+                {
+                    "date": None,
+                    "participant": participant,
+                    "description": f"{rule.name} (Automatisch)",
+                    "total": gross,
+                }
+            )
+
+    # 3. Donations for Subsidies
+    donation_charges = (
+        Charge.objects.filter(
+            participant__camp=camp,
+            kind=Charge.Kind.DONATION,
+            deleted_at__isnull=True,
+        )
+        .select_related("participant")
+        .order_by("participant__last_name", "participant__first_name", "occurred_on")
+    )
+    for charge in donation_charges:
+        evaluation["subsidies"]["income"] += charge.total
+        evaluation["subsidies"]["income_count"] += 1
+        evaluation["subsidies"]["income_details"].append(
+            {
+                "date": charge.occurred_on,
+                "participant": charge.participant,
+                "description": charge.description or "Spende",
+                "total": charge.total,
+            }
+        )
+
+    # 4. Calculate Subsidies Given
+    settlements = calculate_participant_settlements(active_participants)
+    for res in settlements.values():
+        for line in res.lines:
+            if line.subsidy_amount > 0:
+                evaluation["subsidies"]["expense_total"] += line.subsidy_amount
+                evaluation["subsidies"]["expense_count"] += 1
+                evaluation["subsidies"]["expense_details"].append(
+                    {
+                        "paid_on": line.occurred_on,
+                        "created_at": None,
+                        "participant": res.participant,
+                        "description": f"Förderung für {line.label}",
+                        "amount": line.subsidy_amount,
+                    }
+                )
 
     for data in evaluation.values():
         data["balance"] = data["income"] - data["expense_total"]

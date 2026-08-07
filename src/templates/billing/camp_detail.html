@@ -265,15 +265,22 @@
                   </tr>
                 </thead>
                 <tbody>
-                  {% for signup in data.income_details %}
+                  {% for item in data.income_details %}
                     <tr>
-                      <td>{{ signup.meal_date|date:"d.m.Y" }}</td>
-                      <td>
-                        {{ signup.participant.full_name }}
-                        {% if signup.family_member %}für {{ signup.family_member.full_name }}{% endif %}
-                      </td>
-                      <td>{{ signup.get_meal_display }}</td>
-                      <td class="number">{{ signup.charge.total|floatformat:2 }} €</td>
+                      {% if code == 'camp_flat' or code == 'subsidies' %}
+                        <td>{{ item.date|date:"d.m.Y"|default:"-" }}</td>
+                        <td>{{ item.participant.full_name }}</td>
+                        <td>{{ item.description }}</td>
+                        <td class="number">{{ item.total|floatformat:2 }} €</td>
+                      {% else %}
+                        <td>{{ item.meal_date|date:"d.m.Y" }}</td>
+                        <td>
+                          {{ item.participant.full_name }}
+                          {% if item.family_member %}für {{ item.family_member.full_name }}{% endif %}
+                        </td>
+                        <td>{{ item.get_meal_display }}</td>
+                        <td class="number">{{ item.charge.total|floatformat:2 }} €</td>
+                      {% endif %}
                     </tr>
                   {% endfor %}
                 </tbody>
