@@ -3,8 +3,14 @@ from datetime import date
 
 import pytest
 from django.test import override_settings
+from openpyxl import Workbook
 
-from billing.exporters import camp_workbook_response, safe_csv_cell
+from billing.exporters import (
+    CSV_FORMULA_PREFIXES,
+    _write_cost_center_sheet_from_snapshot,
+    camp_workbook_response,
+    safe_csv_cell,
+)
 from billing.forms import MealBookingForm
 from billing.importers import normalize_row
 from billing.models import PushSubscription
@@ -28,6 +34,51 @@ def test_xlsx_formula_escaping():
     ParticipantFactory(camp=camp, last_name="=SUM(A1:A10)", first_name="Danger")
     resp = camp_workbook_response(camp)
     assert resp.status_code == 200
+
+
+def test_cost_center_sheet_escapes_formula_cells():
+    """The cost-center sheet must neutralise attacker-controlled names and descriptions.
+
+    Regression for the M-4 gap: PR #250 escaped the settlement/participant sheets but
+    left ``_write_cost_center_sheet_from_snapshot`` writing raw cells, so a participant's
+    expense description or name could still land as a live formula in the XLSX export.
+    """
+    snapshot = [
+        {
+            "code": "cc-1",
+            "label": "=cmd|'/c calc'!A1",
+            "income": "10.00",
+            "expense_total": "5.00",
+            "balance": "5.00",
+            "income_count": 1,
+            "expense_count": 1,
+            "income_details": [
+                {
+                    "meal_date": "2025-08-15",
+                    "participant_name": '=HYPERLINK("http://evil")',
+                    "family_member_name": "",
+                    "description": "@SUM(1)",
+                    "amount": "10.00",
+                }
+            ],
+            "expense_details": [
+                {
+                    "paid_date": "2025-08-16",
+                    "applicant_name": "+2+2",
+                    "description": "-1-1",
+                    "amount": "5.00",
+                }
+            ],
+        }
+    ]
+
+    sheet = Workbook().active
+    _write_cost_center_sheet_from_snapshot(sheet, snapshot)
+
+    for row in sheet.iter_rows(values_only=True):
+        for value in row:
+            if isinstance(value, str):
+                assert not value.lstrip().startswith(CSV_FORMULA_PREFIXES), value
 
 
 @pytest.mark.django_db
