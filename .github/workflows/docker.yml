@@ -47,6 +47,8 @@ jobs:
             APP_BUILD_DATE=${{ steps.metadata.outputs.created }}
             APP_CHANGE=${{ steps.metadata.outputs.change }}
             APP_CHANGELOG=${{ steps.metadata.outputs.changelog }}
+          cache-from: type=gha,scope=app
+          cache-to: type=gha,mode=max,scope=app
 
       - name: Build updater image for tests
         uses: docker/build-push-action@v7
@@ -55,6 +57,8 @@ jobs:
           file: Dockerfile.updater
           load: true
           tags: lsf-webapp-updater:test
+          cache-from: type=gha,scope=updater
+          cache-to: type=gha,mode=max,scope=updater
 
       - name: Test application image
         run: >-
@@ -95,6 +99,8 @@ jobs:
             APP_BUILD_DATE=${{ steps.metadata.outputs.created }}
             APP_CHANGE=${{ steps.metadata.outputs.change }}
             APP_CHANGELOG=${{ steps.metadata.outputs.changelog }}
+          cache-from: type=gha,scope=app
+          cache-to: type=gha,mode=max,scope=app
 
       - name: Publish updater image
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -107,3 +113,5 @@ jobs:
           tags: |
             ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater:latest
             ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater:${{ github.sha }}
+          cache-from: type=gha,scope=updater
+          cache-to: type=gha,mode=max,scope=updater

@@ -81,6 +81,23 @@ def test_information_batch_groups_selected_participants_by_normalized_address():
 
 
 @pytest.mark.django_db
+def test_information_email_includes_sender_footer_at_end_of_delivery_body():
+    admin = SuperUserFactory(first_name="Ada", last_name="Admin")
+    participant = ParticipantFactory(email="participant@example.test")
+
+    batch = queue_information_email_batch(
+        camp=participant.camp,
+        participant_ids=[participant.pk],
+        subject="Treffpunkt",
+        body="Wir treffen uns um 18 Uhr.",
+        created_by=admin,
+    )
+
+    delivery = batch.deliveries.get()
+    assert delivery.body_text == ("Wir treffen uns um 18 Uhr.\n\n---\nGesendet von: Ada Admin")
+
+
+@pytest.mark.django_db
 def test_information_batch_hashes_a_maximum_length_valid_recipient_address():
     admin = SuperUserFactory()
     long_email = f"{'a' * 64}@{'b' * 63}.{'c' * 63}.{'d' * 56}.test"
@@ -171,7 +188,8 @@ def test_worker_sends_one_private_information_message_from_web_configuration():
     assert message.bcc == []
     assert message.from_email == "Fliegerlager <lager@example.test>"
     assert message.reply_to == ["antwort@example.test"]
-    assert message.body == "<Bitte> morgen um 8 Uhr."
+    assert message.body == delivery.body_text
+    assert message.body.endswith(f"Gesendet von: {admin.get_username()}")
     assert message.alternatives[0].mimetype == "text/html"
     assert "&lt;Bitte&gt; morgen um 8 Uhr." in message.alternatives[0].content
 

@@ -301,6 +301,7 @@ def test_editor_views_allow_editor_and_admin(
         ("camp-list", lambda data: []),
         ("camp-meal-overview", lambda data: [data["camp"].pk]),
         ("meal-cutoff-edit", lambda data: [data["camp"].pk]),
+        ("information-email-compose", lambda data: [data["camp"].pk]),
     ],
 )
 def test_huebers_can_access_meal_management_views(client, huebers_user, permission_dataset, route_name, arg_getter):

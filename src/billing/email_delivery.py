@@ -104,6 +104,12 @@ def _validate_message(subject: str, body: str) -> tuple[str, str]:
     return clean_subject, clean_body
 
 
+def _with_sender_footer(body: str, sender: Any) -> str:
+    """Append the explicit sender attribution to a manually composed email."""
+    sender_name = sender.get_full_name().strip() or sender.get_username()
+    return f"{body}\n\n---\nGesendet von: {sender_name}"
+
+
 def resolve_information_recipients(*, camp: Camp, participant_ids: Iterable[int]) -> list[InformationRecipient]:
     """Resolve an exact participant selection into unique normalized email recipients."""
     requested_ids = {int(participant_id) for participant_id in participant_ids}
@@ -207,7 +213,7 @@ def queue_information_email_batch(
                 recipient_names=recipient.names,
                 dedupe_key=_information_dedupe_key(recipient.email),
                 subject=clean_subject,
-                body_text=clean_body,
+                body_text=_with_sender_footer(clean_body, created_by),
             )
             for recipient in recipients
         ]
@@ -255,7 +261,7 @@ def queue_settlement_email_batch(
                 settlement=recipient.settlement,
                 dedupe_key=f"settlement:{recipient.settlement.pk}",
                 subject=clean_subject,
-                body_text=clean_body,
+                body_text=_with_sender_footer(clean_body, created_by),
                 attachment_filename=recipient.filename,
                 attachment_content=attachment,
                 attachment_sha256=hashlib.sha256(attachment).hexdigest(),
