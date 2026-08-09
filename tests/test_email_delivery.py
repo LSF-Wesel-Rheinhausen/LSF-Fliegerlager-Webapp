@@ -26,7 +26,7 @@ from billing.email_delivery import (
     settlement_recipient_mapping,
 )
 from billing.models import EmailBatch, EmailConfiguration, EmailDelivery, EmailTestLog
-from billing.permissions import EDITOR_GROUP
+from billing.permissions import EDITOR_GROUP, HUEBERS_GROUP
 from billing.services import create_settlement_run
 from tests.factories import CampFactory, ChargeFactory, GroupFactory, ParticipantFactory, SuperUserFactory, UserFactory
 
@@ -463,6 +463,33 @@ def test_admin_previews_and_confirms_exact_information_recipients(client):
     assert confirmed.status_code == 302
     assert confirmed["Location"] == reverse("email-batch-detail", args=[batch.pk])
     assert batch.deliveries.count() == 1
+
+
+@pytest.mark.django_db
+def test_huebers_information_confirmation_returns_to_meal_overview(client):
+    huebers = UserFactory()
+    huebers.groups.add(GroupFactory(name=HUEBERS_GROUP))
+    participant = ParticipantFactory(email="participant@example.test")
+    configuration = EmailConfiguration.load()
+    configuration.enabled = True
+    configuration.host = "smtp.example.test"
+    configuration.from_email = "lager@example.test"
+    configuration.set_password("smtp-secret")
+    configuration.save()
+    client.force_login(huebers)
+    url = reverse("information-email-compose", args=[participant.camp_id])
+    data = {
+        "subject": "Treffpunkt",
+        "body": "Wir treffen uns um 18 Uhr.",
+        "participants": [str(participant.pk)],
+    }
+
+    preview = client.post(url, {**data, "action": "preview"})
+    response = client.post(url, {**data, "action": "confirm", "preview_token": preview.context["preview_token"]})
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("camp-meal-overview", args=[participant.camp_id])
+    assert EmailBatch.objects.count() == 1
 
 
 @pytest.mark.django_db

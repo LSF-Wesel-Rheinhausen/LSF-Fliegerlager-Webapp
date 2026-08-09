@@ -2329,6 +2329,41 @@ input[placeholder="DD.MM.YYYY"] {
   background: rgba(236, 253, 243, 0.9);
 }
 
+.shift-filters {
+  display: grid;
+  gap: 16px;
+}
+
+.shift-filters__heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 16px;
+}
+
+.shift-filters__heading h2,
+.shift-filters__heading p {
+  margin: 0;
+}
+
+.shift-filters__heading p {
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.shift-filters__fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.shift-filters__fields label {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+}
+
 .shift-progress__check {
   display: inline-flex;
   align-items: center;
@@ -2672,8 +2707,16 @@ input[placeholder="DD.MM.YYYY"] {
   }
 
   .kiosk-card__action,
-  .shift-card__actions {
+  .shift-card__actions,
+  .shift-filters__heading .button {
     width: 100%;
+  }
+
+  .shift-filters__heading,
+  .shift-filters__fields {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .drink-card-grid {

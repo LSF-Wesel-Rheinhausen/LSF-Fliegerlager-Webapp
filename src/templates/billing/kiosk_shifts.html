@@ -35,6 +35,34 @@
       {% endif %}
     </section>
 
+    <form class="panel shift-filters" method="get">
+      <div class="shift-filters__heading">
+        <div>
+          <h2>Offene Dienste filtern</h2>
+          <p>Finde einen Dienst schnell nach Datum oder Name.</p>
+        </div>
+        {% if shift_date_filter or shift_name_filter %}
+          <a class="button button-secondary" href="{{ kiosk_urls.shifts }}">Filter zurücksetzen</a>
+        {% endif %}
+      </div>
+      <div class="shift-filters__fields">
+        <label>
+          Datum
+          <select name="date">
+            <option value="">Alle zukünftigen Daten</option>
+            {% for shift_date in shift_dates %}
+              <option value="{{ shift_date|date:'Y-m-d' }}"{% if shift_date_filter == shift_date|date:'Y-m-d' %} selected{% endif %}>{{ shift_date|date:"d.m.Y" }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Dienst
+          <input type="search" name="name" value="{{ shift_name_filter }}" maxlength="120" placeholder="z. B. Küchendienst">
+        </label>
+        <button type="submit" class="button">Filtern</button>
+      </div>
+    </form>
+
     <div class="kiosk-grid shift-columns">
       <div class="shift-column">
         {% if offered_shifts %}
@@ -133,12 +161,20 @@
                   {% if shift.my_assignment.offered_for_exchange %}
                     <input type="hidden" name="action" value="revoke_offer">
                     <button type="submit" class="button button-secondary">Angebot zurückziehen</button>
-                  {% else %}
-                    <input type="hidden" name="action" value="offer">
-                    <button type="submit" class="button button-secondary">Zum Tausch anbieten</button>
-                  {% endif %}
+                {% else %}
+                  <input type="hidden" name="action" value="offer">
+                  <button type="submit" class="button button-secondary">Zum Tausch anbieten</button>
+                {% endif %}
+              </form>
+              {% if not shift.my_assignment.offered_for_exchange and shift.can_retract %}
+                <form method="post">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="retract">
+                  <input type="hidden" name="shift_id" value="{{ shift.pk }}">
+                  <button type="submit" class="button button-secondary">Eintrag zurückziehen</button>
                 </form>
-              </div>
+              {% endif %}
+            </div>
             </article>
           {% empty %}
             <div class="kiosk-empty">

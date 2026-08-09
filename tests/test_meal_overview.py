@@ -102,6 +102,7 @@ def test_camp_meal_overview_renders_and_saves_menu_for_huebers(client):
     assert response.status_code == 200
     assert b"Speiseplan speichern" in response.content
     assert b"meal_plan-description_20260701" in response.content
+    assert reverse("information-email-compose", args=[camp.pk]).encode() in response.content
 
     response = client.post(
         reverse("camp-meal-overview", args=[camp.pk]),

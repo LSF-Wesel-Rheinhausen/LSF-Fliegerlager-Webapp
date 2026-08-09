@@ -9,6 +9,7 @@
     <div class="actions">
       {% if user|is_huebers_user %}
         <a class="button button-secondary" href="{% url 'camp-list' %}">Zur Lagerauswahl</a>
+        <a class="button" href="{% url 'information-email-compose' camp.pk %}">Benachrichtigung senden</a>
       {% else %}
         <a class="button button-secondary" href="{% url 'camp-detail' camp.pk %}">Zur Übersicht</a>
       {% endif %}
