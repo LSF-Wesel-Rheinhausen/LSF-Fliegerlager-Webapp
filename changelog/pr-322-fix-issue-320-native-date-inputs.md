@@ -1,0 +1,1 @@
+* **Behoben:** Datumseingaben verwenden nun das native Datumsfeld (`type="date"`) anstelle eines Textfelds mit numerischer Tastatur, was die Bedienung auf mobilen Geräten erheblich verbessert (Issue #320).
