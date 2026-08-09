@@ -6,10 +6,13 @@ from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
+import requests
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.urls import reverse
 from django.utils import timezone
 from pywebpush import WebPushException
+from requests import Response
 
 from billing.models import (
     Charge,
@@ -39,6 +42,7 @@ from tests.factories import CampFactory, ParticipantFactory, UserFactory
 @pytest.fixture(autouse=True)
 def enable_web_push(settings):
     settings.WEB_PUSH_ENABLED = True
+    settings.WEB_PUSH_ALLOWED_ORIGINS = ("https://push.example.test",)
     settings.WEB_PUSH_VAPID_PUBLIC_KEY = "test-public-key"
     settings.WEB_PUSH_VAPID_PRIVATE_KEY = "test-private-key"
     settings.WEB_PUSH_VAPID_SUBJECT = "mailto:test@example.test"
@@ -152,6 +156,89 @@ def test_subscription_rejects_invalid_endpoint_and_category(client):
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "https://127.0.0.1/push",
+        "https://[::1]/push",
+        "https://localhost/push",
+        "https://10.0.0.1/push",
+        "https://192.0.2.1/push",
+        "https://user:password@push.example.test/push",
+        "https://push.example.test:8443/push",
+        "https://*.push.example.test/push",
+        "https://other.example.test/push",
+    ],
+)
+def test_subscription_rejects_untrusted_push_endpoint(client, settings, endpoint):
+    settings.WEB_PUSH_ALLOWED_ORIGINS = ("https://push.example.test",)
+    user = UserFactory()
+    client.force_login(user)
+    payload = subscription_payload(endpoint)
+    payload["categories"] = ["expenses_admin"]
+
+    response = client.post(
+        reverse("notification-subscribe"),
+        data=json.dumps(payload),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "Ungültiger Push-Endpoint."}
+    assert PushSubscription.objects.count() == 0
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("endpoint", ["https://push.example.test/device", "https://push.example.test:443/device"])
+def test_subscription_accepts_exact_configured_push_origin(client, settings, endpoint):
+    settings.WEB_PUSH_ALLOWED_ORIGINS = ("https://push.example.test",)
+    user = UserFactory()
+    client.force_login(user)
+    payload = subscription_payload(endpoint)
+    payload["categories"] = ["expenses_admin"]
+
+    response = client.post(
+        reverse("notification-subscribe"),
+        data=json.dumps(payload),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 201
+    assert PushSubscription.objects.get().endpoint == endpoint
+
+
+@pytest.mark.django_db
+def test_subscription_policy_is_fail_closed_without_configured_origins(client, settings):
+    settings.WEB_PUSH_ALLOWED_ORIGINS = ()
+    user = UserFactory()
+    client.force_login(user)
+    payload = subscription_payload()
+    payload["categories"] = ["expenses_admin"]
+
+    response = client.post(
+        reverse("notification-subscribe"),
+        data=json.dumps(payload),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 400
+    assert PushSubscription.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_push_subscription_save_rejects_untrusted_legacy_endpoint(settings):
+    settings.WEB_PUSH_ALLOWED_ORIGINS = ("https://push.example.test",)
+    with pytest.raises(ValidationError, match="Push-Endpoint"):
+        PushSubscription.objects.create(
+            user=UserFactory(),
+            endpoint="https://10.0.0.1/push",
+            p256dh="key",
+            auth="secret",
+            categories=["expenses_admin"],
+        )
+
+
+@pytest.mark.django_db
 def test_disabled_web_push_rejects_new_subscriptions(client, settings):
     settings.WEB_PUSH_ENABLED = False
     user = UserFactory()
@@ -261,6 +348,112 @@ def test_worker_sends_due_message_and_records_success(webpush):
     assert message.sent_at is not None
     assert subscription.last_success_at is not None
     assert webpush.call_count == 1
+
+
+@pytest.mark.django_db
+@patch("billing.notifications.webpush")
+def test_worker_rechecks_legacy_endpoint_before_delivery(webpush):
+    subscription = PushSubscription.objects.create(
+        user=UserFactory(),
+        endpoint="https://push.example.test/legacy",
+        p256dh="key",
+        auth="secret",
+        categories=["expenses_admin"],
+    )
+    PushSubscription.objects.filter(pk=subscription.pk).update(endpoint="https://127.0.0.1/legacy")
+    message = PushMessage.objects.create(
+        subscription=subscription,
+        category="expenses_admin",
+        title="Neue Auslage",
+        body="Wartet.",
+        target_url="/camps/",
+        dedupe_key="legacy-endpoint:1",
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+
+    result = send_due_push_messages()
+
+    assert result.failed == 1
+    webpush.assert_not_called()
+    subscription.refresh_from_db()
+    message.refresh_from_db()
+    assert subscription.is_active is False
+    assert message.status == PushMessage.Status.FAILED
+    assert message.last_error_code == "invalid_endpoint"
+
+
+@pytest.mark.django_db
+@patch("billing.notifications.webpush")
+def test_worker_uses_redirect_free_session_and_short_timeout(webpush, monkeypatch):
+    response = Response()
+    response.status_code = 201
+    webpush.return_value = response
+    subscription = PushSubscription.objects.create(
+        user=UserFactory(),
+        endpoint="https://push.example.test/session",
+        p256dh="key",
+        auth="secret",
+        categories=["expenses_admin"],
+    )
+    PushMessage.objects.create(
+        subscription=subscription,
+        category="expenses_admin",
+        title="Neue Auslage",
+        body="Wartet.",
+        target_url="/camps/",
+        dedupe_key="session:1",
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+
+    result = send_due_push_messages()
+
+    assert result.sent == 1
+    kwargs = webpush.call_args.kwargs
+    assert isinstance(kwargs["requests_session"], requests.Session)
+    assert kwargs["timeout"] == 5
+
+    request_kwargs = {}
+
+    def fake_request(self, method, url, **request_options):
+        request_kwargs.update(request_options)
+        return response
+
+    monkeypatch.setattr(requests.Session, "request", fake_request)
+    kwargs["requests_session"].post("https://push.example.test/session", allow_redirects=True)
+    assert request_kwargs["allow_redirects"] is False
+
+
+@pytest.mark.django_db
+@patch("billing.notifications.webpush")
+def test_worker_does_not_follow_or_accept_push_redirect(webpush):
+    response = Response()
+    response.status_code = 307
+    response.headers["Location"] = "https://internal.example.test/push"
+    webpush.return_value = response
+    subscription = PushSubscription.objects.create(
+        user=UserFactory(),
+        endpoint="https://push.example.test/redirect",
+        p256dh="key",
+        auth="secret",
+        categories=["expenses_admin"],
+    )
+    message = PushMessage.objects.create(
+        subscription=subscription,
+        category="expenses_admin",
+        title="Neue Auslage",
+        body="Wartet.",
+        target_url="/camps/",
+        dedupe_key="redirect:1",
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+
+    result = send_due_push_messages()
+
+    assert result.retried == 1
+    message.refresh_from_db()
+    assert message.status == PushMessage.Status.PENDING
+    assert message.last_error_code == "redirect"
+    assert message.sent_at is None
 
 
 @pytest.mark.django_db

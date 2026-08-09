@@ -1,7 +1,6 @@
 import hashlib
 import json
 from typing import Any
-from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -15,6 +14,7 @@ from .notifications import (
     _queue_for_subscriptions,
     allowed_categories,
 )
+from .push_endpoints import PUSH_ENDPOINT_ERROR, is_allowed_push_endpoint
 from .pwa_views import pwa_template_context
 from .views import _kiosk_context
 
@@ -138,8 +138,8 @@ def _subscribe(request: HttpRequest, owner: Any, *, participant_owner: bool) -> 
     keys = payload.get("keys")
     device_name = payload.get("device_name", "Dieses Gerät")
     allowed = allowed_categories(participant_owner=participant_owner)
-    if not isinstance(endpoint, str) or len(endpoint) > 2048 or urlsplit(endpoint).scheme != "https":
-        return JsonResponse({"error": "Ungültiger Push-Endpoint."}, status=400)
+    if not is_allowed_push_endpoint(endpoint):
+        return JsonResponse({"error": PUSH_ENDPOINT_ERROR}, status=400)
     if not isinstance(keys, dict) or not all(isinstance(keys.get(key), str) for key in ("p256dh", "auth")):
         return JsonResponse({"error": "Ungültige Browser-Schlüssel."}, status=400)
     if any(len(keys[key]) > 512 or not keys[key] for key in ("p256dh", "auth")):

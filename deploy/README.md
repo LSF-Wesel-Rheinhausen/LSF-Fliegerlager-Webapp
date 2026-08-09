@@ -25,6 +25,24 @@ Pflichtvariablen für den Update-Agent:
 - `PORTAINER_ENDPOINT_ID`: Portainer Environment/Endpoint-ID des Ziel-Stacks.
 - `PORTAINER_STACK_ID`: Portainer Stack-ID des Ziel-Stacks.
 
+## Service-spezifische Umgebungsvariablen
+
+Die Compose-Dateien injizieren `.env` nicht mehr pauschal in alle Container. Jeder Dienst erhält nur die für seinen
+Prozess benötigten Variablen:
+
+- `app`: Django-/Datenbankkonfiguration, Update-Agent-Token und -URL, Web-Push-Konfiguration sowie
+  Anwendungsoptionen. Portainer- und Registry-Zugangsdaten werden nicht an die App übergeben.
+- `daily-settlement-backup`: Django-Secret, Datenbank-URL, Backup-Pfad und Backup-Intervall.
+- `push-worker`: Django-Secret, Datenbank-URL, Web-Push-Schlüssel/-Subject, die erlaubten Push-Origins und das
+  Worker-Intervall.
+- `email-worker`: Django-Secret und Datenbank-URL. SMTP-Zugangsdaten liegen verschlüsselt in PostgreSQL; Web-Push-
+  Schlüssel werden diesem Dienst nicht bereitgestellt.
+- `updater`: Update-Agent-Token, Datenbank-/Backup-Konfiguration, Portainer-Zugangsdaten und optional `GHCR_TOKEN`.
+
+`PORTAINER_URL`, `PORTAINER_API_KEY`, `PORTAINER_ENDPOINT_ID`, `PORTAINER_STACK_ID` und `GHCR_TOKEN` dürfen nur im
+`updater`-Service vorkommen. Änderungen an der Allowlist müssen durch die Compose-Konfigurationstests abgesichert
+werden.
+
 Optionale Variablen mit Defaults:
 
 - `UPDATER_IMAGE`: Updater-Container-Image; Default ist das veröffentlichte GHCR-Updater-Image.
@@ -155,6 +173,14 @@ Schlüssel haben weiterhin Vorrang.
 Der private Schlüssel darf nicht in Git, Logs oder Screenshots gelangen. Der gesamte persistente Ordner muss in die
 Host-Backupstrategie aufgenommen werden. Eine Schlüsselrotation macht bestehende Browser-Subscriptions unbrauchbar;
 betroffene Geräte müssen Push danach erneut aktivieren.
+
+`WEB_PUSH_ALLOWED_ORIGINS` ist eine kommaseparierte Liste exakter Origins der tatsächlich eingesetzten Browser-
+Pushdienste, zum Beispiel `https://push.example.org` ohne Pfad. Es werden ausschließlich HTTPS, der effektive Port
+443, Hostnamen ohne Userinfo/IP-Literal/Platzhalter und eine exakte Origin-Übereinstimmung akzeptiert. Die Liste bleibt
+standardmäßig leer (Fail-Closed); der Betreiber muss die in der eigenen Browser-/Push-Service-Konfiguration verwendeten
+Origins vor der Aktivierung eintragen. Die Anwendung führt keine DNS-Auflösung als Vertrauensentscheidung durch.
+Redirects werden beim Versand nicht verfolgt. Eine restriktive Egress-Regel des Container-/Proxy-Netzes bleibt als
+Defense in Depth erforderlich.
 
 Der Service `push-worker` erzeugt terminierte Erinnerungen und verarbeitet die Datenbank-Outbox. Zentrale Tablets
 verwenden `/central/kiosk/` und bieten keine Push-Aktivierung an. Weitere Betriebsdetails stehen in
