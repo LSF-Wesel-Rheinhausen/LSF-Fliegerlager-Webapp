@@ -2,6 +2,7 @@ import uuid
 from collections.abc import Collection
 from datetime import date, time, timedelta
 from decimal import Decimal
+from typing import Any
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -19,6 +20,23 @@ class TimeStampedModel(models.Model):
 
     class Meta:
         abstract = True
+
+
+class FirstAdminBootstrapLock(models.Model):
+    """Provide a durable row that serializes first-admin creation."""
+
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+
+    class Meta:
+        verbose_name = "Sperre für Ersteinrichtung"
+        verbose_name_plural = "Sperre für Ersteinrichtung"
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return "Sperre für Ersteinrichtung"
 
 
 class EmailConfiguration(TimeStampedModel):
@@ -544,21 +562,7 @@ class ParticipantPin(TimeStampedModel):
         return self.locked_until is not None and self.locked_until > timezone.now()
 
     def check_pin(self, raw_pin):
-        if not self.pin_hash or self.is_locked:
-            return False
-        if check_password(raw_pin, self.pin_hash):
-            if self.failed_attempts or self.locked_until is not None:
-                self.failed_attempts = 0
-                self.locked_until = None
-                self.save(update_fields=["failed_attempts", "locked_until", "updated_at"])
-            return True
-
-        self.failed_attempts += 1
-        if self.failed_attempts >= self.MAX_FAILED_ATTEMPTS:
-            self.locked_until = timezone.now() + timedelta(minutes=self.LOCK_MINUTES)
-            self.failed_attempts = 0
-        self.save(update_fields=["failed_attempts", "locked_until", "updated_at"])
-        return False
+        return _check_pin_atomically(self, raw_pin)
 
     def __str__(self):
         return f"PIN {self.participant}"
@@ -634,24 +638,39 @@ class ParticipantFamilyMemberPin(TimeStampedModel):
 
     def check_pin(self, raw_pin: str) -> bool:
         """Validate a raw PIN and apply lockout accounting."""
-        if not self.pin_hash or self.is_locked:
-            return False
-        if check_password(raw_pin, self.pin_hash):
-            if self.failed_attempts or self.locked_until is not None:
-                self.failed_attempts = 0
-                self.locked_until = None
-                self.save(update_fields=["failed_attempts", "locked_until", "updated_at"])
-            return True
-
-        self.failed_attempts += 1
-        if self.failed_attempts >= self.MAX_FAILED_ATTEMPTS:
-            self.locked_until = timezone.now() + timedelta(minutes=self.LOCK_MINUTES)
-            self.failed_attempts = 0
-        self.save(update_fields=["failed_attempts", "locked_until", "updated_at"])
-        return False
+        return _check_pin_atomically(self, raw_pin)
 
     def __str__(self):
         return f"PIN {self.family_member}"
+
+
+def _check_pin_atomically(pin_record: Any, raw_pin: str) -> bool:
+    """Validate a personal PIN while serializing its failure counter update."""
+    using = pin_record._state.db or "default"
+    pin_model = type(pin_record)
+    with transaction.atomic(using=using):
+        current = pin_model.objects.using(using).select_for_update().get(pk=pin_record.pk)
+        if not current.pin_hash or current.is_locked:
+            pin_record.failed_attempts = current.failed_attempts
+            pin_record.locked_until = current.locked_until
+            return False
+
+        if check_password(raw_pin, current.pin_hash):
+            current.failed_attempts = 0
+            current.locked_until = None
+            result = True
+        else:
+            current.failed_attempts += 1
+            if current.failed_attempts >= current.MAX_FAILED_ATTEMPTS:
+                current.locked_until = timezone.now() + timedelta(minutes=current.LOCK_MINUTES)
+                current.failed_attempts = 0
+            result = False
+
+        current.save(update_fields=["failed_attempts", "locked_until", "updated_at"], using=using)
+        pin_record.failed_attempts = current.failed_attempts
+        pin_record.locked_until = current.locked_until
+        pin_record.updated_at = current.updated_at
+        return result
 
 
 class ParticipantBookingLink(TimeStampedModel):

@@ -77,5 +77,34 @@ def test_setup_is_disabled_after_user_exists(client):
     assert response["Location"] == reverse("login")
 
 
+@pytest.mark.django_db
+def test_first_admin_setup_rechecks_user_table_inside_bootstrap_transaction(client, monkeypatch):
+    real_exists = User.objects.exists
+    injected_competing_user = False
+
+    def exists_with_competing_bootstrap() -> bool:
+        nonlocal injected_competing_user
+        if not injected_competing_user:
+            injected_competing_user = True
+            User.objects.create_user(username="competing-admin", password="strong-test-pass-123")
+            return False
+        return real_exists()
+
+    monkeypatch.setattr(User.objects, "exists", exists_with_competing_bootstrap)
+    response = client.post(
+        reverse("setup"),
+        {
+            "username": "second-admin",
+            "email": "second@example.org",
+            "password1": "strong-test-pass-123",
+            "password2": "strong-test-pass-123",
+        },
+    )
+
+    assert response.status_code == 200
+    assert User.objects.count() == 1
+    assert User.objects.filter(username="second-admin").exists() is False
+
+
 def test_app_stylesheet_is_discoverable_by_staticfiles():
     assert finders.find("billing/app-v8.css")

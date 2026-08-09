@@ -109,3 +109,40 @@ jobs:
 
       - name: Browser UI tests
         run: npm run test:e2e
+
+  security-concurrency:
+    name: PostgreSQL security concurrency tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: fliegerlager_test
+          POSTGRES_USER: fliegerlager
+          POSTGRES_PASSWORD: test-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fliegerlager -d fliegerlager_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: PostgreSQL concurrency regression tests
+        env:
+          DATABASE_URL: postgresql://fliegerlager:test-password@127.0.0.1:5432/fliegerlager_test
+        run: pytest tests/test_security_concurrency.py

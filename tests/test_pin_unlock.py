@@ -4,6 +4,7 @@ import pytest
 from django.urls import reverse
 from django.utils import timezone
 
+from billing.models import ParticipantFamilyMember, ParticipantFamilyMemberPin, ParticipantPin
 from tests.factories import ParticipantFactory, SuperUserFactory, UserFactory
 
 
@@ -24,6 +25,21 @@ def test_participant_pin_unlock_pin_method():
     assert not pin.is_locked
     assert pin.locked_until is None
     assert pin.failed_attempts == 0
+
+
+@pytest.mark.django_db
+def test_participant_pin_check_preserves_failures_from_stale_instances():
+    participant = ParticipantFactory()
+    participant.pin.set_pin("2468")
+    participant.pin.save()
+    first_instance = ParticipantPin.objects.get(pk=participant.pin.pk)
+    second_instance = ParticipantPin.objects.get(pk=participant.pin.pk)
+
+    assert first_instance.check_pin("9999") is False
+    assert second_instance.check_pin("9999") is False
+
+    participant.pin.refresh_from_db()
+    assert participant.pin.failed_attempts == 2
 
 
 @pytest.mark.django_db
@@ -104,8 +120,6 @@ def test_participant_pin_unlock_when_not_locked():
 
 @pytest.mark.django_db
 def test_participant_family_member_pin_unlock_pin_method():
-    from billing.models import ParticipantFamilyMember, ParticipantFamilyMemberPin
-
     participant = ParticipantFactory()
     family_member = ParticipantFamilyMember.objects.create(
         guardian=participant,
@@ -125,6 +139,28 @@ def test_participant_family_member_pin_unlock_pin_method():
     assert not pin.is_locked
     assert pin.locked_until is None
     assert pin.failed_attempts == 0
+
+
+@pytest.mark.django_db
+def test_family_member_pin_check_preserves_failures_from_stale_instances():
+    participant = ParticipantFactory()
+    family_member = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Kind",
+        last_name="Muster",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    pin, _created = ParticipantFamilyMemberPin.objects.get_or_create(family_member=family_member)
+    pin.set_pin("2468")
+    pin.save()
+    first_instance = ParticipantFamilyMemberPin.objects.get(pk=pin.pk)
+    second_instance = ParticipantFamilyMemberPin.objects.get(pk=pin.pk)
+
+    assert first_instance.check_pin("9999") is False
+    assert second_instance.check_pin("9999") is False
+
+    pin.refresh_from_db()
+    assert pin.failed_attempts == 2
 
 
 @pytest.mark.django_db
