@@ -2,6 +2,7 @@
 
 - Invalidiere den `node_modules`-Cache auch bei Änderungen an `package.json`.
 - Zeige Hübers in der Essensübersicht einen sichtbaren Einstieg zum Versand von Benachrichtigungen.
+- Leite Hübers nach erfolgreichem Benachrichtigungsversand auf die zugängliche Essensübersicht zurück.
 
 ## Kiosk-Dienstbuchung
 
@@ -13,3 +14,4 @@
 
 - `tests/test_kiosk_shifts.py`
 - `tests/test_pwa.py`
+- `tests/test_email_delivery.py`

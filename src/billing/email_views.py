@@ -22,7 +22,7 @@ from .email_delivery import (
 from .email_forms import CampAnnouncementForm, EmailConfigurationForm, InformationEmailForm, SettlementEmailForm
 from .models import Camp, CampAnnouncement, EmailBatch, EmailConfiguration, EmailDelivery, EmailTestLog, SettlementRun
 from .notifications import queue_information_push_batch
-from .permissions import admin_required, editor_required, meal_manager_required
+from .permissions import admin_required, editor_required, is_huebers, meal_manager_required
 
 EMAIL_PREVIEW_SIGNING_SALT = "billing.manual-email-preview.v1"
 EMAIL_PREVIEW_MAX_AGE_SECONDS = 60 * 60
@@ -214,6 +214,8 @@ def information_email_compose(request, camp_id):
                             request,
                             f"Versand vorgemerkt: {', '.join(success_parts)}.",
                         )
+                        if is_huebers(request.user):
+                            return redirect("camp-meal-overview", camp_id=camp.pk)
                         if batch:
                             return redirect("email-batch-detail", batch_id=batch.pk)
                         return redirect("camp-detail", camp_id=camp.pk)
