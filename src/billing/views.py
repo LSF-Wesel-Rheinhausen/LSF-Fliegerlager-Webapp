@@ -4507,6 +4507,8 @@ def debug_ip(request: HttpRequest) -> HttpResponse:
 
         return HttpResponseForbidden("Only staff can view this.")
 
+    import os
+
     headers_of_interest = [
         "HTTP_X_FORWARDED_FOR",
         "HTTP_X_REAL_IP",
@@ -4516,4 +4518,6 @@ def debug_ip(request: HttpRequest) -> HttpResponse:
         "HTTP_HOST",
     ]
     data = {k: request.META.get(k) for k in headers_of_interest}
+    data["ENV_PROXY"] = os.getenv("KIOSK_ACCESS_TRUSTED_PROXY_ADDRESSES", "")
+    data["ENV_GUNICORN"] = os.getenv("GUNICORN_CMD_ARGS", "")
     return JsonResponse(data)
