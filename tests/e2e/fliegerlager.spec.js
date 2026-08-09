@@ -141,7 +141,7 @@ function dateInputValue(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
-  return `${day}.${month}.${year}`;
+  return `${year}-${month}-${day}`;
 }
 
 function germanDate(date) {
@@ -442,7 +442,7 @@ test("Admin creates and edits a manual booking and sees the change log", async (
   await expect(page.getByRole("heading", { name: "Buchung bearbeiten" })).toBeVisible();
   await page.getByLabel("Beschreibung").fill(correctedDescription);
   await page.getByLabel("Menge").fill("3");
-  await page.getByLabel("Datum").fill("01.07.2026");
+  await page.getByLabel("Datum").fill("2026-07-01");
   await page.getByRole("button", { name: "Speichern" }).click();
 
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -607,8 +607,8 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
   expect(sessionCookie.expires).toBeGreaterThan(Date.now() / 1000);
 
   // Check-in can be entered from the kiosk.
-  const checkinArrival = germanDate(addDays(new Date(), 2));
-  const checkinDeparture = germanDate(addDays(new Date(), 4));
+  const checkinArrival = dateInputValue(addDays(new Date(), 2));
+  const checkinDeparture = dateInputValue(addDays(new Date(), 4));
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "Eintragen" }).click();
   const checkinDialog = page.locator("dialog#checkin-dialog");
@@ -620,7 +620,7 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
   );
   expect(nestedVerticalScrollContainers).toEqual([]);
   const departureInput = checkinDialog.getByLabel("Abreise").first();
-  await departureInput.fill(germanDate(addDays(new Date(), 5)));
+  await departureInput.fill(dateInputValue(addDays(new Date(), 5)));
   await checkinDialog.getByLabel("Anreise").fill(checkinArrival);
   await departureInput.fill(checkinDeparture);
   await checkinDialog.getByRole("button", { name: "Check-in speichern" }).click();
@@ -1179,7 +1179,7 @@ test("Finance flow: payments and expenses", async ({ page }) => {
 
   await page.getByRole("link", { name: "Zahlung erfassen" }).click();
   await page.getByLabel("Betrag").fill("50.00");
-  await page.locator("#id_paid_on").fill("01.07.2026");
+  await page.locator("#id_paid_on").fill("2026-07-01");
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(page.getByText("Zahlung wurde gespeichert.")).toBeVisible();
 
@@ -1191,7 +1191,7 @@ test("Finance flow: payments and expenses", async ({ page }) => {
   await page.locator("#id_category").selectOption({ label: "Verbrauchsmaterial" });
   await page.getByLabel("Beschreibung").fill("Stifte");
   await page.getByLabel("Betrag").fill("15.50");
-  await page.locator("#id_paid_on").fill("01.07.2026");
+  await page.locator("#id_paid_on").fill("2026-07-01");
   await page.getByRole("button", { name: "Speichern" }).click();
 
   await expect(page.getByText("Auslage wurde gespeichert.")).toBeVisible();
@@ -1636,7 +1636,7 @@ test("Mobile Kiosk: check-in date selection does not overflow container on mobil
   // Verify check-in target row and date inputs do not exceed container width on mobile
   const targetRow = page.locator(".target-row--checkin").first();
   await expect(targetRow).toBeVisible();
-  const dateInput = page.locator("#checkin-dialog input[type='text']").first();
+  const dateInput = page.locator("#checkin-dialog input[type='date']").first();
   await expect(dateInput).toBeVisible();
   const inputBox = await dateInput.boundingBox();
   const containerBox = await targetRow.boundingBox();

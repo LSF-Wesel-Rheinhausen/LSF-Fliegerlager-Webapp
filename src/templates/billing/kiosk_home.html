@@ -1053,11 +1053,8 @@
               <input
                 id="arrival-date-{{ checkin_target.token }}"
                 name="arrival_date_{{ checkin_target.token }}"
-                type="text"
-                pattern="\d{2}[\. ]\d{2}[\. ]\d{4}"
-                placeholder="DD.MM.YYYY"
-                inputmode="numeric"
-                value="{{ checkin_target.object.arrival_date|date:'d.m.Y' }}"
+                type="date"
+                value="{{ checkin_target.object.arrival_date|date:'Y-m-d' }}"
                 {% if checkin_target.camp.starts_on %}data-min-date-label="{{ checkin_target.camp.starts_on|date:'d.m.Y' }}"{% endif %}
                 {% if checkin_target.camp.ends_on %}data-max-date-label="{{ checkin_target.camp.ends_on|date:'d.m.Y' }}"{% endif %}
               >
@@ -1067,11 +1064,8 @@
               <input
                 id="departure-date-{{ checkin_target.token }}"
                 name="departure_date_{{ checkin_target.token }}"
-                type="text"
-                pattern="\d{2}[\. ]\d{2}[\. ]\d{4}"
-                placeholder="DD.MM.YYYY"
-                inputmode="numeric"
-                value="{{ checkin_target.object.departure_date|date:'d.m.Y' }}"
+                type="date"
+                value="{{ checkin_target.object.departure_date|date:'Y-m-d' }}"
                 {% if checkin_target.camp.starts_on %}data-min-date-label="{{ checkin_target.camp.starts_on|date:'d.m.Y' }}"{% endif %}
                 {% if checkin_target.camp.ends_on %}data-max-date-label="{{ checkin_target.camp.ends_on|date:'d.m.Y' }}"{% endif %}
               >
