@@ -4508,6 +4508,7 @@ def debug_ip(request: HttpRequest) -> HttpResponse:
         return HttpResponseForbidden("Only staff can view this.")
 
     import os
+
     headers_of_interest = [
         "HTTP_X_FORWARDED_FOR",
         "HTTP_X_REAL_IP",
