@@ -22,7 +22,7 @@ from .email_delivery import (
 from .email_forms import CampAnnouncementForm, EmailConfigurationForm, InformationEmailForm, SettlementEmailForm
 from .models import Camp, CampAnnouncement, EmailBatch, EmailConfiguration, EmailDelivery, EmailTestLog, SettlementRun
 from .notifications import queue_information_push_batch
-from .permissions import admin_required, editor_required
+from .permissions import admin_required, editor_required, meal_manager_required
 
 EMAIL_PREVIEW_SIGNING_SALT = "billing.manual-email-preview.v1"
 EMAIL_PREVIEW_MAX_AGE_SECONDS = 60 * 60
@@ -126,7 +126,7 @@ def email_settings(request):
     )
 
 
-@editor_required
+@meal_manager_required
 def information_email_compose(request, camp_id):
     """Preview and manually confirm one informational notification batch (E-Mail, Push, Kiosk)."""
     camp = get_object_or_404(Camp, pk=camp_id)
