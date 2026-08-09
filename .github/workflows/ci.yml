@@ -87,7 +87,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: node_modules
-          key: ${{ runner.os }}-node-22-modules-${{ hashFiles('package-lock.json') }}
+          key: ${{ runner.os }}-node-22-modules-${{ hashFiles('package.json', 'package-lock.json') }}
 
       - name: Install Node dependencies
         if: steps.node-modules-cache.outputs.cache-hit != 'true'
