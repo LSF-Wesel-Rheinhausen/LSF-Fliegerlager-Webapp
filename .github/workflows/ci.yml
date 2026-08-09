@@ -4,14 +4,63 @@ on:
   push:
     branches:
       - main
+    paths:
+      - ".github/workflows/ci.yml"
+      - "package.json"
+      - "package-lock.json"
+      - "playwright.config.js"
+      - "pyproject.toml"
+      - "pytest.ini"
+      - "requirements*.txt"
+      - "scripts/**"
+      - "src/**"
+      - "tests/**"
   pull_request:
+    paths:
+      - ".github/workflows/ci.yml"
+      - "package.json"
+      - "package-lock.json"
+      - "playwright.config.js"
+      - "pyproject.toml"
+      - "pytest.ini"
+      - "requirements*.txt"
+      - "scripts/**"
+      - "src/**"
+      - "tests/**"
+
+concurrency:
+  group: tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
 jobs:
-  quality:
-    name: Quality and browser tests
+  python-quality:
+    name: Python quality tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Django check
+        run: python src/manage.py check
+
+      - name: Python tests
+        run: pytest
+
+  browser:
+    name: Browser UI tests
     runs-on: ubuntu-latest
 
     steps:
@@ -50,12 +99,6 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
-
-      - name: Django check
-        run: python src/manage.py check
-
-      - name: Python tests
-        run: pytest
 
       - name: Install Playwright system dependencies
         run: npx playwright install-deps
