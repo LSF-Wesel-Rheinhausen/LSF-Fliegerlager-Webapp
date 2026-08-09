@@ -33,7 +33,15 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r requirements-dev.txt
 
+      - name: Cache installed Node dependencies
+        id: node-modules-cache
+        uses: actions/cache@v6
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-22-modules-${{ hashFiles('package-lock.json') }}
+
       - name: Install Node dependencies
+        if: steps.node-modules-cache.outputs.cache-hit != 'true'
         run: npm ci
 
       - name: Cache Playwright browsers
