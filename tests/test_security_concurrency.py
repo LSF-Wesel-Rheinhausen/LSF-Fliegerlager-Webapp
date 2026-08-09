@@ -79,7 +79,7 @@ def test_pin_failure_counter_is_atomic_across_postgresql_connections(pin_kind):
             last_name="Muster",
             role=ParticipantFamilyMember.Role.COMPANION,
         )
-        pin = ParticipantFamilyMemberPin.objects.create(family_member=family_member)
+        pin, _created = ParticipantFamilyMemberPin.objects.get_or_create(family_member=family_member)
         pin.set_pin("2468")
         pin.save()
         pin_model = ParticipantFamilyMemberPin
