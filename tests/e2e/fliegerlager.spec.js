@@ -1636,7 +1636,7 @@ test("Mobile Kiosk: check-in date selection does not overflow container on mobil
   // Verify check-in target row and date inputs do not exceed container width on mobile
   const targetRow = page.locator(".target-row--checkin").first();
   await expect(targetRow).toBeVisible();
-  const dateInput = page.locator("#checkin-dialog input[type='text']").first();
+  const dateInput = page.locator("#checkin-dialog input[type='date']").first();
   await expect(dateInput).toBeVisible();
   const inputBox = await dateInput.boundingBox();
   const containerBox = await targetRow.boundingBox();
