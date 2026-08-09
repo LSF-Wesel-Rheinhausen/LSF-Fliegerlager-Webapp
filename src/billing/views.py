@@ -4406,7 +4406,10 @@ def kiosk_shifts(request, kiosk_mode="private"):
                     old_participant = offered_assignment.participant
                     offered_assignment.participant = participant
                     offered_assignment.offered_for_exchange = False
-                    offered_assignment.save(update_fields=["participant", "offered_for_exchange"])
+                    offered_assignment.created_at = timezone.now()
+                    offered_assignment.save(
+                        update_fields=["participant", "offered_for_exchange", "created_at", "updated_at"]
+                    )
                     transaction.on_commit(
                         partial(
                             _notify_shift_exchange_by_id,
@@ -4422,11 +4425,16 @@ def kiosk_shifts(request, kiosk_mode="private"):
                         request, "Dieser Dienst ist voll und es wird aktuell kein Platz zum Tausch angeboten."
                     )
         elif action == "retract":
-            messages.error(
-                request,
-                "Das direkte Austragen aus Diensten ist nicht mehr möglich. Bitte biete deinen Dienst zum Tausch an "
-                "oder wende dich an die Lagerleitung.",
-            )
+            assignment = ShiftAssignment.objects.filter(shift=shift, participant=participant).first()
+            if assignment and assignment.created_at >= timezone.now() - timedelta(minutes=15):
+                assignment.delete()
+                messages.success(request, f"Du hast dich aus '{shift.name}' ausgetragen.")
+            else:
+                messages.error(
+                    request,
+                    "Das Zurückziehen ist nur innerhalb von 15 Minuten nach dem Eintragen möglich. "
+                    "Bitte biete deinen Dienst zum Tausch an oder wende dich an die Lagerleitung.",
+                )
         elif action == "offer":
             if shift.date < today:
                 messages.error(request, "Du kannst keine vergangenen Dienste zum Tausch anbieten.")
@@ -4454,13 +4462,18 @@ def kiosk_shifts(request, kiosk_mode="private"):
         .prefetch_related("assignments__participant")
         .order_by("date", "start_time")
     )
+    shift_date_filter = request.GET.get("date", "").strip()
+    shift_name_filter = request.GET.get("name", "").strip()[:120]
+    parsed_shift_date = parse_date(shift_date_filter) if shift_date_filter else None
     open_shifts = []
     offered_shifts = []
     my_shifts = []
 
+    retract_cutoff = timezone.now() - timedelta(minutes=15)
     for shift in shifts:
         shift_assignments = list(shift.assignments.all())
         shift.my_assignment = next((a for a in shift_assignments if a.participant_id == participant.pk), None)
+        shift.can_retract = bool(shift.my_assignment and shift.my_assignment.created_at >= retract_cutoff)
         shift.has_offers = any(a.offered_for_exchange and a.participant_id != participant.pk for a in shift_assignments)
 
         if shift.my_assignment:
@@ -4474,6 +4487,12 @@ def kiosk_shifts(request, kiosk_mode="private"):
         else:
             open_shifts.append(shift)
 
+    shift_dates = sorted({shift.date for shift in open_shifts})
+    if parsed_shift_date:
+        open_shifts = [shift for shift in open_shifts if shift.date == parsed_shift_date]
+    if shift_name_filter:
+        open_shifts = [shift for shift in open_shifts if shift_name_filter.casefold() in shift.name.casefold()]
+
     return render(
         request,
         "billing/kiosk_shifts.html",
@@ -4482,6 +4501,9 @@ def kiosk_shifts(request, kiosk_mode="private"):
             "open_shifts": open_shifts,
             "offered_shifts": offered_shifts,
             "my_shifts": my_shifts,
+            "shift_dates": shift_dates,
+            "shift_date_filter": shift_date_filter,
+            "shift_name_filter": shift_name_filter,
             "today": today,
             **_kiosk_context(kiosk_mode),
         },

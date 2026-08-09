@@ -2,6 +2,7 @@ import datetime
 
 import pytest
 from django.urls import reverse
+from django.utils import timezone
 
 from billing.models import Camp, Participant, Shift, ShiftAssignment
 from billing.views import KIOSK_PARTICIPANT_SESSION_KEY
@@ -95,6 +96,52 @@ def test_kiosk_can_signup_for_shift(logged_in_kiosk_client, active_camp):
 
 
 @pytest.mark.django_db
+def test_kiosk_can_filter_open_shifts_by_date_and_name(logged_in_kiosk_client, active_camp):
+    matching_shift = Shift.objects.create(
+        camp=active_camp,
+        name="Küchendienst",
+        date=datetime.date.today() + datetime.timedelta(days=2),
+        required_slots=1,
+    )
+    Shift.objects.create(
+        camp=active_camp,
+        name="Aufsicht",
+        date=datetime.date.today() + datetime.timedelta(days=3),
+        required_slots=1,
+    )
+
+    response = logged_in_kiosk_client.get(
+        reverse("kiosk-shifts"),
+        {"date": matching_shift.date.isoformat(), "name": "küche"},
+    )
+
+    assert response.status_code == 200
+    assert [shift.pk for shift in response.context["open_shifts"]] == [matching_shift.pk]
+    assert response.context["shift_date_filter"] == matching_shift.date.isoformat()
+    assert response.context["shift_name_filter"] == "küche"
+
+
+@pytest.mark.django_db
+def test_kiosk_can_retract_own_shift_assignment_within_15_minutes(logged_in_kiosk_client, active_camp):
+    shift = Shift.objects.create(
+        camp=active_camp,
+        name="Test Shift",
+        date=datetime.date.today() + datetime.timedelta(days=2),
+        required_slots=1,
+    )
+    assignment = ShiftAssignment.objects.create(shift=shift, participant=logged_in_kiosk_client.kiosk_user)
+    ShiftAssignment.objects.filter(pk=assignment.pk).update(created_at=timezone.now() - datetime.timedelta(minutes=14))
+
+    response = logged_in_kiosk_client.post(
+        reverse("kiosk-shifts"),
+        {"action": "retract", "shift_id": shift.pk},
+    )
+
+    assert response.status_code == 302
+    assert not ShiftAssignment.objects.filter(pk=assignment.pk).exists()
+
+
+@pytest.mark.django_db
 def test_private_kiosk_shifts_context_disables_autologout(logged_in_kiosk_client, active_camp):
     response = logged_in_kiosk_client.get(reverse("kiosk-shifts"))
     assert response.status_code == 200
@@ -125,7 +172,8 @@ def test_kiosk_cannot_retract(logged_in_kiosk_client, active_camp):
         date=datetime.date.today() + datetime.timedelta(days=2),
         required_slots=1,
     )
-    ShiftAssignment.objects.create(shift=shift, participant=logged_in_kiosk_client.kiosk_user)
+    assignment = ShiftAssignment.objects.create(shift=shift, participant=logged_in_kiosk_client.kiosk_user)
+    ShiftAssignment.objects.filter(pk=assignment.pk).update(created_at=timezone.now() - datetime.timedelta(minutes=16))
     response = logged_in_kiosk_client.post(reverse("kiosk-shifts"), {"action": "retract", "shift_id": shift.pk})
     assert response.status_code == 302
     assert ShiftAssignment.objects.filter(shift=shift, participant=logged_in_kiosk_client.kiosk_user).exists()
