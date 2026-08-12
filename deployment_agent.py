@@ -13,6 +13,7 @@ import secrets
 import ssl
 import subprocess
 import tarfile
+import tempfile
 import threading
 import time
 import urllib.error
@@ -734,28 +735,16 @@ def open_exclusive_backup(prefix: str, suffix: str) -> tuple[Path, Any]:
         raise RuntimeError("Backup-Dateiendung ist ungültig.")
 
     backup_root = BACKUP_DIR.resolve()
-    directory_descriptor = os.open(backup_root, os.O_RDONLY | os.O_DIRECTORY)
-    try:
-        while True:
-            filename = f"{prefix}-{backup_timestamp()}-{secrets.token_hex(8)}{suffix}"
-            safe_filename = os.path.basename(filename)
-            if safe_filename != filename:
-                raise RuntimeError("Backup-Datei muss ein direktes Kind des Backup-Verzeichnisses sein.")
-            backup_path = backup_root / safe_filename
-            if backup_path.parent != backup_root or backup_path.resolve().parent != backup_root:
-                raise RuntimeError("Backup-Datei muss ein direktes Kind des Backup-Verzeichnisses sein.")
-            try:
-                descriptor = os.open(
-                    safe_filename,
-                    os.O_WRONLY | os.O_CREAT | os.O_EXCL,
-                    0o600,
-                    dir_fd=directory_descriptor,
-                )
-            except FileExistsError:
-                continue
-            return backup_path, os.fdopen(descriptor, "wb")
-    finally:
-        os.close(directory_descriptor)
+    filename_prefix = f"{prefix}-{backup_timestamp()}-{secrets.token_hex(8)}"
+    # mkstemp creates the file directly in backup_root with O_EXCL and retries
+    # generated-name collisions internally; the resolved directory is its boundary.
+    descriptor, raw_path = tempfile.mkstemp(prefix=filename_prefix, suffix=suffix, dir=backup_root)
+    backup_path = Path(raw_path)
+    if backup_path.parent != backup_root:
+        os.close(descriptor)
+        raise RuntimeError("Backup-Datei muss ein direktes Kind des Backup-Verzeichnisses sein.")
+    os.chmod(backup_path, 0o600)
+    return backup_path, os.fdopen(descriptor, "wb")
 
 
 def create_backup() -> str:
