@@ -33,6 +33,9 @@ Optionale Variablen mit Defaults:
 - `WEB_PUSH_WORKER_INTERVAL_SECONDS`: Prüfintervall des Push-Workers; Default `60`.
 - `APP_HEALTH_URL`: Healthcheck-URL der App; Default `http://app:8000/healthz/`.
 - `TARGET_SERVICE`: Compose-Service des App-Containers für Rollback-Digest-Ermittlung; Default `app`.
+- `MAX_AGENT_BODY_BYTES`: maximales JSON-Request-Body-Limit des Update-Agents; Default `1048576` Bytes.
+- `AGENT_READ_TIMEOUT_SECONDS`: maximale Lesedauer für einen Request-Body; Default `10` Sekunden.
+- `MAX_AGENT_CONCURRENT_REQUESTS`: maximale Zahl paralleler Update-Agent-Requests; Default `8`.
 - `PERSISTENCE_DIR`: absoluter Host-Pfad für alle persistenten Daten; für Portainer wird `/srv/fliegerlager` empfohlen.
 - `BACKUP_DIR`: bisheriger Host-Pfad der Backups; dient nur als Quelle bei der einmaligen Speichermigration.
 - `PORTAINER_VERIFY_SSL`: Portainer-Zertifikatsprüfung; Default `true`. Für interne Portainer-Instanzen mit Self-Signed-Zertifikat `false` setzen.
@@ -174,11 +177,20 @@ veröffentlicht aber keinen Port. Betriebs- und Sicherheitshinweise stehen in
 ## Updates
 
 Ein Django-Superuser öffnet **Updates**, prüft das bereitgestellte `latest`-Image und bestätigt die Installation. Der
-Updater liest die OCI-Metadaten aus GHCR, ermittelt vor dem Update den unveränderlichen `repo@sha256:...`-Digest des
-laufenden App-Containers, erstellt ein Backup unter `BACKUP_DIR`, setzt `APP_IMAGE` über die Portainer-API und wartet
-auf `APP_HEALTH_URL`. Schlägt der Start fehl, setzt der Updater `APP_IMAGE` auf den vorher ermittelten Digest zurück
-und redeployt den Stack erneut. Datenbankmigrationen werden nicht automatisch zurückgerollt; das erzeugte Backup bleibt
-für eine kontrollierte Wiederherstellung erhalten.
+Updater liest die OCI-Metadaten aus GHCR und speichert den dabei validierten `repo@sha256:...`-Digest als freigegebenen
+Installationskandidaten. `/install` verwendet ausschließlich diesen gespeicherten Digest und fragt das bewegliche Tag
+nicht erneut ab. Vor dem Update ermittelt der Updater den unveränderlichen Digest des laufenden App-Containers,
+erstellt ein Backup unter `BACKUP_DIR`, setzt `APP_IMAGE` über die Portainer-API und wartet auf `APP_HEALTH_URL`.
+Anschließend wird der tatsächlich laufende RepoDigest erneut gelesen und exakt mit dem freigegebenen Digest verglichen.
+Schlägt ein Schritt fehl oder stimmt der Digest nicht überein, setzt der Updater `APP_IMAGE` auf den vorher ermittelten
+unveränderlichen Digest zurück und redeployt den Stack erneut. Datenbankmigrationen werden nicht automatisch
+zurückgerollt; das erzeugte Backup bleibt für eine kontrollierte Wiederherstellung erhalten.
+
+Der Update-Agent akzeptiert nur Requests mit `Content-Length`, begrenzt den JSON-Body und weist unvollständige oder zu
+langsam gelesene Bodies mit generischen Fehlern zurück. Eine feste Semaphore begrenzt die Anzahl paralleler Requests.
+Backups teilen sich einen Lock; während eines laufenden Backups antwortet `POST /backup` mit HTTP 409. Archivnamen
+enthalten einen kryptografischen Zufallssuffix und werden exklusiv angelegt, sodass auch gleiche Zeitstempel keine
+vorhandenen Archive überschreiben.
 
 Der Updater erhält keinen Docker-Socket und keine Compose-Dateien. Er hat keinen veröffentlichten Port, akzeptiert nur
 das gemeinsame `UPDATE_AGENT_TOKEN` und darf nicht in ein öffentlich erreichbares Netzwerk gelegt werden.
