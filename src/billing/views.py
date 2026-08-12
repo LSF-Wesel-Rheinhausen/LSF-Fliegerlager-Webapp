@@ -3297,7 +3297,7 @@ def _kiosk_meal_calendar(camp, participant, meal_signups, meal_targets):
     days = []
     for meal_date in meal_dates:
         meals = []
-        for meal, _label in [(MealSignup.Meal.DINNER, "Abendessen")]:
+        for meal in (MealSignup.Meal.BREAKFAST, MealSignup.Meal.DINNER):
             scoped = signups_by_date_meal.get((meal_date, meal), [])
             active_signups = [signup for signup in scoped if signup.status == MealSignup.Status.ACTIVE]
             retracted_signups = [signup for signup in scoped if signup.status == MealSignup.Status.RETRACTED]
@@ -3341,17 +3341,27 @@ def _kiosk_meal_calendar(camp, participant, meal_signups, meal_targets):
                     "unit_price": price_rule.unit_price if price_rule else None,
                 }
             )
-        dinner_slot = meals[0]
+        dinner_slot = next(slot for slot in meals if slot["meal"] == MealSignup.Meal.DINNER)
+        breakfast_slot = next(slot for slot in meals if slot["meal"] == MealSignup.Meal.BREAKFAST)
+        summary_slot = (
+            dinner_slot
+            if (
+                dinner_slot["price_rule"] is not None
+                or dinner_slot["active_signups"]
+                or dinner_slot["retracted_signups"]
+            )
+            else breakfast_slot
+        )
         days.append(
             {
                 "date": meal_date,
-                "status": dinner_slot["status"],
-                "status_label": dinner_slot["status_label"],
-                "locked": dinner_slot["locked"],
-                "lock_message": dinner_slot["lock_message"],
-                "price_rule": dinner_slot["price_rule"],
-                "unit_price": dinner_slot["unit_price"],
-                "description": dinner_slot["description"],
+                "status": summary_slot["status"],
+                "status_label": summary_slot["status_label"],
+                "locked": summary_slot["locked"],
+                "lock_message": summary_slot["lock_message"],
+                "price_rule": summary_slot["price_rule"],
+                "unit_price": summary_slot["unit_price"],
+                "description": summary_slot["description"],
                 "meals": meals,
             }
         )

@@ -1352,7 +1352,8 @@ def test_kiosk_home_renders_only_ordered_core_cards_and_menu_dialogs(kiosk_clien
     assert content.count(b"data-kiosk-card=") == 4
     food_card_end = content.index(b"</section>", positions[1])
     food_card = content[positions[1] : food_card_end]
-    assert b"data-open-meal-dialog-new" not in food_card
+    assert b"data-open-meal-dialog-new" in food_card
+    assert b'data-meal="breakfast"' in food_card
     assert "Buche hier Frühstück, Snacks und Abendessen.".encode() in food_card
     for dialog_id in (
         b"kiosk-menu-dialog",
@@ -3230,6 +3231,244 @@ def test_kiosk_meal_signup_child_breakfast_override(kiosk_client, monkeypatch):
     assert charges[0].description == "Standard Frühstück Kind Frühstück"
     assert charges[1].unit_price == Decimal("5.50")
     assert charges[1].description == "Besonderes Frühstück Frühstück"
+
+
+@pytest.mark.django_db
+def test_kiosk_offers_breakfast_prebooking_in_meal_calendar(kiosk_client, monkeypatch):
+    """Expose future breakfast bookings alongside the existing dinner calendar."""
+    _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
+    meal_date = date(2026, 7, 1)
+    camp = CampFactory(starts_on=date(2026, 6, 30), ends_on=meal_date)
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.BREAKFAST,
+        is_default=True,
+        applies_to_children=False,
+        applies_to_adults=True,
+        name="Standard Frühstück",
+        unit_price=Decimal("5.00"),
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.get(reverse("kiosk-home"))
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert 'data-meal="breakfast"' in content
+    assert "Frühstück buchen" in content
+    meal_day = next(day for day in response.context["meal_calendar_days"] if day["date"] == meal_date)
+    breakfast_slot = next(slot for slot in meal_day["meals"] if slot["meal"] == MealSignup.Meal.BREAKFAST)
+    assert breakfast_slot["price_rule"].name == "Standard Frühstück"
+    assert breakfast_slot["locked"] is False
+
+
+@pytest.mark.django_db
+def test_kiosk_breakfast_booking_without_price_is_rejected(kiosk_client, monkeypatch):
+    _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
+    camp = CampFactory(starts_on=date(2026, 6, 30), ends_on=date(2026, 7, 2))
+    participant = ParticipantFactory(camp=camp)
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-meal_dates": date(2026, 7, 1).isoformat(),
+            "meal-meal": MealSignup.Meal.BREAKFAST,
+            "meal-variant": MealSignup.Variant.NORMAL,
+        },
+    )
+
+    assert response.status_code == 200
+    assert b"kein Preis hinterlegt" in response.content
+    assert not MealSignup.objects.filter(participant=participant).exists()
+    assert not Charge.objects.filter(participant=participant, kind=Charge.Kind.FOOD).exists()
+
+
+@pytest.mark.django_db
+def test_kiosk_breakfast_booking_rejects_date_outside_camp(kiosk_client, monkeypatch):
+    _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
+    camp = CampFactory(starts_on=date(2026, 6, 30), ends_on=date(2026, 7, 2))
+    participant = ParticipantFactory(camp=camp)
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.BREAKFAST,
+        is_default=True,
+        applies_to_children=False,
+        applies_to_adults=True,
+        unit_price=Decimal("5.00"),
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-meal_dates": date(2026, 7, 3).isoformat(),
+            "meal-meal": MealSignup.Meal.BREAKFAST,
+            "meal-variant": MealSignup.Variant.NORMAL,
+        },
+    )
+
+    assert response.status_code == 200
+    assert "keine gültige Auswahl" in response.context["meal_form"].errors["meal_dates"][0]
+    assert not MealSignup.objects.filter(participant=participant).exists()
+
+
+@pytest.mark.django_db
+def test_kiosk_duplicate_breakfast_booking_updates_one_signup(kiosk_client, monkeypatch):
+    _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
+    meal_date = date(2026, 7, 1)
+    camp = CampFactory(starts_on=date(2026, 6, 30), ends_on=meal_date)
+    participant = ParticipantFactory(camp=camp)
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.BREAKFAST,
+        is_default=True,
+        applies_to_children=False,
+        applies_to_adults=True,
+        unit_price=Decimal("5.00"),
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    payload = {
+        "action": "meal",
+        "meal-meal_dates": meal_date.isoformat(),
+        "meal-meal": MealSignup.Meal.BREAKFAST,
+        "meal-variant": MealSignup.Variant.NORMAL,
+    }
+
+    assert kiosk_client.post(reverse("kiosk-home"), payload).status_code == 302
+    payload["meal-variant"] = MealSignup.Variant.VEGAN
+    assert kiosk_client.post(reverse("kiosk-home"), payload).status_code == 302
+
+    signup = MealSignup.objects.get(participant=participant, meal=MealSignup.Meal.BREAKFAST)
+    assert signup.variant == MealSignup.Variant.VEGAN
+    assert Charge.objects.filter(participant=participant, occurred_on=meal_date, kind=Charge.Kind.FOOD).count() == 1
+
+
+@pytest.mark.django_db
+def test_kiosk_books_breakfast_for_family_member(kiosk_client, monkeypatch):
+    _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
+    meal_date = date(2026, 7, 1)
+    camp = CampFactory(starts_on=date(2026, 6, 30), ends_on=meal_date)
+    participant = ParticipantFactory(camp=camp)
+    family_member = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Kind",
+        last_name="Muster",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.BREAKFAST,
+        is_default=True,
+        applies_to_children=True,
+        applies_to_adults=False,
+        unit_price=Decimal("3.00"),
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-meal_dates": meal_date.isoformat(),
+            "meal-meal": MealSignup.Meal.BREAKFAST,
+            "meal-variant": MealSignup.Variant.NORMAL,
+            "meal-target": f"family-{family_member.pk}",
+            f"meal-variant-family-{family_member.pk}": MealSignup.Variant.NORMAL_CHILD,
+        },
+    )
+
+    assert response.status_code == 302
+    signup = MealSignup.objects.get(family_member=family_member, meal=MealSignup.Meal.BREAKFAST)
+    assert signup.charge is not None
+    assert signup.charge.unit_price == Decimal("3.00")
+
+
+@pytest.mark.django_db
+def test_kiosk_breakfast_booking_respects_cutoff(kiosk_client, monkeypatch):
+    fixed_now = timezone.make_aware(datetime(2026, 6, 30, 13, 0))
+    _freeze_meal_lock_time(monkeypatch, fixed_now)
+    meal_date = date(2026, 7, 1)
+    camp = CampFactory(starts_on=date(2026, 6, 30), ends_on=meal_date, meal_booking_cutoff_time=time(12, 0))
+    participant = ParticipantFactory(camp=camp)
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.BREAKFAST,
+        is_default=True,
+        applies_to_children=False,
+        applies_to_adults=True,
+        unit_price=Decimal("5.00"),
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-meal_dates": meal_date.isoformat(),
+            "meal-meal": MealSignup.Meal.BREAKFAST,
+            "meal-variant": MealSignup.Variant.NORMAL,
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Buchungen und Rücknahmen".encode() in response.content
+    assert not MealSignup.objects.filter(participant=participant).exists()
+
+
+@pytest.mark.django_db
+def test_kiosk_breakfast_booking_rejects_unknown_target_without_partial_state(kiosk_client, monkeypatch):
+    _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
+    meal_date = date(2026, 7, 1)
+    camp = CampFactory(starts_on=date(2026, 6, 30), ends_on=meal_date)
+    participant = ParticipantFactory(camp=camp)
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.BREAKFAST,
+        is_default=True,
+        applies_to_children=False,
+        applies_to_adults=True,
+        unit_price=Decimal("5.00"),
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-meal_dates": meal_date.isoformat(),
+            "meal-meal": MealSignup.Meal.BREAKFAST,
+            "meal-variant": MealSignup.Variant.NORMAL,
+            "meal-target": "participant-999999",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "nicht verfügbar".encode() in response.content
+    assert not MealSignup.objects.filter(participant=participant).exists()
 
 
 @pytest.mark.django_db

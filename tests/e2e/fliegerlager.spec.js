@@ -709,6 +709,18 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
   await expect(page.locator("dialog#meal-calendar-dialog")).toBeVisible();
   await page.keyboard.press("Escape");
 
+  // Breakfast prebooking uses the same future-day meal flow as dinner.
+  await page.locator('[data-kiosk-card="food"]').getByRole("button", { name: "Frühstück buchen" }).click();
+  const breakfastDialog = page.locator("dialog#meal-dialog");
+  await expect(breakfastDialog.getByRole("heading", { name: "Frühstück vorbestellen" })).toBeVisible();
+  await expect(breakfastDialog.locator('input[data-meal-choice][value="breakfast"]')).toBeChecked();
+  await breakfastDialog.locator("input[data-meal-date-checkbox]:not([disabled])").first().check();
+  await breakfastDialog.getByRole("button", { name: "Weiter" }).click();
+  await breakfastDialog.getByRole("button", { name: "Essensanmeldung speichern" }).click();
+  await expect(page.getByText(/Essensanmeldung wurde für 1 Tag und 1 Person gespeichert\./)).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("dialog#meal-calendar-dialog")).toBeHidden();
+
   await page.getByRole("button", { name: "Apfelsaft" }).click();
   await page.locator("dialog#quick-dialog").getByRole("button", { name: "1x" }).click();
   await expect(page.getByText("Apfelsaft gebucht.")).toBeVisible();

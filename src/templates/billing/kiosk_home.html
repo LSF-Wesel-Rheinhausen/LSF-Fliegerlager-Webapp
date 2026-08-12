@@ -315,6 +315,15 @@
                 <span class="drink-card__title">Abendessen (Kalender)</span>
                 <span class="drink-card__price">Kalender öffnen</span>
               </button>
+              <button
+                type="button"
+                class="drink-card"
+                data-open-meal-dialog-new
+                data-meal="breakfast"
+              >
+                <span class="drink-card__title">Frühstück buchen</span>
+                <span class="drink-card__price">Zukünftige Lagertage</span>
+              </button>
               {% for rule in snack_rules %}
                 <button
                   type="button"
@@ -346,10 +355,11 @@
           <div class="kiosk-card__header-main">
             <span class="kiosk-card__eyebrow">Heute</span>
             <h2 class="kiosk-title" id="meal-calendar-dialog-title">Essenskalender</h2>
-            <p>Deine gespeicherten Abendessen nach Lagertag.</p>
+            <p>Deine gespeicherten Mahlzeiten nach Lagertag.</p>
           </div>
           <div class="inline-actions">
             <button type="button" class="button kiosk-card__action" data-open-meal-dialog-new data-meal="dinner">Essen buchen</button>
+            <button type="button" class="button kiosk-card__action" data-open-meal-dialog-new data-meal="breakfast">Frühstück buchen</button>
             <button type="button" class="button button-secondary" data-close-dialog>Schließen</button>
           </div>
         </div>
@@ -381,12 +391,15 @@
               <span class="meal-status-day__weekday">{{ day.date|date:"D" }}</span>
               <span class="meal-status-day__date">{{ day.date|date:"d.m." }}</span>
               <span class="meal-status-day__offer">
-                <span class="meal-status-day__meal">
-                  {% if day.description %}{{ day.description }}{% elif day.price_rule %}{{ day.price_rule.name }}{% else %}Kein Gericht hinterlegt{% endif %}
-                </span>
-                <strong class="meal-status-day__price">
-                  {% if day.price_rule %}{{ day.unit_price|money_eur }}{% else %}Kein Preis{% endif %}
-                </strong>
+                {% for slot in day.meals %}
+                  <span class="meal-status-day__meal">
+                    <span>{{ slot.label }}</span>
+                    <span>{% if slot.description %}{{ slot.description }}{% elif slot.price_rule %}{{ slot.price_rule.name }}{% else %}Kein Preis hinterlegt{% endif %}</span>
+                  </span>
+                  <strong class="meal-status-day__price">
+                    {% if slot.price_rule %}{{ slot.unit_price|money_eur }}{% else %}–{% endif %}
+                  </strong>
+                {% endfor %}
               </span>
               <span class="meal-status-day__state">{{ day.status_label }}</span>
             </button>
@@ -921,7 +934,12 @@
     {% endif %}
 
     <div id="meal-step-date" class="stack">
-      <div class="meal-booking-calendar" role="group" aria-label="Abendessen nach Lagertag auswählen">
+      <fieldset class="meal-type-choice" aria-label="Mahlzeit auswählen">
+        <legend>Mahlzeit</legend>
+        <label><input type="radio" data-meal-choice value="dinner" checked> Abendessen</label>
+        <label><input type="radio" data-meal-choice value="breakfast"> Frühstück</label>
+      </fieldset>
+      <div class="meal-booking-calendar" role="group" aria-label="Mahlzeit nach Lagertag auswählen">
         {% for day in meal_calendar_days %}
           <label
             class="meal-booking-day meal-booking-day--{{ day.status }}"
@@ -944,24 +962,19 @@
               <span>{{ day.status_label }}</span>
             </span>
             <span class="meal-booking-day__menu">
-              {% if day.description %}
-                <span class="meal-booking-day__menu-label">Menü</span>
-                <strong>{{ day.description }}</strong>
-              {% elif day.price_rule %}
-                <span class="meal-booking-day__menu-label">Preisregel</span>
-                <strong>{{ day.price_rule.name }}</strong>
-              {% else %}
-                Kein Preis hinterlegt
-              {% endif %}
-              {% if day.locked %}
-                <span class="meal-booking-day__lock">Nicht auswählbar: {{ day.lock_message }}</span>
-              {% endif %}
-              {% if day.meals.0.active_signup_names %}
-                <span class="meal-booking-day__booked">Gebucht für {{ day.meals.0.active_signup_names|join:", " }}</span>
-              {% endif %}
+              {% for slot in day.meals %}
+                <span data-meal-booking-option data-meal="{{ slot.meal }}" data-locked="{{ slot.locked|yesno:'true,false' }}" data-has-price="{{ slot.price_rule|yesno:'true,false' }}">
+                  <span class="meal-booking-day__menu-label">{{ slot.label }}{% if slot.description %} · Menü{% endif %}</span>
+                  {% if slot.description %}<strong>{{ slot.description }}</strong>{% elif slot.price_rule %}<strong>{{ slot.price_rule.name }}</strong>{% else %}Kein Preis hinterlegt{% endif %}
+                  {% if slot.locked %}<span class="meal-booking-day__lock">Nicht auswählbar: {{ slot.lock_message }}</span>{% endif %}
+                </span>
+              {% endfor %}
+              {% for slot in day.meals %}
+                {% if slot.active_signup_names %}<span class="meal-booking-day__booked">{{ slot.label }}: Gebucht für {{ slot.active_signup_names|join:", " }}</span>{% endif %}
+              {% endfor %}
             </span>
             <span class="meal-booking-day__price">
-              {% if day.price_rule %}{{ day.price_rule.unit_price|money_eur }}{% elif day.locked %}Geschlossen{% else %}Nicht buchbar{% endif %}
+              {% for slot in day.meals %}<span data-meal-booking-option data-meal="{{ slot.meal }}">{% if slot.price_rule %}{{ slot.unit_price|money_eur }}{% elif slot.locked %}Geschlossen{% else %}Nicht buchbar{% endif %}</span>{% endfor %}
             </span>
           </label>
         {% empty %}
@@ -976,7 +989,7 @@
     <div id="meal-step-persons" style="display: none;" class="stack">
       <div class="kiosk-note">
         <strong id="meal-selected-date">Ausgewählter Tag</strong>
-        <span>Wähle aus, für wen das Abendessen gebucht werden soll.</span>
+        <span>Wähle aus, für wen die Mahlzeit gebucht werden soll.</span>
       </div>
       <p>Wer soll eingebucht werden?</p>
       <div class="target-list">
@@ -1207,6 +1220,7 @@
       const mealStepDate = document.getElementById("meal-step-date");
       const mealStepPersons = document.getElementById("meal-step-persons");
       const mealDateCheckboxes = [...document.querySelectorAll("[data-meal-date-checkbox]")];
+      const mealChoices = [...document.querySelectorAll("[data-meal-choice]")];
       const mealContinueButton = document.getElementById("meal-continue-to-persons");
       const mealBackButton = document.getElementById("meal-back-to-dates");
       const mealInput = document.getElementById("id_meal-meal");
@@ -1319,8 +1333,38 @@
         return selected;
       };
 
+      const updateMealType = () => {
+        const meal = mealInput.value || "dinner";
+        mealChoices.forEach((choice) => {
+          choice.checked = choice.value === meal;
+        });
+        document.querySelectorAll("[data-meal-booking-option]").forEach((option) => {
+          option.hidden = option.dataset.meal !== meal;
+        });
+        document.querySelectorAll("[data-meal-date-checkbox]").forEach((checkbox) => {
+          const day = checkbox.closest("[data-meal-date-select]");
+          const option = day?.querySelector(`[data-meal-booking-option][data-meal="${meal}"]`);
+          const selectable = option?.dataset.locked !== "true" && option?.dataset.hasPrice === "true";
+          checkbox.disabled = !selectable;
+          if (!selectable) checkbox.checked = false;
+        });
+        mealDialogTitle.textContent = meal === "breakfast" ? "Frühstück vorbestellen" : "Abendessen buchen";
+        const selected = selectedMealDates();
+        if (selected.length === 1) {
+          mealSelectedDate.textContent = `${meal === "breakfast" ? "Frühstück" : "Abendessen"} am ${selected[0].dataset.mealDateLabel || "Lagertag"}`;
+        }
+        updateMealDateSelection();
+      };
+
+      mealChoices.forEach((choice) => {
+        choice.addEventListener("change", () => {
+          mealInput.value = choice.value;
+          updateMealType();
+        });
+      });
+
       const showMealDateStep = () => {
-        mealDialogTitle.textContent = "Abendessen buchen";
+        updateMealType();
         mealDialogMeta.textContent = "Wähle einen oder mehrere Lagertage aus.";
         mealDialogClose.hidden = false;
         mealStepDate.style.display = "block";
@@ -1336,8 +1380,9 @@
         }
         const labels = selected.map((checkbox) => checkbox.dataset.mealDateLabel || "Lagertag");
         mealDialogMeta.textContent = selected.length === 1 ? labels[0] : `${selected.length} Tage ausgewählt`;
+        const mealLabel = mealInput.value === "breakfast" ? "Frühstück" : "Abendessen";
         mealSelectedDate.textContent =
-          selected.length === 1 ? `Abendessen am ${labels[0]}` : `${selected.length} Tage ausgewählt: ${labels.join(", ")}`;
+          selected.length === 1 ? `${mealLabel} am ${labels[0]}` : `${selected.length} Tage ausgewählt: ${labels.join(", ")}`;
         mealDialogClose.hidden = true;
         mealStepDate.style.display = "none";
         mealStepPersons.style.display = "block";
@@ -1377,6 +1422,7 @@
           mealDateCheckboxes.forEach((checkbox) => {
             checkbox.checked = checkbox.value === (button.dataset.mealDate || "");
           });
+          updateMealType();
           showMealPersonStep();
           openDialog(mealDialog, button);
         });
@@ -1384,6 +1430,7 @@
       if (mealContinueButton) updateMealDateSelection();
       {% if meal_dialog_open %}
         mealInput.value = mealInput.value || "dinner";
+        updateMealType();
         {% if meal_dialog_step == "persons" %}showMealPersonStep();{% else %}showMealDateStep();{% endif %}
         openDialog(mealDialog);
       {% endif %}
