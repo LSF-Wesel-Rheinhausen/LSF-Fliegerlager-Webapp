@@ -95,6 +95,7 @@ AGENT_READ_TIMEOUT_SECONDS = positive_float_setting("AGENT_READ_TIMEOUT_SECONDS"
 MAX_AGENT_CONCURRENT_REQUESTS = positive_int_setting("MAX_AGENT_CONCURRENT_REQUESTS", "8")
 BACKUP_STAGING_PATTERN = re.compile(r"^staging/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 BACKUP_ARCHIVE_PREFIX_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$")
+BACKUP_FILE_SUFFIX_PATTERN = re.compile(r"^\.(?:sql|tar)\.gz$")
 CONTENT_LENGTH_PATTERN = re.compile(r"^[0-9]+$")
 IMAGE_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 
@@ -496,12 +497,11 @@ def fetch_image_metadata(image: str) -> dict[str, Any]:
     if "image.index" in media_type or "manifest.list" in media_type:
         descriptor = choose_manifest_descriptor(manifest)
         child_digest = str(descriptor.get("digest", digest))
-        raw_manifest, headers = registry_request(
+        raw_manifest, _headers = registry_request(
             f"https://{registry}/v2/{repository}/manifests/{child_digest}",
             accept=MANIFEST_ACCEPT,
         )
         manifest = json.loads(raw_manifest)
-        digest = headers.get("Docker-Content-Digest", child_digest)
     config = manifest.get("config", {})
     config_digest = config.get("digest") if isinstance(config, dict) else None
     if not isinstance(config_digest, str) or not config_digest:
@@ -728,14 +728,34 @@ def backup_timestamp() -> str:
 def open_exclusive_backup(prefix: str, suffix: str) -> tuple[Path, Any]:
     """Create a private backup file without replacing an existing artifact."""
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    while True:
-        filename = f"{prefix}-{backup_timestamp()}-{secrets.token_hex(8)}{suffix}"
-        backup_path = BACKUP_DIR / filename
-        try:
-            descriptor = os.open(backup_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        except FileExistsError:
-            continue
-        return backup_path, os.fdopen(descriptor, "wb")
+    if not isinstance(prefix, str) or not BACKUP_ARCHIVE_PREFIX_PATTERN.fullmatch(prefix):
+        raise RuntimeError("Backup-Archivname ist ungültig.")
+    if not isinstance(suffix, str) or not BACKUP_FILE_SUFFIX_PATTERN.fullmatch(suffix):
+        raise RuntimeError("Backup-Dateiendung ist ungültig.")
+
+    backup_root = BACKUP_DIR.resolve()
+    directory_descriptor = os.open(backup_root, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        while True:
+            filename = f"{prefix}-{backup_timestamp()}-{secrets.token_hex(8)}{suffix}"
+            safe_filename = os.path.basename(filename)
+            if safe_filename != filename:
+                raise RuntimeError("Backup-Datei muss ein direktes Kind des Backup-Verzeichnisses sein.")
+            backup_path = backup_root / safe_filename
+            if backup_path.parent != backup_root or backup_path.resolve().parent != backup_root:
+                raise RuntimeError("Backup-Datei muss ein direktes Kind des Backup-Verzeichnisses sein.")
+            try:
+                descriptor = os.open(
+                    safe_filename,
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                    0o600,
+                    dir_fd=directory_descriptor,
+                )
+            except FileExistsError:
+                continue
+            return backup_path, os.fdopen(descriptor, "wb")
+    finally:
+        os.close(directory_descriptor)
 
 
 def create_backup() -> str:

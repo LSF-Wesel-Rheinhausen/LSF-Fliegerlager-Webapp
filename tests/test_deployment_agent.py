@@ -320,6 +320,40 @@ def test_create_backup_uses_database_url_without_leaking_password(monkeypatch, t
     assert "super-secret-password" not in str(error.value)
 
 
+@pytest.mark.parametrize(
+    ("prefix", "suffix"),
+    [
+        ("../outside", ".sql.gz"),
+        ("/absolute", ".sql.gz"),
+        ("nested/name", ".sql.gz"),
+        (r"nested\\name", ".sql.gz"),
+        ("safe", "../outside"),
+        ("safe", "/absolute"),
+        ("safe", "\\outside"),
+        ("safe", ".sql.gz/extra"),
+    ],
+)
+def test_open_exclusive_backup_rejects_untrusted_prefix_and_suffix(monkeypatch, tmp_path, prefix, suffix):
+    monkeypatch.setattr(deployment_agent, "BACKUP_DIR", tmp_path)
+
+    with pytest.raises(RuntimeError, match="Backup-.*ungültig"):
+        deployment_agent.open_exclusive_backup(prefix, suffix)
+
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_open_exclusive_backup_creates_only_a_direct_backup_child(monkeypatch, tmp_path):
+    monkeypatch.setattr(deployment_agent, "BACKUP_DIR", tmp_path)
+
+    backup_path, raw_backup = deployment_agent.open_exclusive_backup("safe", ".sql.gz")
+    raw_backup.close()
+
+    assert backup_path.parent == tmp_path
+    assert backup_path.resolve().parent == tmp_path.resolve()
+    assert backup_path.name.startswith("safe-")
+    assert backup_path.name.endswith(".sql.gz")
+
+
 def test_backup_child_path_rejects_path_traversal(monkeypatch, tmp_path):
     monkeypatch.setattr(deployment_agent, "BACKUP_DIR", tmp_path)
 
