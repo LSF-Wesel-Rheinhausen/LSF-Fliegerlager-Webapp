@@ -1,8 +1,9 @@
 import csv
+import zlib
 from dataclasses import asdict, dataclass, field
 from decimal import Decimal, InvalidOperation
 from io import BytesIO, TextIOWrapper
-from zipfile import BadZipFile
+from zipfile import BadZipFile, ZipFile
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -13,6 +14,11 @@ from .models import Participant
 
 XLSX_MAGIC = b"PK\x03\x04"
 MAX_IMPORT_ROWS = 5000
+MAX_XLSX_COMPRESSED_BYTES = 5 * 1024 * 1024
+MAX_XLSX_UNCOMPRESSED_BYTES = 32 * 1024 * 1024
+MAX_XLSX_EXPANSION_RATIO = 100
+MAX_XLSX_ARCHIVE_ENTRIES = 1000
+XLSX_ARCHIVE_READ_CHUNK = 64 * 1024
 REQUIRED_PARTICIPANT_COLUMNS = ["first_name", "last_name"]
 PARTICIPANT_COLUMNS = [
     "first_name",
@@ -204,9 +210,62 @@ def read_csv(file_obj):
         raise ValidationError("Die CSV-Datei muss UTF-8-kodiert sein.") from error
 
 
-def read_xlsx(file_obj):
+def _validate_xlsx_archive(payload: bytes) -> None:
+    """Reject encrypted or highly expanding OOXML archives before openpyxl reads them."""
     try:
-        workbook = load_workbook(BytesIO(file_obj.read()), read_only=True, data_only=True)
+        with ZipFile(BytesIO(payload)) as archive:
+            entries = archive.infolist()
+            if len(entries) > MAX_XLSX_ARCHIVE_ENTRIES:
+                raise ValidationError("Die XLSX-Datei enthält zu viele Einträge.")
+            declared_total_uncompressed = 0
+            actual_total_uncompressed = 0
+            for entry in entries:
+                if entry.flag_bits & 0x1:
+                    raise ValidationError("Die XLSX-Datei darf nicht verschlüsselt sein.")
+
+                declared_total_uncompressed += entry.file_size
+                if declared_total_uncompressed > MAX_XLSX_UNCOMPRESSED_BYTES:
+                    raise ValidationError("Die XLSX-Datei überschreitet das erlaubte Dekompressionslimit.")
+
+                if entry.file_size and entry.compress_size == 0:
+                    raise ValidationError("Die XLSX-Datei hat eine unzulässige Kompressionsrate.")
+                if entry.compress_size and entry.file_size / entry.compress_size > MAX_XLSX_EXPANSION_RATIO:
+                    raise ValidationError("Die XLSX-Datei hat eine unzulässige Kompressionsrate.")
+                if entry.is_dir():
+                    continue
+                entry_uncompressed = 0
+                try:
+                    with archive.open(entry) as stream:
+                        while chunk := stream.read(XLSX_ARCHIVE_READ_CHUNK):
+                            entry_uncompressed += len(chunk)
+                            actual_total_uncompressed += len(chunk)
+                            if actual_total_uncompressed > MAX_XLSX_UNCOMPRESSED_BYTES:
+                                raise ValidationError("Die XLSX-Datei überschreitet das erlaubte Dekompressionslimit.")
+                except (
+                    BadZipFile,
+                    EOFError,
+                    NotImplementedError,
+                    OSError,
+                    RuntimeError,
+                    ValueError,
+                    zlib.error,
+                ) as error:
+                    raise ValidationError("Die XLSX-Datei konnte nicht sicher gelesen werden.") from error
+                if entry_uncompressed and not entry.compress_size:
+                    raise ValidationError("Die XLSX-Datei hat eine unzulässige Kompressionsrate.")
+                if entry.compress_size and entry_uncompressed > entry.compress_size * MAX_XLSX_EXPANSION_RATIO:
+                    raise ValidationError("Die XLSX-Datei hat eine unzulässige Kompressionsrate.")
+    except BadZipFile as error:
+        raise ValidationError("Die XLSX-Datei konnte nicht sicher gelesen werden.") from error
+
+
+def read_xlsx(file_obj):
+    payload = file_obj.read(MAX_XLSX_COMPRESSED_BYTES + 1)
+    if len(payload) > MAX_XLSX_COMPRESSED_BYTES:
+        raise ValidationError("Die XLSX-Datei darf höchstens 5 MB groß sein.")
+    _validate_xlsx_archive(payload)
+    try:
+        workbook = load_workbook(BytesIO(payload), read_only=True, data_only=True)
     except (BadZipFile, InvalidFileException, KeyError, OSError) as error:
         raise ValidationError("Die XLSX-Datei konnte nicht sicher gelesen werden.") from error
     try:
