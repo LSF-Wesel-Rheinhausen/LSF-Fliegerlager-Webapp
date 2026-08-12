@@ -654,7 +654,7 @@ def setup_first_admin(request):
     if request.method == "POST" and form.is_valid():
         user = None
         with transaction.atomic():
-            FirstAdminBootstrapLock.objects.select_for_update().get(pk=1)
+            FirstAdminBootstrapLock.objects.select_for_update().get_or_create(pk=1)
             if User.objects.exists():
                 form.add_error(None, "Die Ersteinrichtung wurde bereits abgeschlossen.")
             else:

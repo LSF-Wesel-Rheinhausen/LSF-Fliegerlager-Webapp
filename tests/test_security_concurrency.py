@@ -7,7 +7,7 @@ from django.db import close_old_connections, connection
 from django.test import Client
 from django.urls import reverse
 
-from billing.models import ParticipantFamilyMember, ParticipantFamilyMemberPin, ParticipantPin
+from billing.models import FirstAdminBootstrapLock, ParticipantFamilyMember, ParticipantFamilyMemberPin, ParticipantPin
 from tests.factories import ParticipantFactory
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -20,6 +20,7 @@ def _require_postgresql() -> None:
 
 def test_first_admin_bootstrap_allows_only_one_winner_across_postgresql_connections(monkeypatch):
     _require_postgresql()
+    FirstAdminBootstrapLock.objects.all().delete()
     initial_check_barrier = Barrier(2)
     exists_calls = 0
     exists_lock = Lock()
@@ -61,6 +62,7 @@ def test_first_admin_bootstrap_allows_only_one_winner_across_postgresql_connecti
 
     assert statuses == [200, 302]
     assert User.objects.count() == 1
+    assert FirstAdminBootstrapLock.objects.filter(pk=1).exists()
 
 
 @pytest.mark.parametrize("pin_kind", ["participant", "family_member"])

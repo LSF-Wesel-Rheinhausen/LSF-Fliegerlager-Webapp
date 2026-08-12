@@ -4,6 +4,7 @@
 
 - Serialisiere die First-Admin-Ersteinrichtung über einen migrationsgesicherten PostgreSQL-kompatiblen Lock-Datensatz
   und prüfe die Benutzertabelle innerhalb derselben Transaktion erneut.
+- Stelle den Bootstrap-Lock nach einem Daten-Reset mit erhaltener Migrationshistorie atomar wieder her.
 - Aktualisiere Teilnehmer- und Familien-PIN-Fehlversuchszähler unter `select_for_update()` atomar.
 - Ergänze deterministische Regressionstests sowie einen PostgreSQL-16-CI-Job mit getrennten Verbindungen.
 

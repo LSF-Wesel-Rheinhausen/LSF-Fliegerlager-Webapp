@@ -3,6 +3,7 @@ from django.contrib.auth.models import Group, User
 from django.contrib.staticfiles import finders
 from django.urls import reverse
 
+from billing.models import FirstAdminBootstrapLock
 from billing.permissions import ADMIN_GROUP, EDITOR_GROUP, HUEBERS_GROUP
 from tests.factories import UserFactory
 
@@ -39,6 +40,26 @@ def test_setup_creates_first_admin_and_logs_in(client):
 
     response = client.get(reverse("camp-list"))
     assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_setup_recreates_missing_bootstrap_lock_after_data_reset(client):
+    FirstAdminBootstrapLock.objects.all().delete()
+
+    response = client.post(
+        reverse("setup"),
+        {
+            "username": "admin-after-reset",
+            "email": "admin-after-reset@example.org",
+            "password1": "strong-test-pass-123",
+            "password2": "strong-test-pass-123",
+        },
+    )
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("camp-list")
+    assert User.objects.filter(username="admin-after-reset", is_superuser=True).exists()
+    assert FirstAdminBootstrapLock.objects.filter(pk=1).exists()
 
 
 @pytest.mark.django_db
