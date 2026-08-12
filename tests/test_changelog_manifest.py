@@ -35,7 +35,7 @@ def test_docker_workflow_uses_first_parent_version():
     assert workflow.count("APP_VERSION=${{ steps.metadata.outputs.version }}") == 2
 
 
-RESOURCE_INTENSIVE_WORKFLOWS = ("ci.yml", "docker.yml", "security.yml", "dast.yml")
+RESOURCE_INTENSIVE_WORKFLOWS = ("ci.yml", "security.yml", "dast.yml")
 CONCURRENCY_GROUP = (
     "${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}"
 )
@@ -47,6 +47,16 @@ def test_resource_intensive_workflows_isolate_concurrency_contexts():
     for workflow_name in RESOURCE_INTENSIVE_WORKFLOWS:
         workflow = (workflows_dir / workflow_name).read_text(encoding="utf-8")
         assert f"concurrency:\n  group: {CONCURRENCY_GROUP}\n  cancel-in-progress: true" in workflow
+
+
+def test_docker_publish_is_serialized_without_cancelling_an_active_pair():
+    workflow = (Path(__file__).parents[1] / ".github" / "workflows" / "docker.yml").read_text(encoding="utf-8")
+
+    assert "\nconcurrency:\n  group: " not in workflow
+    assert "    concurrency:\n      group: docker-test-${{ github.ref }}\n      cancel-in-progress: true" in workflow
+    assert (
+        "    concurrency:\n      group: docker-publish-${{ github.ref }}\n      cancel-in-progress: false" in workflow
+    )
 
 
 def test_playwright_system_dependencies_are_documented_as_uncacheable():
