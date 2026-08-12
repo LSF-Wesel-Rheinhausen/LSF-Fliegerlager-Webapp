@@ -320,24 +320,12 @@ def test_create_backup_uses_database_url_without_leaking_password(monkeypatch, t
     assert "super-secret-password" not in str(error.value)
 
 
-@pytest.mark.parametrize(
-    ("prefix", "suffix"),
-    [
-        ("../outside", ".sql.gz"),
-        ("/absolute", ".sql.gz"),
-        ("nested/name", ".sql.gz"),
-        (r"nested\\name", ".sql.gz"),
-        ("safe", "../outside"),
-        ("safe", "/absolute"),
-        ("safe", "\\outside"),
-        ("safe", ".sql.gz/extra"),
-    ],
-)
-def test_open_exclusive_backup_rejects_untrusted_prefix_and_suffix(monkeypatch, tmp_path, prefix, suffix):
+@pytest.mark.parametrize("invalid_category", ["safe", None, ("safe", ".sql.gz")])
+def test_open_exclusive_backup_accepts_only_internal_categories(monkeypatch, tmp_path, invalid_category):
     monkeypatch.setattr(deployment_agent, "BACKUP_DIR", tmp_path)
 
-    with pytest.raises(RuntimeError, match="Backup-.*ungültig"):
-        deployment_agent.open_exclusive_backup(prefix, suffix)
+    with pytest.raises(RuntimeError, match="Backup-Kategorie"):
+        deployment_agent.open_exclusive_backup(invalid_category)
 
     assert list(tmp_path.iterdir()) == []
 
@@ -345,12 +333,14 @@ def test_open_exclusive_backup_rejects_untrusted_prefix_and_suffix(monkeypatch, 
 def test_open_exclusive_backup_creates_only_a_direct_backup_child(monkeypatch, tmp_path):
     monkeypatch.setattr(deployment_agent, "BACKUP_DIR", tmp_path)
 
-    backup_path, raw_backup = deployment_agent.open_exclusive_backup("safe", ".sql.gz")
+    backup_path, raw_backup = deployment_agent.open_exclusive_backup(
+        deployment_agent.BackupArtifactCategory.BEFORE_UPDATE
+    )
     raw_backup.close()
 
     assert backup_path.parent == tmp_path
     assert backup_path.resolve().parent == tmp_path.resolve()
-    assert backup_path.name.startswith("safe-")
+    assert backup_path.name.startswith("fliegerlager-before-update-")
     assert backup_path.name.endswith(".sql.gz")
 
 
@@ -377,6 +367,29 @@ def test_create_backup_archive_contains_database_dump_and_exports(monkeypatch, t
         dump = archive.extractfile("database.sql")
         assert dump is not None
         assert dump.read() == b"-- database dump"
+
+
+def test_archive_prefix_is_validated_but_never_used_in_backup_filename(monkeypatch, tmp_path):
+    staging = tmp_path / "staging" / "run"
+    staging.mkdir(parents=True)
+    monkeypatch.setattr(deployment_agent, "BACKUP_DIR", tmp_path)
+    monkeypatch.setattr(deployment_agent, "database_dump_bytes", lambda: b"-- database dump")
+
+    first = deployment_agent.create_backup_archive("staging/run", "operator-secret")
+    second = deployment_agent.create_backup_archive("staging/run", "another-prefix")
+
+    assert first.startswith("backup-archive-")
+    assert second.startswith("backup-archive-")
+    assert first.endswith(".tar.gz")
+    assert second.endswith(".tar.gz")
+    assert "operator-secret" not in first
+    assert "another-prefix" not in second
+
+
+def test_safe_archive_prefix_rejects_path_values():
+    for value in ("../outside", "/absolute", "nested/name", r"nested\name", ""):
+        with pytest.raises(RuntimeError, match="Backup-Archivname ist ungültig"):
+            deployment_agent.safe_archive_prefix(value)
 
 
 def test_wait_until_healthy_polls_app_health_url(monkeypatch):
@@ -828,7 +841,7 @@ def test_backup_archive_removes_partial_file_after_archive_failure(monkeypatch, 
     with pytest.raises(RuntimeError, match="archive failure"):
         deployment_agent.create_backup_archive("staging/run", "daily-test")
 
-    assert list(tmp_path.glob("daily-test-*.tar.gz")) == []
+    assert list(tmp_path.glob("backup-archive-*.tar.gz")) == []
 
 
 def test_database_backup_uses_the_same_shared_lock(monkeypatch, tmp_path):
