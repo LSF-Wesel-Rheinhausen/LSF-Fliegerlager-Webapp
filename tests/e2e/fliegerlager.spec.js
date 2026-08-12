@@ -721,10 +721,17 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
   await breakfastQuickDialog.getByRole("button", { name: "Für später vorbestellen" }).click();
   const breakfastCalendar = page.locator("dialog#breakfast-meal-dialog");
   await expect(breakfastCalendar).toBeVisible();
+  await expect(page.locator("dialog:open")).toHaveCount(1);
+  await expect(breakfastQuickDialog).toBeHidden();
   await expect(breakfastCalendar.locator("#breakfast-booking-target-names-dialog")).toContainText("Marie Curie");
   await breakfastCalendar.getByRole("button", { name: "Ändern" }).click();
   await expect(breakfastQuickDialog).toBeVisible();
+  await expect(page.locator("dialog:open")).toHaveCount(1);
+  await expect(breakfastCalendar).toBeHidden();
   await breakfastQuickDialog.getByRole("button", { name: "Für später vorbestellen" }).click();
+  await expect(breakfastCalendar).toBeVisible();
+  await expect(page.locator("dialog:open")).toHaveCount(1);
+  await expect(breakfastQuickDialog).toBeHidden();
   await breakfastCalendar.locator("input[data-breakfast-meal-date-checkbox]:not([disabled])").first().check();
   await breakfastCalendar.getByRole("button", { name: "Frühstücksvorbestellung speichern" }).click();
   await expect(page.getByText(/Essensanmeldung wurde für 1 Tag und 1 Person gespeichert\./)).toBeVisible();
@@ -824,6 +831,7 @@ test("Meal booking shows one contextual back action", async ({ page }) => {
   await page.goto("/kiosk/#meal-calendar");
   const mealCalendarDialog = page.locator("dialog#meal-calendar-dialog");
   await expect(mealCalendarDialog).toBeVisible();
+  await expect(page.locator("dialog:open")).toHaveCount(1);
   await expect(page).toHaveURL(/.*\/kiosk\/$/);
   const openMealDay = mealCalendarDialog.locator(".meal-status-day--empty").first();
   await expect(openMealDay).toContainText("7,00 €");
@@ -831,19 +839,27 @@ test("Meal booking shows one contextual back action", async ({ page }) => {
 
   const mealDayDetail = page.locator('dialog[id^="meal-day-detail-"]:visible');
   await expect(mealDayDetail).toBeVisible();
+  await expect(page.locator("dialog:open")).toHaveCount(1);
+  await expect(mealCalendarDialog).toBeHidden();
   await mealDayDetail.getByRole("button", { name: "Essen für diesen Tag buchen" }).click();
 
   const mealDialog = page.locator("dialog#meal-dialog");
+  await expect(page.locator("dialog:open")).toHaveCount(1);
+  await expect(mealDayDetail).toBeHidden();
   await expect(mealDialog.locator("[data-meal-date-checkbox]:checked")).toHaveCount(1);
   await expect(mealDialog.locator("#meal-step-persons")).toBeVisible();
   await expect(mealDialog.locator("#meal-dialog-close")).toBeHidden();
   await expect(mealDialog.getByRole("button", { name: "Zurück", exact: true })).toHaveCount(1);
   await mealDialog.locator("#meal-back-to-dates").click();
   await expect(mealDayDetail).toBeVisible();
+  await expect(page.locator("dialog:open")).toHaveCount(1);
+  await expect(mealDialog).toBeHidden();
 
   await page.keyboard.press("Escape");
   await mealCalendarDialog.getByRole("button", { name: "Essen buchen" }).click();
   await expect(mealDialog.locator("#meal-step-date")).toBeVisible();
+  await expect(page.locator("dialog:open")).toHaveCount(1);
+  await expect(mealCalendarDialog).toBeHidden();
   await expect(mealDialog.locator("#meal-dialog-close")).toBeVisible();
   await mealDialog.locator("input[data-meal-date-checkbox]:not([disabled])").first().check();
   await mealDialog.getByRole("button", { name: "Weiter" }).click();

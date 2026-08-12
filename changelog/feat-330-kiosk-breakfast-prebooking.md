@@ -9,6 +9,7 @@ und ARIA-Beschriftungen; der bestehende Abendessenkalender bleibt unverändert.
 ## Geänderte Dateien
 
 - `src/billing/views.py`
+- `src/templates/billing/kiosk_base.html`
 - `src/templates/billing/includes/kiosk_quick_targets.html`
 - `src/templates/billing/kiosk_home.html`
 - `tests/test_kiosk.py`
@@ -21,6 +22,8 @@ und ARIA-Beschriftungen; der bestehende Abendessenkalender bleibt unverändert.
 - bestehende Kiosk- und Essenskalender-Regressionen
 - Playwright-Flow für primäre Frühstücks-Schnellbuchung, Zielvalidierung, Vorbestellung,
   Zielzusammenfassung und Rückkehr über „Ändern“
+- deterministischer Legacy-Deep-Link `#meal-calendar` und zustandsbasierte native
+  Dialogübergaben mit genau einem offenen Dialog
 
 ## Offene Punkte
 

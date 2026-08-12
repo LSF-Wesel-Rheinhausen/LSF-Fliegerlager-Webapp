@@ -1594,20 +1594,6 @@
       );
 
       const mealCalendarDialog = document.getElementById("meal-calendar-dialog");
-      const checkHashAndOpenMenu = () => {
-        if (window.location.hash === "#menu") {
-          if (kioskMenuDialog && !kioskMenuDialog.open) {
-            openDialog(kioskMenuDialog);
-          }
-        } else if (window.location.hash === "#essen") {
-          if (mealCalendarDialog && !mealCalendarDialog.open) {
-            openDialog(mealCalendarDialog);
-          }
-        }
-      };
-      window.addEventListener("hashchange", checkHashAndOpenMenu);
-      checkHashAndOpenMenu();
-
       kioskMenuDialog?.addEventListener("close", () => {
         if (window.location.hash === "#menu") {
           history.replaceState(null, null, window.location.pathname);
@@ -1668,13 +1654,19 @@
 
       const openRequestedMealCalendar = () => {
         const requestedDialog = new URLSearchParams(window.location.search).get("dialog");
-        const requestedMealCalendar =
-          requestedDialog === "meal-calendar" || window.location.hash === "#meal-calendar";
-        if (!requestedMealCalendar) return;
-        const mealCalendarDialog = document.getElementById("meal-calendar-dialog");
-        if (!mealCalendarDialog) return;
-        openDialog(mealCalendarDialog);
-        window.history.replaceState({}, "", window.location.pathname);
+        const hash = window.location.hash;
+        const targetDialog = requestedDialog === "meal-calendar" || hash === "#meal-calendar"
+          ? mealCalendarDialog
+          : hash === "#menu"
+            ? kioskMenuDialog
+            : hash === "#essen"
+              ? mealCalendarDialog
+              : null;
+        if (!targetDialog || targetDialog.open) return;
+        openDialog(targetDialog);
+        if (requestedDialog === "meal-calendar" || hash === "#meal-calendar") {
+          window.history.replaceState({}, "", window.location.pathname);
+        }
       };
       window.addEventListener("hashchange", openRequestedMealCalendar);
       openRequestedMealCalendar();

@@ -159,19 +159,40 @@
       window.kioskDialogs = (() => {
         const suppressedClose = new WeakSet();
         const returnTargets = new WeakMap();
+        const pendingTransitions = new WeakMap();
         const rootFocusTargets = new WeakMap();
         const boundDialogs = new WeakSet();
+
+        const show = (dialog, focusTarget) => {
+          if (!dialog || dialog.open) return;
+          dialog.showModal();
+          window.requestAnimationFrame(() => focusTarget?.focus());
+        };
 
         const bind = (dialog) => {
           if (!dialog || boundDialogs.has(dialog)) return;
           boundDialogs.add(dialog);
           dialog.addEventListener("close", () => {
-            if (suppressedClose.delete(dialog)) return;
+            if (suppressedClose.delete(dialog)) {
+              const transition = pendingTransitions.get(dialog);
+              pendingTransitions.delete(dialog);
+              if (transition) {
+                window.requestAnimationFrame(() => {
+                  if (!dialog.open && !transition.dialog.open) {
+                    show(transition.dialog, transition.focus);
+                  }
+                });
+              }
+              return;
+            }
             const returnTarget = returnTargets.get(dialog);
             returnTargets.delete(dialog);
             if (returnTarget?.dialog?.isConnected && !returnTarget.dialog.open) {
-              returnTarget.dialog.showModal();
-              window.requestAnimationFrame(() => returnTarget.focus?.focus());
+              window.requestAnimationFrame(() => {
+                if (!dialog.open && !returnTarget.dialog.open) {
+                  show(returnTarget.dialog, returnTarget.focus);
+                }
+              });
               return;
             }
             const rootFocusTarget = rootFocusTargets.get(dialog);
@@ -187,12 +208,13 @@
           if (currentDialog && currentDialog !== dialog) {
             bind(currentDialog);
             suppressedClose.add(currentDialog);
-            currentDialog.close();
+            pendingTransitions.set(currentDialog, { dialog, focus: trigger });
             returnTargets.set(dialog, { dialog: currentDialog, focus: trigger });
-          } else if (trigger?.focus) {
+            currentDialog.close();
+          } else {
             rootFocusTargets.set(dialog, trigger);
+            show(dialog, trigger);
           }
-          dialog.showModal();
         };
 
         document.querySelectorAll("dialog").forEach(bind);
