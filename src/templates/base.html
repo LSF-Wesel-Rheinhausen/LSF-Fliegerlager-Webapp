@@ -3,7 +3,7 @@
 <html lang="de" data-pwa-worker="{{ pwa_worker_url }}" data-pwa-scope="{{ pwa_worker_scope }}">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>{% block title %}Fliegerlager-Abrechnung{% endblock %}</title>
     <link rel="icon" type="image/png" href="{{ pwa_icon_url }}">
     <link rel="apple-touch-icon" sizes="192x192" href="{{ pwa_icon_url }}">
@@ -11,6 +11,7 @@
     <meta name="theme-color" content="#1f5d42">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <script src="{% static 'billing/theme.js' %}?v=1"></script>
+    <script src="{% static 'billing/dialog-scroll-lock.js' %}?v=1"></script>
     <script src="{% static 'billing/pwa.js' %}?v=2" defer></script>
     <link rel="stylesheet" href="{% static 'billing/app-v8.css' %}">
   </head>

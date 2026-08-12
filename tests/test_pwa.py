@@ -33,6 +33,8 @@ def test_private_kiosk_exposes_install_guide_and_apple_touch_icon(kiosk_client):
     assert b"data-pwa-install" in response.content
     assert b"data-pwa-install-dialog" in response.content
     assert b'rel="apple-touch-icon"' in response.content
+    assert b"viewport-fit=cover" in response.content
+    assert b"dialog-scroll-lock.js" in response.content
     assert b"/static/billing/icons/kiosk-icon-192.png" in response.content
     assert b'type="image/png"' in response.content
 
@@ -45,6 +47,8 @@ def test_admin_login_busts_stylesheet_cache(client):
 
     assert response.status_code == 200
     assert b"/static/billing/app-v8.css" in response.content
+    assert b"viewport-fit=cover" in response.content
+    assert b"dialog-scroll-lock.js" in response.content
 
 
 @pytest.mark.django_db
@@ -170,9 +174,9 @@ def test_pwa_surfaces_use_distinct_install_icons(client):
 @pytest.mark.parametrize(
     ("route_name", "expected_scope", "expected_cache_name"),
     [
-        ("pwa-worker-admin", "/", "fliegerlager-admin-v31"),
-        ("pwa-worker-kiosk", "/kiosk/", "fliegerlager-kiosk-v31"),
-        ("pwa-worker-central", "/central/kiosk/", "fliegerlager-central-v31"),
+        ("pwa-worker-admin", "/", "fliegerlager-admin-v32"),
+        ("pwa-worker-kiosk", "/kiosk/", "fliegerlager-kiosk-v32"),
+        ("pwa-worker-central", "/central/kiosk/", "fliegerlager-central-v32"),
     ],
 )
 def test_service_workers_have_explicit_scopes(client, route_name, expected_scope, expected_cache_name):
@@ -185,6 +189,7 @@ def test_service_workers_have_explicit_scopes(client, route_name, expected_scope
     javascript = response.content.decode().replace("\\u002D", "-")
     assert expected_cache_name in javascript
     assert "/static/billing/app-v8.css" in javascript
+    assert "/static/billing/dialog-scroll-lock.js" in javascript
     assert '"/static/billing/app.css"' not in javascript
     assert b"offline" in response.content
     assert b'request.method !== "GET"' in response.content
