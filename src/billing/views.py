@@ -7,6 +7,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from functools import partial
 from typing import Any
+from urllib.parse import urlencode
 
 from django.conf import settings
 from django.contrib import messages
@@ -536,6 +537,54 @@ def _notify_shift_exchange_by_id(
 def _notify_participant_registration_submitted_by_id(participant_id: int) -> None:
     """Load a committed kiosk registration before queuing administrative notifications."""
     notify_participant_registration_submitted(Participant.objects.select_related("camp").get(pk=participant_id))
+
+
+def _kiosk_shift_redirect(request: HttpRequest, kiosk_mode: str):
+    """Redirect to the shift page while retaining its active filters."""
+    filters = {key: request.POST.get(key, "").strip() for key in ("date", "name") if request.POST.get(key, "").strip()}
+    query = urlencode(filters)
+    target = reverse(_kiosk_route(kiosk_mode, "shifts"))
+    return redirect(f"{target}?{query}" if query else target)
+
+
+def _book_open_kiosk_shifts(
+    participant: Participant, shift_ids: list[int], today: date
+) -> tuple[list[Shift], str | None]:
+    """Book several open shifts atomically after locking their capacity rows."""
+    with transaction.atomic():
+        locked_shifts = list(
+            Shift.objects.select_for_update().filter(pk__in=shift_ids, camp=participant.camp).order_by("pk")
+        )
+        if len(locked_shifts) != len(shift_ids):
+            return [], "Mindestens ein ausgewählter Dienst ist nicht verfügbar. Es wurde nichts gebucht."
+
+        assignments = list(
+            ShiftAssignment.objects.filter(shift_id__in=shift_ids).values(
+                "shift_id", "participant_id", "offered_for_exchange"
+            )
+        )
+        assignments_by_shift: dict[int, list[Any]] = {shift.pk: [] for shift in locked_shifts}
+        for assignment in assignments:
+            assignments_by_shift[assignment["shift_id"]].append(assignment)
+
+        for shift in locked_shifts:
+            shift_assignments = assignments_by_shift[shift.pk]
+            if shift.date < today:
+                return [], "Ein ausgewählter Dienst liegt in der Vergangenheit. Es wurde nichts gebucht."
+            if any(item["participant_id"] == participant.pk for item in shift_assignments):
+                return (
+                    [],
+                    "Du bist für mindestens einen ausgewählten Dienst bereits eingetragen. Es wurde nichts gebucht.",
+                )
+            if any(item["offered_for_exchange"] for item in shift_assignments):
+                return [], "Mindestens ein ausgewählter Dienst ist aktuell ein Tauschangebot. Es wurde nichts gebucht."
+            if len(shift_assignments) >= shift.required_slots:
+                return [], "Mindestens ein ausgewählter Dienst ist inzwischen voll. Es wurde nichts gebucht."
+
+        ShiftAssignment.objects.bulk_create(
+            [ShiftAssignment(shift=shift, participant=participant) for shift in locked_shifts]
+        )
+        return locked_shifts, None
 
 
 @superuser_required
@@ -4393,44 +4442,72 @@ def kiosk_shifts(request, kiosk_mode="private"):
     today = timezone.localdate()
     if request.method == "POST":
         action = request.POST.get("action")
+        if action == "bulk_signup":
+            raw_shift_ids = request.POST.getlist("shift_ids")
+            shift_ids = [_positive_int_or_none(value) for value in raw_shift_ids]
+            if not raw_shift_ids:
+                messages.error(request, "Bitte wähle mindestens einen Dienst aus.")
+            elif any(shift_id is None for shift_id in shift_ids) or len(set(shift_ids)) != len(shift_ids):
+                messages.error(request, "Die ausgewählten Dienste sind ungültig. Es wurde nichts gebucht.")
+            else:
+                try:
+                    booked_shifts, error_message = _book_open_kiosk_shifts(
+                        participant, [shift_id for shift_id in shift_ids if shift_id is not None], today
+                    )
+                except IntegrityError:
+                    booked_shifts, error_message = (
+                        [],
+                        (
+                            "Mindestens ein ausgewählter Dienst wurde gerade anderweitig gebucht. "
+                            "Es wurde nichts gebucht."
+                        ),
+                    )
+                if error_message:
+                    messages.error(request, error_message)
+                else:
+                    messages.success(request, f"Du hast {len(booked_shifts)} Dienste übernommen.")
+            return _kiosk_shift_redirect(request, kiosk_mode)
+
         shift_id = _positive_int_or_none(request.POST.get("shift_id"))
         if shift_id is None:
             messages.error(request, "Dienst wurde nicht gefunden.")
-            return redirect(_kiosk_route(kiosk_mode, "shifts"))
+            return _kiosk_shift_redirect(request, kiosk_mode)
         shift = get_object_or_404(Shift, pk=shift_id, camp=participant.camp)
 
         if action == "signup":
-            if ShiftAssignment.objects.filter(shift=shift, participant=participant).exists():
-                messages.error(request, "Du bist für diesen Dienst bereits eingetragen.")
-            elif not shift.is_full:
-                ShiftAssignment.objects.create(shift=shift, participant=participant)
-                messages.success(request, f"Du hast dich für '{shift.name}' eingetragen.")
-            else:
-                offered_assignment = (
-                    shift.assignments.filter(offered_for_exchange=True).exclude(participant=participant).first()
-                )
-                if offered_assignment:
-                    old_participant = offered_assignment.participant
-                    offered_assignment.participant = participant
-                    offered_assignment.offered_for_exchange = False
-                    offered_assignment.created_at = timezone.now()
-                    offered_assignment.save(
-                        update_fields=["participant", "offered_for_exchange", "created_at", "updated_at"]
-                    )
-                    transaction.on_commit(
-                        partial(
-                            _notify_shift_exchange_by_id,
-                            offered_assignment.pk,
-                            "taken",
-                            participant.pk,
-                            old_participant.pk,
-                        )
-                    )
-                    messages.success(request, f"Du hast den Dienst von {old_participant.full_name} übernommen.")
+            with transaction.atomic():
+                shift = Shift.objects.select_for_update().get(pk=shift_id, camp=participant.camp)
+                if ShiftAssignment.objects.filter(shift=shift, participant=participant).exists():
+                    messages.error(request, "Du bist für diesen Dienst bereits eingetragen.")
+                elif not shift.is_full:
+                    ShiftAssignment.objects.create(shift=shift, participant=participant)
+                    messages.success(request, f"Du hast dich für '{shift.name}' eingetragen.")
                 else:
-                    messages.error(
-                        request, "Dieser Dienst ist voll und es wird aktuell kein Platz zum Tausch angeboten."
+                    offered_assignment = (
+                        shift.assignments.filter(offered_for_exchange=True).exclude(participant=participant).first()
                     )
+                    if offered_assignment:
+                        old_participant = offered_assignment.participant
+                        offered_assignment.participant = participant
+                        offered_assignment.offered_for_exchange = False
+                        offered_assignment.created_at = timezone.now()
+                        offered_assignment.save(
+                            update_fields=["participant", "offered_for_exchange", "created_at", "updated_at"]
+                        )
+                        transaction.on_commit(
+                            partial(
+                                _notify_shift_exchange_by_id,
+                                offered_assignment.pk,
+                                "taken",
+                                participant.pk,
+                                old_participant.pk,
+                            )
+                        )
+                        messages.success(request, f"Du hast den Dienst von {old_participant.full_name} übernommen.")
+                    else:
+                        messages.error(
+                            request, "Dieser Dienst ist voll und es wird aktuell kein Platz zum Tausch angeboten."
+                        )
         elif action == "retract":
             assignment = ShiftAssignment.objects.filter(shift=shift, participant=participant).first()
             if assignment and assignment.created_at >= timezone.now() - timedelta(minutes=15):
@@ -4462,7 +4539,7 @@ def kiosk_shifts(request, kiosk_mode="private"):
             if updated:
                 messages.success(request, f"Du hast das Tauschangebot für '{shift.name}' zurückgezogen.")
 
-        return redirect(_kiosk_route(kiosk_mode, "shifts"))
+        return _kiosk_shift_redirect(request, kiosk_mode)
 
     shifts = (
         participant.camp.shifts.filter(date__gte=today)
@@ -4495,6 +4572,7 @@ def kiosk_shifts(request, kiosk_mode="private"):
             open_shifts.append(shift)
 
     shift_dates = sorted({shift.date for shift in open_shifts})
+    shift_name_choices = sorted({shift.name for shift in open_shifts}, key=str.casefold)
     if parsed_shift_date:
         open_shifts = [shift for shift in open_shifts if shift.date == parsed_shift_date]
     if shift_name_filter:
@@ -4511,6 +4589,7 @@ def kiosk_shifts(request, kiosk_mode="private"):
             "shift_dates": shift_dates,
             "shift_date_filter": shift_date_filter,
             "shift_name_filter": shift_name_filter,
+            "shift_name_choices": shift_name_choices,
             "today": today,
             **_kiosk_context(kiosk_mode),
         },

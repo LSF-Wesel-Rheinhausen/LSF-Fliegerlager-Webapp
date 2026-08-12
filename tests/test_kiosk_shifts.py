@@ -122,6 +122,153 @@ def test_kiosk_can_filter_open_shifts_by_date_and_name(logged_in_kiosk_client, a
 
 
 @pytest.mark.django_db
+def test_kiosk_shift_filters_use_german_weekday_and_existing_service_choices(logged_in_kiosk_client, active_camp):
+    monday = datetime.date.today() + datetime.timedelta(days=(7 - datetime.date.today().weekday()) % 7)
+    kitchen_shift = Shift.objects.create(camp=active_camp, name="Küchendienst", date=monday, required_slots=1)
+    Shift.objects.create(camp=active_camp, name="Aufsicht", date=monday, required_slots=1)
+
+    response = logged_in_kiosk_client.get(reverse("kiosk-shifts"), {"date": monday.isoformat(), "name": "Küchendienst"})
+
+    assert response.status_code == 200
+    assert f"Montag, {monday:%d.%m.%Y}" in response.content.decode()
+    assert response.context["shift_name_choices"] == ["Aufsicht", "Küchendienst"]
+    assert [shift.pk for shift in response.context["open_shifts"]] == [kitchen_shift.pk]
+
+
+@pytest.mark.django_db
+def test_kiosk_single_signup_preserves_combined_filters(logged_in_kiosk_client, active_camp):
+    shift = Shift.objects.create(
+        camp=active_camp,
+        name="Küchendienst",
+        date=datetime.date.today() + datetime.timedelta(days=2),
+        required_slots=1,
+    )
+    filter_data = {"date": shift.date.isoformat(), "name": shift.name}
+
+    response = logged_in_kiosk_client.post(
+        reverse("kiosk-shifts"),
+        {"action": "signup", "shift_id": shift.pk, **filter_data},
+    )
+
+    assert response.status_code == 302
+    assert response["Location"] == f"{reverse('kiosk-shifts')}?date={shift.date.isoformat()}&name=K%C3%BCchendienst"
+
+
+@pytest.mark.django_db
+def test_kiosk_bulk_signup_books_all_selected_shifts_atomically(logged_in_kiosk_client, active_camp):
+    shifts = [
+        Shift.objects.create(
+            camp=active_camp,
+            name=name,
+            date=datetime.date.today() + datetime.timedelta(days=offset),
+            required_slots=1,
+        )
+        for name, offset in (("Küchendienst", 2), ("Aufsicht", 3))
+    ]
+
+    response = logged_in_kiosk_client.post(
+        reverse("kiosk-shifts"),
+        {"action": "bulk_signup", "shift_ids": [str(shift.pk) for shift in shifts]},
+    )
+
+    assert response.status_code == 302
+    assert set(
+        ShiftAssignment.objects.filter(participant=logged_in_kiosk_client.kiosk_user).values_list("shift_id", flat=True)
+    ) == {shift.pk for shift in shifts}
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("shift_ids", [[], ["not-an-id"], ["999999"]])
+def test_kiosk_bulk_signup_rejects_empty_foreign_or_malformed_ids(logged_in_kiosk_client, active_camp, shift_ids):
+    Shift.objects.create(
+        camp=active_camp,
+        name="Küchendienst",
+        date=datetime.date.today() + datetime.timedelta(days=2),
+        required_slots=1,
+    )
+    payload = {"action": "bulk_signup", "shift_ids": shift_ids}
+    response = logged_in_kiosk_client.post(reverse("kiosk-shifts"), payload)
+
+    assert response.status_code == 302
+    assert not ShiftAssignment.objects.filter(participant=logged_in_kiosk_client.kiosk_user).exists()
+
+
+@pytest.mark.django_db
+def test_kiosk_bulk_signup_rejects_duplicates_and_does_not_partially_book(logged_in_kiosk_client, active_camp):
+    shift = Shift.objects.create(
+        camp=active_camp,
+        name="Küchendienst",
+        date=datetime.date.today() + datetime.timedelta(days=2),
+        required_slots=1,
+    )
+
+    response = logged_in_kiosk_client.post(
+        reverse("kiosk-shifts"),
+        {"action": "bulk_signup", "shift_ids": [str(shift.pk), str(shift.pk)]},
+    )
+
+    assert response.status_code == 302
+    assert not ShiftAssignment.objects.filter(participant=logged_in_kiosk_client.kiosk_user).exists()
+
+
+@pytest.mark.django_db
+def test_kiosk_bulk_signup_rejects_full_shift_without_partial_booking(logged_in_kiosk_client, active_camp):
+    available = Shift.objects.create(
+        camp=active_camp,
+        name="Küchendienst",
+        date=datetime.date.today() + datetime.timedelta(days=2),
+        required_slots=1,
+    )
+    full = Shift.objects.create(
+        camp=active_camp,
+        name="Aufsicht",
+        date=datetime.date.today() + datetime.timedelta(days=3),
+        required_slots=1,
+    )
+    other = Participant.objects.create(camp=active_camp, first_name="Other", last_name="User")
+    ShiftAssignment.objects.create(shift=full, participant=other)
+
+    response = logged_in_kiosk_client.post(
+        reverse("kiosk-shifts"),
+        {"action": "bulk_signup", "shift_ids": [str(available.pk), str(full.pk)]},
+    )
+
+    assert response.status_code == 302
+    assert not ShiftAssignment.objects.filter(participant=logged_in_kiosk_client.kiosk_user).exists()
+
+
+@pytest.mark.django_db
+def test_kiosk_bulk_signup_rejects_shift_from_another_camp(logged_in_kiosk_client, active_camp):
+    foreign_camp = Camp.objects.create(
+        name="Foreign Camp",
+        year=active_camp.year,
+        starts_on=active_camp.starts_on,
+        ends_on=active_camp.ends_on,
+        is_active=True,
+    )
+    local_shift = Shift.objects.create(
+        camp=active_camp,
+        name="Küchendienst",
+        date=datetime.date.today() + datetime.timedelta(days=2),
+        required_slots=1,
+    )
+    foreign_shift = Shift.objects.create(
+        camp=foreign_camp,
+        name="Fremder Dienst",
+        date=local_shift.date,
+        required_slots=1,
+    )
+
+    response = logged_in_kiosk_client.post(
+        reverse("kiosk-shifts"),
+        {"action": "bulk_signup", "shift_ids": [str(local_shift.pk), str(foreign_shift.pk)]},
+    )
+
+    assert response.status_code == 302
+    assert not ShiftAssignment.objects.filter(participant=logged_in_kiosk_client.kiosk_user).exists()
+
+
+@pytest.mark.django_db
 def test_kiosk_can_retract_own_shift_assignment_within_15_minutes(logged_in_kiosk_client, active_camp):
     shift = Shift.objects.create(
         camp=active_camp,

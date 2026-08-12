@@ -51,13 +51,18 @@
           <select name="date">
             <option value="">Alle zukünftigen Daten</option>
             {% for shift_date in shift_dates %}
-              <option value="{{ shift_date|date:'Y-m-d' }}"{% if shift_date_filter == shift_date|date:'Y-m-d' %} selected{% endif %}>{{ shift_date|date:"d.m.Y" }}</option>
+              <option value="{{ shift_date|date:'Y-m-d' }}"{% if shift_date_filter == shift_date|date:'Y-m-d' %} selected{% endif %}>{{ shift_date|date:"l, d.m.Y" }}</option>
             {% endfor %}
           </select>
         </label>
         <label>
           Dienst
-          <input type="search" name="name" value="{{ shift_name_filter }}" maxlength="120" placeholder="z. B. Küchendienst">
+          <select name="name">
+            <option value="">Alle offenen Dienste</option>
+            {% for shift_name in shift_name_choices %}
+              <option value="{{ shift_name }}"{% if shift_name_filter|lower == shift_name|lower %} selected{% endif %}>{{ shift_name }}</option>
+            {% endfor %}
+          </select>
         </label>
         <button type="submit" class="button">Filtern</button>
       </div>
@@ -82,7 +87,7 @@
                     <span class="shift-badge shift-badge--ok">Tauschangebot</span>
                   </h3>
                   <div class="shift-card__meta">
-                    <span>📅 {{ shift.date|date:"d.m.Y" }}</span>
+                    <span>📅 {{ shift.date|date:"l, d.m.Y" }}</span>
                     {% if shift.start_time %}<span>⏰ {{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}</span>{% endif %}
                     <span>👤 Angeboten von: <strong>{{ shift.offered_by }}</strong></span>
                   </div>
@@ -105,6 +110,8 @@
                 <form method="post">
                   {% csrf_token %}
                   <input type="hidden" name="action" value="signup">
+                  <input type="hidden" name="date" value="{{ shift_date_filter }}">
+                  <input type="hidden" name="name" value="{{ shift_name_filter }}">
                   <input type="hidden" name="shift_id" value="{{ shift.pk }}">
                   {% if not shift.is_full %}
                     <button type="submit" class="button">Eintragen</button>
@@ -132,7 +139,7 @@
               <div class="shift-card__info">
                 <h3 class="shift-card__title">{{ shift.name }}</h3>
                 <div class="shift-card__meta">
-                  <span>📅 {{ shift.date|date:"d.m.Y" }}</span>
+                  <span>📅 {{ shift.date|date:"l, d.m.Y" }}</span>
                   {% if shift.start_time %}<span>⏰ {{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}</span>{% endif %}
                   {% if shift.my_assignment.offered_for_exchange %}
                     <span class="shift-badge shift-badge--ok">Wird zum Tausch angeboten</span>
@@ -157,6 +164,8 @@
               <div class="shift-card__actions">
                 <form method="post">
                   {% csrf_token %}
+                  <input type="hidden" name="date" value="{{ shift_date_filter }}">
+                  <input type="hidden" name="name" value="{{ shift_name_filter }}">
                   <input type="hidden" name="shift_id" value="{{ shift.pk }}">
                   {% if shift.my_assignment.offered_for_exchange %}
                     <input type="hidden" name="action" value="revoke_offer">
@@ -170,6 +179,8 @@
                 <form method="post">
                   {% csrf_token %}
                   <input type="hidden" name="action" value="retract">
+                  <input type="hidden" name="date" value="{{ shift_date_filter }}">
+                  <input type="hidden" name="name" value="{{ shift_name_filter }}">
                   <input type="hidden" name="shift_id" value="{{ shift.pk }}">
                   <button type="submit" class="button button-secondary">Eintrag zurückziehen</button>
                 </form>
@@ -196,12 +207,23 @@
               <p>Hier siehst du alle freien Dienste inklusive aktueller Belegung.</p>
             </div>
           </div>
+          <form id="bulk-shift-form" method="post" class="shift-bulk-actions">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="bulk_signup">
+            <input type="hidden" name="date" value="{{ shift_date_filter }}">
+            <input type="hidden" name="name" value="{{ shift_name_filter }}">
+            <button type="submit" class="button">Ausgewählte Dienste übernehmen</button>
+          </form>
           {% for shift in open_shifts %}
             <article class="shift-card">
               <div class="shift-card__info">
                 <h3 class="shift-card__title">{{ shift.name }}</h3>
                 <div class="shift-card__meta">
-                  <span>📅 {{ shift.date|date:"d.m.Y" }}</span>
+                  <label class="shift-selection">
+                    <input type="checkbox" name="shift_ids" value="{{ shift.pk }}" form="bulk-shift-form" aria-label="Dienst {{ shift.name }} am {{ shift.date|date:'l, d.m.Y' }} auswählen">
+                    <span>Auswählen</span>
+                  </label>
+                  <span>📅 {{ shift.date|date:"l, d.m.Y" }}</span>
                   {% if shift.start_time %}<span>⏰ {{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}</span>{% endif %}
                   <span class="shift-badge {% if shift.is_full %}shift-badge--danger{% else %}shift-badge--ok{% endif %}">
                     Besetzt: {{ shift.assignments.count }} / {{ shift.required_slots }}
@@ -223,6 +245,8 @@
               </div>
               <form method="post">
                 {% csrf_token %}
+                <input type="hidden" name="date" value="{{ shift_date_filter }}">
+                <input type="hidden" name="name" value="{{ shift_name_filter }}">
                 <input type="hidden" name="action" value="signup">
                 <input type="hidden" name="shift_id" value="{{ shift.pk }}">
                 {% if not shift.is_full %}
