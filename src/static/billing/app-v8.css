@@ -2364,6 +2364,20 @@ input[placeholder="DD.MM.YYYY"] {
   font-weight: 700;
 }
 
+.shift-bulk-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin: 0 0 16px;
+}
+
+.shift-selection {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+}
+
 .shift-progress__check {
   display: inline-flex;
   align-items: center;
