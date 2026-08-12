@@ -11,10 +11,14 @@ SHA = re.compile(r"^[0-9a-f]{40}$")
 EXTERNAL_ACTION = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@([0-9a-f]{40})$")
 
 
-def _workflow_documents() -> list[tuple[Path, dict[str, object]]]:
+def _workflow_paths(workflow_dir: Path = WORKFLOW_DIR) -> list[Path]:
+    return sorted(path for path in workflow_dir.rglob("*") if path.is_file() and path.suffix in {".yml", ".yaml"})
+
+
+def _workflow_documents(workflow_dir: Path = WORKFLOW_DIR) -> list[tuple[Path, dict[str, object]]]:
     return [
         (path, yaml.load(path.read_text(encoding="utf-8"), Loader=yaml.BaseLoader))
-        for path in sorted(WORKFLOW_DIR.glob("*.yml"))
+        for path in _workflow_paths(workflow_dir)
     ]
 
 
@@ -41,14 +45,7 @@ def _assert_external_action_is_pinned(reference: str) -> None:
 
 def test_all_external_workflow_actions_are_pinned_to_lowercase_full_shas() -> None:
     workflows = _workflow_documents()
-    assert {path.name for path, _ in workflows} == {
-        "changelog-check.yml",
-        "ci.yml",
-        "dast.yml",
-        "docker.yml",
-        "pr-title.yml",
-        "security.yml",
-    }
+    assert workflows
 
     for _path, workflow in workflows:
         for reference in _uses_values(workflow):
@@ -95,9 +92,20 @@ def test_dast_pr_job_has_no_write_permissions_and_trusted_job_is_separate() -> N
 
     assert dict(pr_job["permissions"]) == {"contents": "read"}
     assert dict(trusted_job["permissions"]) == {"contents": "read", "issues": "write"}
+    assert dict(pr_job["steps"][-1]["with"])["allow_issue_writing"] == "false"
+    assert dict(trusted_job["steps"][-1]["with"])["allow_issue_writing"] == "true"
     assert "actions" not in dict(pr_job["permissions"])
     assert "actions" not in dict(trusted_job["permissions"])
     assert "pull_request" in str(pr_job["if"])
+
+
+def test_workflow_discovery_includes_nested_yml_and_yaml_files(tmp_path: Path) -> None:
+    nested_workflow_dir = tmp_path / "nested"
+    nested_workflow_dir.mkdir()
+    (tmp_path / "root.yml").write_text("name: root\n", encoding="utf-8")
+    (nested_workflow_dir / "new-workflow.yaml").write_text("name: yaml\n", encoding="utf-8")
+
+    assert _workflow_paths(tmp_path) == sorted([tmp_path / "root.yml", nested_workflow_dir / "new-workflow.yaml"])
 
 
 def test_pull_request_target_semantic_action_has_no_checkout_or_run_step() -> None:

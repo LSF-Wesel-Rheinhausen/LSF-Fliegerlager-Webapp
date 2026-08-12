@@ -48,6 +48,7 @@ jobs:
           target: 'http://localhost:8000'
           rules_file_name: '.zap/rules.tsv'
           artifact_name: 'zap-scan'
+          allow_issue_writing: false
           cmd_options: '-a'
 
   zap_scan_trusted:
@@ -79,4 +80,5 @@ jobs:
           target: 'http://localhost:8000'
           rules_file_name: '.zap/rules.tsv'
           artifact_name: 'zap-scan'
+          allow_issue_writing: true
           cmd_options: '-a'
