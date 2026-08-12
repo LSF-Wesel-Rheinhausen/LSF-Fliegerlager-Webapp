@@ -2552,7 +2552,10 @@ input[placeholder="DD.MM.YYYY"] {
 
 :root {
   --mobile-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --mobile-safe-area-left: env(safe-area-inset-left, 0px);
+  --mobile-safe-area-right: env(safe-area-inset-right, 0px);
   --mobile-bottom-nav-height: 56px;
+  --mobile-bottom-nav-total-height: calc(var(--mobile-bottom-nav-height) + var(--mobile-safe-area-bottom) + 1px);
 }
 
 @media (max-width: 780px) {
@@ -2835,7 +2838,7 @@ input[placeholder="DD.MM.YYYY"] {
   #kiosk-menu-dialog,
   #meal-calendar-dialog {
     margin-top: auto;
-    margin-bottom: calc(var(--mobile-bottom-nav-height) + var(--mobile-safe-area-bottom));
+    margin-bottom: var(--mobile-bottom-nav-total-height);
     width: 100%;
     max-width: 100%;
     border-bottom-left-radius: 0;
@@ -2844,13 +2847,13 @@ input[placeholder="DD.MM.YYYY"] {
 
   #kiosk-menu-dialog::backdrop,
   #meal-calendar-dialog::backdrop {
-    -webkit-mask-image: linear-gradient(to bottom, black 0%, black calc(100% - var(--mobile-bottom-nav-height) - var(--mobile-safe-area-bottom)), transparent calc(100% - var(--mobile-bottom-nav-height) - var(--mobile-safe-area-bottom)));
-    mask-image: linear-gradient(to bottom, black 0%, black calc(100% - var(--mobile-bottom-nav-height) - var(--mobile-safe-area-bottom)), transparent calc(100% - var(--mobile-bottom-nav-height) - var(--mobile-safe-area-bottom)));
+    -webkit-mask-image: linear-gradient(to bottom, black 0%, black calc(100% - var(--mobile-bottom-nav-total-height)), transparent calc(100% - var(--mobile-bottom-nav-total-height)));
+    mask-image: linear-gradient(to bottom, black 0%, black calc(100% - var(--mobile-bottom-nav-total-height)), transparent calc(100% - var(--mobile-bottom-nav-total-height)));
   }
 
   .kiosk-mobile-bottom-nav {
     position: fixed;
-    bottom: var(--mobile-safe-area-bottom);
+    bottom: 0;
     left: 0;
     right: 0;
     z-index: 100;
@@ -2859,8 +2862,9 @@ input[placeholder="DD.MM.YYYY"] {
     align-items: center;
     background: var(--panel);
     border-top: 1px solid var(--line);
-    min-height: var(--mobile-bottom-nav-height);
-    padding: 6px 4px;
+    height: var(--mobile-bottom-nav-total-height);
+    min-height: var(--mobile-bottom-nav-total-height);
+    padding: 6px calc(4px + var(--mobile-safe-area-right)) calc(6px + var(--mobile-safe-area-bottom)) calc(4px + var(--mobile-safe-area-left));
     box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
   }
 
@@ -2878,6 +2882,7 @@ input[placeholder="DD.MM.YYYY"] {
     border-radius: var(--radius);
     transition: color 0.15s ease, background-color 0.15s ease;
     min-width: 54px;
+    height: 44px;
     min-height: 44px;
     touch-action: manipulation;
   }
@@ -2894,7 +2899,7 @@ input[placeholder="DD.MM.YYYY"] {
   }
 
   .kiosk-page {
-    padding-bottom: calc(var(--mobile-bottom-nav-height) + var(--mobile-safe-area-bottom));
+    padding-bottom: var(--mobile-bottom-nav-total-height);
   }
 }
 

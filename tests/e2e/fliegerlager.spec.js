@@ -1688,7 +1688,11 @@ test("Mobile Kiosk: fixed bottom navigation bar is present and functional on mob
 
   await page.evaluate(() => {
     document.documentElement.style.setProperty("--test-safe-area-bottom", "34px");
+    document.documentElement.style.setProperty("--test-safe-area-left", "0px");
+    document.documentElement.style.setProperty("--test-safe-area-right", "0px");
     document.documentElement.style.setProperty("--mobile-safe-area-bottom", "var(--test-safe-area-bottom)");
+    document.documentElement.style.setProperty("--mobile-safe-area-left", "var(--test-safe-area-left)");
+    document.documentElement.style.setProperty("--mobile-safe-area-right", "var(--test-safe-area-right)");
   });
 
   // Verify fixed position at bottom
@@ -1710,7 +1714,7 @@ test("Mobile Kiosk: fixed bottom navigation bar is present and functional on mob
       }),
     };
   });
-  expect(bottomSpacing.bottom).toBeLessThanOrEqual(bottomSpacing.viewportHeight - bottomSpacing.safeArea);
+  expect(bottomSpacing.bottom).toBe(bottomSpacing.viewportHeight);
   for (const item of bottomSpacing.items) {
     expect(item.width).toBeGreaterThanOrEqual(44);
     expect(item.height).toBeGreaterThanOrEqual(44);

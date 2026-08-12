@@ -1,9 +1,9 @@
 const { test, expect } = require("./fixtures");
 
 const MOBILE_VIEWPORTS = [
-  { name: "portrait", width: 375, height: 667, safeArea: 34 },
-  { name: "landscape", width: 667, height: 375, safeArea: 21 },
-  { name: "short portrait", width: 320, height: 568, safeArea: 34 },
+  { name: "portrait", width: 375, height: 667, safeAreaBottom: 34, safeAreaLeft: 0, safeAreaRight: 0 },
+  { name: "landscape", width: 667, height: 375, safeAreaBottom: 21, safeAreaLeft: 24, safeAreaRight: 18 },
+  { name: "short portrait", width: 320, height: 568, safeAreaBottom: 34, safeAreaLeft: 0, safeAreaRight: 0 },
 ];
 
 async function loadOverlayHarness(page, viewport, colorScheme = "light") {
@@ -20,7 +20,11 @@ async function loadOverlayHarness(page, viewport, colorScheme = "light") {
   await page.goto("/kiosk/login/");
   await page.evaluate(() => {
     document.documentElement.style.setProperty("--test-safe-area-bottom", "34px");
+    document.documentElement.style.setProperty("--test-safe-area-left", "0px");
+    document.documentElement.style.setProperty("--test-safe-area-right", "0px");
     document.documentElement.style.setProperty("--mobile-safe-area-bottom", "var(--test-safe-area-bottom)");
+    document.documentElement.style.setProperty("--mobile-safe-area-left", "var(--test-safe-area-left)");
+    document.documentElement.style.setProperty("--mobile-safe-area-right", "var(--test-safe-area-right)");
     document.body.style.minHeight = "2400px";
     window.scrollTo(0, 420);
     const nav = document.createElement("nav");
@@ -131,26 +135,41 @@ test.describe("Mobile bottom navigation touch safety", () => {
     for (const colorScheme of ["light", "dark"]) {
       test(`keeps ${colorScheme} navigation targets above the safe area in ${viewport.name}`, async ({ page }) => {
         await loadOverlayHarness(page, viewport, colorScheme);
-        await page.evaluate((safeArea) => {
-          document.documentElement.style.setProperty("--test-safe-area-bottom", `${safeArea}px`);
+        await page.evaluate(({ bottom, left, right }) => {
+          document.documentElement.style.setProperty("--test-safe-area-bottom", `${bottom}px`);
+          document.documentElement.style.setProperty("--test-safe-area-left", `${left}px`);
+          document.documentElement.style.setProperty("--test-safe-area-right", `${right}px`);
           document.documentElement.style.setProperty("--mobile-safe-area-bottom", "var(--test-safe-area-bottom)");
-        }, viewport.safeArea);
+          document.documentElement.style.setProperty("--mobile-safe-area-left", "var(--test-safe-area-left)");
+          document.documentElement.style.setProperty("--mobile-safe-area-right", "var(--test-safe-area-right)");
+        }, { bottom: viewport.safeAreaBottom, left: viewport.safeAreaLeft, right: viewport.safeAreaRight });
+        await addDialogs(page);
         const measurements = await page.locator(".kiosk-mobile-bottom-nav__item").evaluateAll((items) => {
           const viewportHeight = window.innerHeight;
           const nav = document.querySelector(".kiosk-mobile-bottom-nav");
           const navStyle = getComputedStyle(nav);
           const rootStyle = getComputedStyle(document.documentElement);
-          const safeArea = Number.parseFloat(rootStyle.getPropertyValue("--test-safe-area-bottom")) || 0;
+          const safeAreaBottom = Number.parseFloat(rootStyle.getPropertyValue("--test-safe-area-bottom")) || 0;
+          const safeAreaLeft = Number.parseFloat(rootStyle.getPropertyValue("--test-safe-area-left")) || 0;
+          const safeAreaRight = Number.parseFloat(rootStyle.getPropertyValue("--test-safe-area-right")) || 0;
           return {
             nav: nav.getBoundingClientRect().toJSON(),
+            navPosition: navStyle.position,
+            navBottom: navStyle.bottom,
             navBottomGap: viewportHeight - nav.getBoundingClientRect().bottom,
             navPaddingBottom: Number.parseFloat(navStyle.paddingBottom),
-            safeArea,
+            navPaddingLeft: Number.parseFloat(navStyle.paddingLeft),
+            navPaddingRight: Number.parseFloat(navStyle.paddingRight),
+            safeAreaBottom,
+            safeAreaLeft,
+            safeAreaRight,
             pagePaddingBottom: Number.parseFloat(getComputedStyle(document.querySelector("main")).paddingBottom),
+            dialogMarginBottom: Number.parseFloat(getComputedStyle(document.querySelector("#kiosk-menu-dialog")).marginBottom),
             viewportHeight,
+            viewportWidth: window.innerWidth,
             items: items.map((item) => {
               const rect = item.getBoundingClientRect();
-              return { width: rect.width, height: rect.height, top: rect.top, bottom: rect.bottom };
+              return { width: rect.width, height: rect.height, top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right };
             }),
             horizontalOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
             standalone: window.matchMedia("(display-mode: standalone)").matches && navigator.standalone === true,
@@ -160,10 +179,18 @@ test.describe("Mobile bottom navigation touch safety", () => {
         for (const item of measurements.items) {
           expect(item.width).toBeGreaterThanOrEqual(44);
           expect(item.height).toBeGreaterThanOrEqual(44);
-          expect(item.bottom).toBeLessThanOrEqual(measurements.viewportHeight - measurements.safeArea);
+          expect(item.bottom).toBeLessThanOrEqual(measurements.viewportHeight - measurements.safeAreaBottom);
         }
-        expect(measurements.navBottomGap).toBeGreaterThanOrEqual(measurements.safeArea);
-        expect(measurements.pagePaddingBottom).toBeGreaterThanOrEqual(measurements.nav.height);
+        expect(measurements.navBottomGap).toBe(0);
+        expect(measurements.navPosition).toBe("fixed");
+        expect(measurements.navBottom).toBe("0px");
+        expect(measurements.navPaddingBottom).toBe(measurements.safeAreaBottom + 6);
+        expect(measurements.navPaddingLeft).toBe(measurements.safeAreaLeft + 4);
+        expect(measurements.navPaddingRight).toBe(measurements.safeAreaRight + 4);
+        expect(measurements.items[0].left).toBeGreaterThanOrEqual(measurements.safeAreaLeft);
+        expect(measurements.items.at(-1).right).toBeLessThanOrEqual(measurements.viewportWidth - measurements.safeAreaRight);
+        expect(measurements.pagePaddingBottom).toBe(measurements.nav.height);
+        expect(measurements.dialogMarginBottom).toBe(measurements.nav.height);
         expect(measurements.horizontalOverflow).toBeLessThanOrEqual(0);
         expect(measurements.standalone).toBe(true);
         expect(measurements.viewport).toContain("viewport-fit=cover");
