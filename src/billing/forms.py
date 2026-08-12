@@ -1495,24 +1495,10 @@ class MealBookingForm(forms.Form):
             meal_dates_field = cast(forms.TypedMultipleChoiceField, self.fields["meal_dates"])
             variant_field = cast(forms.ChoiceField, self.fields["variant"])
             camp = participant.camp
-            if camp.starts_on and camp.ends_on and camp.starts_on <= camp.ends_on:
-                selectable_dates = camp_meal_dates(camp)
-            elif self.is_bound:
-                getlist = getattr(self.data, "getlist", None)
-                if callable(getlist):
-                    raw_dates = getlist(self.add_prefix("meal_dates"))
-                else:
-                    raw_value = self.data.get(self.add_prefix("meal_dates"), [])
-                    raw_dates = raw_value if isinstance(raw_value, list | tuple) else [raw_value]
-                bound_dates = set()
-                for raw_date in raw_dates:
-                    try:
-                        bound_dates.add(date.fromisoformat(raw_date))
-                    except (TypeError, ValueError):
-                        continue
-                selectable_dates = camp_meal_dates(camp, include_dates=bound_dates)
-            else:
-                selectable_dates = camp_meal_dates(camp)
+            has_valid_camp_bounds = (
+                camp.starts_on is not None and camp.ends_on is not None and camp.starts_on <= camp.ends_on
+            )
+            selectable_dates = camp_meal_dates(camp) if has_valid_camp_bounds else []
             meal_dates_field.choices = [
                 (meal_date.isoformat(), meal_date.strftime("%d.%m.%Y")) for meal_date in sorted(set(selectable_dates))
             ]
@@ -1532,10 +1518,11 @@ class MealBookingForm(forms.Form):
         selected_dates = sorted(set(self.cleaned_data["meal_dates"]))
         if getattr(self, "participant", None) and self.participant.camp:
             camp = self.participant.camp
-            if camp.starts_on and camp.ends_on and camp.starts_on <= camp.ends_on:
-                invalid_dates = [d for d in selected_dates if d < camp.starts_on or d > camp.ends_on]
-                if invalid_dates:
-                    raise forms.ValidationError("Ausgewählte Daten liegen außerhalb des Lagerzeitraums.")
+            if camp.starts_on is None or camp.ends_on is None or camp.starts_on > camp.ends_on:
+                raise forms.ValidationError("Der Lagerzeitraum ist nicht gültig konfiguriert.")
+            invalid_dates = [d for d in selected_dates if d < camp.starts_on or d > camp.ends_on]
+            if invalid_dates:
+                raise forms.ValidationError("Ausgewählte Daten liegen außerhalb des Lagerzeitraums.")
         return selected_dates
 
 
