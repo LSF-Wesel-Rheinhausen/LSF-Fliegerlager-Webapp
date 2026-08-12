@@ -5,6 +5,8 @@
   Zufallssuffix an.
 - Binde `/install` an den bei `/check` validierten `repo@sha256:...`-Digest, verifiziere den tatsächlich laufenden
   RepoDigest nach dem Healthcheck und rolle bei Abweichungen auf den alten Digest zurück.
+- Bewahre bei Multi-Platform-Images den Index-Digest für die Installation, begrenze Header-Wartezeiten bereits am
+  akzeptierten Socket und starte bei einem belegten Backup-Lock keinen Rollback ohne Stack-Mutation.
 - Ergänze Regressionstests für Grenzwerte, abgebrochene Reads, parallele Requests, Backup-Kollisionen und Digest-
   Wechsel.
 
