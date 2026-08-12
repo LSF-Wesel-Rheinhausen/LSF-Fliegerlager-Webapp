@@ -60,6 +60,9 @@ PASSKEY_CHALLENGE_TTL_SECONDS = 300
 
 WEB_PUSH_ENABLED = os.getenv("WEB_PUSH_ENABLED", "0") == "1"
 WEB_PUSH_KEY_DIR = Path(os.getenv("WEB_PUSH_KEY_DIR", "/run/secrets/webpush"))
+WEB_PUSH_ALLOWED_ORIGINS = tuple(
+    origin.strip() for origin in os.getenv("WEB_PUSH_ALLOWED_ORIGINS", "").split(",") if origin.strip()
+)
 try:
     _web_push_keys = load_webpush_keys(os.environ, WEB_PUSH_KEY_DIR) if WEB_PUSH_ENABLED else None
 except WebPushKeyError as error:

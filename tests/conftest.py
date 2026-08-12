@@ -32,3 +32,9 @@ class AuthorizedKioskClient(Client):
 def kiosk_client() -> AuthorizedKioskClient:
     """Return a client authorized for the active camp's first kiosk gate."""
     return AuthorizedKioskClient()
+
+
+@pytest.fixture(autouse=True)
+def configure_test_push_origins(settings: Any) -> None:
+    """Allow only deterministic test push origins unless a test overrides them."""
+    settings.WEB_PUSH_ALLOWED_ORIGINS = ("https://push.example.test", "https://example.com")

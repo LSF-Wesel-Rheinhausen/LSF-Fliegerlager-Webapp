@@ -12,6 +12,8 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
 from django.utils import timezone
 
+from .push_endpoints import PUSH_ENDPOINT_ERROR, is_allowed_push_endpoint
+
 
 class TimeStampedModel(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
@@ -1441,6 +1443,18 @@ class PushSubscription(TimeStampedModel):
                 name="push_subscription_exactly_one_owner",
             )
         ]
+
+    def clean(self):
+        """Validate the endpoint against the current outbound push policy."""
+        super().clean()
+        if not is_allowed_push_endpoint(self.endpoint):
+            raise ValidationError({"endpoint": PUSH_ENDPOINT_ERROR})
+
+    def save(self, *args, **kwargs):
+        """Persist only endpoints allowed by the configured push-origin policy."""
+        if not is_allowed_push_endpoint(self.endpoint):
+            raise ValidationError({"endpoint": PUSH_ENDPOINT_ERROR})
+        return super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         owner = self.user_id or self.participant_id
