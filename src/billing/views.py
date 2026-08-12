@@ -87,6 +87,7 @@ from .models import (
     DailySettlementBackupLog,
     DailySettlementBackupSettings,
     Expense,
+    FirstAdminBootstrapLock,
     KioskActionAuditLog,
     MealOrder,
     MealPlanEntry,
@@ -651,13 +652,19 @@ def setup_first_admin(request):
 
     form = FirstAdminSetupForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
+        user = None
         with transaction.atomic():
-            admin_group, _editor_group, _huebers_group = bootstrap_default_roles()
-            user = form.save()
-            user.groups.add(admin_group)
-        login(request, user, backend="django.contrib.auth.backends.ModelBackend")
-        messages.success(request, "Erster Admin-Benutzer wurde angelegt.")
-        return redirect("camp-list")
+            FirstAdminBootstrapLock.objects.select_for_update().get_or_create(pk=1)
+            if User.objects.exists():
+                form.add_error(None, "Die Ersteinrichtung wurde bereits abgeschlossen.")
+            else:
+                admin_group, _editor_group, _huebers_group = bootstrap_default_roles()
+                user = form.save()
+                user.groups.add(admin_group)
+        if user is not None:
+            login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+            messages.success(request, "Erster Admin-Benutzer wurde angelegt.")
+            return redirect("camp-list")
 
     return render(request, "billing/setup.html", {"form": form})
 
