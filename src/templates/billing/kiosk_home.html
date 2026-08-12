@@ -1079,11 +1079,13 @@
         <strong>Für: <span id="breakfast-booking-target-names-dialog">Keine Person ausgewählt</span></strong>
         <button type="button" class="button button-small button-secondary" id="change-breakfast-booking-targets-dialog">Ändern</button>
       </div>
+      <form method="post" class="form-grid" id="breakfast-meal-booking-form">
+        {% csrf_token %}<input type="hidden" name="action" value="meal"><input type="hidden" name="meal-targets-submitted" value="1"><input type="hidden" name="{{ meal_form.variant.html_name }}" value="{{ meal_default_variant }}"><input type="hidden" name="{{ meal_form.meal.html_name }}" id="breakfast-meal-input" value="breakfast"><span id="breakfast-meal-targets"></span>
       <div class="meal-booking-calendar" role="group" aria-label="Frühstück nach Lagertag auswählen">
         {% for day in breakfast_calendar_days %}
           {% with slot=day.meals.0 %}
             <label class="meal-booking-day meal-booking-day--{{ day.status }}" data-breakfast-meal-date-select="{{ day.date|date:'Y-m-d' }}" {% if not day.locked and day.price_rule %}data-breakfast-meal-date="{{ day.date|date:'Y-m-d' }}"{% endif %} {% if day.locked or not day.price_rule %}aria-disabled="true"{% endif %}>
-              <input type="checkbox" form="breakfast-meal-booking-form" name="{{ meal_form.meal_dates.html_name }}" value="{{ day.date|date:'Y-m-d' }}" data-breakfast-meal-date-checkbox data-meal-date-label="{{ day.date|date:'D d.m.' }}" {% if day.selected %}checked{% endif %} {% if day.locked or not day.price_rule %}disabled{% endif %}>
+              <input type="checkbox" name="{{ meal_form.meal_dates.html_name }}" value="{{ day.date|date:'Y-m-d' }}" data-breakfast-meal-date-checkbox data-meal-date-label="{{ day.date|date:'D d.m.' }}" {% if day.selected %}checked{% endif %} {% if day.locked or not day.price_rule %}disabled{% endif %}>
               <span class="meal-booking-day__date"><strong>{% if day.date == today %}Heute{% elif day.date == tomorrow %}Morgen{% else %}{{ day.date|date:"D d.m." }}{% endif %}</strong><span>{{ day.status_label }}</span></span>
               <span class="meal-booking-day__menu"><span class="meal-booking-day__menu-label">Frühstück{% if slot.description %} · Menü{% endif %}</span>{% if slot.description %}<strong>{{ slot.description }}</strong>{% elif slot.price_rule %}<strong>{{ slot.price_rule.name }}</strong>{% else %}Kein Preis hinterlegt{% endif %}{% if slot.active_signup_names %}<span class="meal-booking-day__booked">Gebucht für {{ slot.active_signup_names|join:", " }}</span>{% endif %}</span>
               <span class="meal-booking-day__price">{% if slot.price_rule %}{{ slot.unit_price|money_eur }}{% elif slot.locked %}Geschlossen{% else %}Nicht buchbar{% endif %}</span>
@@ -1091,12 +1093,9 @@
           {% endwith %}
         {% empty %}<p class="hint">Keine Lagertage für Frühstücksvorbestellungen vorhanden.</p>{% endfor %}
       </div>
-      <div class="dialog-actions"><button type="button" class="button" id="breakfast-meal-continue-to-persons" disabled>Weiter</button></div>
+      <div class="dialog-actions"><button type="submit" class="button" id="breakfast-meal-continue-to-persons" disabled>Frühstücksvorbestellung speichern</button></div>
+      </form>
     </div>
-    <div class="dialog-actions"><button type="submit" form="breakfast-meal-booking-form" class="button">Frühstücksvorbestellung speichern</button></div>
-    <form method="post" class="form-grid kiosk-meal-form" id="breakfast-meal-booking-form">
-      {% csrf_token %}<input type="hidden" name="action" value="meal"><input type="hidden" name="meal-targets-submitted" value="1"><input type="hidden" name="{{ meal_form.variant.html_name }}" value="{{ meal_default_variant }}"><input type="hidden" name="{{ meal_form.meal.html_name }}" id="breakfast-meal-input" value="breakfast"><span id="breakfast-meal-targets"></span>
-    </form>
   </dialog>
 
   {% if not kiosk_actor_is_family_member %}<dialog id="family-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="family-dialog-title">
@@ -1355,6 +1354,7 @@
       const breakfastCalendarDialog = document.getElementById("breakfast-meal-dialog");
       const breakfastDateCheckboxes = [...document.querySelectorAll("[data-breakfast-meal-date-checkbox]")];
       const breakfastBookingForm = document.getElementById("breakfast-meal-booking-form");
+      const breakfastContinueButton = document.getElementById("breakfast-meal-continue-to-persons");
       const breakfastTargetNames = document.getElementById("breakfast-booking-target-names");
       const breakfastTargetNamesDialog = document.getElementById("breakfast-booking-target-names-dialog");
       const breakfastTargets = document.getElementById("breakfast-meal-targets");
@@ -1371,6 +1371,12 @@
       });
 
       const selectedFoodTargets = () => [...document.querySelectorAll('[data-quick-target-scope="food"]:checked')];
+      const updateBreakfastDateSelection = () => {
+        if (breakfastContinueButton) {
+          breakfastContinueButton.disabled = !breakfastDateCheckboxes.some((checkbox) => checkbox.checked);
+        }
+      };
+      breakfastDateCheckboxes.forEach((checkbox) => checkbox.addEventListener("change", updateBreakfastDateSelection));
       const syncBreakfastTargets = () => {
         breakfastTargets.replaceChildren();
         const selected = selectedFoodTargets();
@@ -1403,6 +1409,7 @@
         foodTargetError.hidden = true;
         syncBreakfastTargets();
         breakfastDateCheckboxes.forEach((checkbox) => { checkbox.checked = false; });
+        updateBreakfastDateSelection();
         openDialog(breakfastCalendarDialog, foodPrebookButton);
       });
 
@@ -1559,6 +1566,7 @@
           breakfastDateCheckboxes.forEach((checkbox) => {
             checkbox.checked = checkbox.value === (button.dataset.breakfastMealDate || "");
           });
+          updateBreakfastDateSelection();
           openDialog(breakfastCalendarDialog, button);
         });
       });
