@@ -1,6 +1,9 @@
 import io
+import json
 import os
+import socket
 import threading
+import time
 import urllib.error
 from datetime import UTC, datetime
 from http import HTTPStatus
@@ -62,6 +65,100 @@ def test_image_metadata_ignores_invalid_changelog_labels():
     )
 
     assert deployment_agent.image_metadata(image)["changelog"] == []
+
+
+def test_fetch_image_metadata_keeps_index_digest_for_installation(monkeypatch):
+    index_digest = image_digest("1")
+    child_digest = image_digest("2")
+    config_digest = image_digest("3")
+    index = {
+        "mediaType": "application/vnd.oci.image.index.v1+json",
+        "manifests": [
+            {
+                "digest": child_digest,
+                "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                "platform": {"os": "linux", "architecture": "amd64"},
+            }
+        ],
+    }
+    child = {
+        "mediaType": "application/vnd.oci.image.manifest.v1+json",
+        "config": {"digest": config_digest},
+    }
+    responses = iter(
+        [
+            (json.dumps(index), {"Docker-Content-Digest": index_digest}),
+            (json.dumps(child), {"Docker-Content-Digest": child_digest}),
+            (json.dumps({"config": {"Labels": {}}}), {}),
+        ]
+    )
+    monkeypatch.setattr(deployment_agent, "registry_request", lambda *_args, **_kwargs: next(responses))
+
+    metadata = deployment_agent.fetch_image_metadata(deployment_agent.TARGET_IMAGE)
+
+    assert metadata["id"] == index_digest
+
+
+def test_perform_update_does_not_rollback_when_backup_lock_is_busy(monkeypatch):
+    digest = image_digest("4")
+    approved_image = target_digest_reference(digest)
+    client = Mock()
+    client.docker_request.side_effect = [
+        [{"ImageID": "sha256:old-config"}],
+        {"RepoDigests": [target_digest_reference(image_digest("5"))]},
+    ]
+    states = []
+    monkeypatch.setattr(deployment_agent, "PortainerClient", lambda: client)
+    monkeypatch.setattr(
+        deployment_agent,
+        "load_state",
+        lambda: {
+            "latest": {"id": digest, "image": deployment_agent.TARGET_IMAGE},
+            "approved_image": approved_image,
+            "approved_digest": digest,
+            "changelog": [],
+        },
+    )
+    monkeypatch.setattr(deployment_agent, "create_backup", Mock(side_effect=deployment_agent.BackupInProgressError()))
+    monkeypatch.setattr(deployment_agent, "save_state", lambda **values: states.append(values) or values)
+
+    deployment_agent.update_lock.acquire()
+    try:
+        deployment_agent.perform_update()
+    finally:
+        if deployment_agent.update_lock.locked():
+            deployment_agent.update_lock.release()
+
+    client.update_stack_image.assert_not_called()
+    assert states[-1]["phase"] == "failed"
+
+
+def test_incomplete_headers_timeout_and_release_server_slot(monkeypatch):
+    monkeypatch.setattr(deployment_agent, "AGENT_READ_TIMEOUT_SECONDS", 0.05)
+    server = deployment_agent.BoundedThreadingHTTPServer(
+        ("127.0.0.1", 0), deployment_agent.RequestHandler, max_concurrent_requests=1
+    )
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
+    try:
+        partial = socket.create_connection(server.server_address)
+        partial.sendall(b"GET /healthz HTTP/1.1\r\nHost: localhost\r\n")
+        time.sleep(0.15)
+
+        with socket.create_connection(server.server_address, timeout=1) as healthy:
+            healthy.sendall(
+                b"GET /healthz HTTP/1.1\r\nHost: localhost\r\n"
+                + f"Authorization: Bearer {deployment_agent.TOKEN}\r\n".encode()
+                + b"Connection: close\r\n\r\n"
+            )
+            response = healthy.recv(4096)
+
+        assert b"200 OK" in response
+    finally:
+        partial.close()
+        server.shutdown()
+        server.server_close()
+        server_thread.join(timeout=1)
 
 
 def test_portainer_request_uses_api_key_and_endpoint_id():
@@ -158,7 +255,7 @@ def test_update_stack_image_sets_app_image_in_portainer_payload():
     )
 
 
-def test_perform_update_rolls_back_previous_app_image(monkeypatch):
+def test_perform_update_rolls_back_when_portainer_update_call_fails(monkeypatch):
     states = []
     digest = image_digest("a")
     approved_image = target_digest_reference(digest)

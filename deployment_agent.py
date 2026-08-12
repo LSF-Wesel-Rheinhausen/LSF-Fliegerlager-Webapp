@@ -492,15 +492,16 @@ def fetch_image_metadata(image: str) -> dict[str, Any]:
     manifest = json.loads(raw_manifest)
     media_type = manifest.get("mediaType") or headers.get("Content-Type", "")
     digest = headers.get("Docker-Content-Digest", reference if reference.startswith("sha256:") else "unknown")
+    installation_digest = digest
     if "image.index" in media_type or "manifest.list" in media_type:
         descriptor = choose_manifest_descriptor(manifest)
-        digest = str(descriptor.get("digest", digest))
+        child_digest = str(descriptor.get("digest", digest))
         raw_manifest, headers = registry_request(
-            f"https://{registry}/v2/{repository}/manifests/{digest}",
+            f"https://{registry}/v2/{repository}/manifests/{child_digest}",
             accept=MANIFEST_ACCEPT,
         )
         manifest = json.loads(raw_manifest)
-        digest = headers.get("Docker-Content-Digest", digest)
+        digest = headers.get("Docker-Content-Digest", child_digest)
     config = manifest.get("config", {})
     config_digest = config.get("digest") if isinstance(config, dict) else None
     if not isinstance(config_digest, str) or not config_digest:
@@ -515,7 +516,7 @@ def fetch_image_metadata(image: str) -> dict[str, Any]:
         labels = {}
     return image_metadata(
         {
-            "id": digest,
+            "id": installation_digest,
             "image": image,
             "labels": labels,
         }
@@ -863,6 +864,7 @@ def recovery_hint(backup_name: str, old_image: str) -> str:
 def perform_update() -> None:
     """Install the checked immutable image through Portainer and rollback on failure."""
     old_image = ""
+    stack_mutated = False
     backup_name = ""
     step = "Update vorbereiten"
     try:
@@ -889,6 +891,7 @@ def perform_update() -> None:
             backup=backup_name,
         )
         step = "Portainer Stack aktualisieren"
+        stack_mutated = True
         client.update_stack_image(approved_image)
         step = "Healthcheck abwarten"
         wait_until_healthy()
@@ -913,7 +916,7 @@ def perform_update() -> None:
     except (AgentConfigError, PortainerAPIError, OSError, RuntimeError, subprocess.SubprocessError) as error:
         logger.exception("Update fehlgeschlagen")
         rollback_error = ""
-        if old_image:
+        if old_image and stack_mutated:
             try:
                 save_state(phase="rollback", message="Update fehlgeschlagen; vorheriges Image wird wiederhergestellt.")
                 redeploy_stack(old_image)
@@ -1050,6 +1053,7 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
             self._reject_busy(request)
             return
         try:
+            request.settimeout(AGENT_READ_TIMEOUT_SECONDS)
             thread = threading.Thread(
                 target=self.process_request_thread,
                 args=(request, client_address),
