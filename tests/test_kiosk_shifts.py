@@ -122,6 +122,70 @@ def test_kiosk_can_filter_open_shifts_by_date_and_name(logged_in_kiosk_client, a
 
 
 @pytest.mark.django_db
+def test_kiosk_bulk_selection_excludes_full_shifts_without_exchange_offer(logged_in_kiosk_client, active_camp):
+    available = Shift.objects.create(
+        camp=active_camp,
+        name="Küchendienst",
+        date=datetime.date.today() + datetime.timedelta(days=2),
+        required_slots=1,
+    )
+    full = Shift.objects.create(
+        camp=active_camp,
+        name="Aufsicht",
+        date=datetime.date.today() + datetime.timedelta(days=3),
+        required_slots=1,
+    )
+    other = Participant.objects.create(camp=active_camp, first_name="Other", last_name="User")
+    ShiftAssignment.objects.create(shift=full, participant=other)
+
+    response = logged_in_kiosk_client.get(reverse("kiosk-shifts"))
+
+    content = response.content.decode()
+    assert f'name="shift_ids" value="{available.pk}"' in content
+    assert f'name="shift_ids" value="{full.pk}"' not in content
+    assert full.name in content
+
+
+@pytest.mark.django_db
+def test_kiosk_full_shift_with_exchange_offer_stays_available_for_takeover(logged_in_kiosk_client, active_camp):
+    shift = Shift.objects.create(
+        camp=active_camp,
+        name="Aufsicht",
+        date=datetime.date.today() + datetime.timedelta(days=2),
+        required_slots=1,
+    )
+    other = Participant.objects.create(camp=active_camp, first_name="Other", last_name="User")
+    ShiftAssignment.objects.create(shift=shift, participant=other, offered_for_exchange=True)
+
+    response = logged_in_kiosk_client.get(reverse("kiosk-shifts"))
+
+    content = response.content.decode()
+    assert f'name="shift_ids" value="{shift.pk}"' not in content
+    assert "Dienst übernehmen" in content
+
+
+@pytest.mark.django_db
+def test_kiosk_shift_filter_keeps_last_booked_service_selected(logged_in_kiosk_client, active_camp):
+    shift = Shift.objects.create(
+        camp=active_camp,
+        name="Küchendienst",
+        date=datetime.date.today() + datetime.timedelta(days=2),
+        required_slots=1,
+    )
+    filter_data = {"date": shift.date.isoformat(), "name": shift.name}
+
+    response = logged_in_kiosk_client.post(
+        reverse("kiosk-shifts"),
+        {"action": "signup", "shift_id": shift.pk, **filter_data},
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    assert response.context["shift_name_choices"] == [shift.name]
+    assert f'<option value="{shift.name}" selected>' in response.content.decode()
+
+
+@pytest.mark.django_db
 def test_kiosk_shift_filters_use_german_weekday_and_existing_service_choices(logged_in_kiosk_client, active_camp):
     monday = datetime.date.today() + datetime.timedelta(days=(7 - datetime.date.today().weekday()) % 7)
     kitchen_shift = Shift.objects.create(camp=active_camp, name="Küchendienst", date=monday, required_slots=1)

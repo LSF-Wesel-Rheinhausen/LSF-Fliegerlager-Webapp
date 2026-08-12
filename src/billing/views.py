@@ -4572,7 +4572,10 @@ def kiosk_shifts(request, kiosk_mode="private"):
             open_shifts.append(shift)
 
     shift_dates = sorted({shift.date for shift in open_shifts})
-    shift_name_choices = sorted({shift.name for shift in open_shifts}, key=str.casefold)
+    shift_name_choices = {shift.name for shift in open_shifts}
+    if shift_name_filter:
+        shift_name_choices.add(shift_name_filter)
+    shift_name_choices = sorted(shift_name_choices, key=str.casefold)
     if parsed_shift_date:
         open_shifts = [shift for shift in open_shifts if shift.date == parsed_shift_date]
     if shift_name_filter:

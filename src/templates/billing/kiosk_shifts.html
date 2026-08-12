@@ -219,10 +219,12 @@
               <div class="shift-card__info">
                 <h3 class="shift-card__title">{{ shift.name }}</h3>
                 <div class="shift-card__meta">
-                  <label class="shift-selection">
-                    <input type="checkbox" name="shift_ids" value="{{ shift.pk }}" form="bulk-shift-form" aria-label="Dienst {{ shift.name }} am {{ shift.date|date:'l, d.m.Y' }} auswählen">
-                    <span>Auswählen</span>
-                  </label>
+                  {% if not shift.is_full %}
+                    <label class="shift-selection">
+                      <input type="checkbox" name="shift_ids" value="{{ shift.pk }}" form="bulk-shift-form" aria-label="Dienst {{ shift.name }} am {{ shift.date|date:'l, d.m.Y' }} auswählen">
+                      <span>Auswählen</span>
+                    </label>
+                  {% endif %}
                   <span>📅 {{ shift.date|date:"l, d.m.Y" }}</span>
                   {% if shift.start_time %}<span>⏰ {{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}</span>{% endif %}
                   <span class="shift-badge {% if shift.is_full %}shift-badge--danger{% else %}shift-badge--ok{% endif %}">
