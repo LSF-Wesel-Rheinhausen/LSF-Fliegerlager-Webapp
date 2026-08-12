@@ -4,6 +4,7 @@ import pytest
 import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_DJANGO_ALLOWED_HOSTS = "${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}"
 
 FORBIDDEN_NON_UPDATER_ENVIRONMENT_KEYS = {
     "PORTAINER_URL",
@@ -47,11 +48,13 @@ EXPECTED_SERVICE_ENVIRONMENT_KEYS = {
         "BACKUP_DIR",
         "DATABASE_URL",
         "DAILY_SETTLEMENT_BACKUP_INTERVAL_SECONDS",
+        "DJANGO_ALLOWED_HOSTS",
         "DJANGO_DEBUG",
         "DJANGO_SECRET_KEY",
     },
     "push-worker": {
         "DATABASE_URL",
+        "DJANGO_ALLOWED_HOSTS",
         "DJANGO_DEBUG",
         "DJANGO_SECRET_KEY",
         "WEB_PUSH_ALLOWED_ORIGINS",
@@ -64,6 +67,7 @@ EXPECTED_SERVICE_ENVIRONMENT_KEYS = {
     },
     "email-worker": {
         "DATABASE_URL",
+        "DJANGO_ALLOWED_HOSTS",
         "DJANGO_DEBUG",
         "DJANGO_SECRET_KEY",
     },
@@ -92,6 +96,17 @@ def test_email_worker_does_not_receive_webpush_keys(compose_path: str) -> None:
 
     assert "WEB_PUSH_KEY_DIR" not in email_worker["environment"]
     assert not any("/secrets/webpush" in volume for volume in email_worker.get("volumes", []))
+
+
+@pytest.mark.parametrize("compose_path", ["docker-compose.yml", "deploy/docker-compose.example.yml"])
+def test_background_workers_receive_safe_django_allowed_hosts_default(compose_path: str) -> None:
+    configuration = yaml.safe_load((PROJECT_ROOT / compose_path).read_text(encoding="utf-8"))
+
+    for service_name in ("daily-settlement-backup", "push-worker", "email-worker"):
+        allowed_hosts = configuration["services"][service_name]["environment"]["DJANGO_ALLOWED_HOSTS"]
+
+        assert allowed_hosts == DEFAULT_DJANGO_ALLOWED_HOSTS
+        assert "*" not in allowed_hosts
 
 
 @pytest.mark.parametrize("compose_path", ["docker-compose.yml", "deploy/docker-compose.example.yml"])

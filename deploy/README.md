@@ -32,16 +32,20 @@ Prozess benötigten Variablen:
 
 - `app`: Django-/Datenbankkonfiguration, Update-Agent-Token und -URL, Web-Push-Konfiguration sowie
   Anwendungsoptionen. Portainer- und Registry-Zugangsdaten werden nicht an die App übergeben.
-- `daily-settlement-backup`: Django-Secret, Datenbank-URL, Backup-Pfad und Backup-Intervall.
-- `push-worker`: Django-Secret, Datenbank-URL, Web-Push-Schlüssel/-Subject, die erlaubten Push-Origins und das
-  Worker-Intervall.
-- `email-worker`: Django-Secret und Datenbank-URL. SMTP-Zugangsdaten liegen verschlüsselt in PostgreSQL; Web-Push-
-  Schlüssel werden diesem Dienst nicht bereitgestellt.
+- `daily-settlement-backup`: Django-Secret, Django-Host-Allowlist, Datenbank-URL, Backup-Pfad und Backup-Intervall.
+- `push-worker`: Django-Secret, Django-Host-Allowlist, Datenbank-URL, Web-Push-Schlüssel/-Subject, die erlaubten
+  Push-Origins und das Worker-Intervall.
+- `email-worker`: Django-Secret, Django-Host-Allowlist und Datenbank-URL. SMTP-Zugangsdaten liegen verschlüsselt in
+  PostgreSQL; Web-Push-Schlüssel werden diesem Dienst nicht bereitgestellt.
 - `updater`: Update-Agent-Token, Datenbank-/Backup-Konfiguration, Portainer-Zugangsdaten und optional `GHCR_TOKEN`.
 
 `PORTAINER_URL`, `PORTAINER_API_KEY`, `PORTAINER_ENDPOINT_ID`, `PORTAINER_STACK_ID` und `GHCR_TOKEN` dürfen nur im
 `updater`-Service vorkommen. Änderungen an der Allowlist müssen durch die Compose-Konfigurationstests abgesichert
 werden.
+
+`DJANGO_ALLOWED_HOSTS` wird für den `app`-Service weiterhin zwingend aus `.env` verlangt. Die drei Worker verwenden
+dieselbe Variable und fallen bei einem isolierten Start sicher auf `localhost,127.0.0.1` zurück; eine Wildcard wird
+nicht verwendet.
 
 Optionale Variablen mit Defaults:
 

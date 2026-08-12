@@ -132,6 +132,7 @@ services:
       BACKUP_DIR: /backups
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set in .env}
       DAILY_SETTLEMENT_BACKUP_INTERVAL_SECONDS: ${DAILY_SETTLEMENT_BACKUP_INTERVAL_SECONDS:-300}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
       DJANGO_DEBUG: ${DJANGO_DEBUG:-0}
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?DJANGO_SECRET_KEY must be set in .env}
     command: ["python", "manage.py", "run_daily_settlement_backup", "--loop"]
@@ -155,6 +156,7 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set in .env}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
       DJANGO_DEBUG: ${DJANGO_DEBUG:-0}
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?DJANGO_SECRET_KEY must be set in .env}
       WEB_PUSH_ALLOWED_ORIGINS: ${WEB_PUSH_ALLOWED_ORIGINS:-}
@@ -183,6 +185,7 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set in .env}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
       DJANGO_DEBUG: ${DJANGO_DEBUG:-0}
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?DJANGO_SECRET_KEY must be set in .env}
     command: ["python", "manage.py", "run_email_worker", "--loop"]
