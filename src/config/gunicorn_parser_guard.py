@@ -13,7 +13,6 @@ from gunicorn.http.errors import (
 
 SUPPORTED_GUNICORN_VERSION = "26.0.0"
 MAX_CHUNK_METADATA_SIZE = 8192
-_installed = False
 
 
 class ChunkMetadataTooLarge(LimitRequestLine):
@@ -53,8 +52,6 @@ def _parse_chunk_size(self: ChunkedReader, unreader: object, data: bytes | None 
         if len(buffer) + len(incoming) > MAX_CHUNK_METADATA_SIZE:
             raise ChunkMetadataTooLarge(len(buffer) + len(incoming), MAX_CHUNK_METADATA_SIZE)
         buffer.extend(incoming)
-    else:  # pragma: no cover - the loop always exits through a line or exception
-        raise AssertionError("unreachable")
 
     if line_end >= 0 and "line" not in locals():
         line = bytes(buffer[:line_end])
@@ -75,6 +72,7 @@ def _parse_chunk_size(self: ChunkedReader, unreader: object, data: bytes | None 
         try:
             self.parse_trailers(unreader, rest_chunk)
         except NoMoreData:
+            # Gunicorn accepts EOF after the terminal zero-size chunk.
             pass
         return 0, None
     return parsed_size, rest_chunk
@@ -86,14 +84,11 @@ def install() -> None:
     Raises:
         RuntimeError: if the installed Gunicorn version is unsupported.
     """
-    global _installed
     if gunicorn.__version__ != SUPPORTED_GUNICORN_VERSION:
         raise RuntimeError(
             f"Unsupported Gunicorn version: {gunicorn.__version__}; expected {SUPPORTED_GUNICORN_VERSION}"
         )
-    if not _installed:
-        ChunkedReader.parse_chunk_size = _parse_chunk_size
-        _installed = True
+    ChunkedReader.parse_chunk_size = _parse_chunk_size
 
 
 def configure(config: object) -> object:
