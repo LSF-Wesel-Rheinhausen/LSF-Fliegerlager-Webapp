@@ -13,12 +13,14 @@ import secrets
 import ssl
 import subprocess
 import tarfile
+import tempfile
 import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import UTC, datetime
+from enum import Enum
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -34,6 +36,23 @@ class AgentConfigError(RuntimeError):
 
 class PortainerAPIError(RuntimeError):
     """Raised when Portainer rejects a stack operation."""
+
+
+class BackupArtifactCategory(Enum):
+    """Internal backup categories with fixed filesystem naming components."""
+
+    BEFORE_UPDATE = ("fliegerlager-before-update", ".sql.gz")
+    ARCHIVE = ("backup-archive", ".tar.gz")
+
+    @property
+    def filename_prefix(self) -> str:
+        """Return the server-controlled filename prefix for this category."""
+        return self.value[0]
+
+    @property
+    def suffix(self) -> str:
+        """Return the server-controlled filename suffix for this category."""
+        return self.value[1]
 
 
 class AgentRequestError(RuntimeError):
@@ -496,12 +515,11 @@ def fetch_image_metadata(image: str) -> dict[str, Any]:
     if "image.index" in media_type or "manifest.list" in media_type:
         descriptor = choose_manifest_descriptor(manifest)
         child_digest = str(descriptor.get("digest", digest))
-        raw_manifest, headers = registry_request(
+        raw_manifest, _headers = registry_request(
             f"https://{registry}/v2/{repository}/manifests/{child_digest}",
             accept=MANIFEST_ACCEPT,
         )
         manifest = json.loads(raw_manifest)
-        digest = headers.get("Docker-Content-Digest", child_digest)
     config = manifest.get("config", {})
     config_digest = config.get("digest") if isinstance(config, dict) else None
     if not isinstance(config_digest, str) or not config_digest:
@@ -725,17 +743,21 @@ def backup_timestamp() -> str:
     return f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}"
 
 
-def open_exclusive_backup(prefix: str, suffix: str) -> tuple[Path, Any]:
+def open_exclusive_backup(category: BackupArtifactCategory) -> tuple[Path, Any]:
     """Create a private backup file without replacing an existing artifact."""
+    if not isinstance(category, BackupArtifactCategory):
+        raise RuntimeError("Backup-Kategorie ist ungültig.")
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    while True:
-        filename = f"{prefix}-{backup_timestamp()}-{secrets.token_hex(8)}{suffix}"
-        backup_path = BACKUP_DIR / filename
-        try:
-            descriptor = os.open(backup_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        except FileExistsError:
-            continue
-        return backup_path, os.fdopen(descriptor, "wb")
+    backup_root = BACKUP_DIR.resolve()
+    filename_prefix = f"{category.filename_prefix}-{backup_timestamp()}-{secrets.token_hex(8)}"
+    # mkstemp creates the file directly in backup_root with O_EXCL and retries
+    # generated-name collisions internally; the resolved directory is its boundary.
+    descriptor, raw_path = tempfile.mkstemp(prefix=filename_prefix, suffix=category.suffix, dir=backup_root)
+    backup_path = Path(raw_path)
+    if backup_path.parent != backup_root:
+        os.close(descriptor)
+        raise RuntimeError("Backup-Datei muss ein direktes Kind des Backup-Verzeichnisses sein.")
+    return backup_path, os.fdopen(descriptor, "wb")
 
 
 def create_backup() -> str:
@@ -745,7 +767,7 @@ def create_backup() -> str:
     backup_path: Path | None = None
     try:
         dump = database_dump_bytes()
-        backup_path, raw_backup = open_exclusive_backup("fliegerlager-before-update", ".sql.gz")
+        backup_path, raw_backup = open_exclusive_backup(BackupArtifactCategory.BEFORE_UPDATE)
         try:
             with raw_backup:
                 with gzip.GzipFile(fileobj=raw_backup, mode="wb") as backup:
@@ -795,8 +817,8 @@ def _create_backup_archive(staging_dir: str, archive_prefix: str) -> str:
         raise RuntimeError("Backup-Staging-Verzeichnis wurde nicht gefunden.")
 
     dump = database_dump_bytes()
-    prefix = safe_archive_prefix(archive_prefix)
-    archive_path, raw_archive = open_exclusive_backup(prefix, ".tar.gz")
+    safe_archive_prefix(archive_prefix)
+    archive_path, raw_archive = open_exclusive_backup(BackupArtifactCategory.ARCHIVE)
     try:
         with raw_archive:
             with tarfile.open(fileobj=raw_archive, mode="w:gz") as archive:
