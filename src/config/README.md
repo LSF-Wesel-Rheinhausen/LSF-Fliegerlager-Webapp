@@ -39,6 +39,10 @@ Unterstuetzte Umgebungsvariablen:
 WhiteNoise liefert die durch `collectstatic` erzeugten Dateien direkt über Gunicorn aus. Der Update-Agent bleibt ein
 separater Container; der Django-Prozess erhält keinen Zugriff auf Portainer-Zugangsdaten.
 
+Die Produktionskonfiguration lädt `config.gunicorn_config`. Sie pinnt den Python-HTTP-Parser an Gunicorn 26.0.0 und
+begrenzt fragmentierte Chunk-Metadatenzeilen auf 8 KiB. Bei einer abweichenden Gunicorn-Version startet der Prozess
+nicht, damit der versionsgebundene Parser-Guard nicht unbemerkt umgangen wird.
+
 Passkeys verwenden discoverable Credentials mit verpflichtender User Verification. Registrierung und Anmeldung
 speichern getrennte, fünf Minuten gültige Einmal-Challenges in der Django-Session. RP-ID und Origin werden bei jeder
 Zeremonie exakt gegen die Deployment-Konfiguration geprüft. Passwort und optionales Authelia-SSO bleiben als
