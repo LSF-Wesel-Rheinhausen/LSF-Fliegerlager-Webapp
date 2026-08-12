@@ -28,6 +28,8 @@ def test_build_manifest_adds_first_parent_version(monkeypatch, tmp_path: Path):
 def test_docker_workflow_uses_first_parent_version():
     workflow = (Path(__file__).parents[1] / ".github" / "workflows" / "docker.yml").read_text(encoding="utf-8")
 
-    assert "uses: actions/checkout@v7\n        with:\n          fetch-depth: 0" in workflow
+    assert (
+        "uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7\n        with:\n          fetch-depth: 0"
+    ) in workflow
     assert 'echo "version=$(git rev-list --first-parent --count HEAD)"' in workflow
     assert workflow.count("APP_VERSION=${{ steps.metadata.outputs.version }}") == 2
