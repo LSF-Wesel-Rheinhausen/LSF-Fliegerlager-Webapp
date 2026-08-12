@@ -315,15 +315,6 @@
                 <span class="drink-card__title">Abendessen (Kalender)</span>
                 <span class="drink-card__price">Kalender öffnen</span>
               </button>
-              <button
-                type="button"
-                class="drink-card"
-                data-open-meal-dialog-new
-                data-meal="breakfast"
-              >
-                <span class="drink-card__title">Frühstück buchen</span>
-                <span class="drink-card__price">Zukünftige Lagertage</span>
-              </button>
               {% for rule in snack_rules %}
                 <button
                   type="button"
@@ -331,6 +322,7 @@
                   data-food-button
                   data-rule-id="{{ rule.pk }}"
                   data-rule-name="{{ rule.name }}"
+                  data-meal-type="{{ rule.meal_type }}"
                 >
                   <span class="drink-card__title">{{ rule.name }}</span>
                   <span class="drink-card__price">{{ rule.unit_price|money_eur }}</span>
@@ -354,12 +346,11 @@
         <div class="kiosk-card__header kiosk-section-heading">
           <div class="kiosk-card__header-main">
             <span class="kiosk-card__eyebrow">Heute</span>
-            <h2 class="kiosk-title" id="meal-calendar-dialog-title">Essenskalender</h2>
-            <p>Deine gespeicherten Mahlzeiten nach Lagertag.</p>
+            <h2 class="kiosk-title" id="meal-calendar-dialog-title">Abendessenkalender</h2>
+            <p>Deine gespeicherten Abendessen nach Lagertag.</p>
           </div>
           <div class="inline-actions">
             <button type="button" class="button kiosk-card__action" data-open-meal-dialog-new data-meal="dinner">Essen buchen</button>
-            <button type="button" class="button kiosk-card__action" data-open-meal-dialog-new data-meal="breakfast">Frühstück buchen</button>
             <button type="button" class="button button-secondary" data-close-dialog>Schließen</button>
           </div>
         </div>
@@ -380,26 +371,19 @@
           <input type="hidden" name="{{ meal_form.variant.html_name }}" value="{{ meal_default_variant }}">
           <input type="hidden" name="{{ meal_form.meal.html_name }}" id="{{ meal_form.meal.id_for_label }}" value="{{ meal_form.meal.value|default:'' }}">
         </form>
-        <div class="meal-status-calendar" aria-label="Essensstatus nach Lagertag">
+        <div class="meal-status-calendar" aria-label="Abendessensstatus nach Lagertag">
           {% for day in meal_calendar_days %}
             <button
               type="button"
               class="meal-status-day meal-status-day--{{ day.status }}"
               data-open-meal-day-detail="meal-day-detail-{{ day.date|date:'Y-m-d' }}"
-              aria-label="{{ day.date|date:'D d.m.Y' }}: {{ day.status_label }}. {% if day.description %}{{ day.description }}{% elif day.price_rule %}{{ day.price_rule.name }}{% else %}Kein Gericht hinterlegt{% endif %}. {% if day.price_rule %}Preis {{ day.unit_price|money_eur }}{% else %}Kein Preis hinterlegt{% endif %}"
+              aria-label="{{ day.date|date:'D d.m.Y' }}. Abendessen: {{ day.status_label }}. {% if day.description %}{{ day.description }}{% elif day.price_rule %}{{ day.price_rule.name }}{% else %}Kein Gericht hinterlegt{% endif %}. {% if day.price_rule %}Preis {{ day.unit_price|money_eur }}{% else %}Kein Preis hinterlegt{% endif %}"
             >
               <span class="meal-status-day__weekday">{{ day.date|date:"D" }}</span>
               <span class="meal-status-day__date">{{ day.date|date:"d.m." }}</span>
               <span class="meal-status-day__offer">
-                {% for slot in day.meals %}
-                  <span class="meal-status-day__meal">
-                    <span>{{ slot.label }}</span>
-                    <span>{% if slot.description %}{{ slot.description }}{% elif slot.price_rule %}{{ slot.price_rule.name }}{% else %}Kein Preis hinterlegt{% endif %}</span>
-                  </span>
-                  <strong class="meal-status-day__price">
-                    {% if slot.price_rule %}{{ slot.unit_price|money_eur }}{% else %}–{% endif %}
-                  </strong>
-                {% endfor %}
+                <span class="meal-status-day__meal">Abendessen · {% if day.description %}{{ day.description }}{% elif day.price_rule %}{{ day.price_rule.name }}{% else %}Kein Gericht hinterlegt{% endif %}</span>
+                <strong class="meal-status-day__price">{% if day.price_rule %}{{ day.unit_price|money_eur }}{% else %}–{% endif %}</strong>
               </span>
               <span class="meal-status-day__state">{{ day.status_label }}</span>
             </button>
@@ -410,6 +394,47 @@
         <dl class="meal-status-legend" aria-label="Legende Essensstatus">
           <div><dt class="meal-status-dot meal-status-dot--booked"></dt><dd>Gebucht</dd></div>
           <div><dt class="meal-status-dot meal-status-dot--mixed"></dt><dd>Gemischt</dd></div>
+          <div><dt class="meal-status-dot meal-status-dot--retracted"></dt><dd>Zurückgenommen</dd></div>
+          <div><dt class="meal-status-dot meal-status-dot--empty"></dt><dd>Offen</dd></div>
+          <div><dt class="meal-status-dot meal-status-dot--closed"></dt><dd>Geschlossen</dd></div>
+        </dl>
+      </dialog>
+
+      <dialog id="breakfast-meal-calendar" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="breakfast-meal-calendar-title">
+        <div class="kiosk-card__header kiosk-section-heading">
+          <div class="kiosk-card__header-main">
+            <span class="kiosk-card__eyebrow">Vorbestellung</span>
+            <h2 class="kiosk-title" id="breakfast-meal-calendar-title">Frühstückskalender</h2>
+            <p>Deine gespeicherten Frühstücke nach Lagertag.</p>
+          </div>
+          <div class="inline-actions"><button type="button" class="button button-secondary" data-close-dialog>Schließen</button></div>
+        </div>
+        <div class="kiosk-note" id="breakfast-booking-target-summary" aria-live="polite">
+          <strong>Für: <span id="breakfast-booking-target-names">Keine Person ausgewählt</span></strong>
+          <button type="button" class="button button-small button-secondary" id="change-breakfast-booking-targets">Ändern</button>
+        </div>
+        <div id="breakfast-meal-status-calendar" class="meal-status-calendar" aria-label="Frühstücksstatus nach Lagertag">
+          {% for day in breakfast_calendar_days %}
+            <button
+              type="button"
+              class="meal-status-day meal-status-day--{{ day.status }}"
+              data-open-meal-day-detail="breakfast-meal-day-detail-{{ day.date|date:'Y-m-d' }}"
+              aria-label="{{ day.date|date:'D d.m.Y' }}. Frühstück: {{ day.status_label }}. {% if day.description %}{{ day.description }}{% elif day.price_rule %}{{ day.price_rule.name }}{% else %}Kein Gericht hinterlegt{% endif %}. {% if day.price_rule %}Preis {{ day.unit_price|money_eur }}{% else %}Kein Preis hinterlegt{% endif %}"
+            >
+              <span class="meal-status-day__weekday">{{ day.date|date:"D" }}</span>
+              <span class="meal-status-day__date">{{ day.date|date:"d.m." }}</span>
+              <span class="meal-status-day__offer">
+                <span class="meal-status-day__meal">Frühstück · {% if day.description %}{{ day.description }}{% elif day.price_rule %}{{ day.price_rule.name }}{% else %}Kein Gericht hinterlegt{% endif %}</span>
+                <strong class="meal-status-day__price">{% if day.price_rule %}{{ day.unit_price|money_eur }}{% else %}–{% endif %}</strong>
+              </span>
+              <span class="meal-status-day__state">{{ day.status_label }}</span>
+            </button>
+          {% empty %}
+            <p class="hint">Keine Lagertage für Frühstücksvorbestellungen vorhanden.</p>
+          {% endfor %}
+        </div>
+        <dl class="meal-status-legend" aria-label="Legende Frühstücksstatus">
+          <div><dt class="meal-status-dot meal-status-dot--booked"></dt><dd>Gebucht</dd></div>
           <div><dt class="meal-status-dot meal-status-dot--retracted"></dt><dd>Zurückgenommen</dd></div>
           <div><dt class="meal-status-dot meal-status-dot--empty"></dt><dd>Offen</dd></div>
           <div><dt class="meal-status-dot meal-status-dot--closed"></dt><dd>Geschlossen</dd></div>
@@ -818,7 +843,11 @@
     <div class="stack">
       <p>Wer soll eingebucht werden?</p>
       {% include "billing/includes/kiosk_quick_targets.html" with target_scope="food" %}
-      <button type="button" class="button" id="submit-food-booking">Kostenpflichtig buchen</button>
+      <p class="helptext error" role="alert" data-food-target-error hidden>Bitte mindestens eine Person auswählen.</p>
+      <div class="dialog-actions">
+        <button type="button" class="button" id="submit-food-booking">Jetzt buchen</button>
+        <button type="button" class="button button-secondary" id="prebook-breakfast" hidden>Für später vorbestellen</button>
+      </div>
     </div>
   </dialog>
 
@@ -915,6 +944,47 @@
     </dialog>
   {% endfor %}
 
+  {% for day in breakfast_calendar_days %}
+    <dialog id="breakfast-meal-day-detail-{{ day.date|date:'Y-m-d' }}" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="breakfast-meal-day-detail-title-{{ day.date|date:'Y-m-d' }}">
+      <form method="dialog" class="dialog-heading">
+        <div>
+          <h2 id="breakfast-meal-day-detail-title-{{ day.date|date:'Y-m-d' }}">Frühstück am {{ day.date|date:"D d.m." }}</h2>
+          <p class="dialog-heading__meta">{{ day.status_label }}</p>
+        </div>
+        <button class="button button-secondary">Schließen</button>
+      </form>
+      {% for slot in day.meals %}
+        <div class="kiosk-note">
+          <strong>Frühstück</strong>
+          {% if slot.description %}<span>{{ slot.description }}</span>{% elif slot.price_rule %}<span>{{ slot.price_rule.name }}</span>{% else %}<span>Kein Gericht hinterlegt.</span>{% endif %}
+          {% if slot.price_rule %}<span>Preis: {{ slot.unit_price|money_eur }}</span>{% else %}<span>Kein Preis hinterlegt.</span>{% endif %}
+        </div>
+        {% if slot.signups %}
+          <div class="target-list">
+            {% for signup in slot.signups %}
+              <article class="target-row target-row--single meal-detail-row meal-detail-row--{{ signup.status }}">
+                <div class="kiosk-list-row__content">
+                  <strong>{% if signup.family_member %}{{ signup.family_member.full_name }}{% else %}{{ signup.participant.full_name }}{% endif %}</strong>
+                  <span>Frühstück · {{ signup.get_variant_display }} · {{ signup.get_status_display }}</span>
+                </div>
+                {% if signup.status == "active" and not slot.locked %}
+                  <form method="post" class="kiosk-list-row__actions">
+                    {% csrf_token %}<input type="hidden" name="action" value="meal_retract"><input type="hidden" name="meal_signup_id" value="{{ signup.pk }}"><button type="submit" class="button-secondary">Zurücknehmen</button>
+                  </form>
+                {% endif %}
+              </article>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="kiosk-empty"><strong>Keine Frühstücksbuchung für diesen Tag.</strong></div>
+        {% endif %}
+        {% if not slot.locked and slot.price_rule %}
+          <div class="dialog-actions"><button type="button" class="button" data-open-breakfast-meal-dialog data-breakfast-meal-date="{{ day.date|date:'Y-m-d' }}">Frühstück für diesen Tag vorbestellen</button></div>
+        {% endif %}
+      {% endfor %}
+    </dialog>
+  {% endfor %}
+
   <dialog id="meal-dialog" class="kiosk-dialog kiosk-dialog--wide meal-booking-dialog" aria-labelledby="meal-dialog-title">
     <form method="dialog" class="dialog-heading">
       <div>
@@ -934,12 +1004,7 @@
     {% endif %}
 
     <div id="meal-step-date" class="stack">
-      <fieldset class="meal-type-choice" aria-label="Mahlzeit auswählen">
-        <legend>Mahlzeit</legend>
-        <label><input type="radio" data-meal-choice value="dinner" checked> Abendessen</label>
-        <label><input type="radio" data-meal-choice value="breakfast"> Frühstück</label>
-      </fieldset>
-      <div class="meal-booking-calendar" role="group" aria-label="Mahlzeit nach Lagertag auswählen">
+      <div class="meal-booking-calendar" role="group" aria-label="Abendessen nach Lagertag auswählen">
         {% for day in meal_calendar_days %}
           <label
             class="meal-booking-day meal-booking-day--{{ day.status }}"
@@ -961,21 +1026,8 @@
               <strong>{% if day.date == today %}Heute{% elif day.date == tomorrow %}Morgen{% else %}{{ day.date|date:"D d.m." }}{% endif %}</strong>
               <span>{{ day.status_label }}</span>
             </span>
-            <span class="meal-booking-day__menu">
-              {% for slot in day.meals %}
-                <span data-meal-booking-option data-meal="{{ slot.meal }}" data-locked="{{ slot.locked|yesno:'true,false' }}" data-has-price="{{ slot.price_rule|yesno:'true,false' }}">
-                  <span class="meal-booking-day__menu-label">{{ slot.label }}{% if slot.description %} · Menü{% endif %}</span>
-                  {% if slot.description %}<strong>{{ slot.description }}</strong>{% elif slot.price_rule %}<strong>{{ slot.price_rule.name }}</strong>{% else %}Kein Preis hinterlegt{% endif %}
-                  {% if slot.locked %}<span class="meal-booking-day__lock">Nicht auswählbar: {{ slot.lock_message }}</span>{% endif %}
-                </span>
-              {% endfor %}
-              {% for slot in day.meals %}
-                {% if slot.active_signup_names %}<span class="meal-booking-day__booked">{{ slot.label }}: Gebucht für {{ slot.active_signup_names|join:", " }}</span>{% endif %}
-              {% endfor %}
-            </span>
-            <span class="meal-booking-day__price">
-              {% for slot in day.meals %}<span data-meal-booking-option data-meal="{{ slot.meal }}">{% if slot.price_rule %}{{ slot.unit_price|money_eur }}{% elif slot.locked %}Geschlossen{% else %}Nicht buchbar{% endif %}</span>{% endfor %}
-            </span>
+            <span class="meal-booking-day__menu"><span class="meal-booking-day__menu-label">Abendessen{% if day.description %} · Menü{% endif %}</span>{% if day.description %}<strong>{{ day.description }}</strong>{% elif day.price_rule %}<strong>{{ day.price_rule.name }}</strong>{% else %}Kein Preis hinterlegt{% endif %}{% if day.locked %}<span class="meal-booking-day__lock">Nicht auswählbar: {{ day.lock_message }}</span>{% endif %}{% if day.meals.0.active_signup_names %}<span class="meal-booking-day__booked">Gebucht für {{ day.meals.0.active_signup_names|join:", " }}</span>{% endif %}</span>
+            <span class="meal-booking-day__price">{% if day.price_rule %}{{ day.unit_price|money_eur }}{% elif day.locked %}Geschlossen{% else %}Nicht buchbar{% endif %}</span>
           </label>
         {% empty %}
           <p class="hint">Keine Lagertage für Essensbuchungen vorhanden.</p>
@@ -1012,6 +1064,39 @@
         <button type="submit" form="meal-booking-form" class="button">Essensanmeldung speichern</button>
       </div>
     </div>
+  </dialog>
+
+  <dialog id="breakfast-meal-dialog" class="kiosk-dialog kiosk-dialog--wide meal-booking-dialog" aria-labelledby="breakfast-meal-dialog-title">
+    <form method="dialog" class="dialog-heading">
+      <div>
+        <h2 id="breakfast-meal-dialog-title">Frühstück vorbestellen</h2>
+        <p class="dialog-heading__meta" id="breakfast-meal-dialog-meta">Wähle zuerst einen Lagertag aus.</p>
+      </div>
+      <button class="button button-secondary" id="breakfast-meal-dialog-close">Schließen</button>
+    </form>
+    <div id="breakfast-meal-step-date" class="stack">
+      <div class="kiosk-note" id="breakfast-booking-target-summary-dialog" aria-live="polite">
+        <strong>Für: <span id="breakfast-booking-target-names-dialog">Keine Person ausgewählt</span></strong>
+        <button type="button" class="button button-small button-secondary" id="change-breakfast-booking-targets-dialog">Ändern</button>
+      </div>
+      <div class="meal-booking-calendar" role="group" aria-label="Frühstück nach Lagertag auswählen">
+        {% for day in breakfast_calendar_days %}
+          {% with slot=day.meals.0 %}
+            <label class="meal-booking-day meal-booking-day--{{ day.status }}" data-breakfast-meal-date-select="{{ day.date|date:'Y-m-d' }}" {% if not day.locked and day.price_rule %}data-breakfast-meal-date="{{ day.date|date:'Y-m-d' }}"{% endif %} {% if day.locked or not day.price_rule %}aria-disabled="true"{% endif %}>
+              <input type="checkbox" form="breakfast-meal-booking-form" name="{{ meal_form.meal_dates.html_name }}" value="{{ day.date|date:'Y-m-d' }}" data-breakfast-meal-date-checkbox data-meal-date-label="{{ day.date|date:'D d.m.' }}" {% if day.selected %}checked{% endif %} {% if day.locked or not day.price_rule %}disabled{% endif %}>
+              <span class="meal-booking-day__date"><strong>{% if day.date == today %}Heute{% elif day.date == tomorrow %}Morgen{% else %}{{ day.date|date:"D d.m." }}{% endif %}</strong><span>{{ day.status_label }}</span></span>
+              <span class="meal-booking-day__menu"><span class="meal-booking-day__menu-label">Frühstück{% if slot.description %} · Menü{% endif %}</span>{% if slot.description %}<strong>{{ slot.description }}</strong>{% elif slot.price_rule %}<strong>{{ slot.price_rule.name }}</strong>{% else %}Kein Preis hinterlegt{% endif %}{% if slot.active_signup_names %}<span class="meal-booking-day__booked">Gebucht für {{ slot.active_signup_names|join:", " }}</span>{% endif %}</span>
+              <span class="meal-booking-day__price">{% if slot.price_rule %}{{ slot.unit_price|money_eur }}{% elif slot.locked %}Geschlossen{% else %}Nicht buchbar{% endif %}</span>
+            </label>
+          {% endwith %}
+        {% empty %}<p class="hint">Keine Lagertage für Frühstücksvorbestellungen vorhanden.</p>{% endfor %}
+      </div>
+      <div class="dialog-actions"><button type="button" class="button" id="breakfast-meal-continue-to-persons" disabled>Weiter</button></div>
+    </div>
+    <div class="dialog-actions"><button type="submit" form="breakfast-meal-booking-form" class="button">Frühstücksvorbestellung speichern</button></div>
+    <form method="post" class="form-grid kiosk-meal-form" id="breakfast-meal-booking-form">
+      {% csrf_token %}<input type="hidden" name="action" value="meal"><input type="hidden" name="meal-targets-submitted" value="1"><input type="hidden" name="{{ meal_form.variant.html_name }}" value="{{ meal_default_variant }}"><input type="hidden" name="{{ meal_form.meal.html_name }}" id="breakfast-meal-input" value="breakfast"><span id="breakfast-meal-targets"></span>
+    </form>
   </dialog>
 
   {% if not kiosk_actor_is_family_member %}<dialog id="family-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="family-dialog-title">
@@ -1265,13 +1350,67 @@
       // Food Dialog Logic
       const foodDialog = document.getElementById("food-dialog");
       const foodDialogName = document.getElementById("food-dialog-name");
+      const foodPrebookButton = document.getElementById("prebook-breakfast");
+      const foodTargetError = document.querySelector("[data-food-target-error]");
+      const breakfastCalendarDialog = document.getElementById("breakfast-meal-dialog");
+      const breakfastDateCheckboxes = [...document.querySelectorAll("[data-breakfast-meal-date-checkbox]")];
+      const breakfastBookingForm = document.getElementById("breakfast-meal-booking-form");
+      const breakfastTargetNames = document.getElementById("breakfast-booking-target-names");
+      const breakfastTargetNamesDialog = document.getElementById("breakfast-booking-target-names-dialog");
+      const breakfastTargets = document.getElementById("breakfast-meal-targets");
+      let breakfastFoodTrigger = null;
 
       document.querySelectorAll("[data-food-button]").forEach((button) => {
         button.addEventListener("click", () => {
           priceRuleInput.value = button.dataset.ruleId;
           foodDialogName.textContent = button.dataset.ruleName || "";
+          breakfastFoodTrigger = button;
+          foodPrebookButton.hidden = button.dataset.mealType !== "breakfast";
           openDialog(foodDialog, button);
         });
+      });
+
+      const selectedFoodTargets = () => [...document.querySelectorAll('[data-quick-target-scope="food"]:checked')];
+      const syncBreakfastTargets = () => {
+        breakfastTargets.replaceChildren();
+        const selected = selectedFoodTargets();
+        selected.forEach((checkbox) => {
+          const token = checkbox.value;
+          const targetInput = document.createElement("input");
+          targetInput.type = "hidden";
+          targetInput.name = "meal-target";
+          targetInput.value = token;
+          breakfastTargets.append(targetInput);
+          const variantInput = document.createElement("input");
+          variantInput.type = "hidden";
+          variantInput.name = `meal-variant-${token}`;
+          variantInput.value = checkbox.dataset.quickTargetVariant || "normal";
+          breakfastTargets.append(variantInput);
+        });
+        const names = selected.map((checkbox) => checkbox.dataset.quickTargetName).join(", ");
+        breakfastTargetNames.textContent = names;
+        breakfastTargetNamesDialog.textContent = names;
+        return selected;
+      };
+
+      foodPrebookButton?.addEventListener("click", () => {
+        const selected = selectedFoodTargets();
+        if (!selected.length) {
+          foodTargetError.hidden = false;
+          selected[0]?.focus();
+          return;
+        }
+        foodTargetError.hidden = true;
+        syncBreakfastTargets();
+        breakfastDateCheckboxes.forEach((checkbox) => { checkbox.checked = false; });
+        openDialog(breakfastCalendarDialog, foodPrebookButton);
+      });
+
+      document.getElementById("change-breakfast-booking-targets")?.addEventListener("click", () => {
+        openDialog(foodDialog, breakfastFoodTrigger || document.querySelector('[data-food-button][data-meal-type="breakfast"]'));
+      });
+      document.getElementById("change-breakfast-booking-targets-dialog")?.addEventListener("click", () => {
+        openDialog(foodDialog, breakfastFoodTrigger || document.querySelector('[data-food-button][data-meal-type="breakfast"]'));
       });
 
       const syncQuickTargets = (scope) => {
@@ -1334,24 +1473,11 @@
       };
 
       const updateMealType = () => {
-        const meal = mealInput.value || "dinner";
-        mealChoices.forEach((choice) => {
-          choice.checked = choice.value === meal;
-        });
-        document.querySelectorAll("[data-meal-booking-option]").forEach((option) => {
-          option.hidden = option.dataset.meal !== meal;
-        });
-        document.querySelectorAll("[data-meal-date-checkbox]").forEach((checkbox) => {
-          const day = checkbox.closest("[data-meal-date-select]");
-          const option = day?.querySelector(`[data-meal-booking-option][data-meal="${meal}"]`);
-          const selectable = option?.dataset.locked !== "true" && option?.dataset.hasPrice === "true";
-          checkbox.disabled = !selectable;
-          if (!selectable) checkbox.checked = false;
-        });
-        mealDialogTitle.textContent = meal === "breakfast" ? "Frühstück vorbestellen" : "Abendessen buchen";
+        mealInput.value = "dinner";
+        mealDialogTitle.textContent = "Abendessen buchen";
         const selected = selectedMealDates();
         if (selected.length === 1) {
-          mealSelectedDate.textContent = `${meal === "breakfast" ? "Frühstück" : "Abendessen"} am ${selected[0].dataset.mealDateLabel || "Lagertag"}`;
+          mealSelectedDate.textContent = `Abendessen am ${selected[0].dataset.mealDateLabel || "Lagertag"}`;
         }
         updateMealDateSelection();
       };
@@ -1425,6 +1551,15 @@
           updateMealType();
           showMealPersonStep();
           openDialog(mealDialog, button);
+        });
+      });
+      document.querySelectorAll("[data-open-breakfast-meal-dialog]").forEach((button) => {
+        button.addEventListener("click", () => {
+          syncBreakfastTargets();
+          breakfastDateCheckboxes.forEach((checkbox) => {
+            checkbox.checked = checkbox.value === (button.dataset.breakfastMealDate || "");
+          });
+          openDialog(breakfastCalendarDialog, button);
         });
       });
       if (mealContinueButton) updateMealDateSelection();

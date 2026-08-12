@@ -2,21 +2,25 @@
 
 ## Zusammenfassung
 
-Der Kiosk zeigt Frühstück als zusätzliche zukünftige Mahlzeit im bestehenden Essenskalender
-und verwendet dafür denselben Buchungs-, Preis-, Frist-, Familien- und Rücknahmevertrag wie
-das Abendessen.
+Der Kiosk zeigt Frühstück als zusätzliche Schnellbuchung. Über den sekundären Vorbestell-CTA
+öffnet sich ein eigener Frühstückskalender mit getrennten Preisen, Beschreibungen, Statuswerten
+und ARIA-Beschriftungen; der bestehende Abendessenkalender bleibt unverändert.
 
 ## Geänderte Dateien
 
 - `src/billing/views.py`
+- `src/templates/billing/includes/kiosk_quick_targets.html`
 - `src/templates/billing/kiosk_home.html`
 - `tests/test_kiosk.py`
+- `tests/e2e/fliegerlager.spec.js`
 
 ## Tests
 
 - Frühstücks-Regressionen für fehlende Preise, ungültige Tage, Duplikate, Familienmitglieder,
   Cutoff und unbekannte Ziele
 - bestehende Kiosk- und Essenskalender-Regressionen
+- Playwright-Flow für primäre Frühstücks-Schnellbuchung, Zielvalidierung, Vorbestellung,
+  Zielzusammenfassung und Rückkehr über „Ändern“
 
 ## Offene Punkte
 

@@ -636,7 +636,7 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
   await expect(page.locator("dialog#food-dialog")).toBeVisible();
   await expect(page.locator("#food-step-date")).toHaveCount(0);
   await expect(page.locator("dialog#food-dialog").getByText("Wer soll eingebucht werden?")).toBeVisible();
-  await page.locator("dialog#food-dialog").getByRole("button", { name: "Kostenpflichtig buchen" }).click();
+  await page.locator("dialog#food-dialog").getByRole("button", { name: "Jetzt buchen" }).click();
   await expect(page.getByText(/Standard Frühstück.*gebucht\./)).toBeVisible();
 
   // Create a second billing target for the multi-account confirmation.
@@ -709,14 +709,24 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
   await expect(page.locator("dialog#meal-calendar-dialog")).toBeVisible();
   await page.keyboard.press("Escape");
 
-  // Breakfast prebooking uses the same future-day meal flow as dinner.
-  await page.locator('[data-kiosk-card="food"]').getByRole("button", { name: "Frühstück buchen" }).click();
-  const breakfastDialog = page.locator("dialog#meal-dialog");
-  await expect(breakfastDialog.getByRole("heading", { name: "Frühstück vorbestellen" })).toBeVisible();
-  await expect(breakfastDialog.locator('input[data-meal-choice][value="breakfast"]')).toBeChecked();
-  await breakfastDialog.locator("input[data-meal-date-checkbox]:not([disabled])").first().check();
-  await breakfastDialog.getByRole("button", { name: "Weiter" }).click();
-  await breakfastDialog.getByRole("button", { name: "Essensanmeldung speichern" }).click();
+  // Breakfast quick booking stays primary; prebooking is a secondary action.
+  await page.locator('[data-kiosk-card="food"] [data-food-button][data-meal-type="breakfast"]').click();
+  const breakfastQuickDialog = page.locator("dialog#food-dialog");
+  await expect(breakfastQuickDialog.getByRole("button", { name: "Jetzt buchen" })).toBeVisible();
+  const breakfastTarget = breakfastQuickDialog.locator('[data-quick-target-scope="food"]').first();
+  await breakfastTarget.uncheck();
+  await breakfastQuickDialog.getByRole("button", { name: "Für später vorbestellen" }).click();
+  await expect(breakfastQuickDialog.getByRole("alert")).toHaveText("Bitte mindestens eine Person auswählen.");
+  await breakfastTarget.check();
+  await breakfastQuickDialog.getByRole("button", { name: "Für später vorbestellen" }).click();
+  const breakfastCalendar = page.locator("dialog#breakfast-meal-dialog");
+  await expect(breakfastCalendar).toBeVisible();
+  await expect(breakfastCalendar.locator("#breakfast-booking-target-names-dialog")).toContainText("Marie Curie");
+  await breakfastCalendar.getByRole("button", { name: "Ändern" }).click();
+  await expect(breakfastQuickDialog).toBeVisible();
+  await breakfastQuickDialog.getByRole("button", { name: "Für später vorbestellen" }).click();
+  await breakfastCalendar.locator("input[data-breakfast-meal-date-checkbox]:not([disabled])").first().check();
+  await breakfastCalendar.getByRole("button", { name: "Frühstücksvorbestellung speichern" }).click();
   await expect(page.getByText(/Essensanmeldung wurde für 1 Tag und 1 Person gespeichert\./)).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.locator("dialog#meal-calendar-dialog")).toBeHidden();

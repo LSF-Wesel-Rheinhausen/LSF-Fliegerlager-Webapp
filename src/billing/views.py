@@ -3279,7 +3279,7 @@ def _meal_price_rule_for_targets(camp, meal, meal_date, participant, meal_target
     return None
 
 
-def _kiosk_meal_calendar(camp, participant, meal_signups, meal_targets):
+def _kiosk_meal_calendar(camp, participant, meal_signups, meal_targets, meal=MealSignup.Meal.DINNER):
     signups_by_date_meal = {}
     included_dates = {signup.meal_date for signup in meal_signups}
     for signup in meal_signups:
@@ -3288,7 +3288,7 @@ def _kiosk_meal_calendar(camp, participant, meal_signups, meal_targets):
     meal_dates = camp_meal_dates(camp, included_dates)
     menu_descriptions = {
         entry.meal_date: entry.description
-        for entry in MealPlanEntry.objects.filter(camp=camp, meal=MealSignup.Meal.DINNER, meal_date__in=meal_dates)
+        for entry in MealPlanEntry.objects.filter(camp=camp, meal=meal, meal_date__in=meal_dates)
     }
     sent_order_dates = set(
         MealOrder.objects.filter(camp=camp, meal_date__in=meal_dates).values_list("meal_date", flat=True)
@@ -3297,71 +3297,57 @@ def _kiosk_meal_calendar(camp, participant, meal_signups, meal_targets):
     days = []
     for meal_date in meal_dates:
         meals = []
-        for meal in (MealSignup.Meal.BREAKFAST, MealSignup.Meal.DINNER):
-            scoped = signups_by_date_meal.get((meal_date, meal), [])
-            active_signups = [signup for signup in scoped if signup.status == MealSignup.Status.ACTIVE]
-            retracted_signups = [signup for signup in scoped if signup.status == MealSignup.Status.RETRACTED]
-            locked = is_meal_change_locked(camp, meal_date, sent_order_dates=sent_order_dates)
-            lock_message = (
-                meal_change_lock_message(camp, meal_date, sent_order_dates=sent_order_dates) if locked else ""
-            )
-            if active_signups and retracted_signups:
-                status = "mixed"
-                status_label = "Teilweise zurückgenommen"
-            elif active_signups:
-                status = "booked"
-                status_label = "Gebucht"
-            elif retracted_signups:
-                status = "retracted"
-                status_label = "Zurückgenommen"
-            elif locked:
-                status = "closed"
-                status_label = "Geschlossen"
-            else:
-                status = "empty"
-                status_label = "Ungebucht"
-            price_rule = _meal_price_rule_for_targets(camp, meal, meal_date, participant, meal_targets)
-            meals.append(
-                {
-                    "meal": meal,
-                    "label": meal_labels[meal],
-                    "status": status,
-                    "status_label": status_label,
-                    "signups": scoped,
-                    "active_signups": active_signups,
-                    "active_signup_names": [
-                        signup.family_member.full_name if signup.family_member_id else signup.participant.full_name
-                        for signup in active_signups
-                    ],
-                    "retracted_signups": retracted_signups,
-                    "locked": locked,
-                    "lock_message": lock_message,
-                    "description": menu_descriptions.get(meal_date, ""),
-                    "price_rule": price_rule,
-                    "unit_price": price_rule.unit_price if price_rule else None,
-                }
-            )
-        dinner_slot = next(slot for slot in meals if slot["meal"] == MealSignup.Meal.DINNER)
-        breakfast_slot = next(slot for slot in meals if slot["meal"] == MealSignup.Meal.BREAKFAST)
-        summary_slot = (
-            dinner_slot
-            if (
-                dinner_slot["price_rule"] is not None
-                or dinner_slot["active_signups"]
-                or dinner_slot["retracted_signups"]
-            )
-            else breakfast_slot
-        )
+        scoped = signups_by_date_meal.get((meal_date, meal), [])
+        active_signups = [signup for signup in scoped if signup.status == MealSignup.Status.ACTIVE]
+        retracted_signups = [signup for signup in scoped if signup.status == MealSignup.Status.RETRACTED]
+        locked = is_meal_change_locked(camp, meal_date, sent_order_dates=sent_order_dates)
+        lock_message = meal_change_lock_message(camp, meal_date, sent_order_dates=sent_order_dates) if locked else ""
+        if active_signups and retracted_signups:
+            status = "mixed"
+            status_label = "Teilweise zurückgenommen"
+        elif active_signups:
+            status = "booked"
+            status_label = "Gebucht"
+        elif retracted_signups:
+            status = "retracted"
+            status_label = "Zurückgenommen"
+        elif locked:
+            status = "closed"
+            status_label = "Geschlossen"
+        else:
+            status = "empty"
+            status_label = "Ungebucht"
+        price_rule = _meal_price_rule_for_targets(camp, meal, meal_date, participant, meal_targets)
+        slot = {
+            "meal": meal,
+            "label": meal_labels[meal],
+            "status": status,
+            "status_label": status_label,
+            "signups": scoped,
+            "active_signups": active_signups,
+            "active_signup_names": [
+                signup.family_member.full_name if signup.family_member_id else signup.participant.full_name
+                for signup in active_signups
+            ],
+            "retracted_signups": retracted_signups,
+            "locked": locked,
+            "lock_message": lock_message,
+            "description": menu_descriptions.get(meal_date, ""),
+            "price_rule": price_rule,
+            "unit_price": price_rule.unit_price if price_rule else None,
+            "dialog_id": "meal-dialog" if meal == MealSignup.Meal.DINNER else "breakfast-meal-dialog",
+        }
+        meals.append(slot)
         days.append(
             {
                 "date": meal_date,
-                "status": summary_slot["status"],
-                "status_label": summary_slot["status_label"],
-                "locked": summary_slot["locked"],
-                "lock_message": summary_slot["lock_message"],
-                "price_rule": summary_slot["price_rule"],
-                "unit_price": summary_slot["unit_price"],
-                "description": summary_slot["description"],
+                "status": slot["status"],
+                "status_label": slot["status_label"],
+                "locked": slot["locked"],
+                "lock_message": slot["lock_message"],
+                "price_rule": slot["price_rule"],
+                "unit_price": slot["unit_price"],
+                "description": slot["description"],
                 "meals": meals,
             }
         )
@@ -4261,7 +4247,13 @@ def kiosk_home(request, kiosk_mode="private"):
         signup.retraction_confirmation_token = (
             _sign_kiosk_meal_retraction(participant, signup) if signup.requires_partner_retraction_confirmation else ""
         )
-    meal_calendar_days = _kiosk_meal_calendar(participant.camp, participant, meal_signups, meal_targets)
+    dinner_calendar_days = _kiosk_meal_calendar(
+        participant.camp, participant, meal_signups, meal_targets, meal=MealSignup.Meal.DINNER
+    )
+    breakfast_calendar_days = _kiosk_meal_calendar(
+        participant.camp, participant, meal_signups, meal_targets, meal=MealSignup.Meal.BREAKFAST
+    )
+    meal_calendar_days = dinner_calendar_days
     is_meal_post = request.method == "POST" and request.POST.get("action") == "meal"
     selected_meal_date_values = set(request.POST.getlist(meal_form.add_prefix("meal_dates"))) if is_meal_post else set()
     for meal_calendar_day in meal_calendar_days:
@@ -4320,8 +4312,10 @@ def kiosk_home(request, kiosk_mode="private"):
         "pin_change_form": pin_change_form,
         "recent_quick_charges": recent_quick_charges,
         "meal_signups": meal_signups,
-        "meal_calendar_days": meal_calendar_days,
-        "meal_calendar_groups": _group_kiosk_meal_calendar(meal_calendar_days),
+        "meal_calendar_days": dinner_calendar_days,
+        "dinner_calendar_days": dinner_calendar_days,
+        "breakfast_calendar_days": breakfast_calendar_days,
+        "meal_calendar_groups": _group_kiosk_meal_calendar(dinner_calendar_days),
         "meal_dialog_open": is_meal_post and bool(meal_form.errors),
         "meal_dialog_step": "persons" if selected_meal_date_values else "dates",
         "drink_rules": quick_form.fields["price_rule"].queryset.filter(kind=PriceRule.Kind.DRINK),

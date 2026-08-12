@@ -1352,8 +1352,8 @@ def test_kiosk_home_renders_only_ordered_core_cards_and_menu_dialogs(kiosk_clien
     assert content.count(b"data-kiosk-card=") == 4
     food_card_end = content.index(b"</section>", positions[1])
     food_card = content[positions[1] : food_card_end]
-    assert b"data-open-meal-dialog-new" in food_card
-    assert b'data-meal="breakfast"' in food_card
+    assert b'data-dialog-target="meal-calendar-dialog"' in food_card
+    assert b'data-dialog-target="breakfast-meal-calendar"' not in food_card
     assert "Buche hier Frühstück, Snacks und Abendessen.".encode() in food_card
     for dialog_id in (
         b"kiosk-menu-dialog",
@@ -3258,12 +3258,125 @@ def test_kiosk_offers_breakfast_prebooking_in_meal_calendar(kiosk_client, monkey
 
     assert response.status_code == 200
     content = response.content.decode("utf-8")
-    assert 'data-meal="breakfast"' in content
-    assert "Frühstück buchen" in content
-    meal_day = next(day for day in response.context["meal_calendar_days"] if day["date"] == meal_date)
-    breakfast_slot = next(slot for slot in meal_day["meals"] if slot["meal"] == MealSignup.Meal.BREAKFAST)
+    assert 'data-meal-type="breakfast"' in content
+    assert "Jetzt buchen" in content
+    assert "Für später vorbestellen" in content
+    assert 'data-dialog-target="breakfast-meal-calendar"' not in content
+    assert 'data-dialog-target="breakfast-meal-dialog"' not in content
+    meal_day = next(day for day in response.context["breakfast_calendar_days"] if day["date"] == meal_date)
+    breakfast_slot = meal_day["meals"][0]
     assert breakfast_slot["price_rule"].name == "Standard Frühstück"
     assert breakfast_slot["locked"] is False
+    assert response.context["dinner_calendar_days"]
+
+
+@pytest.mark.django_db
+def test_kiosk_meal_calendars_keep_slots_descriptions_prices_and_aria_separate(kiosk_client, monkeypatch):
+    _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
+    meal_date = date(2026, 7, 1)
+    camp = CampFactory(starts_on=date(2026, 6, 30), ends_on=meal_date)
+    participant = ParticipantFactory(camp=camp)
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.BREAKFAST,
+        is_default=True,
+        applies_to_children=False,
+        applies_to_adults=True,
+        name="Standard Frühstück",
+        unit_price=Decimal("5.00"),
+    )
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        is_default=True,
+        applies_to_children=False,
+        applies_to_adults=True,
+        name="Standard Abendessen",
+        unit_price=Decimal("7.00"),
+    )
+    MealPlanEntry.objects.create(
+        camp=camp,
+        meal_date=meal_date,
+        meal=MealSignup.Meal.DINNER,
+        description="Pasta mit Salat",
+    )
+    breakfast_signup = MealSignup.objects.create(
+        participant=participant,
+        meal_date=meal_date,
+        meal=MealSignup.Meal.BREAKFAST,
+        variant=MealSignup.Variant.NORMAL,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.get(reverse("kiosk-home"))
+    content = response.content.decode()
+
+    dinner_day = next(day for day in response.context["dinner_calendar_days"] if day["date"] == meal_date)
+    breakfast_day = next(day for day in response.context["breakfast_calendar_days"] if day["date"] == meal_date)
+    assert dinner_day["meals"][0]["description"] == "Pasta mit Salat"
+    assert breakfast_day["meals"][0]["description"] == ""
+    assert breakfast_day["meals"][0]["price_rule"].name == "Standard Frühstück"
+    assert breakfast_day["status"] == "booked"
+    assert dinner_day["status"] == "empty"
+    assert f'name="meal_signup_id" value="{breakfast_signup.pk}"' in content
+
+    dinner_calendar = content[
+        content.index('id="meal-calendar-dialog"') : content.index(
+            "</dialog>", content.index('id="meal-calendar-dialog"')
+        )
+    ]
+    breakfast_calendar = content[
+        content.index('id="breakfast-meal-calendar"') : content.index(
+            "</dialog>", content.index('id="breakfast-meal-calendar"')
+        )
+    ]
+    assert "Pasta mit Salat" in dinner_calendar
+    assert "Pasta mit Salat" not in breakfast_calendar
+    assert "Standard Frühstück" not in dinner_calendar
+    assert "Standard Frühstück" in breakfast_calendar
+    assert "Frühstück:" in breakfast_calendar
+    assert "Abendessen:" in dinner_calendar
+    assert 'aria-label="' in dinner_calendar
+    assert 'aria-label="' in breakfast_calendar
+
+
+@pytest.mark.django_db
+def test_kiosk_breakfast_calendar_shows_retracted_status_separately(kiosk_client, monkeypatch):
+    _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
+    meal_date = date(2026, 7, 1)
+    camp = CampFactory(starts_on=meal_date, ends_on=meal_date)
+    participant = ParticipantFactory(camp=camp)
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.BREAKFAST,
+        is_default=True,
+        name="Frühstück",
+        unit_price=Decimal("5.00"),
+    )
+    MealSignup.objects.create(
+        participant=participant,
+        meal_date=meal_date,
+        meal=MealSignup.Meal.BREAKFAST,
+        variant=MealSignup.Variant.NORMAL,
+        status=MealSignup.Status.RETRACTED,
+        retracted_at=timezone.now(),
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.get(reverse("kiosk-home"))
+
+    breakfast_day = response.context["breakfast_calendar_days"][0]
+    dinner_day = response.context["dinner_calendar_days"][0]
+    assert breakfast_day["status"] == "retracted"
+    assert breakfast_day["status_label"] == "Zurückgenommen"
+    assert dinner_day["status"] == "empty"
 
 
 @pytest.mark.django_db
