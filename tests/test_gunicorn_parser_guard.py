@@ -5,6 +5,7 @@ import socket
 import subprocess
 import sys
 import time
+from types import SimpleNamespace
 
 import pytest
 from gunicorn.config import Config
@@ -109,6 +110,65 @@ def test_guard_configuration_uses_python_parser_and_installs_guard() -> None:
 
     assert gunicorn_parser_guard.configure(config) is config
     assert config.http_parser == "auto"
+
+
+@pytest.mark.parametrize("parser", ["auto", "fast", "rust"])
+def test_on_starting_fails_closed_for_non_python_parser(parser: str) -> None:
+    server = SimpleNamespace(cfg=SimpleNamespace(http_parser=parser))
+
+    with pytest.raises(RuntimeError, match="(?i)parser.*python"):
+        gunicorn_config.on_starting(server)
+
+
+@pytest.mark.parametrize(
+    ("parser", "expected_error"),
+    [
+        ("auto", "Unsafe Gunicorn HTTP parser"),
+        ("fast", "Unsafe Gunicorn HTTP parser"),
+        ("rust", "http_parser must be one of"),
+    ],
+)
+def test_real_gunicorn_start_fails_closed_for_cmd_args_parser_override(parser: str, expected_error: str) -> None:
+    with socket.socket() as reservation:
+        reservation.bind(("127.0.0.1", 0))
+        port = reservation.getsockname()[1]
+
+    command = [
+        sys.executable,
+        "-m",
+        "gunicorn",
+        "tests.gunicorn_probe_app:application",
+        "--config",
+        "python:config.gunicorn_config",
+        "--bind",
+        f"127.0.0.1:{port}",
+        "--workers",
+        "1",
+        "--worker-class",
+        "sync",
+        "--timeout",
+        "2",
+        "--log-level",
+        "error",
+    ]
+    environment = os.environ | {
+        "GUNICORN_CMD_ARGS": f"--http-parser={parser}",
+        "PYTHONPATH": "src",
+        "DJANGO_DEBUG": "1",
+        "DJANGO_SETTINGS_MODULE": "config.settings",
+    }
+    process = subprocess.Popen(
+        command,
+        cwd=".",
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    stdout, stderr = process.communicate(timeout=10)
+
+    assert process.returncode != 0
+    assert expected_error.encode() in stderr
+    assert b"Starting gunicorn" not in stdout + stderr
 
 
 @pytest.mark.parametrize("worker_class", ["sync", "gthread"])

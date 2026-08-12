@@ -41,7 +41,8 @@ separater Container; der Django-Prozess erhält keinen Zugriff auf Portainer-Zug
 
 Die Produktionskonfiguration lädt `config.gunicorn_config`. Sie pinnt den Python-HTTP-Parser an Gunicorn 26.0.0 und
 begrenzt fragmentierte Chunk-Metadatenzeilen auf 8 KiB. Bei einer abweichenden Gunicorn-Version startet der Prozess
-nicht, damit der versionsgebundene Parser-Guard nicht unbemerkt umgangen wird.
+nicht, damit der versionsgebundene Parser-Guard nicht unbemerkt umgangen wird. Das gilt auch für einen abweichenden
+`http_parser`-Wert aus `GUNICORN_CMD_ARGS`; der Prozess beendet sich dann vor dem Worker-Start.
 
 Passkeys verwenden discoverable Credentials mit verpflichtender User Verification. Registrierung und Anmeldung
 speichern getrennte, fünf Minuten gültige Einmal-Challenges in der Django-Session. RP-ID und Origin werden bei jeder
