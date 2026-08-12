@@ -255,7 +255,7 @@ def test_update_stack_image_sets_app_image_in_portainer_payload():
     )
 
 
-def test_perform_update_does_not_rollback_when_stack_mutation_fails(monkeypatch):
+def test_perform_update_rolls_back_when_portainer_update_call_fails(monkeypatch):
     states = []
     digest = image_digest("a")
     approved_image = target_digest_reference(digest)
@@ -287,10 +287,17 @@ def test_perform_update_does_not_rollback_when_stack_mutation_fails(monkeypatch)
     deployment_agent.update_lock.acquire()
     deployment_agent.perform_update()
 
-    client.update_stack_image.assert_called_once_with(approved_image)
+    assert client.update_stack_image.mock_calls == [
+        call(approved_image),
+        call("ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp@sha256:old-manifest"),
+    ]
     failed_state = states[-1]
     assert failed_state["phase"] == "failed"
     assert "Portainer API: update failed" in failed_state["error"]
+    assert (
+        "Rollback-Image fuer APP_IMAGE: ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp@sha256:old-manifest"
+        in failed_state["recovery"]
+    )
     assert "backup.sql.gz" in failed_state["recovery"]
 
 

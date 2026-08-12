@@ -891,8 +891,8 @@ def perform_update() -> None:
             backup=backup_name,
         )
         step = "Portainer Stack aktualisieren"
-        client.update_stack_image(approved_image)
         stack_mutated = True
+        client.update_stack_image(approved_image)
         step = "Healthcheck abwarten"
         wait_until_healthy()
         step = "Installiertes Image verifizieren"
