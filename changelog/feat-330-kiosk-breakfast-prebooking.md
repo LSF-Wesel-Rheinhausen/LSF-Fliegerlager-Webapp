@@ -26,6 +26,8 @@ und ARIA-Beschriftungen; der bestehende Abendessenkalender bleibt unverändert.
   Dialogübergaben mit genau einem offenen Dialog
 - unterbrechungsfreier Hintergrund-Scroll-Lock bei serialisierten Dialogübergaben sowie
   Aktualisierung des PWA-Caches auf Version 34
+- stabilisierte Rückwechsel zwischen Frühstücks-Zielauswahl und Frühstückskalender ohne
+  stale Rücksprungdialoge oder dauerhaft gehaltenen Scroll-Lock
 
 ## Offene Punkte
 

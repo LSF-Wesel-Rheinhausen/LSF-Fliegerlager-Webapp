@@ -184,10 +184,13 @@
                       show(transition.dialog, transition.focus);
                     }
                   } finally {
+                    const nextReturnTarget = returnTargets.get(transition.dialog);
                     if (!transition.dialog.open) {
-                      const failedReturnTarget = returnTargets.get(transition.dialog);
                       returnTargets.delete(transition.dialog);
-                      failedReturnTarget?.releaseScrollLock?.();
+                      nextReturnTarget?.releaseScrollLock?.();
+                    } else if (transition.releaseAfterShow) {
+                      returnTargets.delete(transition.dialog);
+                      transition.releaseScrollLock?.();
                     }
                   }
                 });
@@ -222,9 +225,15 @@
           if (currentDialog && currentDialog !== dialog) {
             bind(currentDialog);
             suppressedClose.add(currentDialog);
+            const currentReturnTarget = returnTargets.get(currentDialog);
+            const isReverseTransition = currentReturnTarget?.dialog === dialog;
+            if (isReverseTransition) {
+              returnTargets.delete(currentDialog);
+              currentReturnTarget.releaseScrollLock?.();
+            }
             const releaseScrollLock = window.dialogScrollLock?.hold();
-            pendingTransitions.set(currentDialog, { dialog, focus: trigger });
-            returnTargets.set(dialog, { dialog: currentDialog, focus: trigger, releaseScrollLock });
+            pendingTransitions.set(currentDialog, { dialog, focus: trigger, releaseScrollLock, releaseAfterShow: isReverseTransition });
+            returnTargets.set(dialog, { dialog: isReverseTransition ? null : currentDialog, focus: trigger, releaseScrollLock });
             currentDialog.close();
           } else {
             rootFocusTargets.set(dialog, trigger);
