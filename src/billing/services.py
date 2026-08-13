@@ -1560,3 +1560,50 @@ def get_cost_center_evaluation(camp):
         data["balance"] = data["income"] - data["expense_total"]
 
     return {code: data for code, data in evaluation.items() if data["income_count"] or data["expense_count"]}
+
+
+def sync_meal_signup_charges_for_camp(camp: Camp) -> int:
+    """Synchronize existing meal signups and charges with current camp price rules."""
+    rules = {
+        (rule.meal_type, rule.applies_to_children): rule
+        for rule in PriceRule.objects.filter(camp=camp, kind=PriceRule.Kind.MEAL, is_default=True)
+    }
+    if not rules:
+        return 0
+
+    updated_count = 0
+    signups = MealSignup.objects.filter(participant__camp=camp, status=MealSignup.Status.ACTIVE).select_related(
+        "charge", "family_member"
+    )
+    for signup in signups:
+        is_child = signup.variant in (MealSignup.Variant.NORMAL_CHILD, MealSignup.Variant.VEGAN_CHILD) or (
+            signup.family_member is not None and signup.family_member.role == ParticipantFamilyMember.Role.CHILD
+        )
+        rule = rules.get((signup.meal, is_child))
+        if rule is None:
+            rule = rules.get((signup.meal, False))
+        if rule is None:
+            continue
+
+        signup_changed = False
+        if signup.foerdersatz != rule.foerdersatz:
+            signup.foerdersatz = rule.foerdersatz
+            signup_changed = True
+
+        if signup_changed:
+            signup.save(update_fields=["foerdersatz", "updated_at"])
+            updated_count += 1
+
+        if signup.charge is not None:
+            charge = signup.charge
+            charge_changed = False
+            if charge.foerdersatz != rule.foerdersatz:
+                charge.foerdersatz = rule.foerdersatz
+                charge_changed = True
+            if charge.unit_price != rule.unit_price:
+                charge.unit_price = rule.unit_price
+                charge_changed = True
+            if charge_changed:
+                charge.save(update_fields=["foerdersatz", "unit_price", "updated_at"])
+
+    return updated_count

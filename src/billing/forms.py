@@ -1673,6 +1673,9 @@ class MealStandardPricesForm(forms.Form):
                             "applies_to_companions": False,
                         },
                     )
+            from .services import sync_meal_signup_charges_for_camp
+
+            sync_meal_signup_charges_for_camp(self.camp)
 
 
 class ShiftForm(forms.ModelForm):
