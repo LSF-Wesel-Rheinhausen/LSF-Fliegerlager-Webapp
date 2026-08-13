@@ -24,6 +24,8 @@ und ARIA-Beschriftungen; der bestehende Abendessenkalender bleibt unverändert.
   Zielzusammenfassung und Rückkehr über „Ändern“
 - deterministischer Legacy-Deep-Link `#meal-calendar` und zustandsbasierte native
   Dialogübergaben mit genau einem offenen Dialog
+- unterbrechungsfreier Hintergrund-Scroll-Lock bei serialisierten Dialogübergaben sowie
+  Aktualisierung des PWA-Caches auf Version 34
 
 ## Offene Punkte
 

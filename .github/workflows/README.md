@@ -2,6 +2,19 @@
 
 GitHub-Actions-Workflows.
 
+## Playwright-Systemabhängigkeiten
+
+Der Browser-Workflow cached die Playwright-Browser-Binaries in
+`~/.cache/ms-playwright`. Die von `npx playwright install-deps` installierten
+Systemabhängigkeiten werden dagegen absichtlich nicht gecacht: Sie verändern
+die systemweite Runner-Installation über APT und sind an das konkrete
+Ubuntu-Image, dessen Paketstände und dessen Architektur gebunden. Ein
+gespeicherter APT- oder `/usr`-Cache wäre dadurch stale und nicht zuverlässig
+wiederverwendbar. GitHub-hosted Runner werden ohnehin frisch bereitgestellt;
+`install-deps` bleibt deshalb der wartbare und reproduzierbare Schritt pro
+Browser-Lauf. Ein echtes OS-Image- oder Runner-Prebaking wäre eine separate
+Infrastrukturentscheidung, keine zusätzliche Cache-Action.
+
 Externe Actions sind aus Supply-Chain-Sicherheitsgründen auf vollständige, lowercase
 40-stellige Commit-SHAs gepinnt. Der lesbare Release-Stand steht als Kommentar neben
 dem SHA; lokale `./`-Actions sind davon ausgenommen. Änderungen an Workflow-Dateien

@@ -3,7 +3,7 @@
 <html lang="de" data-pwa-worker="{{ pwa_worker_url }}" data-pwa-scope="{{ pwa_worker_scope }}">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>{% block title %}Kiosk{% endblock %}</title>
     <link rel="icon" type="image/png" href="{{ pwa_icon_url }}">
     <link rel="apple-touch-icon" sizes="192x192" href="{{ pwa_icon_url }}">
@@ -11,6 +11,7 @@
     <meta name="theme-color" content="#1f5d42">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <script src="{% static 'billing/theme.js' %}?v=1"></script>
+    <script src="{% static 'billing/dialog-scroll-lock.js' %}?v=1"></script>
     <script src="{% static 'billing/pwa.js' %}?v=2" defer></script>
     <link rel="stylesheet" href="{% static 'billing/app-v8.css' %}">
   </head>
@@ -178,8 +179,16 @@
               pendingTransitions.delete(dialog);
               if (transition) {
                 window.requestAnimationFrame(() => {
-                  if (!dialog.open && !transition.dialog.open) {
-                    show(transition.dialog, transition.focus);
+                  try {
+                    if (!dialog.open && !transition.dialog.open) {
+                      show(transition.dialog, transition.focus);
+                    }
+                  } finally {
+                    if (!transition.dialog.open) {
+                      const failedReturnTarget = returnTargets.get(transition.dialog);
+                      returnTargets.delete(transition.dialog);
+                      failedReturnTarget?.releaseScrollLock?.();
+                    }
                   }
                 });
               }
@@ -189,12 +198,17 @@
             returnTargets.delete(dialog);
             if (returnTarget?.dialog?.isConnected && !returnTarget.dialog.open) {
               window.requestAnimationFrame(() => {
-                if (!dialog.open && !returnTarget.dialog.open) {
-                  show(returnTarget.dialog, returnTarget.focus);
+                try {
+                  if (!dialog.open && !returnTarget.dialog.open) {
+                    show(returnTarget.dialog, returnTarget.focus);
+                  }
+                } finally {
+                  returnTarget.releaseScrollLock?.();
                 }
               });
               return;
             }
+            returnTarget?.releaseScrollLock?.();
             const rootFocusTarget = rootFocusTargets.get(dialog);
             rootFocusTargets.delete(dialog);
             window.requestAnimationFrame(() => rootFocusTarget?.focus());
@@ -208,8 +222,9 @@
           if (currentDialog && currentDialog !== dialog) {
             bind(currentDialog);
             suppressedClose.add(currentDialog);
+            const releaseScrollLock = window.dialogScrollLock?.hold();
             pendingTransitions.set(currentDialog, { dialog, focus: trigger });
-            returnTargets.set(dialog, { dialog: currentDialog, focus: trigger });
+            returnTargets.set(dialog, { dialog: currentDialog, focus: trigger, releaseScrollLock });
             currentDialog.close();
           } else {
             rootFocusTargets.set(dialog, trigger);

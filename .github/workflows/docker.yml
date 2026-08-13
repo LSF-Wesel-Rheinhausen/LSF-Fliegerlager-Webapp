@@ -9,6 +9,9 @@ jobs:
   docker-test:
     name: Build and test containers
     runs-on: ubuntu-latest
+    concurrency:
+      group: docker-test-${{ github.ref }}
+      cancel-in-progress: true
     permissions:
       contents: read
 
@@ -78,6 +81,9 @@ jobs:
     needs: docker-test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    concurrency:
+      group: docker-publish-${{ github.ref }}
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write

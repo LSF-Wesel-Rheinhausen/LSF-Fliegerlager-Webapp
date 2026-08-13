@@ -1724,6 +1724,15 @@ test("Mobile Kiosk: fixed bottom navigation bar is present and functional on mob
   const bottomNav = page.locator(".kiosk-mobile-bottom-nav");
   await expect(bottomNav).toBeVisible();
 
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty("--test-safe-area-bottom", "34px");
+    document.documentElement.style.setProperty("--test-safe-area-left", "0px");
+    document.documentElement.style.setProperty("--test-safe-area-right", "0px");
+    document.documentElement.style.setProperty("--mobile-safe-area-bottom", "var(--test-safe-area-bottom)");
+    document.documentElement.style.setProperty("--mobile-safe-area-left", "var(--test-safe-area-left)");
+    document.documentElement.style.setProperty("--mobile-safe-area-right", "var(--test-safe-area-right)");
+  });
+
   // Verify fixed position at bottom
   const position = await bottomNav.evaluate((el) => window.getComputedStyle(el).position);
   expect(position).toBe("fixed");
@@ -1731,14 +1740,24 @@ test("Mobile Kiosk: fixed bottom navigation bar is present and functional on mob
   const bottomSpacing = await bottomNav.evaluate((el) => {
     const styles = window.getComputedStyle(el);
     const bounds = el.getBoundingClientRect();
+    const safeArea = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--test-safe-area-bottom"));
     return {
       paddingBottom: Number.parseFloat(styles.paddingBottom),
       bottom: bounds.bottom,
+      safeArea,
       viewportHeight: window.innerHeight,
+      items: [...el.querySelectorAll(".kiosk-mobile-bottom-nav__item")].map((item) => {
+        const itemBounds = item.getBoundingClientRect();
+        return { width: itemBounds.width, height: itemBounds.height, bottom: itemBounds.bottom };
+      }),
     };
   });
-  expect(bottomSpacing.paddingBottom).toBeGreaterThanOrEqual(12);
   expect(bottomSpacing.bottom).toBe(bottomSpacing.viewportHeight);
+  for (const item of bottomSpacing.items) {
+    expect(item.width).toBeGreaterThanOrEqual(44);
+    expect(item.height).toBeGreaterThanOrEqual(44);
+    expect(item.bottom).toBeLessThanOrEqual(bottomSpacing.viewportHeight - bottomSpacing.safeArea);
+  }
 
   // Verify top navigation is hidden on mobile
   const topNav = page.locator(".kiosk-nav");
