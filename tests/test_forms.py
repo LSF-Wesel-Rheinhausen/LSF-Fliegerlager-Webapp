@@ -180,6 +180,32 @@ def test_kiosk_login_form_lists_companions_but_not_children():
 
 
 @pytest.mark.django_db
+def test_kiosk_login_form_keeps_active_companion_choice_unique():
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp)
+    active_companion = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Active",
+        last_name="Companion",
+        role=ParticipantFamilyMember.Role.COMPANION,
+        is_active=True,
+    )
+    inactive_companion = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Inactive",
+        last_name="Companion",
+        role=ParticipantFamilyMember.Role.COMPANION,
+        is_active=False,
+    )
+
+    form = KioskLoginForm()
+    values = [str(value) for value, _label in form.fields["participant"].choices]
+
+    assert values.count(f"family-{active_companion.pk}") == 1
+    assert f"family-{inactive_companion.pk}" not in values
+
+
+@pytest.mark.django_db
 def test_first_admin_setup_form_commit_false():
     form = FirstAdminSetupForm(
         data={

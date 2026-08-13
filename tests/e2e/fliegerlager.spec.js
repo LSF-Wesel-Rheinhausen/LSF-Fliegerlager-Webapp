@@ -108,6 +108,18 @@ async function assertKioskCardsDoNotOverlap(page) {
   expect(overlaps, "Kiosk-Karten überlappen sich").toEqual([]);
 }
 
+async function expectModalDialogIds(page, expectedIds) {
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        [...document.querySelectorAll("dialog")]
+          .filter((dialog) => dialog.open || dialog.matches(":modal"))
+          .map((dialog) => dialog.id),
+      ),
+    )
+    .toEqual(expectedIds);
+}
+
 async function assertReadableContrast(locator, minimumRatio = 4.5) {
   const colors = await locator.evaluate((element) => {
     const styles = window.getComputedStyle(element);
@@ -601,7 +613,7 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
   await page.getByRole("button", { name: "Anmelden", exact: true }).click();
 
   // Now in Kiosk Home
-  await expect(page).toHaveURL(/.*\/kiosk\//);
+  await expect(page).toHaveURL(/\/kiosk\/$/);
   const sessionCookie = (await page.context().cookies()).find((cookie) => cookie.name === "sessionid");
   expect(sessionCookie).toBeDefined();
   expect(sessionCookie.expires).toBeGreaterThan(Date.now() / 1000);
@@ -708,6 +720,7 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
   await page.keyboard.press("Escape");
   await expect(page.locator("dialog#meal-calendar-dialog")).toBeVisible();
   await page.keyboard.press("Escape");
+  await expectModalDialogIds(page, []);
 
   // Breakfast quick booking stays primary; prebooking is a secondary action.
   const expectOnlyModal = async (dialogId) => {
@@ -735,6 +748,7 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
   await breakfastPrebookButton.click();
   const breakfastCalendar = page.locator("dialog#breakfast-meal-dialog");
   await expect(breakfastCalendar).toBeVisible();
+  await expectModalDialogIds(page, ["breakfast-meal-dialog"]);
   await expect(page.locator("dialog:open")).toHaveCount(1);
   await expectOnlyModal("breakfast-meal-dialog");
   await expect(breakfastQuickDialog).toBeHidden();
@@ -747,6 +761,7 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
   await expectButtonHitTestable(breakfastPrebookButton);
   await breakfastPrebookButton.click();
   await expect(breakfastCalendar).toBeVisible();
+  await expectModalDialogIds(page, ["breakfast-meal-dialog"]);
   await expect(page.locator("dialog:open")).toHaveCount(1);
   await expectOnlyModal("breakfast-meal-dialog");
   await expect(breakfastQuickDialog).toBeHidden();
@@ -754,6 +769,7 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
   await expect(breakfastCalendar).toBeHidden();
   await expect.poll(() => page.locator("dialog:open").evaluateAll((dialogs) => dialogs.map((dialog) => dialog.id))).toEqual(["food-dialog"]);
   await breakfastQuickDialog.getByRole("button", { name: "Schließen" }).click();
+  await expectModalDialogIds(page, []);
   await expect.poll(() => page.locator("dialog:open").evaluateAll((dialogs) => dialogs.map((dialog) => dialog.id))).toEqual([]);
   await expect.poll(() => page.evaluate(() => ({
     scrollLockClass: document.documentElement.classList.contains("dialog-scroll-lock"),
@@ -774,6 +790,7 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
   await expect(page.getByText(/Essensanmeldung wurde für 1 Tag und 1 Person gespeichert\./)).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.locator("dialog#meal-calendar-dialog")).toBeHidden();
+  await expectModalDialogIds(page, []);
 
   await page.getByRole("button", { name: "Apfelsaft" }).click();
   await page.locator("dialog#quick-dialog").getByRole("button", { name: "1x" }).click();

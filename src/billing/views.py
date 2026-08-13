@@ -2242,6 +2242,7 @@ def _linked_booking_participants(participant):
             camp__is_active=True,
             archived_at__isnull=True,
         )
+        .exclude(pk=participant.pk)
         .select_related("camp")
         .distinct()
         .prefetch_related(
@@ -2253,6 +2254,17 @@ def _linked_booking_participants(participant):
         )
         .order_by("last_name", "first_name", "pk")
     )
+
+
+def _deduplicate_kiosk_targets(targets):
+    seen_tokens = set()
+    unique_targets = []
+    for target in targets:
+        if target["token"] in seen_tokens:
+            continue
+        seen_tokens.add(target["token"])
+        unique_targets.append(target)
+    return unique_targets
 
 
 def _notify_booking_link_by_id(
@@ -2633,6 +2645,7 @@ def _kiosk_checkin_participants(
                     "camp": linked_participant.camp,
                 }
             )
+    targets = _deduplicate_kiosk_targets(targets)
     for target in targets:
         target["state_token"] = _sign_kiosk_checkin_state(
             participant,
@@ -2910,7 +2923,7 @@ def _kiosk_meal_targets(
                     "variant_choices": _variant_choices_for_booking_target(member.is_child),
                 }
             )
-    return targets
+    return _deduplicate_kiosk_targets(targets)
 
 
 def _target_lookup(meal_targets):
