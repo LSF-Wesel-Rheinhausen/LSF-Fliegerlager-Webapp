@@ -1564,11 +1564,8 @@ def get_cost_center_evaluation(camp):
 
 def sync_meal_signup_charges_for_camp(camp: Camp) -> int:
     """Synchronize existing meal signups and charges with current camp price rules."""
-    rules = {
-        (rule.meal_type, rule.applies_to_children): rule
-        for rule in PriceRule.objects.filter(camp=camp, kind=PriceRule.Kind.MEAL, is_default=True)
-    }
-    if not rules:
+    all_rules = list(PriceRule.objects.filter(camp=camp, kind=PriceRule.Kind.MEAL))
+    if not all_rules:
         return 0
 
     updated_count = 0
@@ -1579,11 +1576,29 @@ def sync_meal_signup_charges_for_camp(camp: Camp) -> int:
         is_child = signup.variant in (MealSignup.Variant.NORMAL_CHILD, MealSignup.Variant.VEGAN_CHILD) or (
             signup.family_member is not None and signup.family_member.role == ParticipantFamilyMember.Role.CHILD
         )
-        rule = rules.get((signup.meal, is_child))
-        if rule is None:
-            rule = rules.get((signup.meal, False))
-        if rule is None:
+        matching = [
+            r
+            for r in all_rules
+            if r.meal_type == signup.meal
+            and (r.meal_date == signup.meal_date or r.meal_date is None)
+            and (r.applies_to_children if is_child else r.applies_to_adults)
+        ]
+        if not matching:
+            matching = [
+                r
+                for r in all_rules
+                if r.meal_type == signup.meal and (r.meal_date == signup.meal_date or r.meal_date is None)
+            ]
+        if not matching:
             continue
+
+        matching.sort(
+            key=lambda r: (
+                r.meal_date is None,
+                not (r.applies_to_children if is_child else r.applies_to_adults),
+            )
+        )
+        rule = matching[0]
 
         signup_changed = False
         if signup.foerdersatz != rule.foerdersatz:

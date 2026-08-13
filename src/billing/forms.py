@@ -572,6 +572,14 @@ class PriceRuleForm(forms.ModelForm):
             cleaned_data["camp_flat_role"] = ""
         return cleaned_data
 
+    def save(self, commit: bool = True) -> PriceRule:
+        rule = super().save(commit=commit)
+        if commit and rule.kind == PriceRule.Kind.MEAL and rule.camp:
+            from .services import sync_meal_signup_charges_for_camp
+
+            sync_meal_signup_charges_for_camp(rule.camp)
+        return rule
+
 
 class CampFlatRateSettingsForm(forms.Form):
     participant_1w_price = forms.DecimalField(label="Teilnehmer 1 Woche", min_value=0, max_digits=10, decimal_places=2)
