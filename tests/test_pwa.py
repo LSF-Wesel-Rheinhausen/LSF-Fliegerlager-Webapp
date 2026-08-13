@@ -1,4 +1,7 @@
+import hashlib
 import json
+import struct
+from pathlib import Path
 
 import pytest
 from django.templatetags.static import static
@@ -171,11 +174,37 @@ def test_pwa_surfaces_use_distinct_install_icons(client):
     assert len(set(icon_sources)) == 3
 
 
+def test_kiosk_brand_uses_authoritative_club_logo_without_changing_other_surfaces():
+    icons_dir = Path(__file__).resolve().parents[1] / "src/static/billing/icons"
+    kiosk_svg = (icons_dir / "kiosk-icon.svg").read_text(encoding="utf-8")
+
+    assert '<title id="title">Luftsportfreunde Wesel-Rheinhausen e.V.</title>' in kiosk_svg
+    assert 'aria-labelledby="title"' in kiosk_svg
+    assert '<image href="../logo.jpg"' in kiosk_svg
+    assert 'preserveAspectRatio="xMidYMid meet"' in kiosk_svg
+    assert "<path" not in kiosk_svg
+    assert "<circle" not in kiosk_svg
+
+    for size in (192, 512):
+        png = (icons_dir / f"kiosk-icon-{size}.png").read_bytes()
+        width, height, bit_depth, color_type = struct.unpack(">IIBB", png[16:26])
+        assert (width, height) == (size, size)
+        assert (bit_depth, color_type) == (8, 6)
+
+    for surface in ("admin", "central"):
+        icon = icons_dir / f"{surface}-icon.svg"
+        expected_hash = {
+            "admin": "e73dc895e7c9fd451b8b7c317da8d10617f90f971f6c7f1781806a1db08f075f",
+            "central": "144dbac3498358c5bc5511b7e5341b364513608322484ad9ce583bb4744774a8",
+        }[surface]
+        assert hashlib.sha256(icon.read_bytes()).hexdigest() == expected_hash
+
+
 @pytest.mark.parametrize(
     ("route_name", "expected_scope", "expected_cache_name"),
     [
         ("pwa-worker-admin", "/", "fliegerlager-admin-v34"),
-        ("pwa-worker-kiosk", "/kiosk/", "fliegerlager-kiosk-v34"),
+        ("pwa-worker-kiosk", "/kiosk/", "fliegerlager-kiosk-v35"),
         ("pwa-worker-central", "/central/kiosk/", "fliegerlager-central-v34"),
     ],
 )
