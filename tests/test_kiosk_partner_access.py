@@ -2496,6 +2496,43 @@ def test_partner_meal_retraction_rejects_charge_reassigned_after_confirmation():
 
 
 @pytest.mark.django_db
+def test_family_meal_retraction_rejects_ambiguous_historical_charge_without_mutating_signup():
+    guardian = ParticipantFactory()
+    member = ParticipantFamilyMember.objects.create(
+        guardian=guardian,
+        first_name="Kind",
+        last_name="Historisch",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    charge = Charge.objects.create(
+        participant=guardian,
+        kind=Charge.Kind.FOOD,
+        description="Historisches Abendessen",
+        quantity=Decimal("1.00"),
+        unit_price=Decimal("8.00"),
+        occurred_on=date(2026, 7, 2),
+    )
+    signup = MealSignup.objects.create(
+        participant=guardian,
+        family_member=member,
+        meal_date=date(2026, 7, 2),
+        meal=MealSignup.Meal.DINNER,
+        variant=MealSignup.Variant.NORMAL_CHILD,
+        charge=charge,
+    )
+
+    with transaction.atomic():
+        rejected = _retract_meal_signup(signup, guardian)
+
+    signup.refresh_from_db()
+    charge.refresh_from_db()
+    assert rejected is False
+    assert signup.status == MealSignup.Status.ACTIVE
+    assert signup.retraction_version == 0
+    assert charge.deleted_at is None
+
+
+@pytest.mark.django_db
 def test_partner_meal_retraction_revalidates_stale_state_after_row_lock(
     kiosk_client,
     django_capture_on_commit_callbacks,

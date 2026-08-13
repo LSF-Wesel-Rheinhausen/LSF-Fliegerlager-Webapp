@@ -7,6 +7,7 @@ from io import BytesIO, StringIO
 import pytest
 from django.apps import apps
 from django.core.exceptions import ValidationError
+from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
 from openpyxl import load_workbook
@@ -333,3 +334,129 @@ def test_charge_edit_rejects_a_target_from_another_guardian(client):
     assert response.status_code == 200
     charge.refresh_from_db()
     assert charge.family_member is None
+
+
+@pytest.mark.django_db
+def test_charge_create_accepts_the_guardians_family_member_and_rejects_foreign_target(client):
+    guardian = ParticipantFactory()
+    member = ParticipantFamilyMemberFactory(guardian=guardian)
+    foreign_member = ParticipantFamilyMemberFactory(guardian=ParticipantFactory(camp=guardian.camp))
+    client.force_login(SuperUserFactory())
+    url = reverse("charge-create", args=[guardian.pk])
+    data = {
+        "kind": Charge.Kind.OTHER,
+        "description": "Familienkosten",
+        "quantity": "1",
+        "unit_price": "10.00",
+        "foerdersatz": "0",
+        "occurred_on": "",
+    }
+
+    accepted = client.post(url, {**data, "family_member": member.pk})
+    rejected = client.post(url, {**data, "family_member": foreign_member.pk})
+
+    assert accepted.status_code == 302
+    assert Charge.objects.get(description="Familienkosten").family_member == member
+    assert rejected.status_code == 200
+    assert Charge.objects.filter(family_member=foreign_member).count() == 0
+
+
+@pytest.mark.django_db
+def test_family_member_financial_edit_requires_confirmation_but_name_edit_does_not(client):
+    guardian = ParticipantFactory()
+    member = ParticipantFamilyMemberFactory(guardian=guardian, arrival_date=date(2026, 7, 1))
+    client.force_login(SuperUserFactory())
+    url = reverse("participant-family-member-edit", args=[guardian.pk, member.pk])
+    data = {
+        "first_name": member.first_name,
+        "last_name": member.last_name,
+        "role": member.role,
+        "arrival_date": "2026-07-02",
+        "departure_date": "",
+        "is_active": "on",
+    }
+
+    confirmation = client.post(url, data)
+    member.refresh_from_db()
+    name_edit = client.post(url, {**data, "arrival_date": "2026-07-01", "first_name": "Neu"})
+
+    assert confirmation.status_code == 200
+    assert b"Abrechnung" in confirmation.content
+    assert member.arrival_date == date(2026, 7, 1)
+    assert name_edit.status_code == 302
+    member.refresh_from_db()
+    assert member.first_name == "Neu"
+
+
+@pytest.mark.django_db
+def test_family_member_financial_edit_persists_only_after_explicit_confirmation(client):
+    guardian = ParticipantFactory()
+    member = ParticipantFamilyMemberFactory(guardian=guardian, is_active=True)
+    client.force_login(SuperUserFactory())
+    url = reverse("participant-family-member-edit", args=[guardian.pk, member.pk])
+    data = {
+        "first_name": member.first_name,
+        "last_name": member.last_name,
+        "role": member.role,
+        "arrival_date": "",
+        "departure_date": "",
+    }
+
+    response = client.post(url, {**data, "confirm_settlement_change": "1"})
+
+    assert response.status_code == 302
+    member.refresh_from_db()
+    assert member.is_active is False
+
+
+@pytest.mark.django_db
+def test_family_member_edit_rejects_invalid_and_csrf_missing_financial_updates(client):
+    guardian = ParticipantFactory()
+    member = ParticipantFamilyMemberFactory(guardian=guardian, is_active=True)
+    admin = SuperUserFactory()
+    client.force_login(admin)
+    csrf_client = Client(enforce_csrf_checks=True)
+    csrf_client.force_login(admin)
+    url = reverse("participant-family-member-edit", args=[guardian.pk, member.pk])
+
+    invalid = client.post(url, {"first_name": "Neu"})
+    csrf_rejected = csrf_client.post(
+        url,
+        {
+            "first_name": member.first_name,
+            "last_name": member.last_name,
+            "role": member.role,
+            "arrival_date": "",
+            "departure_date": "",
+            "confirm_settlement_change": "1",
+        },
+    )
+
+    member.refresh_from_db()
+    assert invalid.status_code == 200
+    assert csrf_rejected.status_code == 403
+    assert member.is_active is True
+
+
+@pytest.mark.django_db
+def test_participant_detail_renders_immutable_family_audit_target_name(client):
+    guardian = ParticipantFactory()
+    member = ParticipantFamilyMemberFactory(guardian=guardian, first_name="Alt")
+    audit = KioskActionAuditLog.objects.create(
+        camp=guardian.camp,
+        actor_participant=guardian,
+        target_participant=guardian,
+        target_family_member=member,
+        action=KioskActionAuditLog.Action.MEAL_BOOKED,
+        description="Essensanmeldung gespeichert.",
+    )
+    member.first_name = "Neu"
+    member.save(update_fields=["first_name", "updated_at"])
+    client.force_login(SuperUserFactory())
+
+    response = client.get(reverse("participant-detail", args=[guardian.pk]))
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert f"{audit.target_display_name} – Essensanmeldung gespeichert." in content
+    assert f"{member.full_name} – Essensanmeldung gespeichert." not in content

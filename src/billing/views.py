@@ -1143,12 +1143,25 @@ def participant_family_member_edit(request, participant_id, family_member_id):
     )
     form = ParticipantFamilyMemberForm(request.POST or None, instance=member)
     if request.method == "POST" and form.is_valid():
+        settlement_fields = {"arrival_date", "departure_date", "is_active"}
+        changes_settlement = bool(settlement_fields.intersection(form.changed_data))
+        if changes_settlement and request.POST.get("confirm_settlement_change") != "1":
+            return render(
+                request,
+                "billing/participant_family_member_edit.html",
+                {
+                    "form": form,
+                    "title": "Familienmitglied bearbeiten",
+                    "camp": member.guardian.camp,
+                    "confirmation_required": True,
+                },
+            )
         form.save()
         messages.success(request, "Familienmitglied wurde gespeichert.")
         return redirect("participant-detail", participant_id=participant_id)
     return render(
         request,
-        "billing/form.html",
+        "billing/participant_family_member_edit.html",
         {"form": form, "title": "Familienmitglied bearbeiten", "camp": member.guardian.camp},
     )
 
@@ -1193,10 +1206,10 @@ def settlement_snapshot_export_pdf(request, settlement_id):
 def charge_create(request, participant_id):
     participant = get_object_or_404(Participant, pk=participant_id, archived_at__isnull=True)
     form = ChargeForm(request.POST or None, guardian=participant)
+    form.instance.participant = participant
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
             charge = form.save(commit=False)
-            charge.participant = participant
             charge.save()
         messages.success(request, "Kostenposition wurde gespeichert.")
         return redirect("participant-detail", participant_id=participant.pk)
@@ -3280,7 +3293,12 @@ def _retract_meal_signup(
     locked_charge = None
     if locked_signup.charge_id is not None:
         locked_charge = Charge.objects.select_for_update(of=("self",)).filter(pk=locked_signup.charge_id).first()
-        if locked_charge is None or locked_charge.participant_id != affected_participant.pk:
+        if (
+            locked_charge is None
+            or locked_charge.participant_id != affected_participant.pk
+            or locked_charge.family_member_id
+            != (affected_family_member.pk if affected_family_member is not None else None)
+        ):
             return False
     locked_signup.charge = locked_charge
     booking_link = None
@@ -3313,8 +3331,6 @@ def _retract_meal_signup(
     locked_signup.save(update_fields=["status", "retraction_version", "retracted_at", "updated_at"])
     charge = locked_charge
     if charge is not None:
-        if charge.family_member_id != (affected_family_member.pk if affected_family_member is not None else None):
-            return False
         charge.deleted_at = timezone.now()
         charge.deleted_by = None
         charge.save(update_fields=["deleted_at", "deleted_by"])

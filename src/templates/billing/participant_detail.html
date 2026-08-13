@@ -200,7 +200,7 @@
     </ul>
     <h3>Kiosk-Audit</h3>
     <ul>
-      {% for log in family_audit_logs %}<li>{{ log.created_at }}: {{ log.target_family_member.full_name }} – {{ log.description }}</li>{% empty %}<li>Keine Familien-Audit-Einträge vorhanden.</li>{% endfor %}
+      {% for log in family_audit_logs %}<li>{{ log.created_at }}: {{ log.target_display_name|default:"Unbekanntes Ziel" }} – {{ log.description }}</li>{% empty %}<li>Keine Familien-Audit-Einträge vorhanden.</li>{% endfor %}
     </ul>
   </section>
 
