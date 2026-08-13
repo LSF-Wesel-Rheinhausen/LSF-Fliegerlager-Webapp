@@ -861,6 +861,103 @@ def test_linked_households_are_prefetched_once_and_reused_by_target_builders(dja
 
 
 @pytest.mark.django_db
+def test_target_builders_deduplicate_an_overlapping_family_member_token():
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp)
+    partner = ParticipantFactory(camp=camp)
+    companion = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Shared",
+        last_name="Companion",
+        role=ParticipantFamilyMember.Role.COMPANION,
+        is_active=True,
+    )
+    partner.active_kiosk_family_members = [companion]
+
+    meal_targets = _kiosk_meal_targets(
+        participant,
+        family_members=[companion],
+        linked_participants=[partner],
+    )
+    checkin_targets = _kiosk_checkin_participants(
+        participant,
+        family_members=[companion],
+        linked_participants=[partner],
+    )
+
+    token = f"family-{companion.pk}"
+    assert [target["token"] for target in meal_targets].count(token) == 1
+    assert [target["token"] for target in checkin_targets].count(token) == 1
+
+
+@pytest.mark.django_db
+def test_target_builders_keep_same_named_family_members_with_distinct_pks():
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp)
+    partner = ParticipantFactory(camp=camp)
+    own_companion = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Same",
+        last_name="Name",
+        role=ParticipantFamilyMember.Role.COMPANION,
+        is_active=True,
+    )
+    linked_companion = ParticipantFamilyMember.objects.create(
+        guardian=partner,
+        first_name="Same",
+        last_name="Name",
+        role=ParticipantFamilyMember.Role.COMPANION,
+        is_active=True,
+    )
+    partner.active_kiosk_family_members = [linked_companion]
+
+    meal_targets = _kiosk_meal_targets(
+        participant,
+        family_members=[own_companion],
+        linked_participants=[partner],
+    )
+    checkin_targets = _kiosk_checkin_participants(
+        participant,
+        family_members=[own_companion],
+        linked_participants=[partner],
+    )
+
+    expected_tokens = {f"family-{own_companion.pk}", f"family-{linked_companion.pk}"}
+    assert expected_tokens <= {target["token"] for target in meal_targets}
+    assert expected_tokens <= {target["token"] for target in checkin_targets}
+
+
+@pytest.mark.django_db
+def test_target_builders_only_include_active_own_family_members():
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp)
+    active_companion = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Active",
+        last_name="Companion",
+        role=ParticipantFamilyMember.Role.COMPANION,
+        is_active=True,
+    )
+    inactive_companion = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Inactive",
+        last_name="Companion",
+        role=ParticipantFamilyMember.Role.COMPANION,
+        is_active=False,
+    )
+
+    meal_targets = _kiosk_meal_targets(participant)
+    checkin_targets = _kiosk_checkin_participants(participant)
+
+    meal_tokens = {target["token"] for target in meal_targets}
+    checkin_tokens = {target["token"] for target in checkin_targets}
+    assert f"family-{active_companion.pk}" in meal_tokens
+    assert f"family-{active_companion.pk}" in checkin_tokens
+    assert f"family-{inactive_companion.pk}" not in meal_tokens
+    assert f"family-{inactive_companion.pk}" not in checkin_tokens
+
+
+@pytest.mark.django_db
 def test_kiosk_home_links_to_partner_activity_page(kiosk_client):
     participant = ParticipantFactory()
     session = kiosk_client.session
