@@ -59,9 +59,16 @@ jobs:
       - name: Python tests
         run: pytest
 
-  browser:
-    name: Browser UI tests
+  browser_matrix:
+    name: Browser UI tests (${{ matrix.browser }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser:
+          - chromium
+          - firefox
+          - webkit
 
     steps:
       - name: Checkout
@@ -98,17 +105,45 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+          key: ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('package-lock.json') }}
 
       - name: Install Playwright system dependencies
-        run: npx playwright install-deps
+        run: npx playwright install-deps ${{ matrix.browser }}
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install
+        run: npx playwright install ${{ matrix.browser }}
 
       - name: Browser UI tests
-        run: npm run test:e2e
+        run: npx playwright test --project=${{ matrix.browser }}
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-report-${{ matrix.browser }}-${{ github.run_id }}
+          path: playwright-report
+          if-no-files-found: ignore
+
+      - name: Upload Playwright test results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-test-results-${{ matrix.browser }}-${{ github.run_id }}
+          path: test-results
+          if-no-files-found: ignore
+
+  browser-gate:
+    name: Browser UI tests
+    needs: browser_matrix
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Require every browser job to pass
+        env:
+          MATRIX_RESULT: ${{ needs.browser_matrix.result }}
+        run: test "$MATRIX_RESULT" = success
 
   security-concurrency:
     name: PostgreSQL security concurrency tests

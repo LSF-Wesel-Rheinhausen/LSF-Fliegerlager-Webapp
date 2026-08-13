@@ -14,7 +14,7 @@ def _ci_workflow() -> dict[str, object]:
 
 def _browser_matrix_job() -> dict[str, object]:
     jobs = dict(_ci_workflow()["jobs"])
-    return dict(jobs["browser-matrix"])
+    return dict(jobs["browser_matrix"])
 
 
 def test_browser_matrix_runs_all_supported_playwright_projects() -> None:
@@ -48,7 +48,8 @@ def test_browser_ui_tests_gate_aggregates_the_browser_matrix() -> None:
     gate = dict(jobs["browser-gate"])
 
     assert gate["name"] == "Browser UI tests"
-    assert gate["needs"] == "browser-matrix"
+    assert gate["needs"] == "browser_matrix"
     assert gate["if"] == "${{ always() }}"
-    gate_commands = [step["run"] for step in gate["steps"] if isinstance(step, dict) and "run" in step]
-    assert any("needs.browser-matrix.result" in command for command in gate_commands)
+    gate_step = dict(gate["steps"][0])
+    assert dict(gate_step["env"])["MATRIX_RESULT"] == "${{ needs.browser_matrix.result }}"
+    assert gate_step["run"] == 'test "$MATRIX_RESULT" = success'
