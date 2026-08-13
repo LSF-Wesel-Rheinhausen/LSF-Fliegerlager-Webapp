@@ -816,7 +816,18 @@ test("Breakfast prebooking saves a selected date", async ({ page }) => {
 });
 
 test("Kiosk can book a drink after breakfast prebooking", async ({ page }) => {
-  await setupKioskScenario(page, "Kiosk Nachgelagerte Getränke");
+  const campName = await setupKioskScenario(page, "Kiosk Nachgelagerte Getränke");
+  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).or(page.locator(".kiosk-mobile-bottom-nav").getByRole("link", { name: "Mehr" })).click();
+  const kioskMenu = page.locator("dialog#kiosk-menu-dialog");
+  await kioskMenu.getByRole("button", { name: /Familie/ }).click();
+  const familyManagementDialog = page.locator("dialog#family-management-dialog");
+  await familyManagementDialog.getByRole("button", { name: "Anlegen" }).click();
+  const familyDialog = page.locator("dialog#family-dialog");
+  await familyDialog.getByLabel("Vorname").fill("Irène");
+  await familyDialog.getByLabel("Nachname").fill("Curie");
+  await familyDialog.getByLabel("Rolle").selectOption({ label: "Kind" });
+  await familyDialog.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByText("Familienmitglied wurde angelegt.")).toBeVisible();
   await page.locator('[data-kiosk-card="food"] [data-food-button][data-meal-type="breakfast"]').click();
   await page.locator("dialog#food-dialog").getByRole("button", { name: "Für später vorbestellen" }).click();
   const breakfastCalendar = page.locator("dialog#breakfast-meal-dialog");
