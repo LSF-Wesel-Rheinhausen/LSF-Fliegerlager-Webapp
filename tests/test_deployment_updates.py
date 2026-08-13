@@ -1,5 +1,6 @@
 import io
 import json
+import urllib.error
 from unittest.mock import Mock, patch
 
 import pytest
@@ -52,6 +53,17 @@ def test_update_check_requires_post_and_reports_available_image(client, superuse
 
     assert response.status_code == 200
     assert "Ein neues Container-Image ist verfügbar." in [str(message) for message in response.context["messages"]]
+
+
+@pytest.mark.django_db
+def test_update_check_maps_invalid_registry_metadata_to_operator_message(client, superuser):
+    client.force_login(superuser)
+    error = UpdateAgentError("Registry/Image prüfen und erneut versuchen.", public_code="invalid_registry_metadata")
+    with patch("billing.views.check_for_update", side_effect=error):
+        response = client.post(reverse("deployment-update-check"), follow=True)
+
+    assert response.status_code == 200
+    assert "Registry/Image prüfen und erneut versuchen." in [str(message) for message in response.context["messages"]]
 
 
 @pytest.mark.django_db
@@ -145,6 +157,23 @@ def test_check_for_update_sends_current_build_metadata():
         }
     }
     assert result == {"update_available": True}
+
+
+@override_settings(UPDATE_AGENT_URL="http://updater:8080", UPDATE_AGENT_TOKEN="secret-token")
+def test_check_for_update_maps_invalid_registry_metadata_to_operator_message():
+    response = urllib.error.HTTPError(
+        url="http://updater:8080/check",
+        code=502,
+        msg="Bad Gateway",
+        hdrs={},
+        fp=io.BytesIO(b'{"error":"invalid_registry_metadata"}'),
+    )
+
+    with patch("urllib.request.urlopen", side_effect=response):
+        with pytest.raises(UpdateAgentError, match="Registry/Image prüfen und erneut versuchen") as error:
+            check_for_update()
+
+    assert error.value.public_code == "invalid_registry_metadata"
 
 
 @pytest.mark.django_db
@@ -253,3 +282,19 @@ def test_deployment_update_status_json_handles_agent_error(client, superuser):
 
     assert response.status_code == 503
     assert response.json() == {"active": False, "phase": "error", "error": "Agent offline"}
+
+
+@pytest.mark.django_db
+def test_deployment_update_status_json_maps_invalid_registry_metadata(client, superuser):
+    client.force_login(superuser)
+    error = UpdateAgentError("Registry/Image prüfen und erneut versuchen.")
+    error.public_code = "invalid_registry_metadata"
+    with patch("billing.views.deployment_status", side_effect=error):
+        response = client.get(reverse("deployment-update-status-json"))
+
+    assert response.status_code == 502
+    assert response.json() == {
+        "active": False,
+        "phase": "error",
+        "error": "Registry/Image prüfen und erneut versuchen.",
+    }

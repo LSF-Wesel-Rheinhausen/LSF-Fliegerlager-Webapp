@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import gzip
+import hashlib
 import hmac
 import io
 import json
@@ -36,6 +37,10 @@ class AgentConfigError(RuntimeError):
 
 class PortainerAPIError(RuntimeError):
     """Raised when Portainer rejects a stack operation."""
+
+
+class RegistryMetadataError(RuntimeError):
+    """Raised when registry metadata cannot be trusted for an immutable update."""
 
 
 class BackupArtifactCategory(Enum):
@@ -462,6 +467,26 @@ def registry_request(
         raise RuntimeError("Registry ist nicht erreichbar.") from error
 
 
+def registry_header(headers: dict[str, str], name: str) -> str | None:
+    """Return a registry response header without depending on header casing."""
+    wanted = name.casefold()
+    for key, value in headers.items():
+        if key.casefold() == wanted:
+            return value
+    return None
+
+
+def manifest_digest(raw_manifest: bytes, headers: dict[str, str]) -> str:
+    """Validate the optional registry digest against the exact manifest bytes."""
+    calculated = "sha256:" + hashlib.sha256(raw_manifest).hexdigest()
+    advertised = registry_header(headers, "Docker-Content-Digest")
+    if advertised is None:
+        return calculated
+    if not IMAGE_DIGEST_PATTERN.fullmatch(advertised) or advertised != calculated:
+        raise RegistryMetadataError("Registry-Manifest-Digest ist ungueltig.")
+    return advertised
+
+
 def fetch_registry_token(auth_header: str) -> str:
     """Fetch a bearer token from a registry WWW-Authenticate challenge."""
     if not auth_header.startswith("Bearer "):
@@ -508,17 +533,22 @@ def fetch_image_metadata(image: str) -> dict[str, Any]:
     registry, repository, reference = parse_image_reference(image)
     manifest_url = f"https://{registry}/v2/{repository}/manifests/{reference}"
     raw_manifest, headers = registry_request(manifest_url, accept=MANIFEST_ACCEPT)
+    installation_digest = manifest_digest(raw_manifest, headers)
+    if reference.startswith("sha256:") and installation_digest != reference:
+        raise RegistryMetadataError("Angefordertes Image stimmt nicht mit dem Manifest ueberein.")
     manifest = json.loads(raw_manifest)
-    media_type = manifest.get("mediaType") or headers.get("Content-Type", "")
-    digest = headers.get("Docker-Content-Digest", reference if reference.startswith("sha256:") else "unknown")
-    installation_digest = digest
+    media_type = manifest.get("mediaType") or registry_header(headers, "Content-Type") or ""
     if "image.index" in media_type or "manifest.list" in media_type:
         descriptor = choose_manifest_descriptor(manifest)
-        child_digest = str(descriptor.get("digest", digest))
-        raw_manifest, _headers = registry_request(
+        child_digest = descriptor.get("digest")
+        if not isinstance(child_digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(child_digest):
+            raise RegistryMetadataError("OCI-Index enthaelt keinen validen Child-Digest.")
+        raw_manifest, child_headers = registry_request(
             f"https://{registry}/v2/{repository}/manifests/{child_digest}",
             accept=MANIFEST_ACCEPT,
         )
+        if manifest_digest(raw_manifest, child_headers) != child_digest:
+            raise RegistryMetadataError("OCI-Index und Child-Manifest stimmen nicht ueberein.")
         manifest = json.loads(raw_manifest)
     config = manifest.get("config", {})
     config_digest = config.get("digest") if isinstance(config, dict) else None
@@ -1043,6 +1073,9 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.respond(HTTPStatus.NOT_FOUND, {"error": "not_found"})
         except AgentRequestError as error:
             self.respond(error.status, {"error": error.public_code})
+        except RegistryMetadataError:
+            logger.exception("Ungültige Registry-Metadaten beim Update-Check.")
+            self.respond(HTTPStatus.BAD_GATEWAY, {"error": "invalid_registry_metadata"})
         except (AgentConfigError, PortainerAPIError, OSError, RuntimeError):
             logger.exception("Agent-Anfrage fehlgeschlagen")
             self.respond(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "service_unavailable"})
