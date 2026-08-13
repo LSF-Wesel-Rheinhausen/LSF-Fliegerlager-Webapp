@@ -9,8 +9,8 @@ from django.urls import reverse
 from openpyxl import load_workbook
 from reportlab.lib.pagesizes import A4
 
-from billing.exporters import participant_pdf_response, settlement_snapshot_pdf_bytes
-from billing.models import Charge, Expense, MealSignup
+from billing.exporters import camp_workbook_response, participant_pdf_response, settlement_snapshot_pdf_bytes
+from billing.models import Charge, Expense, MealSignup, PriceRule
 from billing.permissions import EDITOR_GROUP
 from billing.services import create_settlement_run
 from tests.factories import (
@@ -20,6 +20,7 @@ from tests.factories import (
     ExpenseFactory,
     GroupFactory,
     ParticipantFactory,
+    ParticipantFamilyMemberFactory,
     PaymentFactory,
     SuperUserFactory,
     UserFactory,
@@ -367,6 +368,106 @@ def test_workbook_export_compares_cost_center_income_and_expenses(client):
     assert sheet["A10"].value == "Unterkunft/Verpflegung - Frühstück"
     assert sheet["D10"].value == "Brötchen"
     assert sheet["E10"].value == 3.5
+
+
+@pytest.mark.django_db
+def test_workbook_export_handles_cost_center_detail_dicts_and_isolates_camp():
+    camp = CampFactory(year=2026)
+    other_camp = CampFactory(year=2027)
+    participant = ParticipantFactory(
+        camp=camp,
+        first_name="Ada",
+        last_name="Lovelace",
+        status="active",
+        booked_nights=7,
+        is_youth_group=True,
+        hilfssatz=Decimal("1.00"),
+        berufssatz=Decimal("1.00"),
+    )
+    other_participant = ParticipantFactory(camp=other_camp, first_name="Other", last_name="Camp")
+    PriceRule.objects.create(
+        camp=camp,
+        kind=PriceRule.Kind.CAMP_FLAT,
+        name="Lagerpauschale",
+        unit_price=Decimal("150.00"),
+        foerdersatz=Decimal("0.50"),
+        is_default=True,
+        camp_flat_duration=PriceRule.CampFlatDuration.ONE_WEEK,
+        camp_flat_role=PriceRule.CampFlatRole.PARTICIPANT,
+    )
+    ChargeFactory(
+        participant=participant,
+        kind=Charge.Kind.DONATION,
+        description="Spende",
+        quantity=Decimal("1.00"),
+        unit_price=Decimal("20.00"),
+    )
+    ChargeFactory(
+        participant=other_participant,
+        kind=Charge.Kind.DONATION,
+        description="Fremdes Lager",
+        quantity=Decimal("1.00"),
+        unit_price=Decimal("99.00"),
+    )
+    meal_charge = ChargeFactory(
+        participant=participant,
+        kind=Charge.Kind.FOOD,
+        description="Frühstück",
+        quantity=Decimal("1.00"),
+        unit_price=Decimal("8.00"),
+    )
+    MealSignup.objects.create(
+        participant=participant,
+        meal_date=date(2026, 7, 1),
+        meal=MealSignup.Meal.BREAKFAST,
+        variant=MealSignup.Variant.NORMAL,
+        charge=meal_charge,
+    )
+
+    workbook = load_workbook(BytesIO(camp_workbook_response(camp).content), data_only=True)
+    sheet = workbook["Kostenstellen"]
+    rows = list(sheet.iter_rows(values_only=True))
+
+    assert any(row[0] == "Förderungen" for row in rows)
+    assert any(
+        row[0]
+        == "Lagerpauschale (Unterkunft/Verpflegung - sonstiges, Fahrtkosten, Verbrauchsmaterial, Miete/sonstiges)"
+        for row in rows
+    )
+    assert ("Unterkunft/Verpflegung - Frühstück", "01.07.2026", "Ada Lovelace", "Frühstück", 8) in [
+        row[:5] for row in rows
+    ]
+    assert ("Förderungen", None, "Ada Lovelace", "Spende", 20) in [row[:5] for row in rows]
+    assert ("Förderungen", None, "Ada Lovelace", "Förderung für Lagerpauschale", 75) in [row[:5] for row in rows]
+    assert all("Fremdes Lager" not in row for row in rows)
+
+
+@pytest.mark.django_db
+def test_workbook_export_uses_family_child_youth_subsidy_totals():
+    guardian = ParticipantFactory(first_name="Ada", last_name="Guardian")
+    child = ParticipantFamilyMemberFactory(
+        guardian=guardian,
+        first_name="Mila",
+        last_name="Child",
+        is_youth_group=True,
+    )
+    ChargeFactory(
+        participant=guardian,
+        family_member=child,
+        kind=Charge.Kind.FOOD,
+        description="Kinderessen",
+        quantity=Decimal("1.00"),
+        unit_price=Decimal("100.00"),
+        foerdersatz=Decimal("0.4000"),
+    )
+
+    workbook = load_workbook(BytesIO(camp_workbook_response(guardian.camp).content), data_only=True)
+    summary = workbook["Abrechnung"]
+
+    assert summary["C2"].value == "Mila Child"
+    assert summary["D2"].value == 100
+    assert summary["E2"].value == 40
+    assert summary["F2"].value == 60
 
 
 @pytest.mark.django_db
