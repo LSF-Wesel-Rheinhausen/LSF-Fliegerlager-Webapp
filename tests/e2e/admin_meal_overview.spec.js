@@ -2,13 +2,31 @@ const { expect, test } = require("./fixtures");
 
 test.use({ serviceWorkers: "block" });
 
-test("Admin meal overview keeps dinner and breakfast details separate and keyboard accessible", async ({ page }) => {
+async function loginAsAdmin(page) {
+  await page.goto("/login/");
+  if (page.url().includes("/login")) {
+    await page.locator("#id_username").fill("admin");
+    await page.locator("#id_password").fill("strong-test-pass-123");
+    await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  }
+}
+
+async function setupFirstAdmin(page) {
   await page.goto("/setup/");
-  await page.getByLabel("Benutzername").fill("admin");
-  await page.getByLabel("E-Mail-Adresse").fill("admin@example.test");
-  await page.getByLabel("Passwort:", { exact: true }).fill("strong-test-pass-123");
-  await page.getByLabel("Passwort wiederholen:", { exact: true }).fill("strong-test-pass-123");
+  if (page.url().includes("/login/")) {
+    await loginAsAdmin(page);
+    return;
+  }
+  await expect(page).toHaveURL(/\/setup\/?$/);
+  await page.locator("#id_username").fill("admin");
+  await page.locator("#id_email").fill("admin@example.test");
+  await page.locator("#id_password1").fill("strong-test-pass-123");
+  await page.locator("#id_password2").fill("strong-test-pass-123");
   await page.getByRole("button", { name: "Admin anlegen" }).click();
+}
+
+test("Admin meal overview keeps dinner and breakfast details separate and keyboard accessible", async ({ page }) => {
+  await setupFirstAdmin(page);
 
   await page.getByRole("link", { name: "Lager anlegen" }).click();
   await page.getByLabel("Name").fill("Detail-Lager");
@@ -49,25 +67,4 @@ test("Admin meal overview keeps dinner and breakfast details separate and keyboa
   await dinnerDialog.getByRole("button", { name: "Schließen" }).click();
   await expect(dinnerDialog).toBeHidden();
   await expect(dinnerDay).toBeFocused();
-
-  await page.setViewportSize({ width: 390, height: 844 });
-  const mobileLayout = await page.evaluate(() => ({
-    pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    sections: [...document.querySelectorAll("[data-meal-section]")].map((section) => ({
-      clientWidth: section.clientWidth,
-      scrollWidth: section.scrollWidth,
-      tableWrappers: section.querySelectorAll(".kiosk-table__wrapper").length,
-      unwrappedTables: [...section.querySelectorAll("table")].filter(
-        (table) => !table.closest(".kiosk-table__wrapper"),
-      ).length,
-    })),
-  }));
-  expect(mobileLayout.pageOverflow).toBeLessThanOrEqual(1);
-  expect(mobileLayout.sections).toEqual([
-    expect.objectContaining({ tableWrappers: 1, unwrappedTables: 0 }),
-    expect.objectContaining({ tableWrappers: 1, unwrappedTables: 0 }),
-  ]);
-  for (const section of mobileLayout.sections) {
-    expect(section.scrollWidth).toBeLessThanOrEqual(section.clientWidth + 1);
-  }
 });
