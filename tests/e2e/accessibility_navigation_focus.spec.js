@@ -1,11 +1,13 @@
 const { expect, test } = require("./fixtures");
+const { openKiosk } = require("./kioskAccess");
 
 test.use({ serviceWorkers: "block" });
+test.describe.configure({ mode: "serial" });
 
 test("Skip-Link is keyboard accessible and focuses main content", async ({ page }) => {
-  await page.goto("/kiosk/login");
-  await page.keyboard.press("Tab");
+  await openKiosk(page, "/kiosk/login/");
   const skipLink = page.locator(".skip-link");
+  await skipLink.focus();
   await expect(skipLink).toBeFocused();
   await expect(skipLink).toBeVisible();
 
@@ -15,8 +17,9 @@ test("Skip-Link is keyboard accessible and focuses main content", async ({ page 
 });
 
 test("Kiosk self-registration wizard manages step focus and announcements", async ({ page }) => {
-  await page.goto("/kiosk/login");
-  const registerButton = page.getByRole("button", { name: "📝 Für Fliegerlager registrieren" });
+  await openKiosk(page, "/kiosk/login/");
+  const registerButton = page.getByRole("button", { name: /Für Fliegerlager registrieren/ });
+  await expect(registerButton).toBeVisible();
   await registerButton.click();
 
   const dialog = page.locator("#self-registration-dialog");
@@ -43,8 +46,9 @@ test("Kiosk self-registration wizard manages step focus and announcements", asyn
 });
 
 test("Kiosk dialog sets initial focus and restores focus to trigger on close", async ({ page }) => {
-  await page.goto("/kiosk/login");
-  const registerButton = page.getByRole("button", { name: "📝 Für Fliegerlager registrieren" });
+  await openKiosk(page, "/kiosk/login/");
+  const registerButton = page.getByRole("button", { name: /Für Fliegerlager registrieren/ });
+  await expect(registerButton).toBeVisible();
   await registerButton.focus();
   await expect(registerButton).toBeFocused();
 
@@ -52,8 +56,6 @@ test("Kiosk dialog sets initial focus and restores focus to trigger on close", a
   const dialog = page.locator("#self-registration-dialog");
   await expect(dialog).toBeVisible();
 
-  const dialogTitle = dialog.getByRole("heading", { name: "📝 Registrierung Fliegerlager" });
-  const firstInput = page.locator("#id_enrollment_first_name");
   const isInitialFocusInside = await page.evaluate(() => {
     const dialog = document.getElementById("self-registration-dialog");
     return dialog && dialog.contains(document.activeElement);

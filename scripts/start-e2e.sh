@@ -33,9 +33,23 @@ fi
 
 $PYTHON src/manage.py migrate --noinput
 $PYTHON src/manage.py shell -c '
+from datetime import timedelta
+from django.utils import timezone
 from billing.models import Camp, CampKioskAccess
 
-camp, _ = Camp.objects.get_or_create(name="E2E-Lagerzugang", year=2099)
+today = timezone.localdate()
+camp, _ = Camp.objects.get_or_create(
+    name="E2E-Lagerzugang",
+    defaults={
+        "year": today.year,
+        "starts_on": today - timedelta(days=2),
+        "ends_on": today + timedelta(days=14),
+        "is_active": True,
+    },
+)
+camp.year = today.year
+camp.starts_on = today - timedelta(days=2)
+camp.ends_on = today + timedelta(days=14)
 camp.is_active = True
 camp.save()
 access, _ = CampKioskAccess.objects.get_or_create(camp=camp)
