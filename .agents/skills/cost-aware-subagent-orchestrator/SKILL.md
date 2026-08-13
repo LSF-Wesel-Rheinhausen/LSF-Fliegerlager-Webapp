@@ -19,6 +19,8 @@ Coordinate authorized subagent work with the least expensive model that can reli
 
 Start at the lowest suitable tier. Increase model capability only when task evidence requires it.
 
+Before applying the matrix, inspect the actual `spawn_agent` interface and the models it offers in the current environment. If `model` and/or `reasoning_effort` are not selectable, do not invent model names or send unsupported parameters. Use the matrix as a capability and task-tier guide, choose the cheapest available agent type that fits the task, and state transparently that the corresponding cost control could not be enforced.
+
 | Tier | Assign when | Typical work |
 | --- | --- | --- |
 | Luna, low reasoning | The procedure is deterministic, read-only, mechanical, or mostly waiting | CI monitoring, PR status and comment checks, log collection, metadata fixes, formatting, inventory, exact command execution |
