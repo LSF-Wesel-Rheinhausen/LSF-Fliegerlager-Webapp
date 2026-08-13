@@ -1,7 +1,8 @@
 from django.contrib import admin
+from django.contrib.admin.widgets import AdminDateWidget, AdminSplitDateTime
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
-from django.db import transaction
+from django.db import models, transaction
 from django.utils import timezone
 
 from .forms import ExpenseAdminForm
@@ -37,6 +38,25 @@ from .services import (
 )
 
 admin.site.unregister(User)
+
+
+class AccessibleAdminDateWidget(AdminDateWidget):
+    """Keep admin date controls free of absent timezone warning references."""
+
+    def get_context(self, name, value, attrs):
+        context = super().get_context(name, value, attrs)
+        context["widget"]["attrs"].pop("aria-describedby", None)
+        return context
+
+
+class AccessibleAdminSplitDateTime(AdminSplitDateTime):
+    """Keep both admin datetime subinputs free of absent warning references."""
+
+    def get_context(self, name, value, attrs):
+        context = super().get_context(name, value, attrs)
+        for subwidget in context["widget"]["subwidgets"]:
+            subwidget["attrs"].pop("aria-describedby", None)
+        return context
 
 
 @admin.register(User)
@@ -85,6 +105,10 @@ class ParticipantAdmin(admin.ModelAdmin):
     list_display = ("last_name", "first_name", "camp", "status", "hilfssatz", "berufssatz", "actual_nights", "is_child")
     list_filter = ("camp", "status", "is_child", "is_youth_group", "is_companion")
     search_fields = ("first_name", "last_name", "email")
+    formfield_overrides = {
+        models.DateField: {"widget": AccessibleAdminDateWidget},
+        models.DateTimeField: {"widget": AccessibleAdminSplitDateTime},
+    }
 
     def has_delete_permission(self, request, obj=None):
         return False
