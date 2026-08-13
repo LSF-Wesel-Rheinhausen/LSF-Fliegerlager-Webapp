@@ -16,6 +16,9 @@ function isBenignPageRequestFailure(details) {
   if (details.method !== "GET") {
     return false;
   }
+  if (details.url.endsWith(".webmanifest") || details.url.includes("/manifest")) {
+    return true;
+  }
   if (!details.url.endsWith(ADMIN_ICON_PATH)) {
     return false;
   }
