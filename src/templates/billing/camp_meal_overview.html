@@ -49,19 +49,20 @@
     {% endif %}
   </section>
 
-  <section class="panel stack">
+  <section class="panel stack" data-meal-section="dinner">
     <form method="post" class="stack">
       {% csrf_token %}
       <input type="hidden" name="action" value="meal_plan">
       {{ meal_plan_form.non_field_errors }}
       <div class="toolbar compact-toolbar">
         <div>
-          <h2>Caterer-Bestellung</h2>
+          <h2>Caterer-Abendessen</h2>
           <p>Gezählt werden aktive Buchungen. Zurücknahmen bleiben separat sichtbar.</p>
         </div>
         <button type="submit">Speiseplan speichern</button>
       </div>
-      <table>
+      <div class="kiosk-table__wrapper">
+        <table>
         <thead>
           <tr>
             <th>Datum</th>
@@ -79,7 +80,16 @@
           {% for row in meal_plan_rows %}
             {% for meal in row.day.meals %}
               <tr>
-                <td>{{ row.day.meal_date|date:"d.m.Y" }}</td>
+                <td>
+                  <button
+                    type="button"
+                    class="button-link"
+                    data-dialog-open="dinner-detail-{{ row.day.meal_date|date:'Ymd' }}"
+                    aria-haspopup="dialog"
+                  >
+                    {{ row.day.meal_date|date:"d.m.Y" }}
+                  </button>
+                </td>
                 <td>{{ meal.meal_label }}</td>
                 <td class="meal-plan-cell">
                   <label class="sr-only" for="{{ row.description_field.id_for_label }}">
@@ -101,7 +111,128 @@
             <tr><td colspan="9">Noch keine Lagertage vorhanden.</td></tr>
           {% endfor %}
         </tbody>
-      </table>
+        </table>
+      </div>
     </form>
+    {% for row in meal_plan_rows %}
+      <dialog
+        id="dinner-detail-{{ row.day.meal_date|date:'Ymd' }}"
+        class="kiosk-dialog kiosk-dialog--wide"
+        closedby="any"
+        aria-labelledby="dinner-detail-title-{{ row.day.meal_date|date:'Ymd' }}"
+      >
+        <form method="dialog" class="dialog-heading">
+          <h3 id="dinner-detail-title-{{ row.day.meal_date|date:'Ymd' }}">
+            Abendessen · {{ row.day.meal_date|date:"d.m.Y" }}
+          </h3>
+          <button type="submit" class="button button-secondary">Schließen</button>
+        </form>
+        {% if row.day.dinner.bookings %}
+          <div class="kiosk-table__wrapper">
+            <table>
+              <thead><tr><th>Zielperson</th><th>Zahlungskonto / Guardian</th><th>Variante</th><th>Status</th></tr></thead>
+              <tbody>
+                {% for booking in row.day.dinner.bookings %}
+                  <tr>
+                    <td>{{ booking.target_name }}</td>
+                    <td>{{ booking.payment_account_name }}</td>
+                    <td>{{ booking.variant_label }}</td>
+                    <td>{{ booking.status_label }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p>Keine Buchungen für diesen Tag.</p>
+        {% endif %}
+      </dialog>
+    {% endfor %}
   </section>
+
+  <section class="panel stack" data-meal-section="breakfast">
+    <div class="toolbar compact-toolbar">
+      <div>
+        <h2>Frühstücksvorbestellungen</h2>
+        <p>Frühstück bleibt getrennt vom Caterer-Abendessen und wird je Tag ausgewiesen.</p>
+      </div>
+    </div>
+    <div class="kiosk-table__wrapper">
+      <table>
+      <thead>
+        <tr>
+          <th>Datum</th>
+          <th>Mit Fleisch</th>
+          <th>Vegan</th>
+          <th>Mit Fleisch Kind</th>
+          <th>Vegan Kind</th>
+          <th>Aktiv</th>
+          <th>Zurückgenommen</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for day in meal_overview_days %}
+          <tr>
+            <td>
+              <button
+                type="button"
+                class="button-link"
+                data-dialog-open="breakfast-detail-{{ day.meal_date|date:'Ymd' }}"
+                aria-haspopup="dialog"
+              >
+                {{ day.meal_date|date:"d.m.Y" }}
+              </button>
+            </td>
+            {% for _variant, count in day.breakfast.variant_counts.items %}<td>{{ count }}</td>{% endfor %}
+            <td><strong>{{ day.breakfast.active_total }}</strong></td>
+            <td>{{ day.breakfast.retracted_total }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7">Noch keine Lagertage vorhanden.</td></tr>
+        {% endfor %}
+      </tbody>
+      </table>
+    </div>
+    {% for day in meal_overview_days %}
+      <dialog
+        id="breakfast-detail-{{ day.meal_date|date:'Ymd' }}"
+        class="kiosk-dialog kiosk-dialog--wide"
+        closedby="any"
+        aria-labelledby="breakfast-detail-title-{{ day.meal_date|date:'Ymd' }}"
+      >
+        <form method="dialog" class="dialog-heading">
+          <h3 id="breakfast-detail-title-{{ day.meal_date|date:'Ymd' }}">
+            Frühstück · {{ day.meal_date|date:"d.m.Y" }}
+          </h3>
+          <button type="submit" class="button button-secondary">Schließen</button>
+        </form>
+        {% if day.breakfast.bookings %}
+          <div class="kiosk-table__wrapper">
+            <table>
+              <thead><tr><th>Zielperson</th><th>Zahlungskonto / Guardian</th><th>Variante</th><th>Status</th></tr></thead>
+              <tbody>
+                {% for booking in day.breakfast.bookings %}
+                  <tr>
+                    <td>{{ booking.target_name }}</td>
+                    <td>{{ booking.payment_account_name }}</td>
+                    <td>{{ booking.variant_label }}</td>
+                    <td>{{ booking.status_label }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p>Keine Buchungen für diesen Tag.</p>
+        {% endif %}
+      </dialog>
+    {% endfor %}
+  </section>
+  <script nonce="{{ request.csp_nonce }}">
+    document.querySelectorAll("[data-dialog-open]").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.getElementById(button.dataset.dialogOpen)?.showModal();
+      });
+    });
+  </script>
 {% endblock %}
