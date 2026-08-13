@@ -95,9 +95,16 @@ admin.site.register(UserProfile)
 
 @admin.register(ParticipantFamilyMember)
 class ParticipantFamilyMemberAdmin(admin.ModelAdmin):
+    settlement_fields = ("role", "is_youth_group", "arrival_date", "departure_date", "is_active")
     list_display = ("last_name", "first_name", "guardian", "role", "is_active")
     list_filter = ("role", "is_active", "guardian__camp")
     search_fields = ("first_name", "last_name", "guardian__first_name", "guardian__last_name")
+
+    def get_readonly_fields(self, request, obj=None):
+        """Require settlement-relevant edits to use the confirmed participant workflow."""
+        if obj is not None:
+            return self.settlement_fields
+        return ()
 
 
 @admin.register(ParticipantBookingLink)

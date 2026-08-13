@@ -483,11 +483,20 @@ class ParticipantFamilyMemberForm(forms.ModelForm):
 
     class Meta:
         model = ParticipantFamilyMember
-        fields = ["first_name", "last_name", "role", "arrival_date", "departure_date", "is_active"]
+        fields = [
+            "first_name",
+            "last_name",
+            "role",
+            "is_youth_group",
+            "arrival_date",
+            "departure_date",
+            "is_active",
+        ]
         labels = {
             "first_name": "Vorname",
             "last_name": "Nachname",
             "role": "Rolle",
+            "is_youth_group": "Jugendgruppe",
             "arrival_date": "Anreise",
             "departure_date": "Abreise",
             "is_active": "Aktiv",

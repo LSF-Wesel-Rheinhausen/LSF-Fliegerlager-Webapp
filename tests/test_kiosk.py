@@ -161,6 +161,51 @@ def test_guardian_cannot_create_companion_without_pin(kiosk_client):
 
 
 @pytest.mark.django_db
+def test_kiosk_family_member_form_does_not_render_subsidy_controls(kiosk_client):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.get(reverse("kiosk-home"))
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert 'name="family-is_youth_group"' not in content
+    assert 'name="family-confirm_settlement_change"' not in content
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("role", [ParticipantFamilyMember.Role.CHILD, ParticipantFamilyMember.Role.COMPANION])
+def test_kiosk_family_member_creation_ignores_forged_subsidy_fields(kiosk_client, role):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    pin_data = {"family-pin": "2468", "family-pin_repeat": "2468"} if role == "companion" else {}
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "family_member_create",
+            "family-first_name": "Grace",
+            "family-last_name": "Hopper",
+            "family-role": role,
+            "family-is_youth_group": "on",
+            "family-confirm_settlement_change": "on",
+            **pin_data,
+        },
+    )
+
+    assert response.status_code == 302
+    member = ParticipantFamilyMember.objects.get(guardian=participant, first_name="Grace")
+    assert member.role == role
+    assert member.is_youth_group is False
+    if role == ParticipantFamilyMember.Role.COMPANION:
+        assert member.pin.check_pin("2468") is True
+
+
+@pytest.mark.django_db
 def test_guardian_can_set_pin_for_existing_companion(kiosk_client):
     participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
     companion = ParticipantFamilyMember.objects.create(
@@ -2735,7 +2780,7 @@ def test_kiosk_meal_signup_requires_person_when_dialog_selection_is_empty(kiosk_
 
 
 @pytest.mark.django_db
-def test_kiosk_creates_family_member_and_books_meal_on_guardian(kiosk_client, monkeypatch):
+def test_kiosk_cannot_self_award_family_subsidy_when_creating_member_and_booking_meal(kiosk_client, monkeypatch):
     _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
     camp = CampFactory(starts_on=date(2026, 6, 30), ends_on=date(2026, 7, 2))
     participant = ParticipantFactory(camp=camp, first_name="Vater", last_name="Muster")
@@ -2760,11 +2805,14 @@ def test_kiosk_creates_family_member_and_books_meal_on_guardian(kiosk_client, mo
             "family-first_name": "Kind",
             "family-last_name": "Muster",
             "family-role": ParticipantFamilyMember.Role.CHILD,
+            "family-is_youth_group": "on",
+            "family-confirm_settlement_change": "on",
         },
     )
 
     assert response.status_code == 302
     family_member = ParticipantFamilyMember.objects.get(guardian=participant)
+    assert family_member.is_youth_group is False
 
     response = kiosk_client.post(
         reverse("kiosk-home"),

@@ -622,6 +622,7 @@
             <div class="kiosk-list-row__content">
               <strong>{{ member.full_name }}</strong>
               <span>{{ member.get_role_display }}</span>
+              <span>{% if member.is_youth_group %}Jugendgruppe{% else %}Keine Jugendgruppenförderung{% endif %}</span>
               {% if member.role == "companion" %}
                 <span>{% if member.pin.pin_hash and not member.pin.must_set_pin %}PIN eingerichtet{% else %}PIN fehlt{% endif %}</span>
               {% endif %}

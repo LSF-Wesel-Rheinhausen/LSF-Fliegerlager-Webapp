@@ -176,19 +176,20 @@
       </div>
     </div>
     <table class="responsive-record-table">
-      <thead><tr><th>Name</th><th>Rolle</th><th>Anreise</th><th>Abreise</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Rolle</th><th>Jugendgruppe</th><th>Anreise</th><th>Abreise</th><th>Status</th><th></th></tr></thead>
       <tbody>
         {% for member in family_members %}
           <tr>
             <td data-label="Name">{{ member.full_name }}</td>
             <td data-label="Rolle">{{ member.get_role_display }}</td>
+            <td data-label="Jugendgruppe">{% if member.is_youth_group %}Ja{% else %}Nein{% endif %}</td>
             <td data-label="Anreise">{{ member.arrival_date|default:"-" }}</td>
             <td data-label="Abreise">{{ member.departure_date|default:"-" }}</td>
             <td data-label="Status">{% if member.is_active %}Aktiv{% else %}Inaktiv{% endif %}</td>
             <td data-label="Aktionen">{% if user|can_manage_users %}<a href="{% url 'participant-family-member-edit' participant.pk member.pk %}">Bearbeiten</a>{% else %}-{% endif %}</td>
           </tr>
         {% empty %}
-          <tr><td colspan="6">Keine Familienmitglieder vorhanden.</td></tr>
+          <tr><td colspan="7">Keine Familienmitglieder vorhanden.</td></tr>
         {% endfor %}
       </tbody>
     </table>

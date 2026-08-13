@@ -1143,7 +1143,7 @@ def participant_family_member_edit(request, participant_id, family_member_id):
     )
     form = ParticipantFamilyMemberForm(request.POST or None, instance=member)
     if request.method == "POST" and form.is_valid():
-        settlement_fields = {"role", "arrival_date", "departure_date", "is_active"}
+        settlement_fields = {"arrival_date", "departure_date", "is_active", "role", "is_youth_group"}
         changes_settlement = bool(settlement_fields.intersection(form.changed_data))
         if changes_settlement and request.POST.get("confirm_settlement_change") != "1":
             return render(
