@@ -1820,7 +1820,7 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/scripts/start-e2e.sh": {
-    "mtime": 1786661222.8563375,
+    "mtime": 1786661247.463504,
     "ast_hash": "e012f7291fda2eb3f064811d3c03cf53",
     "semantic_hash": ""
   },
@@ -1865,8 +1865,8 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/email_delivery.py": {
-    "mtime": 1786661089.4344218,
-    "ast_hash": "df3aea5841906d577a4f462f5d166fcb",
+    "mtime": 1786661247.463693,
+    "ast_hash": "f066a43376afdabf268bd66beb470a97",
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/email_forms.py": {
@@ -1885,8 +1885,8 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/forms.py": {
-    "mtime": 1786661222.8566022,
-    "ast_hash": "37078469a493c4f28a9eb89c0059c23a",
+    "mtime": 1786661247.4639823,
+    "ast_hash": "7d07d183f68c9f0f1fe1f69616b074bc",
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/importers.py": {
@@ -2245,7 +2245,7 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/billing/pwa_views.py": {
-    "mtime": 1786661226.0440512,
+    "mtime": 1786661247.4641454,
     "ast_hash": "fb5b30d38edb14fb30d762192bbb2287",
     "semantic_hash": ""
   },
@@ -2570,8 +2570,8 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_pwa.py": {
-    "mtime": 1786661222.8902218,
-    "ast_hash": "a2ff0e0bcc79bd192e3ab52270c100e3",
+    "mtime": 1786661247.4672458,
+    "ast_hash": "f2ba549cb29361f076cf3318963a316a",
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_roles.py": {
@@ -2695,7 +2695,7 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/GEMINI.md": {
-    "mtime": 1786661222.8451712,
+    "mtime": 1786661247.4518816,
     "ast_hash": "f90fedf80ecd3bd919c4edea12c0ac5b",
     "semantic_hash": ""
   },
@@ -3385,8 +3385,8 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/base.html": {
-    "mtime": 1786661222.8572023,
-    "ast_hash": "5d42c4f12e448ab4dfcda809924b3bf6",
+    "mtime": 1786661247.4920437,
+    "ast_hash": "9f7ef0dd44383d4f11a58e9612b28a51",
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/admin_guide.html": {
@@ -3475,8 +3475,8 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/kiosk_base.html": {
-    "mtime": 1786661222.8573852,
-    "ast_hash": "ade964bc67c0ef26f7a08daf62b5ae65",
+    "mtime": 1786661247.4922621,
+    "ast_hash": "28e944536e64c4ab755bad4e5f0d0ff8",
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/kiosk_home.html": {
@@ -3485,7 +3485,7 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/kiosk_login.html": {
-    "mtime": 1786661222.8578753,
+    "mtime": 1786661247.466007,
     "ast_hash": "548073e7a82c2798821db28f8db555d5",
     "semantic_hash": ""
   },
@@ -3515,7 +3515,7 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/templates/billing/offline.html": {
-    "mtime": 1786661222.8583338,
+    "mtime": 1786661247.4661527,
     "ast_hash": "ba452644573557d549dabe0cdb8343f5",
     "semantic_hash": ""
   },
@@ -6120,12 +6120,12 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/static/billing/dialog-scroll-lock.js": {
-    "mtime": 1786661092.339998,
-    "ast_hash": "cd6d98da009d63dac9eeeb9e8501a002",
+    "mtime": 1786661247.4912622,
+    "ast_hash": "9e6cc631026bc4897f2190c4ea9047b6",
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/e2e/accessibility_navigation_focus.spec.js": {
-    "mtime": 1786661222.8586533,
+    "mtime": 1786661247.4662728,
     "ast_hash": "c41a491485262b627d81d193fa5a7b4e",
     "semantic_hash": ""
   },
@@ -6145,7 +6145,7 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_accessibility_navigation_focus.py": {
-    "mtime": 1786661222.85924,
+    "mtime": 1786661247.4667287,
     "ast_hash": "2e1c878cac48d04e0ede66b5f8c52525",
     "semantic_hash": ""
   },
@@ -6295,7 +6295,7 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-380-accessibility-navigation-focus.md": {
-    "mtime": 1786661222.8453357,
+    "mtime": 1786661247.4520197,
     "ast_hash": "799714b2b3c6ea14609906b8122d08ad",
     "semantic_hash": ""
   },
@@ -6315,18 +6315,33 @@
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/e2e/mobile_touch_form_metadata.spec.js": {
-    "mtime": 1786661222.8589504,
+    "mtime": 1786661247.4666088,
     "ast_hash": "f80e9d68ddc6815d713ae73696f74a91",
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_mobile_touch_form_metadata.py": {
-    "mtime": 1786661222.859496,
+    "mtime": 1786661247.4670815,
     "ast_hash": "f51fba1a894bb78702ec14ce5d45a93d",
     "semantic_hash": ""
   },
   "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-381-mobile-touch-targets-form-metadata.md": {
-    "mtime": 1786661222.8454714,
+    "mtime": 1786661247.4521403,
     "ast_hash": "aada867d0439c45d726027cf38babd48",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/e2e/high_contrast_color_ratios.spec.js": {
+    "mtime": 1786661247.466385,
+    "ast_hash": "dc466ba844f0a8804e1615b177746846",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/tests/test_high_contrast_color_ratios.py": {
+    "mtime": 1786661247.466842,
+    "ast_hash": "7d8e6b407489d45348b02a0ae38d156e",
+    "semantic_hash": ""
+  },
+  "/Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/changelog/pr-382-high-contrast-color-ratios.md": {
+    "mtime": 1786661247.4522703,
+    "ast_hash": "4e5e5877f8156c4e897087135e33aeb5",
     "semantic_hash": ""
   }
 }

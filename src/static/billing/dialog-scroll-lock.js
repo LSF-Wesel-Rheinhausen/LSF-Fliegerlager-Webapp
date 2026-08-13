@@ -75,4 +75,15 @@
       }
     },
   };
+
+  window.announceToScreenReader = (message, priority = "polite") => {
+    const targetId = priority === "assertive" ? "sr-announcer-assertive" : "sr-announcer-polite";
+    const announcer = document.getElementById(targetId);
+    if (announcer) {
+      announcer.textContent = "";
+      setTimeout(() => {
+        announcer.textContent = message;
+      }, 50);
+    }
+  };
 })();
