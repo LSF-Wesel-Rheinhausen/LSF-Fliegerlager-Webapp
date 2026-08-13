@@ -2,7 +2,7 @@
 
 ## Communication
 
-- Begin every user-facing response with the name "Jan".
+- Begin every user-facing response with the current user's name when it is available from explicit user, profile, or session context; never guess a name.
 
 ## Scope And Precedence
 
