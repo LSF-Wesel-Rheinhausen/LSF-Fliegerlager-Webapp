@@ -1,7 +1,8 @@
 from django.contrib import admin
+from django.contrib.admin.widgets import AdminDateWidget, AdminSplitDateTime
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
-from django.db import transaction
+from django.db import models, transaction
 from django.utils import timezone
 
 from .forms import ExpenseAdminForm
@@ -37,6 +38,46 @@ from .services import (
 )
 
 admin.site.unregister(User)
+
+
+def _without_timezone_warning_reference(value: str | None, name: str) -> str | None:
+    """Remove only the admin-generated warning reference for one field."""
+    if not value:
+        return None
+    warning_reference = f"id_{name}_timezone_warning_helptext"
+    references = [reference for reference in value.split() if reference != warning_reference]
+    return " ".join(references) or None
+
+
+class AccessibleAdminDateWidget(AdminDateWidget):
+    """Keep admin date controls free of absent timezone warning references."""
+
+    def get_context(self, name, value, attrs):
+        context = super().get_context(name, value, attrs)
+        describedby = (attrs or {}).get("aria-describedby") or context["widget"]["attrs"].get("aria-describedby")
+        filtered_describedby = _without_timezone_warning_reference(describedby, name)
+        if filtered_describedby is None:
+            context["widget"]["attrs"].pop("aria-describedby", None)
+        else:
+            context["widget"]["attrs"]["aria-describedby"] = filtered_describedby
+        return context
+
+
+class AccessibleAdminSplitDateTime(AdminSplitDateTime):
+    """Keep both admin datetime subinputs free of absent warning references."""
+
+    def get_context(self, name, value, attrs):
+        context = super().get_context(name, value, attrs)
+        describedby = (attrs or {}).get("aria-describedby") or self.attrs.get("aria-describedby")
+        for subwidget in context["widget"]["subwidgets"]:
+            filtered_describedby = _without_timezone_warning_reference(
+                describedby or subwidget["attrs"].get("aria-describedby"), name
+            )
+            if filtered_describedby is None:
+                subwidget["attrs"].pop("aria-describedby", None)
+            else:
+                subwidget["attrs"]["aria-describedby"] = filtered_describedby
+        return context
 
 
 @admin.register(User)
@@ -85,6 +126,10 @@ class ParticipantAdmin(admin.ModelAdmin):
     list_display = ("last_name", "first_name", "camp", "status", "hilfssatz", "berufssatz", "actual_nights", "is_child")
     list_filter = ("camp", "status", "is_child", "is_youth_group", "is_companion")
     search_fields = ("first_name", "last_name", "email")
+    formfield_overrides = {
+        models.DateField: {"widget": AccessibleAdminDateWidget},
+        models.DateTimeField: {"widget": AccessibleAdminSplitDateTime},
+    }
 
     def has_delete_permission(self, request, obj=None):
         return False
