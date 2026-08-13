@@ -89,7 +89,6 @@ def test_fetch_image_metadata_keeps_index_digest_for_installation(monkeypatch):
         ],
     }
     index_raw = manifest_bytes(index)
-    index_digest = content_digest(index_raw)
     config_digest = image_digest("3")
     child = {
         "mediaType": "application/vnd.oci.image.manifest.v1+json",
