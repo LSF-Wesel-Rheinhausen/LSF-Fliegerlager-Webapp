@@ -4,7 +4,7 @@
 
 - Korrigiert die Validierungsreihenfolge für manuell angelegte Familienkosten.
 - Hält abgewiesene Stornos historischer, mehrdeutig zugeordneter Essenskosten atomar unverändert.
-- Fordert eine explizite Bestätigung vor abrechnungsrelevanten Änderungen an Familienmitgliedern.
+- Fordert eine explizite Bestätigung vor abrechnungsrelevanten Rollen-, Aufenthalts- und Statusänderungen an Familienmitgliedern.
 - Zeigt im Familien-Kiosk-Audit den unveränderlichen Namens-Snapshot an.
 
 ## Geänderte Dateien

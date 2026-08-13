@@ -410,6 +410,78 @@ def test_family_member_financial_edit_persists_only_after_explicit_confirmation(
 
 
 @pytest.mark.django_db
+def test_family_member_role_edit_requires_confirmation_before_persisting(client):
+    guardian = ParticipantFactory()
+    member = ParticipantFamilyMemberFactory(guardian=guardian, role="child")
+    client.force_login(SuperUserFactory())
+    url = reverse("participant-family-member-edit", args=[guardian.pk, member.pk])
+    data = {
+        "first_name": member.first_name,
+        "last_name": member.last_name,
+        "role": "companion",
+        "arrival_date": "",
+        "departure_date": "",
+        "is_active": "on",
+    }
+
+    confirmation = client.post(url, data)
+
+    member.refresh_from_db()
+    assert confirmation.status_code == 200
+    assert b"Abrechnung" in confirmation.content
+    assert member.role == "child"
+
+    confirmed = client.post(url, {**data, "confirm_settlement_change": "1"})
+
+    assert confirmed.status_code == 302
+    member.refresh_from_db()
+    assert member.role == "companion"
+
+
+@pytest.mark.django_db
+def test_family_member_combined_settlement_changes_use_one_confirmation(client):
+    guardian = ParticipantFactory()
+    member = ParticipantFamilyMemberFactory(
+        guardian=guardian,
+        role="child",
+        arrival_date=date(2026, 7, 1),
+        departure_date=date(2026, 7, 5),
+        is_active=True,
+    )
+    client.force_login(SuperUserFactory())
+    url = reverse("participant-family-member-edit", args=[guardian.pk, member.pk])
+    data = {
+        "first_name": member.first_name,
+        "last_name": member.last_name,
+        "role": "companion",
+        "arrival_date": "2026-07-02",
+        "departure_date": "2026-07-07",
+    }
+
+    confirmation = client.post(url, data)
+
+    member.refresh_from_db()
+    assert confirmation.status_code == 200
+    assert (member.role, member.arrival_date, member.departure_date, member.is_active) == (
+        "child",
+        date(2026, 7, 1),
+        date(2026, 7, 5),
+        True,
+    )
+
+    confirmed = client.post(url, {**data, "confirm_settlement_change": "1"})
+
+    assert confirmed.status_code == 302
+    member.refresh_from_db()
+    assert (member.role, member.arrival_date, member.departure_date, member.is_active) == (
+        "companion",
+        date(2026, 7, 2),
+        date(2026, 7, 7),
+        False,
+    )
+
+
+@pytest.mark.django_db
 def test_family_member_edit_rejects_invalid_and_csrf_missing_financial_updates(client):
     guardian = ParticipantFactory()
     member = ParticipantFamilyMemberFactory(guardian=guardian, is_active=True)
