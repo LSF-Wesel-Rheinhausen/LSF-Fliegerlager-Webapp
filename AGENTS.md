@@ -1,5 +1,9 @@
 # Agent Instructions
 
+## Communication
+
+- Begin every user-facing response with the current user's name when it is available from explicit user, profile, or session context; never guess a name.
+
 ## Scope And Precedence
 
 - These rules apply to the entire repository. A closer nested `AGENTS.md` may add or override rules for its subtree.
