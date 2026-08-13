@@ -125,6 +125,11 @@ urlpatterns = [
     path("camps/<int:camp_id>/participants/new/", views.participant_create, name="participant-create"),
     path("participants/<int:participant_id>/", views.participant_detail, name="participant-detail"),
     path("participants/<int:participant_id>/edit/", views.participant_edit, name="participant-edit"),
+    path(
+        "participants/<int:participant_id>/family/<int:family_member_id>/edit/",
+        views.participant_family_member_edit,
+        name="participant-family-member-edit",
+    ),
     path("participants/<int:participant_id>/archive/", views.participant_archive, name="participant-archive"),
     path("participants/<int:participant_id>/restore/", views.participant_restore, name="participant-restore"),
     path("camps/<int:camp_id>/settlements/runs/new/", views.settlement_run_create, name="settlement-run-create"),

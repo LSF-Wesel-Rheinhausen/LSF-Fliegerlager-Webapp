@@ -767,6 +767,14 @@ class Charge(TimeStampedModel):
         DONATION = "donation", "Spende"
 
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="charges")
+    family_member = models.ForeignKey(
+        ParticipantFamilyMember,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="charges",
+        help_text="Optionales Familienziel innerhalb des Zahlungskontos.",
+    )
     kind = models.CharField(max_length=20, choices=Kind.choices)
     description = models.CharField(max_length=180)
     quantity = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("1.00"))
@@ -804,6 +812,14 @@ class Charge(TimeStampedModel):
 
     class Meta:
         ordering = ["participant", "kind", "description"]
+        indexes = [models.Index(fields=["participant", "family_member", "deleted_at"], name="charge_family_active")]
+
+    def clean(self) -> None:
+        """Reject target members that do not belong to this charge's guardian account."""
+        super().clean()
+        family_member = self.family_member
+        if family_member is not None and family_member.guardian_id != self.participant_id:
+            raise ValidationError({"family_member": "Das Zielmitglied gehört nicht zum Zahlungskonto."})
 
     @property
     def total(self):

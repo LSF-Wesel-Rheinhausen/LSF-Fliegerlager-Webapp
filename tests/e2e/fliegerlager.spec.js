@@ -816,7 +816,18 @@ test("Breakfast prebooking saves a selected date", async ({ page }) => {
 });
 
 test("Kiosk can book a drink after breakfast prebooking", async ({ page }) => {
-  await setupKioskScenario(page, "Kiosk Nachgelagerte Getränke");
+  const campName = await setupKioskScenario(page, "Kiosk Nachgelagerte Getränke");
+  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).or(page.locator(".kiosk-mobile-bottom-nav").getByRole("link", { name: "Mehr" })).click();
+  const kioskMenu = page.locator("dialog#kiosk-menu-dialog");
+  await kioskMenu.getByRole("button", { name: /Familie/ }).click();
+  const familyManagementDialog = page.locator("dialog#family-management-dialog");
+  await familyManagementDialog.getByRole("button", { name: "Anlegen" }).click();
+  const familyDialog = page.locator("dialog#family-dialog");
+  await familyDialog.getByLabel("Vorname").fill("Irène");
+  await familyDialog.getByLabel("Nachname").fill("Curie");
+  await familyDialog.getByLabel("Rolle").selectOption({ label: "Kind" });
+  await familyDialog.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByText("Familienmitglied wurde angelegt.")).toBeVisible();
   await page.locator('[data-kiosk-card="food"] [data-food-button][data-meal-type="breakfast"]').click();
   await page.locator("dialog#food-dialog").getByRole("button", { name: "Für später vorbestellen" }).click();
   const breakfastCalendar = page.locator("dialog#breakfast-meal-dialog");
@@ -832,6 +843,16 @@ test("Kiosk can book a drink after breakfast prebooking", async ({ page }) => {
   await expect(page.locator("dialog#meal-calendar-dialog")).toBeHidden();
   await page.getByRole("link", { name: "Abmelden" }).first().click();
   await expect(page).toHaveURL(/.*\/kiosk\/login\//);
+  await loginAsAdmin(page);
+  await page.getByRole("link", { name: campName, exact: true }).click();
+  await page.getByRole("link", { name: "Marie Curie", exact: true }).last().click();
+  await expect(page.getByRole("heading", { name: "Marie Curie" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Familienmitglieder", exact: true })).toBeVisible();
+  await expect(page.getByText("Irène Curie", { exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await assertNoUnexpectedOverflow(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await assertNoUnexpectedOverflow(page);
 });
 
 test("Kiosk user can change their own PIN and log in with the new PIN", async ({ page }) => {

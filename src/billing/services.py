@@ -89,6 +89,7 @@ class SettlementLine:
     source: str
     occurred_on: date | None = None
     booking_references: tuple[str, ...] = ()
+    target_name: str = ""
 
     @property
     def is_automatic(self) -> bool:
@@ -113,6 +114,11 @@ class SettlementResult:
     @property
     def is_overpaid(self):
         return self.balance < ZERO
+
+    @property
+    def family_target_names(self) -> tuple[str, ...]:
+        """Return stable, de-duplicated target names represented in this guardian settlement."""
+        return tuple(dict.fromkeys(line.target_name for line in self.lines if line.target_name))
 
 
 def money(value):
@@ -424,7 +430,7 @@ def charge_audit_snapshot(charge: Charge) -> dict[str, str | None]:
     Returns:
         A JSON-serializable snapshot of the charge fields that an admin may edit.
     """
-    return {
+    snapshot = {
         "booking_reference": charge.booking_reference,
         "kind": charge.kind,
         "description": charge.description,
@@ -433,12 +439,17 @@ def charge_audit_snapshot(charge: Charge) -> dict[str, str | None]:
         "foerdersatz": str(rate(Decimal(str(charge.foerdersatz)))),
         "occurred_on": charge.occurred_on.isoformat() if charge.occurred_on else None,
     }
+    family_member = charge.family_member
+    if family_member is not None:
+        snapshot["family_member"] = family_member.full_name
+    return snapshot
 
 
 def kiosk_charge_audit_snapshot(charge: Charge) -> dict[str, str | None]:
     """Return the booking fields needed to resolve participant kiosk disputes."""
     snapshot = charge_audit_snapshot(charge)
     snapshot.pop("description", None)
+    snapshot.pop("family_member", None)
     snapshot["deleted_at"] = charge.deleted_at.isoformat() if charge.deleted_at else None
     return snapshot
 
@@ -653,6 +664,7 @@ def build_settlement_line(
     *,
     occurred_on=None,
     booking_references=(),
+    target_name: str = "",
 ):
     gross_total = money(quantity * unit_price)
     effective_subsidy_rate = participant_subsidy_rate(participant, subsidy_rate)
@@ -669,6 +681,7 @@ def build_settlement_line(
         source=source,
         occurred_on=occurred_on,
         booking_references=tuple(booking_references),
+        target_name=target_name,
     )
 
 
@@ -711,13 +724,77 @@ def default_charge_lines(
     return lines
 
 
+def family_member_camp_flat_duration(member: ParticipantFamilyMember, guardian: Participant) -> str:
+    """Resolve a family member's camp-fee duration from their stay, falling back to the guardian."""
+    if member.arrival_date and member.departure_date and member.departure_date > member.arrival_date:
+        nights = (member.departure_date - member.arrival_date).days
+    else:
+        nights = guardian.actual_nights or guardian.booked_nights or 0
+    return PriceRule.CampFlatDuration.TWO_WEEKS if nights > 7 else PriceRule.CampFlatDuration.ONE_WEEK
+
+
+def family_member_camp_flat_role(member: ParticipantFamilyMember) -> str:
+    """Map a child to the participant rate and a companion to the companion rate."""
+    if member.role == ParticipantFamilyMember.Role.COMPANION:
+        return PriceRule.CampFlatRole.COMPANION
+    return PriceRule.CampFlatRole.PARTICIPANT
+
+
+def _family_member_rule_applies(rule: PriceRule, member: ParticipantFamilyMember) -> bool:
+    if member.role == ParticipantFamilyMember.Role.CHILD:
+        return rule.applies_to_children
+    return rule.applies_to_companions
+
+
+def family_camp_flat_lines(
+    guardian: Participant,
+    family_members: Iterable[ParticipantFamilyMember],
+    default_rules: Iterable[PriceRule],
+) -> list[SettlementLine]:
+    """Create pure, guardian-billed camp-fee lines for active family members."""
+    camp_flat_rules = [rule for rule in default_rules if rule.kind == PriceRule.Kind.CAMP_FLAT]
+    lines = []
+    for member in family_members:
+        if not member.is_active:
+            continue
+        matching_rules = [
+            rule
+            for rule in camp_flat_rules
+            if rule.camp_flat_duration == family_member_camp_flat_duration(member, guardian)
+            and rule.camp_flat_role == family_member_camp_flat_role(member)
+        ]
+        if not matching_rules:
+            matching_rules = [
+                rule for rule in camp_flat_rules if rule.camp_flat_duration == "" and rule.camp_flat_role == ""
+            ]
+        for rule in matching_rules:
+            if not _family_member_rule_applies(rule, member):
+                continue
+            lines.append(
+                build_settlement_line(
+                    label=rule.name,
+                    quantity=Decimal("1.00"),
+                    unit_price=rule.unit_price,
+                    source=f"price_rule:family:{rule.pk}:{member.pk}",
+                    subsidy_rate=rule.foerdersatz,
+                    participant=guardian,
+                    target_name=member.full_name,
+                )
+            )
+    return lines
+
+
 def manual_charge_lines(
     participant: Participant,
     charges: Iterable[Charge] | None = None,
 ) -> list[SettlementLine]:
     grouped_charges: dict[tuple[Any, ...], dict[str, Any]] = {}
     if charges is None:
-        charges = Charge.objects.filter(participant=participant, deleted_at__isnull=True).order_by("created_at", "pk")
+        charges = (
+            Charge.objects.filter(participant=participant, deleted_at__isnull=True)
+            .select_related("family_member")
+            .order_by("created_at", "pk")
+        )
     for charge in charges:
         occurred_on = charge.occurred_on or timezone.localdate(charge.created_at)
         individual_line = build_settlement_line(
@@ -734,6 +811,7 @@ def manual_charge_lines(
             charge.description,
             charge.unit_price,
             charge.foerdersatz,
+            charge.family_member_id,
         )
         group = grouped_charges.setdefault(
             key,
@@ -745,6 +823,7 @@ def manual_charge_lines(
                 "subsidy_rate": individual_line.subsidy_rate,
                 "charge_ids": [],
                 "booking_references": [],
+                "target_name": charge.family_member.full_name if charge.family_member is not None else "",
             },
         )
         group["quantity"] += charge.quantity
@@ -756,7 +835,7 @@ def manual_charge_lines(
 
     lines = []
     for key, group in grouped_charges.items():
-        occurred_on, _kind, description, unit_price, _subsidy_rate = key
+        occurred_on, _kind, description, unit_price, _subsidy_rate, _family_member_id = key
         charge_ids = ",".join(str(charge_id) for charge_id in group["charge_ids"])
         lines.append(
             SettlementLine(
@@ -770,6 +849,7 @@ def manual_charge_lines(
                 source=f"charges:{charge_ids}",
                 occurred_on=occurred_on,
                 booking_references=tuple(group["booking_references"]),
+                target_name=group["target_name"],
             )
         )
     return lines
@@ -847,11 +927,23 @@ def shared_expense_charge_lines(
 def calculate_participant_settlement(participant):
     participant = (
         Participant.objects.select_related("camp")
-        .prefetch_related("charges", "payments", "expenses", "drink_entries", "expense_allocations__expense")
+        .prefetch_related(
+            Prefetch("charges", queryset=Charge.objects.select_related("family_member")),
+            "family_members",
+            "payments",
+            "expenses",
+            "drink_entries",
+            "expense_allocations__expense",
+        )
         .get(pk=participant.pk)
     )
     lines = (
         default_charge_lines(participant)
+        + family_camp_flat_lines(
+            participant,
+            participant.family_members.all(),
+            participant.camp.price_rules.filter(is_default=True),
+        )
         + manual_charge_lines(participant)
         + drink_charge_lines(participant)
         + shared_expense_charge_lines(participant)
@@ -901,8 +993,17 @@ def calculate_participant_settlements(
         .prefetch_related(
             Prefetch(
                 "charges",
-                queryset=Charge.objects.filter(deleted_at__isnull=True).order_by("created_at", "pk"),
+                queryset=(
+                    Charge.objects.filter(deleted_at__isnull=True)
+                    .select_related("family_member")
+                    .order_by("created_at", "pk")
+                ),
                 to_attr="settlement_charges",
+            ),
+            Prefetch(
+                "family_members",
+                queryset=ParticipantFamilyMember.objects.order_by("last_name", "first_name", "pk"),
+                to_attr="settlement_family_members",
             ),
             Prefetch(
                 "drink_entries",
@@ -941,6 +1042,11 @@ def calculate_participant_settlements(
         prefetched_participant = cast(Any, participant)
         lines = (
             default_charge_lines(participant, default_rules_by_camp.get(participant.camp_id, ()))
+            + family_camp_flat_lines(
+                participant,
+                prefetched_participant.settlement_family_members,
+                default_rules_by_camp.get(participant.camp_id, ()),
+            )
             + manual_charge_lines(participant, prefetched_participant.settlement_charges)
             + drink_charge_lines(participant, prefetched_participant.settlement_drink_entries)
             + shared_expense_charge_lines(participant, prefetched_participant.settlement_expense_allocations)
@@ -967,7 +1073,8 @@ def calculate_participant_settlements(
 
 def calculate_camp_settlements(camp):
     participants = Participant.objects.filter(camp=camp, archived_at__isnull=True).order_by("last_name", "first_name")
-    return [calculate_participant_settlement(participant) for participant in participants]
+    results_by_id = calculate_participant_settlements(participants)
+    return list(results_by_id.values())
 
 
 def _settlement_snapshot_data(result: SettlementResult) -> dict[str, Any]:
@@ -989,6 +1096,7 @@ def _settlement_snapshot_data(result: SettlementResult) -> dict[str, Any]:
                 "source": line.source,
                 "occurred_on": line.occurred_on.isoformat() if line.occurred_on else None,
                 "booking_references": list(line.booking_references),
+                "target_name": line.target_name,
             }
             for line in result.lines
         ],
@@ -1009,13 +1117,23 @@ def _cost_center_snapshot_data(camp: Camp) -> list[dict[str, Any]]:
                 "income_count": data["income_count"],
                 "expense_count": data["expense_count"],
                 "income_details": [
-                    {
-                        "meal_date": signup.meal_date.isoformat(),
-                        "participant_name": signup.participant.full_name,
-                        "family_member_name": signup.family_member.full_name if signup.family_member else "",
-                        "description": signup.get_meal_display(),
-                        "amount": str(money(signup.charge.total)),
-                    }
+                    (
+                        {
+                            "meal_date": signup.meal_date.isoformat(),
+                            "participant_name": signup.participant.full_name,
+                            "family_member_name": signup.family_member.full_name if signup.family_member else "",
+                            "description": signup.get_meal_display(),
+                            "amount": str(money(signup.charge.total if signup.charge is not None else ZERO)),
+                        }
+                        if isinstance(signup, MealSignup)
+                        else {
+                            "meal_date": signup["date"].isoformat() if signup["date"] else "",
+                            "participant_name": signup["participant"].full_name,
+                            "family_member_name": signup.get("family_member_name", ""),
+                            "description": signup["description"],
+                            "amount": str(money(signup["total"])),
+                        }
+                    )
                     for signup in data["income_details"]
                 ],
                 "expense_details": [
@@ -1329,10 +1447,14 @@ def get_cost_center_evaluation(camp):
         )
 
     # 2. Automated CAMP_FLAT from rules
-    active_participants = Participant.objects.filter(
-        camp=camp,
-        status__in=[Participant.Status.REGISTERED, Participant.Status.ACTIVE, Participant.Status.SETTLED],
-    ).select_related("camp")
+    active_participants = (
+        Participant.objects.filter(
+            camp=camp,
+            status__in=[Participant.Status.REGISTERED, Participant.Status.ACTIVE, Participant.Status.SETTLED],
+        )
+        .select_related("camp")
+        .prefetch_related("family_members")
+    )
     default_rules = list(PriceRule.objects.filter(camp=camp, is_default=True))
     camp_flat_rules = [rule for rule in default_rules if rule.kind == PriceRule.Kind.CAMP_FLAT]
 
@@ -1361,6 +1483,19 @@ def get_cost_center_evaluation(camp):
                     "participant": participant,
                     "description": f"{rule.name} (Automatisch)",
                     "total": gross,
+                }
+            )
+
+        for line in family_camp_flat_lines(participant, participant.family_members.all(), default_rules):
+            evaluation["camp_flat"]["income"] += line.gross_total
+            evaluation["camp_flat"]["income_count"] += 1
+            evaluation["camp_flat"]["income_details"].append(
+                {
+                    "date": None,
+                    "participant": participant,
+                    "family_member_name": line.target_name,
+                    "description": f"{line.label} (Automatisch)",
+                    "total": line.gross_total,
                 }
             )
 
