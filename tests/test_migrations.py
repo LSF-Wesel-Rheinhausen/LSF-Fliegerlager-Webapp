@@ -224,3 +224,43 @@ def test_kiosk_audit_migration_snapshots_existing_family_member_names() -> None:
     migrated_audit_log = new_apps.get_model("billing", "KioskActionAuditLog").objects.get(pk=audit_log.pk)
     assert migrated_audit_log.actor_display_name_snapshot == "Akteur Alt"
     assert migrated_audit_log.target_display_name_snapshot == "Ziel Alt"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_family_member_youth_group_migration_defaults_false_and_rolls_back() -> None:
+    executor = MigrationExecutor(connection)
+    old_target = [("billing", "0058_charge_family_member_attribution")]
+    executor.migrate(old_target)
+    old_apps = executor.loader.project_state(old_target).apps
+    Camp = old_apps.get_model("billing", "Camp")
+    Participant = old_apps.get_model("billing", "Participant")
+    FamilyMember = old_apps.get_model("billing", "ParticipantFamilyMember")
+    camp = Camp.objects.create(name="Migration", year=2030)
+    participant = Participant.objects.create(camp=camp, first_name="Haupt", last_name="Konto")
+    member = FamilyMember.objects.create(
+        guardian=participant,
+        first_name="Alt",
+        last_name="Kind",
+        role="child",
+    )
+
+    new_target = [("billing", "0059_participantfamilymember_is_youth_group")]
+    executor = MigrationExecutor(connection)
+    executor.migrate(new_target)
+    new_member = (
+        executor.loader.project_state(new_target)
+        .apps.get_model("billing", "ParticipantFamilyMember")
+        .objects.get(pk=member.pk)
+    )
+    assert new_member.is_youth_group is False
+
+    executor = MigrationExecutor(connection)
+    executor.migrate(old_target)
+    with connection.cursor() as cursor:
+        columns = {
+            column.name
+            for column in connection.introspection.get_table_description(cursor, "billing_participantfamilymember")
+        }
+    assert "is_youth_group" not in columns
+    executor = MigrationExecutor(connection)
+    executor.migrate(executor.loader.graph.leaf_nodes())

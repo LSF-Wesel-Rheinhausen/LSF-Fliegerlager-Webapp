@@ -589,6 +589,10 @@ class ParticipantFamilyMember(TimeStampedModel):
     first_name = models.CharField(max_length=120)
     last_name = models.CharField(max_length=120)
     role = models.CharField(max_length=20, choices=Role.choices)
+    is_youth_group = models.BooleanField(
+        default=False,
+        help_text="Förderfähige Kosten werden mit Hilfssatz und Berufssatz 1,0000 berechnet.",
+    )
     arrival_date = models.DateField(null=True, blank=True)
     departure_date = models.DateField(null=True, blank=True)
     is_active = models.BooleanField(default=True)

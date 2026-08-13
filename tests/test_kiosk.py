@@ -161,6 +161,28 @@ def test_guardian_cannot_create_companion_without_pin(kiosk_client):
 
 
 @pytest.mark.django_db
+def test_guardian_must_confirm_youth_group_status_when_creating_family_member(kiosk_client):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "family_member_create",
+            "family-first_name": "Grace",
+            "family-last_name": "Hopper",
+            "family-role": ParticipantFamilyMember.Role.CHILD,
+            "family-is_youth_group": "on",
+        },
+    )
+
+    assert response.status_code == 200
+    assert not ParticipantFamilyMember.objects.filter(guardian=participant, first_name="Grace").exists()
+
+
+@pytest.mark.django_db
 def test_guardian_can_set_pin_for_existing_companion(kiosk_client):
     participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
     companion = ParticipantFamilyMember.objects.create(
@@ -2760,11 +2782,14 @@ def test_kiosk_creates_family_member_and_books_meal_on_guardian(kiosk_client, mo
             "family-first_name": "Kind",
             "family-last_name": "Muster",
             "family-role": ParticipantFamilyMember.Role.CHILD,
+            "family-is_youth_group": "on",
+            "family-confirm_settlement_change": "on",
         },
     )
 
     assert response.status_code == 302
     family_member = ParticipantFamilyMember.objects.get(guardian=participant)
+    assert family_member.is_youth_group is True
 
     response = kiosk_client.post(
         reverse("kiosk-home"),

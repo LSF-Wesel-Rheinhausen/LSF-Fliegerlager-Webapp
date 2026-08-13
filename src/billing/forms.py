@@ -483,11 +483,20 @@ class ParticipantFamilyMemberForm(forms.ModelForm):
 
     class Meta:
         model = ParticipantFamilyMember
-        fields = ["first_name", "last_name", "role", "arrival_date", "departure_date", "is_active"]
+        fields = [
+            "first_name",
+            "last_name",
+            "role",
+            "is_youth_group",
+            "arrival_date",
+            "departure_date",
+            "is_active",
+        ]
         labels = {
             "first_name": "Vorname",
             "last_name": "Nachname",
             "role": "Rolle",
+            "is_youth_group": "Jugendgruppe",
             "arrival_date": "Anreise",
             "departure_date": "Abreise",
             "is_active": "Aktiv",
@@ -1404,20 +1413,27 @@ class KioskFamilyMemberForm(forms.ModelForm):
         required=False,
         widget=forms.PasswordInput(attrs={"autocomplete": "new-password", "inputmode": "numeric"}),
     )
+    confirm_settlement_change = forms.BooleanField(
+        required=False,
+        label="Jugendgruppenstatus für die Abrechnung bestätigen",
+    )
 
     class Meta:
         model = ParticipantFamilyMember
-        fields = ["first_name", "last_name", "role"]
+        fields = ["first_name", "last_name", "role", "is_youth_group"]
         labels = {
             "first_name": "Vorname",
             "last_name": "Nachname",
             "role": "Rolle",
+            "is_youth_group": "Jugendgruppe",
         }
 
     def clean(self) -> dict[str, Any]:
         """Require a confirmed PIN when the family member receives a login."""
         cleaned_data = super().clean() or {}
         if cleaned_data.get("role") != ParticipantFamilyMember.Role.COMPANION:
+            if cleaned_data.get("is_youth_group") and not cleaned_data.get("confirm_settlement_change"):
+                self.add_error("confirm_settlement_change", "Bitte bestätige die Auswirkung auf die Abrechnung.")
             return cleaned_data
 
         pin = cleaned_data.get("pin")
@@ -1428,6 +1444,8 @@ class KioskFamilyMemberForm(forms.ModelForm):
             self.add_error("pin_repeat", "Bitte wiederhole die PIN.")
         if pin and pin_repeat and pin != pin_repeat:
             self.add_error("pin_repeat", "Die PINs stimmen nicht überein.")
+        if cleaned_data.get("is_youth_group") and not cleaned_data.get("confirm_settlement_change"):
+            self.add_error("confirm_settlement_change", "Bitte bestätige die Auswirkung auf die Abrechnung.")
         return cleaned_data
 
 

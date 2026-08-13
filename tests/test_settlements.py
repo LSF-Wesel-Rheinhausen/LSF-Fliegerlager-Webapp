@@ -311,6 +311,40 @@ def test_settlement_selects_matching_camp_flat_rate_for_companion_and_duration()
 
 
 @pytest.mark.django_db
+def test_participant_owned_child_and_companion_keep_their_existing_rule_filters():
+    camp = CampFactory()
+    child = ParticipantFactory(camp=camp, is_child=True)
+    companion = ParticipantFactory(camp=camp, is_companion=True)
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.CAMP_FLAT,
+        name="Teilnehmer nur Erwachsene",
+        unit_price=Decimal("100.00"),
+        camp_flat_role=PriceRule.CampFlatRole.PARTICIPANT,
+        camp_flat_duration=PriceRule.CampFlatDuration.ONE_WEEK,
+        applies_to_children=False,
+        applies_to_adults=True,
+        is_default=True,
+    )
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.CAMP_FLAT,
+        name="Begleitperson",
+        unit_price=Decimal("150.00"),
+        camp_flat_role=PriceRule.CampFlatRole.COMPANION,
+        camp_flat_duration=PriceRule.CampFlatDuration.ONE_WEEK,
+        applies_to_companions=True,
+        is_default=True,
+    )
+
+    child_result = calculate_participant_settlement(child)
+    companion_result = calculate_participant_settlement(companion)
+
+    assert child_result.total_due == Decimal("0.00")
+    assert [line.label for line in companion_result.lines] == ["Begleitperson"]
+
+
+@pytest.mark.django_db
 def test_participant_camp_flat_duration():
     from billing.models import PriceRule
     from billing.services import participant_camp_flat_duration

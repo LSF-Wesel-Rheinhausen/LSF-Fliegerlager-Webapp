@@ -1,0 +1,3 @@
+- Familienmitglieder können unabhängig von ihrer Rolle als Jugendgruppe markiert werden.
+- Jugendgruppen-Familienmitglieder erhalten für ihre förderfähigen Kosten effektiv Hilfssatz 1 und Berufssatz 1; der Förderregelsatz bleibt der Multiplikator und Deckel.
+- Familienkinder erhalten weiterhin keine automatische Lagerpauschale; erwachsene Begleitpersonen werden mit korrekter Aufenthaltsdauer abgerechnet.

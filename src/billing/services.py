@@ -654,6 +654,17 @@ def participant_subsidy_rate(participant, subsidy_rate):
     return min(rate(raw_rate), Decimal("1.0000"))
 
 
+def family_member_subsidy_rate(
+    guardian: Participant,
+    family_member: ParticipantFamilyMember | None,
+    subsidy_rate,
+) -> Decimal:
+    """Calculate a family target's subsidy using its youth-group flag or guardian fallback."""
+    if family_member is not None and family_member.is_youth_group:
+        return min(rate(subsidy_rate), Decimal("1.0000"))
+    return participant_subsidy_rate(guardian, subsidy_rate)
+
+
 def build_settlement_line(
     label,
     quantity,
@@ -665,9 +676,10 @@ def build_settlement_line(
     occurred_on=None,
     booking_references=(),
     target_name: str = "",
+    family_member: ParticipantFamilyMember | None = None,
 ):
     gross_total = money(quantity * unit_price)
-    effective_subsidy_rate = participant_subsidy_rate(participant, subsidy_rate)
+    effective_subsidy_rate = family_member_subsidy_rate(participant, family_member, subsidy_rate)
     subsidy_amount = money(gross_total * effective_subsidy_rate)
     total = money(gross_total - subsidy_amount)
     return SettlementLine(
@@ -751,11 +763,15 @@ def family_camp_flat_lines(
     family_members: Iterable[ParticipantFamilyMember],
     default_rules: Iterable[PriceRule],
 ) -> list[SettlementLine]:
-    """Create pure, guardian-billed camp-fee lines for active family members."""
+    """Create guardian-billed camp-fee lines for active adult companions.
+
+    Family children are not charged a camp flat fee. Their ``role`` is the
+    authoritative classification because family members do not carry age data.
+    """
     camp_flat_rules = [rule for rule in default_rules if rule.kind == PriceRule.Kind.CAMP_FLAT]
     lines = []
     for member in family_members:
-        if not member.is_active:
+        if not member.is_active or member.role == ParticipantFamilyMember.Role.CHILD:
             continue
         matching_rules = [
             rule
@@ -779,6 +795,7 @@ def family_camp_flat_lines(
                     subsidy_rate=rule.foerdersatz,
                     participant=guardian,
                     target_name=member.full_name,
+                    family_member=member,
                 )
             )
     return lines
@@ -804,6 +821,7 @@ def manual_charge_lines(
             source=f"charge:{charge.pk}",
             subsidy_rate=charge.foerdersatz,
             participant=participant,
+            family_member=charge.family_member,
         )
         key = (
             occurred_on,
