@@ -25,6 +25,28 @@ Pflichtvariablen für den Update-Agent:
 - `PORTAINER_ENDPOINT_ID`: Portainer Environment/Endpoint-ID des Ziel-Stacks.
 - `PORTAINER_STACK_ID`: Portainer Stack-ID des Ziel-Stacks.
 
+## Service-spezifische Umgebungsvariablen
+
+Die Compose-Dateien injizieren `.env` nicht mehr pauschal in alle Container. Jeder Dienst erhält nur die für seinen
+Prozess benötigten Variablen:
+
+- `app`: Django-/Datenbankkonfiguration, Update-Agent-Token und -URL, Web-Push-Konfiguration sowie
+  Anwendungsoptionen. Portainer- und Registry-Zugangsdaten werden nicht an die App übergeben.
+- `daily-settlement-backup`: Django-Secret, Django-Host-Allowlist, Datenbank-URL, Backup-Pfad und Backup-Intervall.
+- `push-worker`: Django-Secret, Django-Host-Allowlist, Datenbank-URL, Web-Push-Schlüssel/-Subject, die erlaubten
+  Push-Origins und das Worker-Intervall.
+- `email-worker`: Django-Secret, Django-Host-Allowlist und Datenbank-URL. SMTP-Zugangsdaten liegen verschlüsselt in
+  PostgreSQL; Web-Push-Schlüssel werden diesem Dienst nicht bereitgestellt.
+- `updater`: Update-Agent-Token, Datenbank-/Backup-Konfiguration, Portainer-Zugangsdaten und optional `GHCR_TOKEN`.
+
+`PORTAINER_URL`, `PORTAINER_API_KEY`, `PORTAINER_ENDPOINT_ID`, `PORTAINER_STACK_ID` und `GHCR_TOKEN` dürfen nur im
+`updater`-Service vorkommen. Änderungen an der Allowlist müssen durch die Compose-Konfigurationstests abgesichert
+werden.
+
+`DJANGO_ALLOWED_HOSTS` wird für den `app`-Service weiterhin zwingend aus `.env` verlangt. Die drei Worker verwenden
+dieselbe Variable und fallen bei einem isolierten Start sicher auf `localhost,127.0.0.1` zurück; eine Wildcard wird
+nicht verwendet.
+
 Optionale Variablen mit Defaults:
 
 - `UPDATER_IMAGE`: Updater-Container-Image; Default ist das veröffentlichte GHCR-Updater-Image.
@@ -33,6 +55,9 @@ Optionale Variablen mit Defaults:
 - `WEB_PUSH_WORKER_INTERVAL_SECONDS`: Prüfintervall des Push-Workers; Default `60`.
 - `APP_HEALTH_URL`: Healthcheck-URL der App; Default `http://app:8000/healthz/`.
 - `TARGET_SERVICE`: Compose-Service des App-Containers für Rollback-Digest-Ermittlung; Default `app`.
+- `MAX_AGENT_BODY_BYTES`: maximales JSON-Request-Body-Limit des Update-Agents; Default `1048576` Bytes.
+- `AGENT_READ_TIMEOUT_SECONDS`: maximale Lesedauer für einen Request-Body; Default `10` Sekunden.
+- `MAX_AGENT_CONCURRENT_REQUESTS`: maximale Zahl paralleler Update-Agent-Requests; Default `8`.
 - `PERSISTENCE_DIR`: absoluter Host-Pfad für alle persistenten Daten; für Portainer wird `/srv/fliegerlager` empfohlen.
 - `BACKUP_DIR`: bisheriger Host-Pfad der Backups; dient nur als Quelle bei der einmaligen Speichermigration.
 - `PORTAINER_VERIFY_SSL`: Portainer-Zertifikatsprüfung; Default `true`. Für interne Portainer-Instanzen mit Self-Signed-Zertifikat `false` setzen.
@@ -156,6 +181,14 @@ Der private Schlüssel darf nicht in Git, Logs oder Screenshots gelangen. Der ge
 Host-Backupstrategie aufgenommen werden. Eine Schlüsselrotation macht bestehende Browser-Subscriptions unbrauchbar;
 betroffene Geräte müssen Push danach erneut aktivieren.
 
+`WEB_PUSH_ALLOWED_ORIGINS` ist eine kommaseparierte Liste exakter Origins der tatsächlich eingesetzten Browser-
+Pushdienste, zum Beispiel `https://push.example.org` ohne Pfad. Es werden ausschließlich HTTPS, der effektive Port
+443, Hostnamen ohne Userinfo/IP-Literal/Platzhalter und eine exakte Origin-Übereinstimmung akzeptiert. Die Liste bleibt
+standardmäßig leer (Fail-Closed); der Betreiber muss die in der eigenen Browser-/Push-Service-Konfiguration verwendeten
+Origins vor der Aktivierung eintragen. Die Anwendung führt keine DNS-Auflösung als Vertrauensentscheidung durch.
+Redirects werden beim Versand nicht verfolgt. Eine restriktive Egress-Regel des Container-/Proxy-Netzes bleibt als
+Defense in Depth erforderlich.
+
 Der Service `push-worker` erzeugt terminierte Erinnerungen und verarbeitet die Datenbank-Outbox. Zentrale Tablets
 verwenden `/central/kiosk/` und bieten keine Push-Aktivierung an. Weitere Betriebsdetails stehen in
 [`../docs/pwa-push.md`](../docs/pwa-push.md).
@@ -174,11 +207,20 @@ veröffentlicht aber keinen Port. Betriebs- und Sicherheitshinweise stehen in
 ## Updates
 
 Ein Django-Superuser öffnet **Updates**, prüft das bereitgestellte `latest`-Image und bestätigt die Installation. Der
-Updater liest die OCI-Metadaten aus GHCR, ermittelt vor dem Update den unveränderlichen `repo@sha256:...`-Digest des
-laufenden App-Containers, erstellt ein Backup unter `BACKUP_DIR`, setzt `APP_IMAGE` über die Portainer-API und wartet
-auf `APP_HEALTH_URL`. Schlägt der Start fehl, setzt der Updater `APP_IMAGE` auf den vorher ermittelten Digest zurück
-und redeployt den Stack erneut. Datenbankmigrationen werden nicht automatisch zurückgerollt; das erzeugte Backup bleibt
-für eine kontrollierte Wiederherstellung erhalten.
+Updater liest die OCI-Metadaten aus GHCR und speichert den dabei validierten `repo@sha256:...`-Digest als freigegebenen
+Installationskandidaten. `/install` verwendet ausschließlich diesen gespeicherten Digest und fragt das bewegliche Tag
+nicht erneut ab. Vor dem Update ermittelt der Updater den unveränderlichen Digest des laufenden App-Containers,
+erstellt ein Backup unter `BACKUP_DIR`, setzt `APP_IMAGE` über die Portainer-API und wartet auf `APP_HEALTH_URL`.
+Anschließend wird der tatsächlich laufende RepoDigest erneut gelesen und exakt mit dem freigegebenen Digest verglichen.
+Schlägt ein Schritt fehl oder stimmt der Digest nicht überein, setzt der Updater `APP_IMAGE` auf den vorher ermittelten
+unveränderlichen Digest zurück und redeployt den Stack erneut. Datenbankmigrationen werden nicht automatisch
+zurückgerollt; das erzeugte Backup bleibt für eine kontrollierte Wiederherstellung erhalten.
+
+Der Update-Agent akzeptiert nur Requests mit `Content-Length`, begrenzt den JSON-Body und weist unvollständige oder zu
+langsam gelesene Bodies mit generischen Fehlern zurück. Eine feste Semaphore begrenzt die Anzahl paralleler Requests.
+Backups teilen sich einen Lock; während eines laufenden Backups antwortet `POST /backup` mit HTTP 409. Archivnamen
+enthalten einen kryptografischen Zufallssuffix und werden exklusiv angelegt, sodass auch gleiche Zeitstempel keine
+vorhandenen Archive überschreiben.
 
 Der Updater erhält keinen Docker-Socket und keine Compose-Dateien. Er hat keinen veröffentlichten Port, akzeptiert nur
 das gemeinsame `UPDATE_AGENT_TOKEN` und darf nicht in ein öffentlich erreichbares Netzwerk gelegt werden.

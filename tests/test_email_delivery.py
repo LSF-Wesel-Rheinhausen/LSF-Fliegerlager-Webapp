@@ -26,7 +26,7 @@ from billing.email_delivery import (
     settlement_recipient_mapping,
 )
 from billing.models import EmailBatch, EmailConfiguration, EmailDelivery, EmailTestLog
-from billing.permissions import EDITOR_GROUP
+from billing.permissions import EDITOR_GROUP, HUEBERS_GROUP
 from billing.services import create_settlement_run
 from tests.factories import CampFactory, ChargeFactory, GroupFactory, ParticipantFactory, SuperUserFactory, UserFactory
 
@@ -78,6 +78,23 @@ def test_information_batch_groups_selected_participants_by_normalized_address():
     assert delivery.dedupe_key == f"information:{expected_digest}"
     assert delivery.recipient_email not in str(delivery)
     assert str(delivery) == f"E-Mail-Zustellung {delivery.pk} (Ausstehend)"
+
+
+@pytest.mark.django_db
+def test_information_email_includes_sender_footer_at_end_of_delivery_body():
+    admin = SuperUserFactory(first_name="Ada", last_name="Admin")
+    participant = ParticipantFactory(email="participant@example.test")
+
+    batch = queue_information_email_batch(
+        camp=participant.camp,
+        participant_ids=[participant.pk],
+        subject="Treffpunkt",
+        body="Wir treffen uns um 18 Uhr.",
+        created_by=admin,
+    )
+
+    delivery = batch.deliveries.get()
+    assert delivery.body_text == ("Wir treffen uns um 18 Uhr.\n\n---\nGesendet von: Ada Admin")
 
 
 @pytest.mark.django_db
@@ -171,7 +188,8 @@ def test_worker_sends_one_private_information_message_from_web_configuration():
     assert message.bcc == []
     assert message.from_email == "Fliegerlager <lager@example.test>"
     assert message.reply_to == ["antwort@example.test"]
-    assert message.body == "<Bitte> morgen um 8 Uhr."
+    assert message.body == delivery.body_text
+    assert message.body.endswith(f"Gesendet von: {admin.get_username()}")
     assert message.alternatives[0].mimetype == "text/html"
     assert "&lt;Bitte&gt; morgen um 8 Uhr." in message.alternatives[0].content
 
@@ -445,6 +463,33 @@ def test_admin_previews_and_confirms_exact_information_recipients(client):
     assert confirmed.status_code == 302
     assert confirmed["Location"] == reverse("email-batch-detail", args=[batch.pk])
     assert batch.deliveries.count() == 1
+
+
+@pytest.mark.django_db
+def test_huebers_information_confirmation_returns_to_meal_overview(client):
+    huebers = UserFactory()
+    huebers.groups.add(GroupFactory(name=HUEBERS_GROUP))
+    participant = ParticipantFactory(email="participant@example.test")
+    configuration = EmailConfiguration.load()
+    configuration.enabled = True
+    configuration.host = "smtp.example.test"
+    configuration.from_email = "lager@example.test"
+    configuration.set_password("smtp-secret")
+    configuration.save()
+    client.force_login(huebers)
+    url = reverse("information-email-compose", args=[participant.camp_id])
+    data = {
+        "subject": "Treffpunkt",
+        "body": "Wir treffen uns um 18 Uhr.",
+        "participants": [str(participant.pk)],
+    }
+
+    preview = client.post(url, {**data, "action": "preview"})
+    response = client.post(url, {**data, "action": "confirm", "preview_token": preview.context["preview_token"]})
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("camp-meal-overview", args=[participant.camp_id])
+    assert EmailBatch.objects.count() == 1
 
 
 @pytest.mark.django_db

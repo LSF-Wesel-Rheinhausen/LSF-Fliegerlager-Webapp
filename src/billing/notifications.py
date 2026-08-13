@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from typing import Any
 
+import requests
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -26,6 +27,7 @@ from .models import (
     ShiftAssignment,
 )
 from .permissions import ADMIN_GROUP, EDITOR_GROUP, HUEBERS_GROUP
+from .push_endpoints import is_allowed_push_endpoint
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +45,16 @@ ADMIN_CATEGORIES: dict[str, str] = {
 }
 ALL_CATEGORIES = {**PARTICIPANT_CATEGORIES, **ADMIN_CATEGORIES}
 RETRY_DELAYS = (60, 300, 1800, 7200, 21600)
+PUSH_DELIVERY_TIMEOUT_SECONDS = 5
 User = get_user_model()
+
+
+class _NoRedirectSession(requests.Session):
+    """Force pywebpush requests to return redirects instead of following them."""
+
+    def request(self, *args: Any, **kwargs: Any):
+        kwargs["allow_redirects"] = False
+        return super().request(*args, **kwargs)
 
 
 @dataclass(frozen=True)
@@ -411,58 +422,75 @@ def send_due_push_messages(*, batch_size: int = 50) -> PushDeliveryResult:
         .order_by("next_attempt_at", "pk")[:batch_size]
     )
     sent = retried = failed = removed = 0
-    for message in messages:
-        subscription = message.subscription
-        try:
-            webpush(
-                subscription_info={
-                    "endpoint": subscription.endpoint,
-                    "keys": {"p256dh": subscription.p256dh, "auth": subscription.auth},
-                },
-                data=json.dumps(
-                    {
-                        "title": message.title,
-                        "body": message.body,
-                        "url": message.target_url,
-                        "tag": message.dedupe_key,
-                    },
-                    ensure_ascii=False,
-                ),
-                vapid_private_key=settings.WEB_PUSH_VAPID_PRIVATE_KEY,
-                vapid_claims={"sub": settings.WEB_PUSH_VAPID_SUBJECT},
-                ttl=86400,
-            )
-        except WebPushException as error:
-            status_code = getattr(getattr(error, "response", None), "status_code", None)
-            if status_code in {404, 410}:
-                subscription.delete()
-                removed += 1
-                continue
-            message.attempts += 1
-            message.last_error_code = str(status_code or "delivery_error")[:40]
-            if message.attempts >= len(RETRY_DELAYS):
+    with _NoRedirectSession() as requests_session:
+        for message in messages:
+            subscription = message.subscription
+            if not is_allowed_push_endpoint(subscription.endpoint):
+                PushSubscription.objects.filter(pk=subscription.pk).update(is_active=False, updated_at=now)
                 message.status = PushMessage.Status.FAILED
+                message.last_error_code = "invalid_endpoint"
+                message.save(update_fields=["status", "last_error_code", "updated_at"])
                 failed += 1
-            else:
-                message.next_attempt_at = now + timedelta(seconds=RETRY_DELAYS[message.attempts - 1])
-                retried += 1
-            message.save(update_fields=["attempts", "last_error_code", "status", "next_attempt_at", "updated_at"])
-            logger.warning(
-                "Push delivery failed",
-                extra={"push_message_id": message.pk, "status_code": status_code, "attempt": message.attempts},
-            )
-            continue
+                continue
+            try:
+                response = webpush(
+                    subscription_info={
+                        "endpoint": subscription.endpoint,
+                        "keys": {"p256dh": subscription.p256dh, "auth": subscription.auth},
+                    },
+                    data=json.dumps(
+                        {
+                            "title": message.title,
+                            "body": message.body,
+                            "url": message.target_url,
+                            "tag": message.dedupe_key,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    vapid_private_key=settings.WEB_PUSH_VAPID_PRIVATE_KEY,
+                    vapid_claims={"sub": settings.WEB_PUSH_VAPID_SUBJECT},
+                    requests_session=requests_session,
+                    timeout=PUSH_DELIVERY_TIMEOUT_SECONDS,
+                    ttl=86400,
+                )
+                status_code = getattr(response, "status_code", None)
+                if isinstance(status_code, int) and 300 <= status_code < 400:
+                    raise WebPushException("Push endpoint returned a redirect.", response=response)
+            except (WebPushException, requests.RequestException) as error:
+                status_code = getattr(getattr(error, "response", None), "status_code", None)
+                if status_code in {404, 410}:
+                    subscription.delete()
+                    removed += 1
+                    continue
+                message.attempts += 1
+                message.last_error_code = (
+                    "redirect"
+                    if isinstance(status_code, int) and 300 <= status_code < 400
+                    else str(status_code or "delivery_error")
+                )[:40]
+                if message.attempts >= len(RETRY_DELAYS):
+                    message.status = PushMessage.Status.FAILED
+                    failed += 1
+                else:
+                    message.next_attempt_at = now + timedelta(seconds=RETRY_DELAYS[message.attempts - 1])
+                    retried += 1
+                message.save(update_fields=["attempts", "last_error_code", "status", "next_attempt_at", "updated_at"])
+                logger.warning(
+                    "Push delivery failed",
+                    extra={"push_message_id": message.pk, "status_code": status_code, "attempt": message.attempts},
+                )
+                continue
 
-        with transaction.atomic():
-            message.status = PushMessage.Status.SENT
-            message.sent_at = now
-            message.attempts += 1
-            message.last_error_code = ""
-            message.save(update_fields=["status", "sent_at", "attempts", "last_error_code", "updated_at"])
-            subscription.last_success_at = now
-            subscription.failure_count = 0
-            subscription.save(update_fields=["last_success_at", "failure_count", "updated_at"])
-        sent += 1
+            with transaction.atomic():
+                message.status = PushMessage.Status.SENT
+                message.sent_at = now
+                message.attempts += 1
+                message.last_error_code = ""
+                message.save(update_fields=["status", "sent_at", "attempts", "last_error_code", "updated_at"])
+                subscription.last_success_at = now
+                subscription.failure_count = 0
+                subscription.save(update_fields=["last_success_at", "failure_count", "updated_at"])
+            sent += 1
     return PushDeliveryResult(sent=sent, retried=retried, failed=failed, removed_subscriptions=removed)
 
 

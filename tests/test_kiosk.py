@@ -1398,7 +1398,11 @@ def test_kiosk_rejects_meal_booking_after_order_was_sent(kiosk_client, monkeypat
     fixed_now = timezone.make_aware(datetime(2026, 7, 1, 10, 30))
     monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
     monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
-    camp = CampFactory(meal_booking_cutoff_time=time(14, 45))
+    camp = CampFactory(
+        starts_on=date(2026, 7, 1),
+        ends_on=date(2026, 7, 2),
+        meal_booking_cutoff_time=time(14, 45),
+    )
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     meal_date = date(2026, 7, 2)
     MealOrder.objects.create(camp=camp, meal_date=meal_date)
@@ -2054,7 +2058,7 @@ def test_kiosk_home_filters_quick_booking_list_to_kiosk_created_charges(kiosk_cl
 @pytest.mark.django_db
 def test_kiosk_meal_signup_updates_existing_signup_and_creates_charge(kiosk_client, monkeypatch):
     _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
-    camp = CampFactory()
+    camp = CampFactory(starts_on=date(2026, 6, 30), ends_on=date(2026, 7, 2))
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     PriceRuleFactory(
         camp=camp,
@@ -2093,7 +2097,7 @@ def test_kiosk_meal_signup_updates_existing_signup_and_creates_charge(kiosk_clie
 @pytest.mark.django_db
 def test_kiosk_meal_signup_uses_date_specific_price_only_for_matching_date(kiosk_client, monkeypatch):
     _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
-    camp = CampFactory()
+    camp = CampFactory(starts_on=date(2026, 6, 30), ends_on=date(2026, 7, 2))
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     PriceRuleFactory(
         camp=camp,
@@ -2427,7 +2431,11 @@ def test_kiosk_rejects_unknown_meal_target_without_partial_booking(kiosk_client,
 def test_kiosk_meal_signup_for_tomorrow_closes_after_camp_cutoff(kiosk_client, monkeypatch):
     fixed_now = timezone.make_aware(datetime(2026, 7, 1, 12, 1))
     monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
-    camp = CampFactory(meal_booking_cutoff_time=time(12, 0))
+    camp = CampFactory(
+        starts_on=date(2026, 7, 1),
+        ends_on=date(2026, 7, 2),
+        meal_booking_cutoff_time=time(12, 0),
+    )
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     PriceRuleFactory(
         camp=camp,
@@ -2463,7 +2471,11 @@ def test_kiosk_meal_signup_for_tomorrow_closes_after_camp_cutoff(kiosk_client, m
 def test_kiosk_meal_signup_for_tomorrow_stays_open_before_camp_cutoff(kiosk_client, monkeypatch):
     fixed_now = timezone.make_aware(datetime(2026, 7, 1, 11, 59))
     monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
-    camp = CampFactory(meal_booking_cutoff_time=time(12, 0))
+    camp = CampFactory(
+        starts_on=date(2026, 7, 1),
+        ends_on=date(2026, 7, 2),
+        meal_booking_cutoff_time=time(12, 0),
+    )
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     PriceRuleFactory(
         camp=camp,
@@ -2711,7 +2723,7 @@ def test_kiosk_meal_signup_requires_person_when_dialog_selection_is_empty(kiosk_
 @pytest.mark.django_db
 def test_kiosk_creates_family_member_and_books_meal_on_guardian(kiosk_client, monkeypatch):
     _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
-    camp = CampFactory()
+    camp = CampFactory(starts_on=date(2026, 6, 30), ends_on=date(2026, 7, 2))
     participant = ParticipantFactory(camp=camp, first_name="Vater", last_name="Muster")
     PriceRuleFactory(
         camp=camp,
@@ -2931,7 +2943,7 @@ def test_kiosk_booking_link_invite_accept_revoke_flow(kiosk_client):
 @pytest.mark.django_db
 def test_kiosk_books_meal_for_linked_participant_on_linked_account(kiosk_client, monkeypatch):
     _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
-    camp = CampFactory()
+    camp = CampFactory(starts_on=date(2026, 6, 30), ends_on=date(2026, 7, 2))
     inviter = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")
     invitee = ParticipantFactory(camp=camp, first_name="Grace", last_name="B")
     ParticipantBookingLink.objects.create(
@@ -3158,7 +3170,7 @@ def test_kiosk_quick_food_booking_applies_todays_date_specific_breakfast_price(k
 @pytest.mark.django_db
 def test_kiosk_meal_signup_child_breakfast_override(kiosk_client, monkeypatch):
     _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 6, 30, 10, 0)))
-    camp = CampFactory()
+    camp = CampFactory(starts_on=date(2026, 6, 30), ends_on=date(2026, 7, 2))
     participant = ParticipantFactory(camp=camp, first_name="Timmy", is_child=True)
 
     # Standard price

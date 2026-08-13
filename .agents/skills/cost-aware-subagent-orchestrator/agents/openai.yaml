@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cost-aware Subagent Orchestrator"
+  short_description: "Delegate tasks with minimal model cost"
+  default_prompt: "Use $cost-aware-subagent-orchestrator to split this work and assign each subtask to the least expensive capable agent."

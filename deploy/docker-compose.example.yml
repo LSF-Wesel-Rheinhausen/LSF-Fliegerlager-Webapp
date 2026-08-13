@@ -19,11 +19,35 @@ services:
 
   app:
     image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}
-    env_file: .env
     restart: unless-stopped
     environment:
+      AUTHELIA_SSO_EMAIL_HEADER: ${AUTHELIA_SSO_EMAIL_HEADER:-Remote-Email}
+      AUTHELIA_SSO_ENABLED: ${AUTHELIA_SSO_ENABLED:-0}
       BACKUP_DIR: /backups
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set in .env}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:?DJANGO_ALLOWED_HOSTS must be set in .env}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-0}
+      DJANGO_HSTS_INCLUDE_SUBDOMAINS: ${DJANGO_HSTS_INCLUDE_SUBDOMAINS:-0}
+      DJANGO_HSTS_PRELOAD: ${DJANGO_HSTS_PRELOAD:-0}
+      DJANGO_HSTS_SECONDS: ${DJANGO_HSTS_SECONDS:-0}
+      DJANGO_HTTPS: ${DJANGO_HTTPS:-0}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?DJANGO_SECRET_KEY must be set in .env}
+      DJANGO_TRUST_PROXY_SSL_HEADER: ${DJANGO_TRUST_PROXY_SSL_HEADER:-0}
+      GUNICORN_CMD_ARGS: ${GUNICORN_CMD_ARGS:-}
+      KIOSK_ACCESS_TRUSTED_PROXY_ADDRESSES: ${KIOSK_ACCESS_TRUSTED_PROXY_ADDRESSES:-}
+      PASSKEY_ENABLED: ${PASSKEY_ENABLED:-0}
+      PASSKEY_ORIGIN: ${PASSKEY_ORIGIN:-}
+      PASSKEY_RP_ID: ${PASSKEY_RP_ID:-}
+      PASSKEY_RP_NAME: ${PASSKEY_RP_NAME:-Fliegerlager-Abrechnung}
+      UPDATE_AGENT_TOKEN: ${UPDATE_AGENT_TOKEN:?UPDATE_AGENT_TOKEN must be set in .env}
+      UPDATE_AGENT_URL: ${UPDATE_AGENT_URL:-http://updater:8080}
+      WEB_PUSH_ALLOWED_ORIGINS: ${WEB_PUSH_ALLOWED_ORIGINS:-}
+      WEB_PUSH_ENABLED: ${WEB_PUSH_ENABLED:-0}
       WEB_PUSH_KEY_DIR: /run/secrets/webpush
+      WEB_PUSH_VAPID_PRIVATE_KEY: ${WEB_PUSH_VAPID_PRIVATE_KEY:-}
+      WEB_PUSH_VAPID_PUBLIC_KEY: ${WEB_PUSH_VAPID_PUBLIC_KEY:-}
+      WEB_PUSH_VAPID_SUBJECT: ${WEB_PUSH_VAPID_SUBJECT:-mailto:admin@example.invalid}
     ports:
       - "${APP_BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-8000}:8000"
     depends_on:
@@ -75,6 +99,9 @@ services:
       TARGET_SERVICE: ${TARGET_SERVICE:-app}
       GHCR_TOKEN: ${GHCR_TOKEN:-}
       UPDATE_HEALTH_TIMEOUT: ${UPDATE_HEALTH_TIMEOUT:-180}
+      MAX_AGENT_BODY_BYTES: ${MAX_AGENT_BODY_BYTES:-1048576}
+      AGENT_READ_TIMEOUT_SECONDS: ${AGENT_READ_TIMEOUT_SECONDS:-10}
+      MAX_AGENT_CONCURRENT_REQUESTS: ${MAX_AGENT_CONCURRENT_REQUESTS:-8}
       BACKUP_DIR: /backups
       TZ: ${TZ:-Europe/Berlin}
       PORTAINER_VERIFY_SSL: ${PORTAINER_VERIFY_SSL:-true}
@@ -98,11 +125,14 @@ services:
 
   daily-settlement-backup:
     image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}
-    env_file: .env
     restart: unless-stopped
     environment:
       BACKUP_DIR: /backups
-      WEB_PUSH_KEY_DIR: /run/secrets/webpush
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set in .env}
+      DAILY_SETTLEMENT_BACKUP_INTERVAL_SECONDS: ${DAILY_SETTLEMENT_BACKUP_INTERVAL_SECONDS:-300}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-0}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?DJANGO_SECRET_KEY must be set in .env}
     command: ["python", "manage.py", "run_daily_settlement_backup", "--loop"]
     healthcheck:
       disable: true
@@ -116,15 +146,23 @@ services:
     volumes:
       - ${PERSISTENCE_DIR:-./data}/media:/app/src/media
       - ${PERSISTENCE_DIR:-./data}/backups:/backups
-      - ${PERSISTENCE_DIR:-./data}/secrets/webpush:/run/secrets/webpush:ro
     networks: [backend]
 
   push-worker:
     image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}
-    env_file: .env
     restart: unless-stopped
     environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set in .env}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-0}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?DJANGO_SECRET_KEY must be set in .env}
+      WEB_PUSH_ALLOWED_ORIGINS: ${WEB_PUSH_ALLOWED_ORIGINS:-}
+      WEB_PUSH_ENABLED: ${WEB_PUSH_ENABLED:-0}
       WEB_PUSH_KEY_DIR: /run/secrets/webpush
+      WEB_PUSH_VAPID_PRIVATE_KEY: ${WEB_PUSH_VAPID_PRIVATE_KEY:-}
+      WEB_PUSH_VAPID_PUBLIC_KEY: ${WEB_PUSH_VAPID_PUBLIC_KEY:-}
+      WEB_PUSH_VAPID_SUBJECT: ${WEB_PUSH_VAPID_SUBJECT:-mailto:admin@example.invalid}
+      WEB_PUSH_WORKER_INTERVAL_SECONDS: ${WEB_PUSH_WORKER_INTERVAL_SECONDS:-60}
     command: ["python", "manage.py", "run_push_worker", "--loop"]
     healthcheck:
       disable: true
@@ -139,10 +177,12 @@ services:
 
   email-worker:
     image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}
-    env_file: .env
     restart: unless-stopped
     environment:
-      WEB_PUSH_KEY_DIR: /run/secrets/webpush
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set in .env}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-0}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?DJANGO_SECRET_KEY must be set in .env}
     command: ["python", "manage.py", "run_email_worker", "--loop"]
     healthcheck:
       disable: true
@@ -151,8 +191,6 @@ services:
         condition: service_healthy
       app:
         condition: service_healthy
-    volumes:
-      - ${PERSISTENCE_DIR:-./data}/secrets/webpush:/run/secrets/webpush:ro
     networks: [frontend, backend]
 
 volumes:

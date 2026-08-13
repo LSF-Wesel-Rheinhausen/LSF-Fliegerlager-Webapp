@@ -6,17 +6,21 @@ import hmac
 import io
 import json
 import logging
+import math
 import os
 import re
+import secrets
 import ssl
 import subprocess
 import tarfile
+import tempfile
 import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import UTC, datetime
+from enum import Enum
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -24,6 +28,72 @@ from typing import Any
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("deployment-agent")
+
+
+class AgentConfigError(RuntimeError):
+    """Raised when required updater environment variables are missing or invalid."""
+
+
+class PortainerAPIError(RuntimeError):
+    """Raised when Portainer rejects a stack operation."""
+
+
+class BackupArtifactCategory(Enum):
+    """Internal backup categories with fixed filesystem naming components."""
+
+    BEFORE_UPDATE = ("fliegerlager-before-update", ".sql.gz")
+    ARCHIVE = ("backup-archive", ".tar.gz")
+
+    @property
+    def filename_prefix(self) -> str:
+        """Return the server-controlled filename prefix for this category."""
+        return self.value[0]
+
+    @property
+    def suffix(self) -> str:
+        """Return the server-controlled filename suffix for this category."""
+        return self.value[1]
+
+
+class AgentRequestError(RuntimeError):
+    """Raised for a client request that cannot be safely processed."""
+
+    def __init__(self, status: HTTPStatus, public_code: str) -> None:
+        super().__init__(public_code)
+        self.status = status
+        self.public_code = public_code
+
+
+class BackupInProgressError(AgentRequestError):
+    """Raised when another backup already owns the shared backup lock."""
+
+    def __init__(self) -> None:
+        super().__init__(HTTPStatus.CONFLICT, "backup_in_progress")
+
+
+def positive_int_setting(name: str, default: str) -> int:
+    """Read a positive integer setting used to bound agent resources."""
+    raw_value = os.getenv(name, default)
+    try:
+        value = int(raw_value)
+    except ValueError as error:
+        raise AgentConfigError(f"{name} muss eine positive Ganzzahl sein.") from error
+    if value <= 0:
+        raise AgentConfigError(f"{name} muss eine positive Ganzzahl sein.")
+    return value
+
+
+def positive_float_setting(name: str, default: str) -> float:
+    """Read a positive timeout setting used to bound agent resources."""
+    raw_value = os.getenv(name, default)
+    try:
+        value = float(raw_value)
+    except ValueError as error:
+        raise AgentConfigError(f"{name} muss eine positive Zahl sein.") from error
+    if not math.isfinite(value) or value <= 0:
+        raise AgentConfigError(f"{name} muss eine positive Zahl sein.")
+    return value
+
 
 TOKEN = os.environ["UPDATE_AGENT_TOKEN"]
 TARGET_IMAGE = os.getenv("APP_IMAGE", "ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest")
@@ -39,10 +109,16 @@ DATABASE_URL = os.getenv("DATABASE_URL", "")
 GHCR_TOKEN = os.getenv("GHCR_TOKEN", "")
 HEALTH_TIMEOUT = int(os.getenv("UPDATE_HEALTH_TIMEOUT", "180"))
 STATE_FILE = Path(os.getenv("UPDATE_STATE_FILE", "/state/status.json"))
+MAX_AGENT_BODY_BYTES = positive_int_setting("MAX_AGENT_BODY_BYTES", "1048576")
+AGENT_READ_TIMEOUT_SECONDS = positive_float_setting("AGENT_READ_TIMEOUT_SECONDS", "10")
+MAX_AGENT_CONCURRENT_REQUESTS = positive_int_setting("MAX_AGENT_CONCURRENT_REQUESTS", "8")
 BACKUP_STAGING_PATTERN = re.compile(r"^staging/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 BACKUP_ARCHIVE_PREFIX_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$")
+CONTENT_LENGTH_PATTERN = re.compile(r"^[0-9]+$")
+IMAGE_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 update_lock = threading.Lock()
+backup_lock = threading.Lock()
 state_lock = threading.Lock()
 
 OCI_LABELS = {
@@ -60,14 +136,6 @@ MANIFEST_ACCEPT = ", ".join(
         "application/vnd.docker.distribution.manifest.v2+json",
     ]
 )
-
-
-class AgentConfigError(RuntimeError):
-    """Raised when required updater environment variables are missing or invalid."""
-
-
-class PortainerAPIError(RuntimeError):
-    """Raised when Portainer rejects a stack operation."""
 
 
 def require_env(name: str, value: str) -> str:
@@ -322,9 +390,6 @@ def immutable_running_image(client: PortainerClient) -> str:
     for digest in repo_digests:
         if isinstance(digest, str) and digest.startswith(target_prefix):
             return digest
-    for digest in repo_digests:
-        if isinstance(digest, str) and "@sha256:" in digest:
-            return digest
     raise RuntimeError("Kein unveraenderlicher Image-Digest fuer Rollback gefunden.")
 
 
@@ -341,6 +406,24 @@ def parse_image_reference(image: str) -> tuple[str, str, str]:
     if separator and "/" not in tag:
         return registry, name_part, tag
     return registry, remainder, "latest"
+
+
+def immutable_image_reference(image: str, digest: Any) -> str:
+    """Return a validated registry/repository reference bound to one manifest digest."""
+    if not isinstance(digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(digest):
+        raise RuntimeError("OCI-Metadaten enthalten keinen validen Image-Digest.")
+    registry, repository, _reference = parse_image_reference(image)
+    return f"{registry}/{repository}@{digest}"
+
+
+def validate_immutable_image_reference(image: Any) -> tuple[str, str]:
+    """Validate an approved image reference and return it with its digest."""
+    if not isinstance(image, str):
+        raise RuntimeError("Kein freigegebenes unveraenderliches Update-Image vorhanden.")
+    registry, repository, reference = parse_image_reference(image)
+    if not IMAGE_DIGEST_PATTERN.fullmatch(reference):
+        raise RuntimeError("Das freigegebene Update-Image ist nicht unveraenderlich.")
+    return f"{registry}/{repository}@{reference}", reference
 
 
 def registry_basic_auth_header() -> str | None:
@@ -428,15 +511,15 @@ def fetch_image_metadata(image: str) -> dict[str, Any]:
     manifest = json.loads(raw_manifest)
     media_type = manifest.get("mediaType") or headers.get("Content-Type", "")
     digest = headers.get("Docker-Content-Digest", reference if reference.startswith("sha256:") else "unknown")
+    installation_digest = digest
     if "image.index" in media_type or "manifest.list" in media_type:
         descriptor = choose_manifest_descriptor(manifest)
-        digest = str(descriptor.get("digest", digest))
-        raw_manifest, headers = registry_request(
-            f"https://{registry}/v2/{repository}/manifests/{digest}",
+        child_digest = str(descriptor.get("digest", digest))
+        raw_manifest, _headers = registry_request(
+            f"https://{registry}/v2/{repository}/manifests/{child_digest}",
             accept=MANIFEST_ACCEPT,
         )
         manifest = json.loads(raw_manifest)
-        digest = headers.get("Docker-Content-Digest", digest)
     config = manifest.get("config", {})
     config_digest = config.get("digest") if isinstance(config, dict) else None
     if not isinstance(config_digest, str) or not config_digest:
@@ -451,7 +534,7 @@ def fetch_image_metadata(image: str) -> dict[str, Any]:
         labels = {}
     return image_metadata(
         {
-            "id": digest,
+            "id": installation_digest,
             "image": image,
             "labels": labels,
         }
@@ -585,6 +668,8 @@ def check_update(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     stack = PortainerClient().get_stack()
     running_image = stack_app_image(stack)
     latest = fetch_image_metadata(TARGET_IMAGE)
+    approved_image = immutable_image_reference(str(latest.get("image") or TARGET_IMAGE), latest.get("id"))
+    approved_digest = str(latest["id"])
     current = current_metadata_from_payload(payload)
     update_available = has_update(latest, current, running_image)
     changelog = changelog_between_versions(latest, current)
@@ -595,6 +680,8 @@ def check_update(payload: dict[str, Any] | None = None) -> dict[str, Any]:
         rollback_error="",
         recovery="",
         latest=latest,
+        approved_image=approved_image,
+        approved_digest=approved_digest,
         running={"image": running_image, **current},
         update_available=update_available,
         changelog=changelog,
@@ -651,17 +738,48 @@ def database_dump_bytes() -> bytes:
     return result.stdout
 
 
+def backup_timestamp() -> str:
+    """Return the timestamp used in operator-visible backup names."""
+    return f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}"
+
+
+def open_exclusive_backup(category: BackupArtifactCategory) -> tuple[Path, Any]:
+    """Create a private backup file without replacing an existing artifact."""
+    if not isinstance(category, BackupArtifactCategory):
+        raise RuntimeError("Backup-Kategorie ist ungültig.")
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    backup_root = BACKUP_DIR.resolve()
+    filename_prefix = f"{category.filename_prefix}-{backup_timestamp()}-{secrets.token_hex(8)}"
+    # mkstemp creates the file directly in backup_root with O_EXCL and retries
+    # generated-name collisions internally; the resolved directory is its boundary.
+    descriptor, raw_path = tempfile.mkstemp(prefix=filename_prefix, suffix=category.suffix, dir=backup_root)
+    backup_path = Path(raw_path)
+    if backup_path.parent != backup_root:
+        os.close(descriptor)
+        raise RuntimeError("Backup-Datei muss ein direktes Kind des Backup-Verzeichnisses sein.")
+    return backup_path, os.fdopen(descriptor, "wb")
+
+
 def create_backup() -> str:
     """Create a gzipped PostgreSQL backup using DATABASE_URL connection details."""
-    dump = database_dump_bytes()
-    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    filename = f"fliegerlager-before-update-{datetime.now(UTC):%Y%m%dT%H%M%SZ}.sql.gz"
-    backup_path = BACKUP_DIR / filename
-    with gzip.open(backup_path, "wb") as backup:
-        backup.write(dump)
-    if backup_path.stat().st_size == 0:
-        raise RuntimeError("Datenbank-Backup ist leer.")
-    return filename
+    if not backup_lock.acquire(blocking=False):
+        raise BackupInProgressError()
+    backup_path: Path | None = None
+    try:
+        dump = database_dump_bytes()
+        backup_path, raw_backup = open_exclusive_backup(BackupArtifactCategory.BEFORE_UPDATE)
+        try:
+            with raw_backup:
+                with gzip.GzipFile(fileobj=raw_backup, mode="wb") as backup:
+                    backup.write(dump)
+            if backup_path.stat().st_size == 0:
+                raise RuntimeError("Datenbank-Backup ist leer.")
+        except BaseException:
+            backup_path.unlink(missing_ok=True)
+            raise
+        return backup_path.name
+    finally:
+        backup_lock.release()
 
 
 def backup_child_path(relative_path: str) -> Path:
@@ -692,26 +810,40 @@ def safe_staging_file(path: Path, staging_path: Path) -> Path:
     return resolved_path
 
 
-def create_backup_archive(staging_dir: str, archive_prefix: str) -> str:
+def _create_backup_archive(staging_dir: str, archive_prefix: str) -> str:
     """Create a tar.gz archive containing pg_dump output and prepared export files."""
     staging_path = backup_child_path(staging_dir)
     if not staging_path.is_dir():
         raise RuntimeError("Backup-Staging-Verzeichnis wurde nicht gefunden.")
 
     dump = database_dump_bytes()
-    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    filename = f"{safe_archive_prefix(archive_prefix)}-{datetime.now(UTC):%Y%m%dT%H%M%SZ}.tar.gz"
-    archive_path = BACKUP_DIR / filename
-    with tarfile.open(archive_path, "w:gz") as archive:
-        dump_info = tarfile.TarInfo("database.sql")
-        dump_info.size = len(dump)
-        dump_info.mtime = int(time.time())
-        archive.addfile(dump_info, io.BytesIO(dump))
-        for path in sorted(staging_path.rglob("*")):
-            export_path = safe_staging_file(path, staging_path)
-            if export_path.is_file():
-                archive.add(export_path, arcname=f"exports/{export_path.relative_to(staging_path).as_posix()}")
-    return filename
+    safe_archive_prefix(archive_prefix)
+    archive_path, raw_archive = open_exclusive_backup(BackupArtifactCategory.ARCHIVE)
+    try:
+        with raw_archive:
+            with tarfile.open(fileobj=raw_archive, mode="w:gz") as archive:
+                dump_info = tarfile.TarInfo("database.sql")
+                dump_info.size = len(dump)
+                dump_info.mtime = int(time.time())
+                archive.addfile(dump_info, io.BytesIO(dump))
+                for path in sorted(staging_path.rglob("*")):
+                    export_path = safe_staging_file(path, staging_path)
+                    if export_path.is_file():
+                        archive.add(export_path, arcname=f"exports/{export_path.relative_to(staging_path).as_posix()}")
+        return archive_path.name
+    except BaseException:
+        archive_path.unlink(missing_ok=True)
+        raise
+
+
+def create_backup_archive(staging_dir: str, archive_prefix: str) -> str:
+    """Create one serialized tar.gz archive with pg_dump output and export files."""
+    if not backup_lock.acquire(blocking=False):
+        raise BackupInProgressError()
+    try:
+        return _create_backup_archive(staging_dir, archive_prefix)
+    finally:
+        backup_lock.release()
 
 
 def redeploy_stack(image: str) -> None:
@@ -752,18 +884,24 @@ def recovery_hint(backup_name: str, old_image: str) -> str:
 
 
 def perform_update() -> None:
-    """Install the configured APP_IMAGE through Portainer and rollback on failure."""
+    """Install the checked immutable image through Portainer and rollback on failure."""
     old_image = ""
+    stack_mutated = False
     backup_name = ""
     step = "Update vorbereiten"
     try:
         save_state(phase="preparing", message="Update wird vorbereitet.", error="", rollback_error="", recovery="")
+        checked_state = load_state()
+        approved_image, approved_digest = validate_immutable_image_reference(checked_state.get("approved_image"))
+        if checked_state.get("approved_digest") != approved_digest:
+            raise RuntimeError("Der freigegebene Image-Digest passt nicht zum Update-Status.")
+        latest = checked_state.get("latest")
+        if not isinstance(latest, dict) or latest.get("id") != approved_digest:
+            raise RuntimeError("Der freigegebene Image-Digest passt nicht zu den geprüften Metadaten.")
         client = PortainerClient()
         step = "Rollback-Image ermitteln"
         old_image = immutable_running_image(client)
-        step = "Neuestes Image pruefen"
-        latest = fetch_image_metadata(TARGET_IMAGE)
-        checked_changelog = normalized_changelog_entries(load_state().get("changelog", []))
+        checked_changelog = normalized_changelog_entries(checked_state.get("changelog", []))
         step = "Datenbank-Backup erstellen"
         backup_name = create_backup()
         save_state(
@@ -775,17 +913,23 @@ def perform_update() -> None:
             backup=backup_name,
         )
         step = "Portainer Stack aktualisieren"
-        client.update_stack_image(TARGET_IMAGE)
+        stack_mutated = True
+        client.update_stack_image(approved_image)
         step = "Healthcheck abwarten"
         wait_until_healthy()
+        step = "Installiertes Image verifizieren"
+        running_image = immutable_running_image(client)
+        if running_image != approved_image:
+            raise RuntimeError("Nach dem Healthcheck wurde nicht der freigegebene Image-Digest gestartet.")
+        installed = {**latest, "id": approved_digest, "image": approved_image}
         save_state(
             phase="complete",
             message="Update erfolgreich installiert.",
             error="",
             rollback_error="",
             recovery="",
-            installed=latest,
-            running={"image": TARGET_IMAGE},
+            installed=installed,
+            running={"image": running_image},
             update_available=False,
             changelog=checked_changelog,
             backup=backup_name,
@@ -794,7 +938,7 @@ def perform_update() -> None:
     except (AgentConfigError, PortainerAPIError, OSError, RuntimeError, subprocess.SubprocessError) as error:
         logger.exception("Update fehlgeschlagen")
         rollback_error = ""
-        if old_image:
+        if old_image and stack_mutated:
             try:
                 save_state(phase="rollback", message="Update fehlgeschlagen; vorheriges Image wird wiederhergestellt.")
                 redeploy_stack(old_image)
@@ -815,17 +959,37 @@ def perform_update() -> None:
 
 
 def read_json_body(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
-    """Read an optional JSON request body from a handler."""
-    length = int(handler.headers.get("Content-Length", "0") or "0")
+    """Read a bounded JSON request body from a handler."""
+    raw_length = handler.headers.get("Content-Length")
+    if raw_length is None:
+        raise AgentRequestError(HTTPStatus.LENGTH_REQUIRED, "content_length_required")
+    normalized_length = raw_length.strip()
+    if not CONTENT_LENGTH_PATTERN.fullmatch(normalized_length):
+        raise AgentRequestError(HTTPStatus.BAD_REQUEST, "invalid_content_length")
+    normalized_length = normalized_length.lstrip("0") or "0"
+    maximum_length = str(MAX_AGENT_BODY_BYTES)
+    if len(normalized_length) > len(maximum_length) or (
+        len(normalized_length) == len(maximum_length) and normalized_length > maximum_length
+    ):
+        raise AgentRequestError(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "request_too_large")
+    length = int(normalized_length)
+    handler.connection.settimeout(AGENT_READ_TIMEOUT_SECONDS)
     if length == 0:
         return {}
-    raw = handler.rfile.read(length)
+    try:
+        raw = handler.rfile.read(length)
+    except TimeoutError as error:
+        raise AgentRequestError(HTTPStatus.REQUEST_TIMEOUT, "request_timeout") from error
+    except OSError as error:
+        raise AgentRequestError(HTTPStatus.BAD_REQUEST, "incomplete_body") from error
+    if len(raw) != length:
+        raise AgentRequestError(HTTPStatus.BAD_REQUEST, "incomplete_body")
     try:
         payload = json.loads(raw)
-    except json.JSONDecodeError as error:
-        raise RuntimeError("Ungueltiger JSON-Body.") from error
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+        raise AgentRequestError(HTTPStatus.BAD_REQUEST, "invalid_json") from error
     if not isinstance(payload, dict):
-        raise RuntimeError("JSON-Body muss ein Objekt sein.")
+        raise AgentRequestError(HTTPStatus.BAD_REQUEST, "invalid_json_body")
     return payload
 
 
@@ -877,9 +1041,11 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.respond(HTTPStatus.OK, {"backup": backup_name})
             else:
                 self.respond(HTTPStatus.NOT_FOUND, {"error": "not_found"})
-        except (AgentConfigError, PortainerAPIError, OSError, RuntimeError) as error:
+        except AgentRequestError as error:
+            self.respond(error.status, {"error": error.public_code})
+        except (AgentConfigError, PortainerAPIError, OSError, RuntimeError):
             logger.exception("Agent-Anfrage fehlgeschlagen")
-            self.respond(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(error)})
+            self.respond(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "service_unavailable"})
 
     def do_GET(self) -> None:
         self.dispatch()
@@ -888,10 +1054,70 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.dispatch()
 
 
+class BoundedThreadingHTTPServer(ThreadingHTTPServer):
+    """Threaded HTTP server with a fixed number of request worker slots."""
+
+    def __init__(
+        self,
+        server_address: tuple[str, int],
+        handler_class: type[RequestHandler],
+        *,
+        max_concurrent_requests: int,
+    ):
+        super().__init__(server_address, handler_class)
+        if max_concurrent_requests <= 0:
+            raise ValueError("max_concurrent_requests must be positive")
+        self._request_slots = threading.BoundedSemaphore(max_concurrent_requests)
+
+    def process_request(self, request: Any, client_address: Any) -> None:
+        """Start a request worker or reject it without creating another thread."""
+        if not self._request_slots.acquire(blocking=False):
+            self._reject_busy(request)
+            return
+        try:
+            request.settimeout(AGENT_READ_TIMEOUT_SECONDS)
+            thread = threading.Thread(
+                target=self.process_request_thread,
+                args=(request, client_address),
+                daemon=self.daemon_threads,
+            )
+            thread.start()
+        except BaseException:
+            self._request_slots.release()
+            self.shutdown_request(request)
+            raise
+
+    def process_request_thread(self, request: Any, client_address: Any) -> None:
+        """Run the standard request lifecycle and release its worker slot."""
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._request_slots.release()
+
+    def _reject_busy(self, request: Any) -> None:
+        """Reject excess work with a bounded, generic response."""
+        body = b'{"error":"server_busy"}'
+        response = (
+            b"HTTP/1.1 503 Service Unavailable\r\n"
+            b"Content-Type: application/json\r\n"
+            b"Connection: close\r\n" + f"Content-Length: {len(body)}\r\n\r\n".encode("ascii") + body
+        )
+        try:
+            request.sendall(response)
+        except OSError:
+            logger.info("Anfrage wegen ausgelastetem Deployment-Agent abgewiesen.")
+        finally:
+            self.shutdown_request(request)
+
+
 if __name__ == "__main__":
     PortainerClient().get_stack()
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    server = ThreadingHTTPServer(("0.0.0.0", 8080), RequestHandler)
+    server = BoundedThreadingHTTPServer(
+        ("0.0.0.0", 8080),
+        RequestHandler,
+        max_concurrent_requests=MAX_AGENT_CONCURRENT_REQUESTS,
+    )
     logger.info("Deployment-Agent gestartet fuer Portainer Stack %s", PORTAINER_STACK_ID)
     server.serve_forever()

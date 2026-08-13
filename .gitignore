@@ -34,4 +34,8 @@ backups/
 data/
 docker-config/
 tmp/
-.agents/
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/cost-aware-subagent-orchestrator/
+!.agents/skills/cost-aware-subagent-orchestrator/**
