@@ -5,6 +5,7 @@
     <h1>Lager</h1>
     {% if user|can_manage_users %}
       <a class="button" href="{% url 'camp-create' %}">Lager anlegen</a>
+      <a class="button button-secondary" href="{% url 'preorder-settings' %}">Vorbestellungen</a>
     {% endif %}
   </div>
   <table>

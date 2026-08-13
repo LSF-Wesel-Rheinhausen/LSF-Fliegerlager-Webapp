@@ -36,6 +36,7 @@ from tests.factories import CampFactory, ExpenseFactory, ParticipantFactory, Pri
 def _freeze_meal_lock_time(monkeypatch, fixed_now):
     monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
     monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
+    monkeypatch.setattr("billing.models.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
 
 
 def _checkin_state_tokens(kiosk_client):
@@ -1615,7 +1616,11 @@ def test_kiosk_meal_status_calendar_shows_day_states_and_detail_dialog(kiosk_cli
 def test_kiosk_meal_day_detail_opens_booking_for_the_selected_date(kiosk_client, monkeypatch):
     _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 7, 1, 10, 0)))
     meal_date = date(2026, 7, 2)
-    camp = CampFactory(starts_on=meal_date, ends_on=meal_date)
+    camp = CampFactory(
+        starts_on=meal_date,
+        ends_on=meal_date,
+        allow_dinner_prebooking_before_camp=True,
+    )
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     PriceRuleFactory(
         camp=camp,
@@ -1657,7 +1662,11 @@ def test_kiosk_meal_day_detail_opens_booking_for_the_selected_date(kiosk_client,
 def test_kiosk_meal_day_detail_uses_price_rule_name_and_shows_free_price(kiosk_client, monkeypatch):
     _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 7, 1, 10, 0)))
     meal_date = date(2026, 7, 2)
-    camp = CampFactory(starts_on=meal_date, ends_on=meal_date)
+    camp = CampFactory(
+        starts_on=meal_date,
+        ends_on=meal_date,
+        allow_dinner_prebooking_before_camp=True,
+    )
     participant = ParticipantFactory(camp=camp)
     PriceRuleFactory(
         camp=camp,
@@ -1717,7 +1726,11 @@ def test_kiosk_meal_booking_dialog_shows_all_camp_days_with_prices(kiosk_client,
 @pytest.mark.django_db
 def test_kiosk_meal_booking_dialog_keeps_child_only_price_day_selectable(kiosk_client, monkeypatch):
     _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 7, 1, 10, 0)))
-    camp = CampFactory(starts_on=date(2026, 7, 2), ends_on=date(2026, 7, 2))
+    camp = CampFactory(
+        starts_on=date(2026, 7, 2),
+        ends_on=date(2026, 7, 2),
+        allow_dinner_prebooking_before_camp=True,
+    )
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace", is_child=False)
     ParticipantFamilyMember.objects.create(
         guardian=participant,

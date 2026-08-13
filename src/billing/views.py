@@ -54,6 +54,7 @@ from .forms import (
     MealBookingForm,
     MealCutoffForm,
     MealPlanForm,
+    MealPreorderSettingsForm,
     MealStandardPricesForm,
     ParticipantForm,
     ParticipantImportForm,
@@ -168,6 +169,39 @@ PRE_CAMP_KIOSK_ACTIONS = frozenset(
         "pin_change",
     }
 )
+
+
+def _pre_camp_meal_booking_allowed(camp: Camp, meal: str) -> bool:
+    """Return whether an administrator released this meal for pre-camp booking."""
+    if meal == MealSignup.Meal.BREAKFAST:
+        return camp.allow_breakfast_prebooking_before_camp
+    if meal == MealSignup.Meal.DINNER:
+        return camp.allow_dinner_prebooking_before_camp
+    return False
+
+
+def _pre_camp_meal_booking_unlocked(
+    camp: Camp,
+    meal: str,
+    meal_date: date,
+    sent_order_dates: set[date],
+) -> bool:
+    """Return whether a released pre-camp meal date is not already sent to catering."""
+    return camp.is_pre_camp() and _pre_camp_meal_booking_allowed(camp, meal) and meal_date not in sent_order_dates
+
+
+@admin_required
+def preorder_settings(request: HttpRequest) -> HttpResponse:
+    """Allow administrators to release breakfast and dinner preorders for the active camp."""
+    camp = Camp.objects.filter(is_active=True).first()
+    form = MealPreorderSettingsForm(request.POST or None, instance=camp) if camp else None
+    if request.method == "POST" and form is not None and form.is_valid():
+        form.save()
+        messages.success(request, "Vorbestellungen wurden gespeichert.")
+        return redirect("preorder-settings")
+    return render(request, "billing/preorder_settings.html", {"camp": camp, "form": form})
+
+
 POST_CAMP_KIOSK_ACTIONS = frozenset({"pin_change", "donate"})
 GUARDIAN_ONLY_KIOSK_ACTIONS = frozenset(
     {
@@ -3349,7 +3383,10 @@ def _kiosk_meal_calendar(camp, participant, meal_signups, meal_targets, meal=Mea
         scoped = signups_by_date_meal.get((meal_date, meal), [])
         active_signups = [signup for signup in scoped if signup.status == MealSignup.Status.ACTIVE]
         retracted_signups = [signup for signup in scoped if signup.status == MealSignup.Status.RETRACTED]
-        locked = is_meal_change_locked(camp, meal_date, sent_order_dates=sent_order_dates)
+        pre_camp_booking_unlocked = _pre_camp_meal_booking_unlocked(camp, meal, meal_date, sent_order_dates)
+        locked = not pre_camp_booking_unlocked and is_meal_change_locked(
+            camp, meal_date, sent_order_dates=sent_order_dates
+        )
         lock_message = meal_change_lock_message(camp, meal_date, sent_order_dates=sent_order_dates) if locked else ""
         if active_signups and retracted_signups:
             status = "mixed"
@@ -3489,6 +3526,12 @@ def kiosk_home(request, kiosk_mode="private"):
 
     is_pre_camp = participant.camp.is_pre_camp()
     is_post_camp = participant.camp.is_post_camp()
+    preorder_meals = {
+        meal
+        for meal in (MealSignup.Meal.BREAKFAST, MealSignup.Meal.DINNER)
+        if not is_pre_camp or _pre_camp_meal_booking_allowed(participant.camp, meal)
+    }
+    show_meal_area = not is_pre_camp and not is_post_camp
     active_family_member = _kiosk_family_member(request, participant)
     default_booking_target = active_family_member or participant
     default_booking_target_token = (
@@ -3537,7 +3580,10 @@ def kiosk_home(request, kiosk_mode="private"):
         if is_post_camp and action not in POST_CAMP_KIOSK_ACTIONS:
             messages.error(request, "Das Lager ist beendet. Änderungen sind nicht mehr möglich.")
             return redirect(_kiosk_route(kiosk_mode, "home"))
-        if is_pre_camp and action not in PRE_CAMP_KIOSK_ACTIONS:
+        pre_camp_meal_action = action == "meal" and _pre_camp_meal_booking_allowed(
+            participant.camp, request.POST.get("meal-meal", "")
+        )
+        if is_pre_camp and action not in PRE_CAMP_KIOSK_ACTIONS and not pre_camp_meal_action:
             messages.error(request, "Diese Funktion ist erst ab Lagerbeginn verfügbar.")
             return redirect(_kiosk_route(kiosk_mode, "home"))
         if active_family_member is not None and action in GUARDIAN_ONLY_KIOSK_ACTIONS:
@@ -3969,7 +4015,12 @@ def kiosk_home(request, kiosk_mode="private"):
                     )
                 )
                 for meal_date in meal_dates:
-                    if is_meal_change_locked(
+                    if not _pre_camp_meal_booking_unlocked(
+                        participant.camp,
+                        meal,
+                        meal_date,
+                        sent_order_dates,
+                    ) and is_meal_change_locked(
                         participant.camp,
                         meal_date,
                         sent_order_dates=sent_order_dates,
@@ -4348,6 +4399,8 @@ def kiosk_home(request, kiosk_mode="private"):
         "summary": participant_kiosk_summary(participant),
         "is_pre_camp": is_pre_camp,
         "is_post_camp": is_post_camp,
+        "preorder_meals": preorder_meals,
+        "show_meal_area": show_meal_area,
         "show_party_animation": show_party_animation,
         "days_until_start": days_until_start,
         "historic_settlements": historic_settlements,

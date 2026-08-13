@@ -257,8 +257,29 @@
     </form>
   </dialog>
 
-  {% if not is_pre_camp and not is_post_camp %}
+  {% if is_pre_camp and preorder_meals %}
+    <section class="panel kiosk-card kiosk-card--accent" data-kiosk-card="preorders">
+      <div class="kiosk-card__header">
+        <div class="kiosk-card__header-main">
+          <span class="kiosk-card__eyebrow">Freigegeben</span>
+          <h2 class="kiosk-title">Verpflegung buchen</h2>
+          <p>Vorbestellungen für freigegebene Mahlzeiten im Lagerzeitraum.</p>
+        </div>
+      </div>
+      <div class="dialog-actions">
+        {% if "breakfast" in preorder_meals %}
+          <button type="button" class="button" data-preorder-meal="breakfast" data-open-breakfast-preorder>Frühstück vorbestellen</button>
+        {% endif %}
+        {% if "dinner" in preorder_meals %}
+          <button type="button" class="button" data-preorder-meal="dinner" data-dialog-target="meal-calendar-dialog">Abendessen vorbestellen</button>
+        {% endif %}
+      </div>
+    </section>
+  {% endif %}
+
+  {% if show_meal_area or is_pre_camp and preorder_meals %}
     <div class="kiosk-masonry" data-kiosk-masonry>
+      {% if show_meal_area %}
         <form method="post" id="quick-booking-form" class="kiosk-masonry__contents">
           {% csrf_token %}
           <input type="hidden" name="action" value="quick">
@@ -341,7 +362,9 @@
         {% endfor %}
         {{ quick_form.non_field_errors }}
       </form>
+      {% endif %}
 
+      {% if not is_pre_camp or "dinner" in preorder_meals %}
       <dialog id="meal-calendar-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="meal-calendar-dialog-title">
         <div class="kiosk-card__header kiosk-section-heading">
           <div class="kiosk-card__header-main">
@@ -399,7 +422,9 @@
           <div><dt class="meal-status-dot meal-status-dot--closed"></dt><dd>Geschlossen</dd></div>
         </dl>
       </dialog>
+      {% endif %}
 
+      {% if not is_pre_camp or "breakfast" in preorder_meals %}
       <dialog id="breakfast-meal-calendar" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="breakfast-meal-calendar-title">
         <div class="kiosk-card__header kiosk-section-heading">
           <div class="kiosk-card__header-main">
@@ -440,7 +465,9 @@
           <div><dt class="meal-status-dot meal-status-dot--closed"></dt><dd>Geschlossen</dd></div>
         </dl>
       </dialog>
+      {% endif %}
 
+      {% if show_meal_area %}
       <section class="panel kiosk-card kiosk-card--muted" data-kiosk-card="shifts">
         <div class="kiosk-card__header kiosk-section-heading">
           <div>
@@ -460,11 +487,12 @@
           <button type="button" class="button kiosk-card__action" data-open-checkin-dialog>Eintragen</button>
         </div>
       </section>
+      {% endif %}
 
     </div>
   {% endif %}
 
-      {% if not is_post_camp %}<dialog id="quick-bookings-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="quick-bookings-dialog-title">
+      {% if not is_pre_camp and not is_post_camp %}<dialog id="quick-bookings-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="quick-bookings-dialog-title">
         <div class="kiosk-table__header">
           <div>
             <h2 id="quick-bookings-dialog-title">Letzte Schnellbuchungen</h2>
@@ -833,6 +861,7 @@
     </dialog>
   {% endif %}
 
+  {% if not is_pre_camp or "breakfast" in preorder_meals %}
   <dialog id="food-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="food-dialog-title">
     <form method="dialog" class="dialog-heading">
       <h2 id="food-dialog-title">Verpflegung buchen</h2>
@@ -845,12 +874,14 @@
       {% include "billing/includes/kiosk_quick_targets.html" with target_scope="food" %}
       <p class="helptext error" role="alert" data-food-target-error hidden>Bitte mindestens eine Person auswählen.</p>
       <div class="dialog-actions">
-        <button type="button" class="button" id="submit-food-booking">Jetzt buchen</button>
-        <button type="button" class="button button-secondary" id="prebook-breakfast" hidden>Für später vorbestellen</button>
+        {% if not is_pre_camp %}<button type="button" class="button" id="submit-food-booking">Jetzt buchen</button>{% endif %}
+        {% if "breakfast" in preorder_meals %}<button type="button" class="button button-secondary" id="prebook-breakfast" data-preorder-meal="breakfast" hidden>Für später vorbestellen</button>{% endif %}
       </div>
     </div>
   </dialog>
+  {% endif %}
 
+  {% if not is_pre_camp or "dinner" in preorder_meals %}
   {% for day in meal_calendar_days %}
     <dialog id="meal-day-detail-{{ day.date|date:'Y-m-d' }}" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="meal-day-detail-title-{{ day.date|date:'Y-m-d' }}">
       <form method="dialog" class="dialog-heading">
@@ -927,23 +958,27 @@
           </div>
         {% endif %}
         {% if not slot.locked and slot.price_rule %}
-          <div class="dialog-actions">
-            <button
-              type="button"
-              class="button"
-              data-open-meal-dialog
-              data-meal-date="{{ day.date|date:'Y-m-d' }}"
-              data-meal="{{ slot.meal }}"
-              data-meal-label="{{ slot.label }}"
-            >
-              Essen für diesen Tag buchen
-            </button>
-          </div>
+          {% if not is_pre_camp or "dinner" in preorder_meals %}
+            <div class="dialog-actions">
+              <button
+                type="button"
+                class="button"
+                data-open-meal-dialog
+                data-meal-date="{{ day.date|date:'Y-m-d' }}"
+                data-meal="{{ slot.meal }}"
+                data-meal-label="{{ slot.label }}"
+              >
+                Essen für diesen Tag buchen
+              </button>
+            </div>
+          {% endif %}
         {% endif %}
       {% endfor %}
     </dialog>
   {% endfor %}
+  {% endif %}
 
+  {% if not is_pre_camp or "breakfast" in preorder_meals %}
   {% for day in breakfast_calendar_days %}
     <dialog id="breakfast-meal-day-detail-{{ day.date|date:'Y-m-d' }}" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="breakfast-meal-day-detail-title-{{ day.date|date:'Y-m-d' }}">
       <form method="dialog" class="dialog-heading">
@@ -979,12 +1014,16 @@
           <div class="kiosk-empty"><strong>Keine Frühstücksbuchung für diesen Tag.</strong></div>
         {% endif %}
         {% if not slot.locked and slot.price_rule %}
-          <div class="dialog-actions"><button type="button" class="button" data-open-breakfast-meal-dialog data-breakfast-meal-date="{{ day.date|date:'Y-m-d' }}">Frühstück für diesen Tag vorbestellen</button></div>
+          {% if not is_pre_camp or "breakfast" in preorder_meals %}
+            <div class="dialog-actions"><button type="button" class="button" data-open-breakfast-meal-dialog data-breakfast-meal-date="{{ day.date|date:'Y-m-d' }}">Frühstück für diesen Tag vorbestellen</button></div>
+          {% endif %}
         {% endif %}
       {% endfor %}
     </dialog>
   {% endfor %}
+  {% endif %}
 
+  {% if not is_pre_camp or "dinner" in preorder_meals %}
   <dialog id="meal-dialog" class="kiosk-dialog kiosk-dialog--wide meal-booking-dialog" aria-labelledby="meal-dialog-title">
     <form method="dialog" class="dialog-heading">
       <div>
@@ -1065,7 +1104,9 @@
       </div>
     </div>
   </dialog>
+  {% endif %}
 
+  {% if not is_pre_camp or "breakfast" in preorder_meals %}
   <dialog id="breakfast-meal-dialog" class="kiosk-dialog kiosk-dialog--wide meal-booking-dialog" aria-labelledby="breakfast-meal-dialog-title">
     <form method="dialog" class="dialog-heading">
       <div>
@@ -1097,6 +1138,7 @@
       </form>
     </div>
   </dialog>
+  {% endif %}
 
   {% if not kiosk_actor_is_family_member %}<dialog id="family-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="family-dialog-title">
     <form method="dialog" class="dialog-heading">
@@ -1113,6 +1155,7 @@
     </form>
   </dialog>{% endif %}
 
+  {% if not is_pre_camp %}
   <dialog id="checkin-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="checkin-dialog-title">
     <form method="dialog" class="dialog-heading">
       <div>
@@ -1175,6 +1218,7 @@
       </div>
     </form>
   </dialog>
+  {% endif %}
 
       {% endif %}<dialog id="contact-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="contact-dialog-title">
     <form method="dialog" class="dialog-heading">
@@ -1362,10 +1406,24 @@
 
       document.querySelectorAll("[data-food-button]").forEach((button) => {
         button.addEventListener("click", () => {
+          if (!foodDialog || !foodDialogName || !foodPrebookButton) {
+            return;
+          }
           priceRuleInput.value = button.dataset.ruleId;
           foodDialogName.textContent = button.dataset.ruleName || "";
           breakfastFoodTrigger = button;
           foodPrebookButton.hidden = button.dataset.mealType !== "breakfast";
+          openDialog(foodDialog, button);
+        });
+      });
+
+      document.querySelectorAll("[data-open-breakfast-preorder]").forEach((button) => {
+        button.addEventListener("click", () => {
+          if (!foodDialog || !foodPrebookButton) {
+            return;
+          }
+          breakfastFoodTrigger = button;
+          foodPrebookButton.hidden = false;
           openDialog(foodDialog, button);
         });
       });
@@ -1378,6 +1436,9 @@
       };
       breakfastDateCheckboxes.forEach((checkbox) => checkbox.addEventListener("change", updateBreakfastDateSelection));
       const syncBreakfastTargets = () => {
+        if (!breakfastTargets || !breakfastTargetNames || !breakfastTargetNamesDialog) {
+          return [];
+        }
         breakfastTargets.replaceChildren();
         const selected = selectedFoodTargets();
         selected.forEach((checkbox) => {
