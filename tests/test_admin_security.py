@@ -1,3 +1,5 @@
+from datetime import date
+
 import pytest
 from django.contrib import admin
 from django.contrib.auth.models import Permission
@@ -5,9 +7,16 @@ from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
-from billing.models import Expense, ParticipantFamilyMemberPin, ParticipantPin
+from billing.models import Expense, ParticipantFamilyMember, ParticipantFamilyMemberPin, ParticipantPin
 from billing.roles import bootstrap_default_roles
-from tests.factories import CampFactory, GroupFactory, ParticipantFactory, SuperUserFactory, UserFactory
+from tests.factories import (
+    CampFactory,
+    GroupFactory,
+    ParticipantFactory,
+    ParticipantFamilyMemberFactory,
+    SuperUserFactory,
+    UserFactory,
+)
 
 
 @pytest.fixture
@@ -37,6 +46,97 @@ def test_app_admin_only_accesses_non_sensitive_billing_models(client):
 def test_pin_hash_models_are_not_registered_in_django_admin():
     assert admin.site.is_registered(ParticipantPin) is False
     assert admin.site.is_registered(ParticipantFamilyMemberPin) is False
+
+
+@pytest.mark.django_db
+def test_family_member_admin_add_keeps_initial_settlement_fields_available(client):
+    client.force_login(SuperUserFactory())
+
+    response = client.get(reverse("admin:billing_participantfamilymember_add"))
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    for field_name in ("role", "is_youth_group", "arrival_date", "departure_date", "is_active"):
+        assert f'name="{field_name}"' in content
+
+
+@pytest.mark.django_db
+def test_family_member_admin_change_makes_all_confirmed_settlement_fields_readonly(client):
+    member = ParticipantFamilyMemberFactory(
+        role=ParticipantFamilyMember.Role.CHILD,
+        is_youth_group=False,
+        arrival_date=date(2026, 7, 1),
+        departure_date=date(2026, 7, 8),
+        is_active=True,
+    )
+    client.force_login(SuperUserFactory())
+
+    response = client.get(reverse("admin:billing_participantfamilymember_change", args=[member.pk]))
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert 'name="first_name"' in content
+    assert 'name="last_name"' in content
+    for field_name in ("role", "is_youth_group", "arrival_date", "departure_date", "is_active"):
+        assert f'name="{field_name}"' not in content
+        assert f'class="form-row field-{field_name}"' in content
+
+
+@pytest.mark.django_db
+def test_family_member_admin_change_ignores_crafted_settlement_fields(client):
+    member = ParticipantFamilyMemberFactory(
+        first_name="Vorher",
+        role=ParticipantFamilyMember.Role.CHILD,
+        is_youth_group=False,
+        arrival_date=date(2026, 7, 1),
+        departure_date=date(2026, 7, 8),
+        is_active=True,
+    )
+    client.force_login(SuperUserFactory())
+
+    response = client.post(
+        reverse("admin:billing_participantfamilymember_change", args=[member.pk]),
+        {
+            "guardian": member.guardian_id,
+            "first_name": "Nachher",
+            "last_name": member.last_name,
+            "role": ParticipantFamilyMember.Role.COMPANION,
+            "is_youth_group": "on",
+            "arrival_date": "2026-07-02",
+            "departure_date": "2026-07-10",
+            "_save": "Speichern",
+        },
+    )
+
+    assert response.status_code == 302
+    member.refresh_from_db()
+    assert member.first_name == "Nachher"
+    assert (
+        member.role,
+        member.is_youth_group,
+        member.arrival_date,
+        member.departure_date,
+        member.is_active,
+    ) == (
+        ParticipantFamilyMember.Role.CHILD,
+        False,
+        date(2026, 7, 1),
+        date(2026, 7, 8),
+        True,
+    )
+
+
+def test_family_member_admin_preserves_list_usability():
+    model_admin = admin.site._registry[ParticipantFamilyMember]
+
+    assert model_admin.list_display == ("last_name", "first_name", "guardian", "role", "is_active")
+    assert model_admin.list_filter == ("role", "is_active", "guardian__camp")
+    assert model_admin.search_fields == (
+        "first_name",
+        "last_name",
+        "guardian__first_name",
+        "guardian__last_name",
+    )
 
 
 @pytest.mark.django_db
