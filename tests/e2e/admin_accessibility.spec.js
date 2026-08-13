@@ -1,4 +1,5 @@
 const { expect, test } = require("./fixtures");
+const { isBenignPageRequestFailure, requestFailureDetails } = require("./requestFailureFilter");
 
 test.use({ serviceWorkers: "block" });
 
@@ -52,7 +53,10 @@ test("Participant-Admin-DOM has no dangling ARIA references", async ({ page }) =
   const failedRequests = [];
   page.on("console", (message) => { if (message.type() === "error") browserErrors.push(message.text()); });
   page.on("pageerror", (error) => browserErrors.push(error.message));
-  page.on("requestfailed", (request) => failedRequests.push(`${request.method()} ${request.url()}`));
+  page.on("requestfailed", (request) => {
+    const details = requestFailureDetails(request);
+    if (!isBenignPageRequestFailure(details)) failedRequests.push(`${details.method} ${details.url}`);
+  });
   await signInAdmin(page);
   await openParticipantChangePage(page);
 

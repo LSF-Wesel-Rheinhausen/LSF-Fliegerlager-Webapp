@@ -40,12 +40,26 @@ from .services import (
 admin.site.unregister(User)
 
 
+def _without_timezone_warning_reference(value: str | None, name: str) -> str | None:
+    """Remove only the admin-generated warning reference for one field."""
+    if not value:
+        return None
+    warning_reference = f"id_{name}_timezone_warning_helptext"
+    references = [reference for reference in value.split() if reference != warning_reference]
+    return " ".join(references) or None
+
+
 class AccessibleAdminDateWidget(AdminDateWidget):
     """Keep admin date controls free of absent timezone warning references."""
 
     def get_context(self, name, value, attrs):
         context = super().get_context(name, value, attrs)
-        context["widget"]["attrs"].pop("aria-describedby", None)
+        describedby = (attrs or {}).get("aria-describedby") or context["widget"]["attrs"].get("aria-describedby")
+        filtered_describedby = _without_timezone_warning_reference(describedby, name)
+        if filtered_describedby is None:
+            context["widget"]["attrs"].pop("aria-describedby", None)
+        else:
+            context["widget"]["attrs"]["aria-describedby"] = filtered_describedby
         return context
 
 
@@ -54,8 +68,15 @@ class AccessibleAdminSplitDateTime(AdminSplitDateTime):
 
     def get_context(self, name, value, attrs):
         context = super().get_context(name, value, attrs)
+        describedby = (attrs or {}).get("aria-describedby") or self.attrs.get("aria-describedby")
         for subwidget in context["widget"]["subwidgets"]:
-            subwidget["attrs"].pop("aria-describedby", None)
+            filtered_describedby = _without_timezone_warning_reference(
+                describedby or subwidget["attrs"].get("aria-describedby"), name
+            )
+            if filtered_describedby is None:
+                subwidget["attrs"].pop("aria-describedby", None)
+            else:
+                subwidget["attrs"]["aria-describedby"] = filtered_describedby
         return context
 
 
