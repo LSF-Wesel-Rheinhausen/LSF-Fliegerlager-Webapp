@@ -3644,3 +3644,30 @@ dialog::backdrop {
   display: flex;
   gap: 0.5rem;
 }
+
+/* Accessibility & Skip Links */
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 1rem;
+  z-index: 10000;
+  padding: 0.75rem 1.25rem;
+  background: var(--accent, #1f5d42);
+  color: #ffffff;
+  font-weight: 600;
+  border-radius: 0 0 var(--radius, 8px) var(--radius, 8px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  text-decoration: none;
+  transition: top 0.15s ease-in-out;
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+  top: 0;
+  outline: 3px solid var(--accent-light, #3d8c66);
+  outline-offset: 2px;
+}
+
+main:focus {
+  outline: none;
+}
