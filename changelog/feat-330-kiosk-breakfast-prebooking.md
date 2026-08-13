@@ -28,6 +28,8 @@ und ARIA-Beschriftungen; der bestehende Abendessenkalender bleibt unverändert.
   Aktualisierung des PWA-Caches auf Version 34
 - stabilisierte Rückwechsel zwischen Frühstücks-Zielauswahl und Frühstückskalender ohne
   stale Rücksprungdialoge oder dauerhaft gehaltenen Scroll-Lock
+- zustandsbasierte native Dialogübergaben warten auf WebKits vollständigen Top-Layer-Abbau,
+  bevor der Folgedialog geöffnet und aktionsfähig wird
 
 ## Offene Punkte
 

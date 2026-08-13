@@ -129,6 +129,53 @@ test.describe("Mobile native dialog scroll locking", () => {
     await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(420);
   });
 
+  test("waits for native modal teardown before making the replacement actionable", async ({ page }) => {
+    await loadOverlayHarness(page, MOBILE_VIEWPORTS[0]);
+    await addDialogs(page);
+    await openDialog(page, "kiosk-menu-dialog");
+
+    await page.evaluate(() => {
+      const source = document.getElementById("kiosk-menu-dialog");
+      const target = document.getElementById("food-dialog");
+      const trigger = source.querySelector("[data-close-dialog]");
+      const nativeMatches = source.matches.bind(source);
+      window.testModalTeardownPending = true;
+      window.testModalReadinessChecks = 0;
+      window.testReplacementClicks = 0;
+      window.testClosedTriggerFocusAttempts = 0;
+      const nativeFocus = trigger.focus.bind(trigger);
+      trigger.focus = (...args) => {
+        if (!source.open) window.testClosedTriggerFocusAttempts += 1;
+        return nativeFocus(...args);
+      };
+      source.matches = (selector) => {
+        if (selector === ":modal") {
+          window.testModalReadinessChecks += 1;
+          return window.testModalTeardownPending;
+        }
+        return nativeMatches(selector);
+      };
+      target.querySelector("[data-close-dialog]").addEventListener("click", () => {
+        window.testReplacementClicks += 1;
+      });
+      window.kioskDialogs.open(target, trigger);
+    });
+
+    await expect.poll(() => page.evaluate(() => window.testModalReadinessChecks)).toBeGreaterThan(0);
+    await expect(page.locator("#food-dialog")).toBeHidden();
+    await page.evaluate(() => {
+      window.testModalTeardownPending = false;
+    });
+
+    const replacement = page.locator("#food-dialog");
+    await expect(replacement).toBeVisible();
+    expect(await replacement.evaluate((dialog) => dialog.matches(":modal"))).toBe(true);
+    await expect.poll(() => replacement.evaluate((dialog) => dialog.contains(document.activeElement))).toBe(true);
+    await replacement.getByRole("button", { name: "Schließen" }).click();
+    expect(await page.evaluate(() => window.testReplacementClicks)).toBe(1);
+    expect(await page.evaluate(() => window.testClosedTriggerFocusAttempts)).toBe(0);
+  });
+
   for (const closeMethod of ["escape", "backdrop", "button", "programmatic"]) {
     test(`unlocks reliably through ${closeMethod}`, async ({ page }) => {
       await loadOverlayHarness(page, MOBILE_VIEWPORTS[0]);

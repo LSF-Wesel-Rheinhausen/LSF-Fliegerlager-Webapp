@@ -167,7 +167,22 @@
         const show = (dialog, focusTarget) => {
           if (!dialog || dialog.open) return;
           dialog.showModal();
-          window.requestAnimationFrame(() => focusTarget?.focus());
+          window.requestAnimationFrame(() => {
+            if (dialog.open && focusTarget?.isConnected && dialog.contains(focusTarget)) {
+              focusTarget.focus();
+            }
+          });
+        };
+
+        const afterModalTeardown = (dialog, callback) => {
+          const runWhenReady = () => {
+            if (dialog.open || dialog.matches(":modal")) {
+              window.requestAnimationFrame(runWhenReady);
+              return;
+            }
+            callback();
+          };
+          window.requestAnimationFrame(runWhenReady);
         };
 
         const bind = (dialog) => {
@@ -178,9 +193,9 @@
               const transition = pendingTransitions.get(dialog);
               pendingTransitions.delete(dialog);
               if (transition) {
-                window.requestAnimationFrame(() => {
+                afterModalTeardown(dialog, () => {
                   try {
-                    if (!dialog.open && !transition.dialog.open) {
+                    if (!transition.dialog.open) {
                       show(transition.dialog, transition.focus);
                     }
                   } finally {
@@ -200,9 +215,9 @@
             const returnTarget = returnTargets.get(dialog);
             returnTargets.delete(dialog);
             if (returnTarget?.dialog?.isConnected && !returnTarget.dialog.open) {
-              window.requestAnimationFrame(() => {
+              afterModalTeardown(dialog, () => {
                 try {
-                  if (!dialog.open && !returnTarget.dialog.open) {
+                  if (!returnTarget.dialog.open) {
                     show(returnTarget.dialog, returnTarget.focus);
                   }
                 } finally {
