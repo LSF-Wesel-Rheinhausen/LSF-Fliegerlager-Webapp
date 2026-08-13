@@ -713,16 +713,26 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
   const expectOnlyModal = async (dialogId) => {
     await expect.poll(() => page.locator("dialog:modal").evaluateAll((dialogs) => dialogs.map((dialog) => dialog.id))).toEqual([dialogId]);
   };
+  const expectButtonHitTestable = async (button) => {
+    await expect.poll(() => button.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const hitTarget = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      return hitTarget === element || element.contains(hitTarget);
+    })).toBe(true);
+  };
   await page.locator('[data-kiosk-card="food"] [data-food-button][data-meal-type="breakfast"]').click();
   const breakfastQuickDialog = page.locator("dialog#food-dialog");
   await expectOnlyModal("food-dialog");
   await expect(breakfastQuickDialog.getByRole("button", { name: "Jetzt buchen" })).toBeVisible();
   const breakfastTarget = breakfastQuickDialog.locator('[data-quick-target-scope="food"]').first();
+  const breakfastPrebookButton = breakfastQuickDialog.getByRole("button", { name: "Für später vorbestellen" });
   await breakfastTarget.uncheck();
-  await breakfastQuickDialog.getByRole("button", { name: "Für später vorbestellen" }).click();
+  await expectButtonHitTestable(breakfastPrebookButton);
+  await breakfastPrebookButton.click();
   await expect(breakfastQuickDialog.getByRole("alert")).toHaveText("Bitte mindestens eine Person auswählen.");
   await breakfastTarget.check();
-  await breakfastQuickDialog.getByRole("button", { name: "Für später vorbestellen" }).click();
+  await expectButtonHitTestable(breakfastPrebookButton);
+  await breakfastPrebookButton.click();
   const breakfastCalendar = page.locator("dialog#breakfast-meal-dialog");
   await expect(breakfastCalendar).toBeVisible();
   await expect(page.locator("dialog:open")).toHaveCount(1);
@@ -734,7 +744,8 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
   await expect(page.locator("dialog:open")).toHaveCount(1);
   await expectOnlyModal("food-dialog");
   await expect(breakfastCalendar).toBeHidden();
-  await breakfastQuickDialog.getByRole("button", { name: "Für später vorbestellen" }).click();
+  await expectButtonHitTestable(breakfastPrebookButton);
+  await breakfastPrebookButton.click();
   await expect(breakfastCalendar).toBeVisible();
   await expect(page.locator("dialog:open")).toHaveCount(1);
   await expectOnlyModal("breakfast-meal-dialog");
@@ -751,7 +762,8 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
   await page.locator('[data-kiosk-card="food"] [data-food-button][data-meal-type="breakfast"]').click();
   await expect(breakfastQuickDialog).toBeVisible();
   await expectOnlyModal("food-dialog");
-  await breakfastQuickDialog.getByRole("button", { name: "Für später vorbestellen" }).click();
+  await expectButtonHitTestable(breakfastPrebookButton);
+  await breakfastPrebookButton.click();
   await expect(breakfastCalendar).toBeVisible();
   await expect(page.locator("dialog:open")).toHaveCount(1);
   await expectOnlyModal("breakfast-meal-dialog");
