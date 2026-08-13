@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+  <section class="panel">
+    <h1>{{ title }}</h1>
+    <form id="family-member-edit-form" method="post" class="form-grid">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="form-actions">
+        <button type="submit">Speichern</button>
+      </div>
+    </form>
+  </section>
+  {% if confirmation_required %}
+    <dialog open aria-labelledby="settlement-change-confirmation-title">
+      <h2 id="settlement-change-confirmation-title">Änderung der Abrechnung bestätigen</h2>
+      <p>Diese Änderung kann die Abrechnung des Zahlungskontos verändern.</p>
+      <form method="dialog">
+        <button type="submit">Zurück</button>
+        <button form="family-member-edit-form" type="submit" name="confirm_settlement_change" value="1">Änderung bestätigen</button>
+      </form>
+    </dialog>
+  {% endif %}
+{% endblock %}
