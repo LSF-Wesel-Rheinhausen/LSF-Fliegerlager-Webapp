@@ -56,6 +56,7 @@ from .forms import (
     MealPlanForm,
     MealPreorderSettingsForm,
     MealStandardPricesForm,
+    ParticipantFamilyMemberForm,
     ParticipantForm,
     ParticipantImportForm,
     ParticipantPinForm,
@@ -1094,11 +1095,26 @@ def participant_detail(request, participant_id):
                 return redirect("participant-detail", participant_id=participant.pk)
 
     settlement = calculate_participant_settlement(participant)
-    charges = participant.charges.filter(deleted_at__isnull=True).order_by("-created_at", "-id")
+    charges = (
+        participant.charges.filter(deleted_at__isnull=True)
+        .select_related("family_member")
+        .order_by("-created_at", "-id")
+    )
+    family_members = participant.family_members.all().order_by("-is_active", "last_name", "first_name", "pk")
+    family_meal_signups = (
+        MealSignup.objects.filter(participant=participant, family_member__isnull=False)
+        .select_related("family_member", "charge")
+        .order_by("-meal_date", "meal")
+    )
     audit_logs = BookingAuditLog.objects.filter(
         Q(participant=participant) | Q(charge__participant=participant)
     ).select_related("changed_by", "charge")
     settlement_snapshots = participant.settlements.filter(run__isnull=False).select_related("run", "run__camp")
+    family_audit_logs = (
+        KioskActionAuditLog.objects.filter(target_participant=participant, target_family_member__isnull=False)
+        .select_related("target_family_member", "charge", "actor_participant", "actor_family_member")
+        .order_by("-created_at", "-id")
+    )
 
     return render(
         request,
@@ -1107,10 +1123,33 @@ def participant_detail(request, participant_id):
             "participant": participant,
             "settlement": settlement,
             "charges": charges,
+            "family_members": family_members,
+            "family_meal_signups": family_meal_signups,
+            "family_audit_logs": family_audit_logs,
             "audit_logs": audit_logs,
             "settlement_snapshots": settlement_snapshots,
             "manual_charge_form": manual_charge_form,
         },
+    )
+
+
+@admin_required
+def participant_family_member_edit(request, participant_id, family_member_id):
+    """Edit a family member only through its guardian's administrative profile route."""
+    member = get_object_or_404(
+        ParticipantFamilyMember.objects.select_related("guardian", "guardian__camp"),
+        pk=family_member_id,
+        guardian_id=participant_id,
+    )
+    form = ParticipantFamilyMemberForm(request.POST or None, instance=member)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Familienmitglied wurde gespeichert.")
+        return redirect("participant-detail", participant_id=participant_id)
+    return render(
+        request,
+        "billing/form.html",
+        {"form": form, "title": "Familienmitglied bearbeiten", "camp": member.guardian.camp},
     )
 
 
@@ -1153,7 +1192,7 @@ def settlement_snapshot_export_pdf(request, settlement_id):
 @editor_required
 def charge_create(request, participant_id):
     participant = get_object_or_404(Participant, pk=participant_id, archived_at__isnull=True)
-    form = ChargeForm(request.POST or None)
+    form = ChargeForm(request.POST or None, guardian=participant)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
             charge = form.save(commit=False)
@@ -1171,7 +1210,7 @@ def charge_edit(request, charge_id):
         pk=charge_id,
     )
     before = charge_audit_snapshot(charge)
-    form = ChargeForm(request.POST or None, instance=charge)
+    form = ChargeForm(request.POST or None, instance=charge, guardian=charge.participant)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
             updated_charge = form.save()
@@ -3157,6 +3196,7 @@ def _book_meal_for_target(
     if charge is None:
         charge = Charge(participant=participant, kind=Charge.Kind.FOOD)
     charge.participant = participant
+    charge.family_member = family_member
     charge.kind = Charge.Kind.FOOD
     charge.occurred_on = meal_date
     charge.description = charge_description
@@ -3273,6 +3313,8 @@ def _retract_meal_signup(
     locked_signup.save(update_fields=["status", "retraction_version", "retracted_at", "updated_at"])
     charge = locked_charge
     if charge is not None:
+        if charge.family_member_id != (affected_family_member.pk if affected_family_member is not None else None):
+            return False
         charge.deleted_at = timezone.now()
         charge.deleted_by = None
         charge.save(update_fields=["deleted_at", "deleted_by"])

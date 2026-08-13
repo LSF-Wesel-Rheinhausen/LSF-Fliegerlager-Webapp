@@ -832,6 +832,16 @@ test("Kiosk can book a drink after breakfast prebooking", async ({ page }) => {
   await expect(page.locator("dialog#meal-calendar-dialog")).toBeHidden();
   await page.getByRole("link", { name: "Abmelden" }).first().click();
   await expect(page).toHaveURL(/.*\/kiosk\/login\//);
+  await loginAsAdmin(page);
+  await page.getByRole("link", { name: campName, exact: true }).click();
+  await page.getByRole("link", { name: "Marie Curie", exact: true }).last().click();
+  await expect(page.getByRole("heading", { name: "Marie Curie" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Familienmitglieder", exact: true })).toBeVisible();
+  await expect(page.getByText("Irène Curie", { exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await assertNoUnexpectedOverflow(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await assertNoUnexpectedOverflow(page);
 });
 
 test("Kiosk user can change their own PIN and log in with the new PIN", async ({ page }) => {

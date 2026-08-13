@@ -141,6 +141,7 @@ class ChargeAdmin(admin.ModelAdmin):
     list_display = (
         "booking_reference",
         "participant",
+        "family_member",
         "kind",
         "description",
         "unit_price",
@@ -148,10 +149,20 @@ class ChargeAdmin(admin.ModelAdmin):
         "occurred_on",
         "deleted_at",
     )
-    list_filter = ("kind", "deleted_at")
-    search_fields = ("id", "description", "participant__first_name", "participant__last_name")
+    list_filter = ("kind", "deleted_at", "family_member__role")
+    search_fields = (
+        "id",
+        "description",
+        "participant__first_name",
+        "participant__last_name",
+        "family_member__first_name",
+        "family_member__last_name",
+    )
     readonly_fields = ("deleted_at", "deleted_by")
     actions = ["soft_delete_selected_charges", "restore_selected_charges"]
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("participant", "family_member")
 
     @admin.display(description="Buchungsnr.", ordering="id")
     def booking_reference(self, charge: Charge) -> str:

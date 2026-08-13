@@ -2784,6 +2784,7 @@ def test_kiosk_creates_family_member_and_books_meal_on_guardian(kiosk_client, mo
     charge = Charge.objects.get(participant=participant, kind=Charge.Kind.FOOD)
     assert charge.description == "Abendessen Kind Abendessen für Kind Muster"
     assert charge.unit_price == Decimal("4.00")
+    assert charge.family_member == family_member
 
 
 @pytest.mark.django_db

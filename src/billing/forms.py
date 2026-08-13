@@ -478,6 +478,34 @@ class ParticipantForm(forms.ModelForm):
         return cleaned_data
 
 
+class ParticipantFamilyMemberForm(forms.ModelForm):
+    """Validate administrative updates to one guardian-owned family member."""
+
+    class Meta:
+        model = ParticipantFamilyMember
+        fields = ["first_name", "last_name", "role", "arrival_date", "departure_date", "is_active"]
+        labels = {
+            "first_name": "Vorname",
+            "last_name": "Nachname",
+            "role": "Rolle",
+            "arrival_date": "Anreise",
+            "departure_date": "Abreise",
+            "is_active": "Aktiv",
+        }
+        widgets = {
+            "arrival_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+            "departure_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+        }
+
+    def clean(self) -> dict[str, Any]:
+        cleaned_data = super().clean() or {}
+        arrival_date = cleaned_data.get("arrival_date")
+        departure_date = cleaned_data.get("departure_date")
+        if arrival_date and departure_date and departure_date <= arrival_date:
+            self.add_error("departure_date", "Die Abreise muss nach der Anreise liegen.")
+        return cleaned_data
+
+
 class PriceRuleForm(forms.ModelForm):
     foerdersatz = SubsidyPercentField()
 
@@ -652,17 +680,25 @@ class CampFlatRateSettingsForm(forms.Form):
 class ChargeForm(forms.ModelForm):
     foerdersatz = SubsidyPercentField()
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, *args: Any, guardian: Participant | None = None, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        account_holder = guardian or getattr(self.instance, "participant", None)
+        family_member_field = cast(forms.ModelChoiceField, self.fields["family_member"])
+        family_member_field.queryset = (
+            ParticipantFamilyMember.objects.filter(guardian=account_holder).order_by("last_name", "first_name")
+            if account_holder is not None and account_holder.pk is not None
+            else ParticipantFamilyMember.objects.none()
+        )
         if not self.is_bound and self.instance.pk:
             self.initial["foerdersatz"] = subsidy_percentage(self.instance.foerdersatz)
 
     class Meta:
         model = Charge
-        fields = ["kind", "description", "quantity", "unit_price", "foerdersatz", "occurred_on"]
+        fields = ["kind", "description", "family_member", "quantity", "unit_price", "foerdersatz", "occurred_on"]
         labels = {
             "kind": "Art",
             "description": "Beschreibung",
+            "family_member": "Zielmitglied (optional)",
             "quantity": "Menge",
             "unit_price": "Einzelpreis",
             "foerdersatz": "Fördersatz (%)",

@@ -5,7 +5,7 @@ import factory
 from django.contrib.auth.models import Group, User
 from django.utils import timezone
 
-from billing.models import Camp, Charge, DrinkEntry, Expense, Participant, Payment, PriceRule
+from billing.models import Camp, Charge, DrinkEntry, Expense, Participant, ParticipantFamilyMember, Payment, PriceRule
 
 
 class UserFactory(factory.django.DjangoModelFactory):
@@ -72,6 +72,16 @@ class ChargeFactory(factory.django.DjangoModelFactory):
     description = "Kostenposition"
     quantity = Decimal("1.00")
     unit_price = Decimal("10.00")
+
+
+class ParticipantFamilyMemberFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ParticipantFamilyMember
+
+    guardian = factory.SubFactory(ParticipantFactory)
+    first_name = factory.Sequence(lambda n: f"Familie{n}")
+    last_name = "Muster"
+    role = ParticipantFamilyMember.Role.CHILD
 
 
 class DrinkEntryFactory(factory.django.DjangoModelFactory):

@@ -54,12 +54,21 @@ def settlement_run_csv_bytes(run: SettlementRun) -> bytes:
     """Render a versioned settlement run CSV from immutable snapshots."""
     buffer = StringIO()
     writer = csv.writer(buffer)
-    writer.writerow(safe_csv_row(["Teilnehmer", "Brutto", "Förderung", "Soll", "Gezahlt", "Vorgestreckt", "Offen"]))
+    writer.writerow(
+        safe_csv_row(["Teilnehmer", "Familienziele", "Brutto", "Förderung", "Soll", "Gezahlt", "Vorgestreckt", "Offen"])
+    )
     for snapshot in run.settlements.all():
         writer.writerow(
             safe_csv_row(
                 [
                     snapshot.participant_name,
+                    ", ".join(
+                        dict.fromkeys(
+                            str(line["target_name"])
+                            for line in snapshot.data.get("lines", [])
+                            if line.get("target_name")
+                        )
+                    ),
                     snapshot.total_gross,
                     snapshot.total_subsidy,
                     snapshot.total_due,
@@ -274,6 +283,7 @@ def camp_settlement_csv(camp):
             [
                 result.participant.last_name,
                 result.participant.first_name,
+                ", ".join(result.family_target_names),
                 result.total_gross,
                 result.total_subsidy,
                 result.total_due,
@@ -285,7 +295,7 @@ def camp_settlement_csv(camp):
     return csv_response(
         f"abrechnung-{camp.year}.csv",
         rows,
-        ["Nachname", "Vorname", "Brutto", "Förderung", "Soll", "Gezahlt", "Vorgestreckt", "Offen"],
+        ["Nachname", "Vorname", "Familienziele", "Brutto", "Förderung", "Soll", "Gezahlt", "Vorgestreckt", "Offen"],
     )
 
 
@@ -333,7 +343,9 @@ def camp_workbook_response(camp):
     summary = workbook.active
     summary.title = "Abrechnung"
     summary.append(
-        safe_csv_row(["Nachname", "Vorname", "Brutto", "Förderung", "Soll", "Gezahlt", "Vorgestreckt", "Offen"])
+        safe_csv_row(
+            ["Nachname", "Vorname", "Familienziele", "Brutto", "Förderung", "Soll", "Gezahlt", "Vorgestreckt", "Offen"]
+        )
     )
     for result in calculate_camp_settlements(camp):
         summary.append(
@@ -341,6 +353,7 @@ def camp_workbook_response(camp):
                 [
                     result.participant.last_name,
                     result.participant.first_name,
+                    ", ".join(result.family_target_names),
                     result.total_gross,
                     result.total_subsidy,
                     result.total_due,
@@ -708,7 +721,7 @@ def participant_pdf_response(participant):
         y = _draw_invoice_line(
             pdf,
             y,
-            label=line.label,
+            label=f"{line.label} für {line.target_name}" if line.target_name else line.label,
             quantity=line.quantity,
             total=line.total,
             occurred_on=line.occurred_on,
@@ -752,7 +765,9 @@ def settlement_run_workbook_bytes(run: SettlementRun) -> bytes:
     summary = workbook.active
     summary.title = "Abrechnung"
     summary.append(
-        safe_csv_row(["Teilnehmer", "Status", "Brutto", "Förderung", "Soll", "Gezahlt", "Vorgestreckt", "Offen"])
+        safe_csv_row(
+            ["Teilnehmer", "Status", "Familienziele", "Brutto", "Förderung", "Soll", "Gezahlt", "Vorgestreckt", "Offen"]
+        )
     )
     for snapshot in run.settlements.all():
         summary.append(
@@ -760,6 +775,13 @@ def settlement_run_workbook_bytes(run: SettlementRun) -> bytes:
                 [
                     snapshot.participant_name,
                     snapshot.data.get("participant", {}).get("status_label", snapshot.participant_status),
+                    ", ".join(
+                        dict.fromkeys(
+                            str(line["target_name"])
+                            for line in snapshot.data.get("lines", [])
+                            if line.get("target_name")
+                        )
+                    ),
                     snapshot.total_gross,
                     snapshot.total_subsidy,
                     snapshot.total_due,
@@ -820,7 +842,11 @@ def settlement_snapshot_pdf_bytes(snapshot: Settlement) -> bytes:
         y = _draw_invoice_line(
             pdf,
             y,
-            label=str(line.get("label", "")),
+            label=(
+                f"{line.get('label', '')} für {line.get('target_name', '')}"
+                if line.get("target_name")
+                else str(line.get("label", ""))
+            ),
             quantity=str(line.get("quantity", "")),
             total=total,
             occurred_on=occurred_on,

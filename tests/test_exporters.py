@@ -188,8 +188,8 @@ def test_settlement_csv_exports_calculated_kiosk_charges_payments_and_expenses(c
     assert response["Content-Type"] == "text/csv; charset=utf-8"
     assert response["Content-Disposition"] == 'attachment; filename="abrechnung-2026.csv"'
     assert csv_rows(response) == [
-        ["Nachname", "Vorname", "Brutto", "Förderung", "Soll", "Gezahlt", "Vorgestreckt", "Offen"],
-        ["Lovelace", "Ada", "16.50", "0.00", "16.50", "4.00", "3.00", "9.50"],
+        ["Nachname", "Vorname", "Familienziele", "Brutto", "Förderung", "Soll", "Gezahlt", "Vorgestreckt", "Offen"],
+        ["Lovelace", "Ada", "", "16.50", "0.00", "16.50", "4.00", "3.00", "9.50"],
     ]
 
 
@@ -288,6 +288,7 @@ def test_workbook_export_contains_settlement_and_participant_sheets(client, expo
     assert [cell.value for cell in settlement_sheet[1]] == [
         "Nachname",
         "Vorname",
+        "Familienziele",
         "Brutto",
         "Förderung",
         "Soll",
@@ -297,8 +298,9 @@ def test_workbook_export_contains_settlement_and_participant_sheets(client, expo
     ]
     assert settlement_sheet["A2"].value == "Lovelace"
     assert settlement_sheet["B2"].value == "Ada"
-    assert Decimal(str(settlement_sheet["C2"].value)) == Decimal("16.5")
-    assert Decimal(str(settlement_sheet["H2"].value)) == Decimal("9.5")
+    assert settlement_sheet["C2"].value is None
+    assert Decimal(str(settlement_sheet["D2"].value)) == Decimal("16.5")
+    assert Decimal(str(settlement_sheet["I2"].value)) == Decimal("9.5")
 
     participants_sheet = workbook["Teilnehmer"]
     assert participants_sheet["A2"].value == "Lovelace"
