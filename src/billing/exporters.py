@@ -90,6 +90,55 @@ def _decimal_text(value: str | Decimal) -> float:
     return float(Decimal(str(value)))
 
 
+def _isoformat_or_empty(value) -> str:
+    return value.isoformat() if value is not None else ""
+
+
+def _display_date(value: str) -> str:
+    if not value:
+        return ""
+    return value[8:10] + "." + value[5:7] + "." + value[:4]
+
+
+def _cost_center_income_detail_snapshot(income) -> dict:
+    if isinstance(income, dict):
+        participant = income.get("participant")
+        return {
+            "meal_date": _isoformat_or_empty(income.get("date")),
+            "participant_name": participant.full_name if participant else "Unbekannt",
+            "family_member_name": income.get("family_member_name", ""),
+            "description": income.get("description", ""),
+            "amount": income["total"],
+        }
+
+    return {
+        "meal_date": income.meal_date.isoformat(),
+        "participant_name": income.participant.full_name,
+        "family_member_name": income.family_member.full_name if income.family_member else "",
+        "description": income.get_meal_display(),
+        "amount": income.charge.total,
+    }
+
+
+def _cost_center_expense_detail_snapshot(expense) -> dict:
+    if isinstance(expense, dict):
+        paid_on = expense.get("paid_on") or expense.get("created_at")
+        participant = expense.get("participant")
+        return {
+            "paid_date": _isoformat_or_empty(paid_on),
+            "applicant_name": participant.full_name if participant else "Unbekannt",
+            "description": expense.get("description", ""),
+            "amount": expense["amount"],
+        }
+
+    return {
+        "paid_date": (expense.paid_on or expense.created_at.date()).isoformat(),
+        "applicant_name": expense.participant.full_name if expense.participant else "Unbekannt",
+        "description": expense.description,
+        "amount": expense.amount,
+    }
+
+
 def _write_cost_center_sheet_from_snapshot(sheet, cost_centers: list[dict]) -> None:
     sheet.append(
         safe_csv_row(["Kostenstelle", "Einnahmen", "Ausgaben", "Saldo", "Anzahl Einnahmen", "Anzahl Ausgaben"])
@@ -121,7 +170,7 @@ def _write_cost_center_sheet_from_snapshot(sheet, cost_centers: list[dict]) -> N
                 safe_csv_row(
                     [
                         data["label"],
-                        income["meal_date"][8:10] + "." + income["meal_date"][5:7] + "." + income["meal_date"][:4],
+                        _display_date(income["meal_date"]),
                         participant_name,
                         income["description"],
                         _decimal_text(income["amount"]),
@@ -139,7 +188,7 @@ def _write_cost_center_sheet_from_snapshot(sheet, cost_centers: list[dict]) -> N
                 safe_csv_row(
                     [
                         data["label"],
-                        expense["paid_date"][8:10] + "." + expense["paid_date"][5:7] + "." + expense["paid_date"][:4],
+                        _display_date(expense["paid_date"]),
                         expense["applicant_name"],
                         expense["description"],
                         _decimal_text(expense["amount"]),
@@ -396,24 +445,9 @@ def camp_workbook_response(camp):
                 "balance": data["balance"],
                 "income_count": data["income_count"],
                 "expense_count": data["expense_count"],
-                "income_details": [
-                    {
-                        "meal_date": signup.meal_date.isoformat(),
-                        "participant_name": signup.participant.full_name,
-                        "family_member_name": signup.family_member.full_name if signup.family_member else "",
-                        "description": signup.get_meal_display(),
-                        "amount": signup.charge.total,
-                    }
-                    for signup in data["income_details"]
-                ],
+                "income_details": [_cost_center_income_detail_snapshot(income) for income in data["income_details"]],
                 "expense_details": [
-                    {
-                        "paid_date": (exp.paid_on or exp.created_at.date()).isoformat(),
-                        "applicant_name": exp.participant.full_name if exp.participant else "Unbekannt",
-                        "description": exp.description,
-                        "amount": exp.amount,
-                    }
-                    for exp in data["expense_details"]
+                    _cost_center_expense_detail_snapshot(expense) for expense in data["expense_details"]
                 ],
             }
             for data in cost_centers.values()
