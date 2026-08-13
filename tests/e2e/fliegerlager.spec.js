@@ -734,6 +734,7 @@ test("Kiosk flow: login with assigned pin, drink and meal booking", async ({ pag
   await expect(breakfastQuickDialog).toBeHidden();
   await breakfastCalendar.getByRole("button", { name: "Schließen" }).click();
   await expect(breakfastCalendar).toBeHidden();
+  await expect.poll(() => page.locator("dialog:open").evaluateAll((dialogs) => dialogs.map((dialog) => dialog.id))).toEqual(["food-dialog"]);
   await breakfastQuickDialog.getByRole("button", { name: "Schließen" }).click();
   await expect.poll(() => page.locator("dialog:open").evaluateAll((dialogs) => dialogs.map((dialog) => dialog.id))).toEqual([]);
   await expect.poll(() => page.evaluate(() => ({
