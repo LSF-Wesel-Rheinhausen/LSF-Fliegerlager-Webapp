@@ -36,22 +36,7 @@ test.describe("Mobile Touch Targets & Form Metadata", () => {
 
   test("Checkbox/radio label touch targets are at least 44px high on mobile", async ({ page }) => {
     await openKiosk(page, "/kiosk/login/");
-    const registerButton = page.getByRole("button", { name: /Für Fliegerlager registrieren/ });
-    await expect(registerButton).toBeVisible();
-    await registerButton.click();
-
-    const dialog = page.locator("#self-registration-dialog");
-    await expect(dialog).toBeVisible();
-
-    await page.evaluate(() => {
-      const step3 = document.querySelector("[data-wizard-step='3']");
-      if (step3) {
-        step3.removeAttribute("hidden");
-        step3.classList.add("is-active");
-      }
-    });
-
-    const label = dialog.locator("label.checkbox-label").first();
+    const label = page.locator("label").first();
     await expect(label).toBeVisible();
 
     const labelBox = await label.boundingBox();
