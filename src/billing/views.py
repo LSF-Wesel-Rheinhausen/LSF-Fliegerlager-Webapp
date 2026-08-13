@@ -666,7 +666,8 @@ def deployment_update_status_json(request: HttpRequest) -> JsonResponse:
         error_message = (
             error.args[0] if error.args and isinstance(error.args[0], str) else "Der Update-Agent ist nicht verfügbar."
         )
-        return JsonResponse({"active": False, "phase": "error", "error": error_message}, status=503)
+        status_code = 502 if error.public_code == "invalid_registry_metadata" else 503
+        return JsonResponse({"active": False, "phase": "error", "error": error_message}, status=status_code)
     return JsonResponse(status)
 
 

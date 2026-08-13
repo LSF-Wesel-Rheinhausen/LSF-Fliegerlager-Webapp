@@ -1,3 +1,4 @@
+import hashlib
 import io
 import json
 import os
@@ -25,6 +26,16 @@ def target_digest_reference(digest: str) -> str:
     """Return the configured target repository bound to a digest."""
     registry, repository, _reference = deployment_agent.parse_image_reference(deployment_agent.TARGET_IMAGE)
     return f"{registry}/{repository}@{digest}"
+
+
+def manifest_bytes(payload: dict) -> bytes:
+    """Serialize a registry fixture exactly as the mocked registry returns it."""
+    return json.dumps(payload, separators=(",", ":")).encode("utf-8")
+
+
+def content_digest(raw: bytes) -> str:
+    """Return the OCI digest for the exact bytes served by the registry fixture."""
+    return "sha256:" + hashlib.sha256(raw).hexdigest()
 
 
 def test_image_metadata_reads_oci_and_change_labels():
@@ -68,28 +79,30 @@ def test_image_metadata_ignores_invalid_changelog_labels():
 
 
 def test_fetch_image_metadata_keeps_index_digest_for_installation(monkeypatch):
-    index_digest = image_digest("1")
-    child_digest = image_digest("2")
-    config_digest = image_digest("3")
     index = {
         "mediaType": "application/vnd.oci.image.index.v1+json",
         "manifests": [
             {
-                "digest": child_digest,
                 "mediaType": "application/vnd.oci.image.manifest.v1+json",
                 "platform": {"os": "linux", "architecture": "amd64"},
             }
         ],
     }
+    config_digest = image_digest("3")
     child = {
         "mediaType": "application/vnd.oci.image.manifest.v1+json",
         "config": {"digest": config_digest},
     }
+    child_raw = manifest_bytes(child)
+    child_digest = content_digest(child_raw)
+    index["manifests"][0]["digest"] = child_digest
+    index_raw = manifest_bytes(index)
+    index_digest = content_digest(index_raw)
     responses = iter(
         [
-            (json.dumps(index), {"Docker-Content-Digest": index_digest}),
-            (json.dumps(child), {"Docker-Content-Digest": child_digest}),
-            (json.dumps({"config": {"Labels": {}}}), {}),
+            (index_raw, {}),
+            (child_raw, {}),
+            (manifest_bytes({"config": {"Labels": {}}}), {}),
         ]
     )
     monkeypatch.setattr(deployment_agent, "registry_request", lambda *_args, **_kwargs: next(responses))
@@ -97,6 +110,129 @@ def test_fetch_image_metadata_keeps_index_digest_for_installation(monkeypatch):
     metadata = deployment_agent.fetch_image_metadata(deployment_agent.TARGET_IMAGE)
 
     assert metadata["id"] == index_digest
+
+
+def test_fetch_image_metadata_rejects_child_bytes_not_matching_index_digest(monkeypatch):
+    config_digest = image_digest("3")
+    child = {
+        "mediaType": "application/vnd.oci.image.manifest.v1+json",
+        "config": {"digest": config_digest},
+    }
+    child_raw = manifest_bytes(child)
+    index_digest = image_digest("9")
+    index = {
+        "mediaType": "application/vnd.oci.image.index.v1+json",
+        "manifests": [
+            {
+                "digest": index_digest,
+                "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                "platform": {"os": "linux", "architecture": "amd64"},
+            }
+        ],
+    }
+    responses = iter(
+        [
+            (manifest_bytes(index), {}),
+            (child_raw, {"Docker-Content-Digest": content_digest(child_raw)}),
+            (manifest_bytes({"config": {"Labels": {}}}), {}),
+        ]
+    )
+    monkeypatch.setattr(deployment_agent, "registry_request", lambda *_args, **_kwargs: next(responses))
+
+    with pytest.raises(deployment_agent.RegistryMetadataError):
+        deployment_agent.fetch_image_metadata(deployment_agent.TARGET_IMAGE)
+
+
+def test_fetch_image_metadata_uses_digest_of_exact_manifest_bytes_without_header(monkeypatch):
+    raw_manifest = (
+        b'{"mediaType":"application/vnd.oci.image.manifest.v1+json", '
+        b'"config":{"digest":"' + image_digest("1").encode() + b'"}}'
+    )
+    responses = iter(
+        [
+            (raw_manifest, {}),
+            (manifest_bytes({"config": {"Labels": {}}}), {}),
+        ]
+    )
+    monkeypatch.setattr(deployment_agent, "registry_request", lambda *_args, **_kwargs: next(responses))
+
+    metadata = deployment_agent.fetch_image_metadata(deployment_agent.TARGET_IMAGE)
+
+    assert metadata["id"] == content_digest(raw_manifest)
+
+
+def test_fetch_image_metadata_accepts_digest_image_when_bytes_match_reference(monkeypatch):
+    raw_manifest = (
+        b'{"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"digest":"'
+        + image_digest("2").encode()
+        + b'"}}'
+    )
+    image = target_digest_reference(content_digest(raw_manifest))
+    responses = iter(
+        [
+            (raw_manifest, {}),
+            (manifest_bytes({"config": {"Labels": {}}}), {}),
+        ]
+    )
+    monkeypatch.setattr(deployment_agent, "registry_request", lambda *_args, **_kwargs: next(responses))
+
+    assert deployment_agent.fetch_image_metadata(image)["id"] == content_digest(raw_manifest)
+
+
+def test_fetch_image_metadata_rejects_digest_image_when_bytes_do_not_match_reference(monkeypatch):
+    image = target_digest_reference(image_digest("9"))
+    raw_manifest = manifest_bytes(
+        {"mediaType": "application/vnd.oci.image.manifest.v1+json", "config": {"digest": image_digest("2")}}
+    )
+    monkeypatch.setattr(
+        deployment_agent,
+        "registry_request",
+        lambda *_args, **_kwargs: (raw_manifest, {}),
+    )
+
+    with pytest.raises(deployment_agent.RegistryMetadataError):
+        deployment_agent.fetch_image_metadata(image)
+
+
+def test_fetch_image_metadata_accepts_case_insensitive_matching_digest_header(monkeypatch):
+    manifest = {"mediaType": "application/vnd.oci.image.manifest.v1+json", "config": {"digest": image_digest("1")}}
+    raw_manifest = manifest_bytes(manifest)
+    responses = iter(
+        [
+            (raw_manifest, {"dOcKeR-cOnTeNt-DiGeSt": content_digest(raw_manifest)}),
+            (manifest_bytes({"config": {"Labels": {}}}), {}),
+        ]
+    )
+    monkeypatch.setattr(deployment_agent, "registry_request", lambda *_args, **_kwargs: next(responses))
+
+    assert deployment_agent.fetch_image_metadata(deployment_agent.TARGET_IMAGE)["id"] == content_digest(raw_manifest)
+
+
+@pytest.mark.parametrize("header_value", ["sha256:not-a-digest", "sha512:" + "a" * 64])
+def test_fetch_image_metadata_rejects_malformed_digest_header(monkeypatch, header_value):
+    manifest = {"mediaType": "application/vnd.oci.image.manifest.v1+json", "config": {"digest": image_digest("1")}}
+    raw_manifest = manifest_bytes(manifest)
+    monkeypatch.setattr(
+        deployment_agent,
+        "registry_request",
+        lambda *_args, **_kwargs: (raw_manifest, {"Docker-Content-Digest": header_value}),
+    )
+
+    with pytest.raises(deployment_agent.RegistryMetadataError):
+        deployment_agent.fetch_image_metadata(deployment_agent.TARGET_IMAGE)
+
+
+def test_fetch_image_metadata_rejects_digest_header_mismatch(monkeypatch):
+    manifest = {"mediaType": "application/vnd.oci.image.manifest.v1+json", "config": {"digest": image_digest("1")}}
+    raw_manifest = manifest_bytes(manifest)
+    monkeypatch.setattr(
+        deployment_agent,
+        "registry_request",
+        lambda *_args, **_kwargs: (raw_manifest, {"Docker-Content-Digest": image_digest("9")}),
+    )
+
+    with pytest.raises(deployment_agent.RegistryMetadataError):
+        deployment_agent.fetch_image_metadata(deployment_agent.TARGET_IMAGE)
 
 
 def test_perform_update_does_not_rollback_when_backup_lock_is_busy(monkeypatch):
@@ -753,6 +889,27 @@ def test_request_handler_does_not_return_internal_exception_text(monkeypatch):
     handler.respond.assert_called_once_with(
         HTTPStatus.SERVICE_UNAVAILABLE,
         {"error": "service_unavailable"},
+    )
+
+
+def test_request_handler_maps_invalid_registry_metadata_to_stable_public_error(monkeypatch):
+    handler = object.__new__(deployment_agent.RequestHandler)
+    handler.command = "POST"
+    handler.path = "/check"
+    handler.authorized = lambda: True
+    handler.respond = Mock()
+    monkeypatch.setattr(deployment_agent, "read_json_body", lambda _handler: {})
+    monkeypatch.setattr(
+        deployment_agent,
+        "check_update",
+        Mock(side_effect=deployment_agent.RegistryMetadataError("internal digest detail")),
+    )
+
+    handler.dispatch()
+
+    handler.respond.assert_called_once_with(
+        HTTPStatus.BAD_GATEWAY,
+        {"error": "invalid_registry_metadata"},
     )
 
 

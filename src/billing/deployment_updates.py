@@ -11,6 +11,15 @@ from django.conf import settings
 class UpdateAgentError(RuntimeError):
     """Raised when the isolated deployment agent cannot complete a request."""
 
+    def __init__(self, message: str, *, public_code: str | None = None) -> None:
+        super().__init__(message)
+        self.public_code = public_code
+
+
+AGENT_ERROR_MESSAGES = {
+    "invalid_registry_metadata": "Registry/Image prüfen und erneut versuchen.",
+}
+
 
 def agent_request(
     path: str,
@@ -42,6 +51,8 @@ def agent_request(
             detail = json.load(error).get("error", "Unbekannter Agent-Fehler")
         except (json.JSONDecodeError, AttributeError):
             detail = f"HTTP {error.code}"
+        if isinstance(detail, str) and detail in AGENT_ERROR_MESSAGES:
+            raise UpdateAgentError(AGENT_ERROR_MESSAGES[detail], public_code=detail) from error
         raise UpdateAgentError(f"Update-Agent: {detail}") from error
     except (OSError, TimeoutError, json.JSONDecodeError) as error:
         raise UpdateAgentError("Der Update-Agent ist nicht erreichbar.") from error
