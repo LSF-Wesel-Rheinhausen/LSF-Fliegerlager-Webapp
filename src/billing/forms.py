@@ -400,6 +400,16 @@ class CampForm(forms.ModelForm):
         return is_active
 
 
+class MealPreorderSettingsForm(forms.ModelForm):
+    class Meta:
+        model = Camp
+        fields = ["allow_breakfast_prebooking_before_camp", "allow_dinner_prebooking_before_camp"]
+        labels = {
+            "allow_breakfast_prebooking_before_camp": "Frühstück vor Lagerbeginn freigeben",
+            "allow_dinner_prebooking_before_camp": "Abendessen vor Lagerbeginn freigeben",
+        }
+
+
 class MealCutoffForm(forms.ModelForm):
     """Edit the camp meal booking cutoff without exposing other camp settings."""
 

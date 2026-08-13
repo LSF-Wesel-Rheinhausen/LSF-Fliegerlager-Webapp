@@ -58,6 +58,7 @@ urlpatterns = [
     ),
     path("setup/", views.setup_first_admin, name="setup"),
     path("notifications/", notification_views.notification_settings, name="notification-settings"),
+    path("settings/preorders/", views.preorder_settings, name="preorder-settings"),
     path("notifications/subscriptions/", notification_views.notification_subscribe, name="notification-subscribe"),
     path(
         "notifications/subscriptions/<int:subscription_id>/revoke/",

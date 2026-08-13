@@ -278,6 +278,14 @@ class Camp(TimeStampedModel):
     ends_on = models.DateField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     meal_booking_cutoff_time = models.TimeField(default=time(12, 0))
+    allow_breakfast_prebooking_before_camp = models.BooleanField(
+        default=False,
+        help_text="Frühstück kann vor Lagerbeginn im Kiosk vorbestellt werden.",
+    )
+    allow_dinner_prebooking_before_camp = models.BooleanField(
+        default=False,
+        help_text="Abendessen kann vor Lagerbeginn im Kiosk vorbestellt werden.",
+    )
     shift_ratio_per_night = models.DecimalField(
         max_digits=5,
         decimal_places=4,

@@ -70,7 +70,7 @@
           <span class="kiosk-mobile-bottom-nav__icon" aria-hidden="true">🏠</span>
           <span class="kiosk-mobile-bottom-nav__label">Kiosk</span>
         </a>
-        {% if not is_post_camp %}
+        {% if not is_pre_camp and not is_post_camp %}
           <a href="{{ kiosk_urls.shifts }}" class="kiosk-mobile-bottom-nav__item">
             <span class="kiosk-mobile-bottom-nav__icon" aria-hidden="true">📋</span>
             <span class="kiosk-mobile-bottom-nav__label">Dienste</span>

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+  <section class="panel">
+    <div class="toolbar">
+      <div>
+        <h1>Vorbestellungen</h1>
+        {% if camp %}
+          <p>{{ camp.name }} · {{ camp.year }} · Lagerzeitraum: {{ camp.starts_on|date:"d.m.Y" }} – {{ camp.ends_on|date:"d.m.Y" }}</p>
+        {% endif %}
+      </div>
+    </div>
+    {% if form %}
+      <form method="post" class="form-grid">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div class="form-actions"><button type="submit">Speichern</button></div>
+      </form>
+    {% else %}
+      <p>Es ist kein aktives Lager konfiguriert.</p>
+    {% endif %}
+  </section>
+{% endblock %}
