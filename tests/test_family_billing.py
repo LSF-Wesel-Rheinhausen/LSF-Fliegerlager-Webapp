@@ -295,9 +295,10 @@ def test_guardian_own_charge_keeps_guardian_subsidy_factors():
 
 
 @pytest.mark.django_db
-def test_family_member_youth_group_is_editable_with_confirmation_and_invalid_post_is_rejected(client):
+@pytest.mark.parametrize("role", ["child", "companion"])
+def test_family_member_youth_group_is_editable_with_confirmation_and_invalid_post_is_rejected(client, role):
     guardian = ParticipantFactory()
-    member = ParticipantFamilyMemberFactory(guardian=guardian, is_youth_group=False)
+    member = ParticipantFamilyMemberFactory(guardian=guardian, role=role, is_youth_group=False)
     admin = SuperUserFactory()
     client.force_login(admin)
 

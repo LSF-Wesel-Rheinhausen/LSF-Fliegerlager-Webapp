@@ -2,3 +2,4 @@
 - Jugendgruppen-Familienmitglieder erhalten für ihre förderfähigen Kosten effektiv Hilfssatz 1 und Berufssatz 1; der Förderregelsatz bleibt der Multiplikator und Deckel.
 - Familienkinder erhalten weiterhin keine automatische Lagerpauschale; erwachsene Begleitpersonen werden mit korrekter Aufenthaltsdauer abgerechnet.
 - Abrechnungsrelevante Änderungen an Familienmitgliedern sind im direkten Django-Admin schreibgeschützt und laufen über den bestätigten Bearbeitungsdialog.
+- Der Kiosk kann den förderrelevanten Jugendgruppenstatus beim Anlegen von Familienmitgliedern nicht selbst vergeben.
