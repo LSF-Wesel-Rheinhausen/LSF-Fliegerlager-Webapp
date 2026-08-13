@@ -56,13 +56,22 @@
   document.addEventListener("DOMContentLoaded", syncScrollLock, { once: true });
   syncScrollLock();
   window.dialogScrollLock = {
-    transition(callback) {
+    hold() {
       transitionDepth += 1;
+      let active = true;
+      return () => {
+        if (!active) return;
+        active = false;
+        transitionDepth -= 1;
+        if (transitionDepth === 0) queueMicrotask(syncScrollLock);
+      };
+    },
+    transition(callback) {
+      const release = this.hold();
       try {
         return callback();
       } finally {
-        transitionDepth -= 1;
-        if (transitionDepth === 0) queueMicrotask(syncScrollLock);
+        release();
       }
     },
   };

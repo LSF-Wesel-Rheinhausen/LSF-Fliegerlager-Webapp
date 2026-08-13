@@ -160,21 +160,73 @@
       window.kioskDialogs = (() => {
         const suppressedClose = new WeakSet();
         const returnTargets = new WeakMap();
+        const pendingTransitions = new WeakMap();
         const rootFocusTargets = new WeakMap();
         const boundDialogs = new WeakSet();
+
+        const show = (dialog, focusTarget) => {
+          if (!dialog || dialog.open) return;
+          dialog.showModal();
+          window.requestAnimationFrame(() => {
+            if (dialog.open && focusTarget?.isConnected && dialog.contains(focusTarget)) {
+              focusTarget.focus();
+            }
+          });
+        };
+
+        const afterModalTeardown = (dialog, callback) => {
+          const runWhenReady = () => {
+            if (dialog.open || dialog.matches(":modal")) {
+              window.requestAnimationFrame(runWhenReady);
+              return;
+            }
+            callback();
+          };
+          window.requestAnimationFrame(runWhenReady);
+        };
 
         const bind = (dialog) => {
           if (!dialog || boundDialogs.has(dialog)) return;
           boundDialogs.add(dialog);
           dialog.addEventListener("close", () => {
-            if (suppressedClose.delete(dialog)) return;
+            if (suppressedClose.delete(dialog)) {
+              const transition = pendingTransitions.get(dialog);
+              pendingTransitions.delete(dialog);
+              if (transition) {
+                afterModalTeardown(dialog, () => {
+                  try {
+                    if (!transition.dialog.open) {
+                      show(transition.dialog, transition.focus);
+                    }
+                  } finally {
+                    const nextReturnTarget = returnTargets.get(transition.dialog);
+                    if (!transition.dialog.open) {
+                      returnTargets.delete(transition.dialog);
+                      nextReturnTarget?.releaseScrollLock?.();
+                    } else if (transition.releaseAfterShow) {
+                      returnTargets.delete(transition.dialog);
+                      transition.releaseScrollLock?.();
+                    }
+                  }
+                });
+              }
+              return;
+            }
             const returnTarget = returnTargets.get(dialog);
             returnTargets.delete(dialog);
             if (returnTarget?.dialog?.isConnected && !returnTarget.dialog.open) {
-              returnTarget.dialog.showModal();
-              window.requestAnimationFrame(() => returnTarget.focus?.focus());
+              afterModalTeardown(dialog, () => {
+                try {
+                  if (!returnTarget.dialog.open) {
+                    show(returnTarget.dialog, returnTarget.focus);
+                  }
+                } finally {
+                  returnTarget.releaseScrollLock?.();
+                }
+              });
               return;
             }
+            returnTarget?.releaseScrollLock?.();
             const rootFocusTarget = rootFocusTargets.get(dialog);
             rootFocusTargets.delete(dialog);
             window.requestAnimationFrame(() => rootFocusTarget?.focus());
@@ -188,16 +240,20 @@
           if (currentDialog && currentDialog !== dialog) {
             bind(currentDialog);
             suppressedClose.add(currentDialog);
-            window.dialogScrollLock?.transition(() => {
-              currentDialog.close();
-              returnTargets.set(dialog, { dialog: currentDialog, focus: trigger });
-              dialog.showModal();
-            });
-            return;
-          } else if (trigger?.focus) {
+            const currentReturnTarget = returnTargets.get(currentDialog);
+            const isReverseTransition = currentReturnTarget?.dialog === dialog;
+            if (isReverseTransition) {
+              returnTargets.delete(currentDialog);
+              currentReturnTarget.releaseScrollLock?.();
+            }
+            const releaseScrollLock = window.dialogScrollLock?.hold();
+            pendingTransitions.set(currentDialog, { dialog, focus: trigger, releaseScrollLock, releaseAfterShow: isReverseTransition });
+            returnTargets.set(dialog, { dialog: isReverseTransition ? null : currentDialog, focus: trigger, releaseScrollLock });
+            currentDialog.close();
+          } else {
             rootFocusTargets.set(dialog, trigger);
+            show(dialog, trigger);
           }
-          dialog.showModal();
         };
 
         document.querySelectorAll("dialog").forEach(bind);

@@ -6,6 +6,8 @@
           type="checkbox"
           value="{{ target.token }}"
           data-quick-target-scope="{{ target_scope }}"
+          data-quick-target-name="{{ target.name }}"
+          data-quick-target-variant="{{ target.variant_choices.0.0 }}"
           {% if target.token == default_booking_target_token %}checked{% endif %}
         >
         <span>{{ target.name }} · {{ target.role }}</span>
