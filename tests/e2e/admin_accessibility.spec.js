@@ -74,12 +74,13 @@ test("Participant-Admin-DOM has no dangling ARIA references", async ({ page }) =
       return {
         duplicateIds: ids.filter((id, index) => ids.indexOf(id) !== index),
         missingIds: referencedIds.filter((id) => !ids.includes(id)),
-        dateIds: ["id_arrival_date", "id_departure_date", "id_archived_at_0", "id_archived_at_1"].map((id) => Boolean(document.getElementById(id))),
       };
     });
     expect(result.duplicateIds).toEqual([]);
     expect(result.missingIds).toEqual([]);
-    expect(result.dateIds).toEqual([true, true, true, true]);
+    for (const id of ["id_arrival_date", "id_departure_date", "id_archived_at_0", "id_archived_at_1"]) {
+      await expect(page.locator(`#${id}`)).toHaveCount(1);
+    }
   }
   expect(browserErrors).toEqual([]);
   expect(failedRequests).toEqual([]);
