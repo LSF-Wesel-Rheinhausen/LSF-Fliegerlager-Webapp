@@ -5,6 +5,11 @@ from django.shortcuts import render
 from django.templatetags.static import static
 
 PWA_CACHE_VERSION = 34
+PWA_SURFACE_CACHE_VERSIONS = {
+    "admin": PWA_CACHE_VERSION,
+    "kiosk": PWA_CACHE_VERSION + 1,
+    "central": PWA_CACHE_VERSION,
+}
 
 PWA_SURFACES: dict[str, dict[str, str]] = {
     "admin": {
@@ -77,7 +82,7 @@ def service_worker(request: HttpRequest, surface: str) -> HttpResponse:
         request,
         "billing/service_worker.js",
         {
-            "cache_name": f"fliegerlager-{surface}-v{PWA_CACHE_VERSION}",
+            "cache_name": f"fliegerlager-{surface}-v{PWA_SURFACE_CACHE_VERSIONS[surface]}",
             "cache_prefix": f"fliegerlager-{surface}-",
             "offline_url": "/offline/",
             "static_assets": [
