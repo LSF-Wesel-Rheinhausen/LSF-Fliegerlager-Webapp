@@ -2600,6 +2600,7 @@ input[placeholder="DD.MM.YYYY"] {
   .admin-topbar > nav {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-flow: dense;
     gap: 6px 10px;
     width: 100%;
   }
@@ -2631,11 +2632,6 @@ input[placeholder="DD.MM.YYYY"] {
 
   .admin-topbar .nav-user-group .button {
     width: 100%;
-  }
-
-  .admin-topbar .admin-brand__copy {
-    gap: 0;
-    line-height: 1;
   }
 
   .brand {
