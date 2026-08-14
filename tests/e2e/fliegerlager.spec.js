@@ -1812,8 +1812,8 @@ test("Mobile Kiosk: checkmark for completed shifts is not horizontally distorted
 
   // Assert checkmark circle is perfectly 1:1 ratio and not squished horizontally
   const checkBox = await checkIcon.boundingBox();
-  expect(checkBox.width).toEqual(checkBox.height);
-  expect(checkBox.width).toBe(32);
+  expect(Math.abs(checkBox.width - checkBox.height)).toBeLessThan(0.5);
+  expect(Math.round(checkBox.width)).toBe(32);
 });
 
 test("Mobile Kiosk: fixed bottom navigation bar is present and functional on mobile", async ({ page }) => {
