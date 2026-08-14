@@ -1,6 +1,6 @@
 import re
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from functools import partial
@@ -48,6 +48,16 @@ MANUAL_CHARGE_KIND_BY_PRICE_RULE_KIND = {
 
 
 @dataclass(frozen=True)
+class MealBookingDetail:
+    """Describe one meal booking for the administrator detail dialog."""
+
+    target_name: str
+    payment_account_name: str
+    variant_label: str
+    status_label: str
+
+
+@dataclass(frozen=True)
 class MealCount:
     """Aggregate meal bookings for one day and meal type."""
 
@@ -56,6 +66,12 @@ class MealCount:
     variant_counts: dict[str, int]
     active_total: int
     retracted_total: int
+    bookings: list[MealBookingDetail] = field(default_factory=list)
+
+    @property
+    def booking_total(self) -> int:
+        """Return the total number of active and retracted booking records."""
+        return len(self.bookings)
 
 
 @dataclass(frozen=True)
@@ -65,6 +81,17 @@ class MealOverviewDay:
     meal_date: date
     meals: list[MealCount]
     menu_description: str = ""
+    breakfast_meals: list[MealCount] = field(default_factory=list)
+
+    @property
+    def dinner(self) -> MealCount:
+        """Return the caterer dinner row for this camp day."""
+        return self.meals[0]
+
+    @property
+    def breakfast(self) -> MealCount:
+        """Return the breakfast preorder row for this camp day."""
+        return self.breakfast_meals[0]
 
 
 @dataclass(frozen=True)
@@ -298,46 +325,74 @@ def admin_interface_contacts(user_model: Any) -> list[AdminInterfaceContact]:
 
 
 def calculate_meal_overview(camp: Camp) -> list[MealOverviewDay]:
-    """Aggregate dinner signups for a camp by day for catering orders."""
-    signups = list(
-        MealSignup.objects.select_related("participant", "family_member")
-        .filter(participant__camp=camp)
-        .order_by("meal_date", "meal", "variant")
-    )
-    dates = camp_meal_dates(camp, {signup.meal_date for signup in signups})
+    """Aggregate separate dinner and breakfast signups for a camp by day."""
+    signup_queryset = MealSignup.objects.select_related("participant", "family_member", "family_member__guardian")
+    if camp.starts_on and camp.ends_on and camp.starts_on <= camp.ends_on:
+        dates = camp_meal_dates(camp)
+        signups = list(
+            signup_queryset.filter(
+                participant__camp=camp,
+                meal_date__range=(dates[0], dates[-1]),
+            ).order_by("meal_date", "meal", "variant")
+        )
+    else:
+        signups = list(signup_queryset.filter(participant__camp=camp).order_by("meal_date", "meal", "variant"))
+        dates = camp_meal_dates(camp, {signup.meal_date for signup in signups})
+    date_set = set(dates)
+    signups = [signup for signup in signups if signup.meal_date in date_set]
     menu_descriptions = {
         entry.meal_date: entry.description
         for entry in MealPlanEntry.objects.filter(camp=camp, meal=MealSignup.Meal.DINNER)
     }
     meal_labels = dict(MealSignup.Meal.choices)
     variant_labels = dict(MealSignup.Variant.choices)
+
+    def count_meal(meal_date: date, meal: str) -> MealCount:
+        scoped = [signup for signup in signups if signup.meal_date == meal_date and signup.meal == meal]
+        bookings = [
+            MealBookingDetail(
+                target_name=signup.family_member.full_name if signup.family_member else signup.participant.full_name,
+                payment_account_name=signup.participant.full_name,
+                variant_label=variant_labels[signup.variant],
+                status_label=dict(MealSignup.Status.choices)[signup.status],
+            )
+            for signup in sorted(
+                scoped,
+                key=lambda signup: (
+                    signup.family_member.last_name if signup.family_member else signup.participant.last_name,
+                    signup.family_member.first_name if signup.family_member else signup.participant.first_name,
+                    signup.participant.last_name,
+                    signup.participant.first_name,
+                    signup.participant_id,
+                    signup.pk,
+                ),
+            )
+        ]
+        variant_counts = {
+            variant_labels[variant]: sum(
+                1 for signup in scoped if signup.status == MealSignup.Status.ACTIVE and signup.variant == variant
+            )
+            for variant in MEAL_VARIANT_ORDER
+        }
+        return MealCount(
+            meal=meal,
+            meal_label=meal_labels[meal],
+            variant_counts=variant_counts,
+            active_total=sum(variant_counts.values()),
+            retracted_total=sum(1 for signup in scoped if signup.status == MealSignup.Status.RETRACTED),
+            bookings=bookings,
+        )
+
     days = []
     for meal_date in dates:
-        meals = []
-        for meal, _meal_label in [(MealSignup.Meal.DINNER, meal_labels[MealSignup.Meal.DINNER])]:
-            scoped = [signup for signup in signups if signup.meal_date == meal_date and signup.meal == meal]
-            variant_counts = {
-                variant_labels[variant]: sum(
-                    1 for signup in scoped if signup.status == MealSignup.Status.ACTIVE and signup.variant == variant
-                )
-                for variant in MEAL_VARIANT_ORDER
-            }
-            active_total = sum(variant_counts.values())
-            retracted_total = sum(1 for signup in scoped if signup.status == MealSignup.Status.RETRACTED)
-            meals.append(
-                MealCount(
-                    meal=meal,
-                    meal_label=meal_labels[meal],
-                    variant_counts=variant_counts,
-                    active_total=active_total,
-                    retracted_total=retracted_total,
-                )
-            )
+        dinner = count_meal(meal_date, MealSignup.Meal.DINNER)
+        breakfast = count_meal(meal_date, MealSignup.Meal.BREAKFAST)
         days.append(
             MealOverviewDay(
                 meal_date=meal_date,
-                meals=meals,
+                meals=[dinner],
                 menu_description=menu_descriptions.get(meal_date, ""),
+                breakfast_meals=[breakfast],
             )
         )
     return days

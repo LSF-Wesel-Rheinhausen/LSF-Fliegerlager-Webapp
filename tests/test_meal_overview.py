@@ -2,6 +2,8 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from billing.models import Charge, MealOrder, MealPlanEntry, MealSignup, ParticipantFamilyMember
@@ -69,6 +71,112 @@ def test_calculate_meal_overview_counts_active_variants_and_retractions():
 
 
 @pytest.mark.django_db
+def test_calculate_meal_overview_separates_breakfast_details_and_family_targets():
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 2))
+    first_guardian = ParticipantFactory(camp=camp, first_name="Alex", last_name="Konto")
+    second_guardian = ParticipantFactory(camp=camp, first_name="Bea", last_name="Konto")
+    first_child = ParticipantFamilyMember.objects.create(
+        guardian=first_guardian,
+        first_name="Sam",
+        last_name="Muster",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    second_child = ParticipantFamilyMember.objects.create(
+        guardian=second_guardian,
+        first_name="Sam",
+        last_name="Muster",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    MealSignup.objects.create(
+        participant=first_guardian,
+        family_member=first_child,
+        meal_date=date(2026, 7, 1),
+        meal=MealSignup.Meal.BREAKFAST,
+        variant=MealSignup.Variant.NORMAL_CHILD,
+    )
+    MealSignup.objects.create(
+        participant=second_guardian,
+        family_member=second_child,
+        meal_date=date(2026, 7, 1),
+        meal=MealSignup.Meal.BREAKFAST,
+        variant=MealSignup.Variant.VEGAN_CHILD,
+        status=MealSignup.Status.RETRACTED,
+    )
+    MealSignup.objects.create(
+        participant=first_guardian,
+        meal_date=date(2026, 7, 1),
+        meal=MealSignup.Meal.DINNER,
+        variant=MealSignup.Variant.NORMAL,
+    )
+
+    overview = calculate_meal_overview(camp)
+
+    assert [day.meal_date for day in overview] == [date(2026, 7, 1), date(2026, 7, 2)]
+    breakfast = overview[0].breakfast
+    assert breakfast.active_total == 1
+    assert breakfast.retracted_total == 1
+    assert breakfast.variant_counts == {
+        "Mit Fleisch": 0,
+        "Vegan": 0,
+        "Mit Fleisch Kind": 1,
+        "Vegan Kind": 0,
+    }
+    assert [(booking.target_name, booking.payment_account_name) for booking in breakfast.bookings] == [
+        ("Sam Muster", "Alex Konto"),
+        ("Sam Muster", "Bea Konto"),
+    ]
+    assert [booking.status_label for booking in breakfast.bookings] == ["Gebucht", "Zurückgenommen"]
+    assert breakfast.booking_total == 2
+    assert overview[0].dinner.active_total == 1
+    assert overview[1].breakfast.active_total == 0
+
+
+@pytest.mark.django_db
+def test_calculate_meal_overview_preserves_companion_target_and_guardian_account():
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 1))
+    guardian = ParticipantFactory(camp=camp, first_name="Guardian", last_name="Account")
+    companion = ParticipantFamilyMember.objects.create(
+        guardian=guardian,
+        first_name="Companion",
+        last_name="Identity",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    MealSignup.objects.create(
+        participant=guardian,
+        family_member=companion,
+        meal_date=date(2026, 7, 1),
+        meal=MealSignup.Meal.DINNER,
+        variant=MealSignup.Variant.NORMAL,
+    )
+
+    booking = calculate_meal_overview(camp)[0].dinner.bookings[0]
+
+    assert booking.target_name == "Companion Identity"
+    assert booking.payment_account_name == "Guardian Account"
+
+
+@pytest.mark.django_db
+def test_calculate_meal_overview_uses_bounded_queries_and_ignores_out_of_camp_signups():
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 1))
+    participant = ParticipantFactory(camp=camp)
+    MealSignup.objects.create(
+        participant=participant,
+        meal_date=date(2026, 6, 30),
+        meal=MealSignup.Meal.BREAKFAST,
+        variant=MealSignup.Variant.NORMAL,
+    )
+
+    with CaptureQueriesContext(connection) as queries:
+        overview = calculate_meal_overview(camp)
+
+    assert len(queries) <= 2
+    signup_query = next(query["sql"] for query in queries if "billing_mealsignup" in query["sql"])
+    assert '"meal_date" BETWEEN' in signup_query
+    assert len(overview) == 1
+    assert overview[0].breakfast.active_total == 0
+
+
+@pytest.mark.django_db
 def test_camp_meal_overview_renders_counts_for_admin(client):
     camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 1))
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")
@@ -86,8 +194,67 @@ def test_camp_meal_overview_renders_counts_for_admin(client):
     assert b"Essens\xc3\xbcbersicht" in response.content
     assert b"N\xc3\xa4chster Tag" in response.content
     assert b"Abendessen" in response.content
-    assert b"Fr\xc3\xbchst\xc3\xbcck" not in response.content
+    assert b"Fr\xc3\xbchst\xc3\xbcck" in response.content
+    assert b"Fr\xc3\xbchst\xc3\xbccksvorbestellungen" in response.content
+    assert b'data-meal-section="dinner"' in response.content
+    assert b'data-meal-section="breakfast"' in response.content
     assert b"<strong>1</strong>" in response.content
+
+
+@pytest.mark.django_db
+def test_camp_meal_overview_renders_booking_details_only_in_their_meal_dialogs(client):
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 1))
+    guardian = ParticipantFactory(camp=camp, first_name="Alex", last_name="Konto")
+    child = ParticipantFamilyMember.objects.create(
+        guardian=guardian,
+        first_name="Sam",
+        last_name="Muster",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    dinner_guest = ParticipantFactory(camp=camp, first_name="Dora", last_name="Dinner")
+    MealSignup.objects.create(
+        participant=guardian,
+        family_member=child,
+        meal_date=date(2026, 7, 1),
+        meal=MealSignup.Meal.BREAKFAST,
+        variant=MealSignup.Variant.VEGAN_CHILD,
+        status=MealSignup.Status.RETRACTED,
+    )
+    MealSignup.objects.create(
+        participant=dinner_guest,
+        meal_date=date(2026, 7, 1),
+        meal=MealSignup.Meal.DINNER,
+        variant=MealSignup.Variant.NORMAL,
+    )
+    client.force_login(SuperUserFactory())
+
+    response = client.get(reverse("camp-meal-overview", args=[camp.pk]))
+
+    content = response.content.decode()
+    breakfast_dialog = content.split('id="breakfast-detail-20260701"', 1)[1].split("</dialog>", 1)[0]
+    dinner_dialog = content.split('id="dinner-detail-20260701"', 1)[1].split("</dialog>", 1)[0]
+    assert all(value in breakfast_dialog for value in ["Sam Muster", "Alex Konto", "Vegan Kind", "Zurückgenommen"])
+    assert "Dora Dinner" not in breakfast_dialog
+    assert all(value in dinner_dialog for value in ["Dora Dinner", "Mit Fleisch", "Gebucht"])
+    assert "Sam Muster" not in dinner_dialog
+
+
+@pytest.mark.django_db
+def test_camp_meal_overview_escapes_booking_names(client):
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 1))
+    participant = ParticipantFactory(camp=camp, first_name="<script>alert(1)</script>", last_name="Guest")
+    MealSignup.objects.create(
+        participant=participant,
+        meal_date=date(2026, 7, 1),
+        meal=MealSignup.Meal.DINNER,
+        variant=MealSignup.Variant.NORMAL,
+    )
+    client.force_login(SuperUserFactory())
+
+    content = client.get(reverse("camp-meal-overview", args=[camp.pk])).content.decode()
+
+    assert "&lt;script&gt;alert(1)&lt;/script&gt; Guest" in content
+    assert "<script>alert(1)</script> Guest" not in content
 
 
 @pytest.mark.django_db
