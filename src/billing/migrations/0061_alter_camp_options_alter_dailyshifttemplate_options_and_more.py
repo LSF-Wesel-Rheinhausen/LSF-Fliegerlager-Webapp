@@ -10,7 +10,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("billing", "0059_participantfamilymember_is_youth_group"),
+        ("billing", "0060_shiftassignment_family_member"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
