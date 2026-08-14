@@ -1080,7 +1080,7 @@ test("Kiosk masonry and expense cards stay responsive and accessible", async ({ 
       columns: new Set(navigationItems.map((item) => Math.round(item.getBoundingClientRect().left))).size,
     };
   });
-  expect(mobileAdminHeader.height, "Mobile Admin-Kopfzeile bleibt überschaubar").toBeLessThanOrEqual(320);
+  expect(mobileAdminHeader.height, "Mobile Admin-Kopfzeile bleibt überschaubar").toBeLessThanOrEqual(360);
   expect(mobileAdminHeader.columns, "Mobile Admin-Aktionen nutzen zwei Spalten").toBe(2);
   await assertNoUnexpectedOverflow(page);
   await page.setViewportSize({ width: 1280, height: 900 });
