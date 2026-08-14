@@ -1590,35 +1590,6 @@ def get_cost_center_evaluation(camp):
     return {code: data for code, data in evaluation.items() if data["income_count"] or data["expense_count"]}
 
 
-def is_charge_covered_by_settlement_run(
-    charge: Charge,
-    settlements: Iterable[Settlement] | None = None,
-) -> bool:
-    """Return whether an immutable settlement snapshot contains a charge.
-
-    Args:
-        charge: Charge whose settlement status is checked.
-        settlements: Optional preloaded snapshots for the charge owner.
-
-    Returns:
-        ``True`` when any settlement line explicitly references the charge.
-    """
-    if settlements is None:
-        settlements = Settlement.objects.filter(
-            run__camp_id=charge.participant.camp_id,
-            participant_id=charge.participant_id,
-        ).only("data")
-    singular_source = f"charge:{charge.pk}"
-    for settlement in settlements:
-        for line in settlement.data.get("lines", []):
-            source = line.get("source", "") if isinstance(line, dict) else ""
-            if source == singular_source:
-                return True
-            if source.startswith("charges:") and str(charge.pk) in source.removeprefix("charges:").split(","):
-                return True
-    return False
-
-
 def lock_camp_price_rules_for_update(camp: Camp | int) -> tuple[Camp, dict[int, PriceRule]]:
     """Lock a camp and all of its price rules in the global mutation order.
 
@@ -1644,8 +1615,9 @@ def lock_camp_price_rules_for_update(camp: Camp | int) -> tuple[Camp, dict[int, 
 def sync_meal_signup_charges_for_camp(camp: Camp) -> int:
     """Synchronize unfinalized future meal signups with current meal rules.
 
-    Archived rules, historical bookings, deleted charges, and charges covered
-    by a settlement snapshot are intentionally left unchanged.
+    Archived rules, historical bookings, and deleted charges are intentionally
+    left unchanged. Settlement snapshots remain immutable copies and do not
+    lock their mutable source bookings.
     """
     camp, locked_rules = lock_camp_price_rules_for_update(camp)
     all_rules = [rule for rule in locked_rules.values() if rule.kind == PriceRule.Kind.MEAL and not rule.is_archived]
@@ -1653,9 +1625,6 @@ def sync_meal_signup_charges_for_camp(camp: Camp) -> int:
         return 0
 
     updated_count = 0
-    settlements_by_participant: dict[int, list[Settlement]] = {}
-    for settlement in Settlement.objects.filter(run__camp=camp).only("participant_id", "data"):
-        settlements_by_participant.setdefault(settlement.participant_id, []).append(settlement)
     today = timezone.localdate()
     signups = MealSignup.objects.filter(participant__camp=camp, status=MealSignup.Status.ACTIVE).select_related(
         "charge", "family_member", "participant"
@@ -1664,13 +1633,7 @@ def sync_meal_signup_charges_for_camp(camp: Camp) -> int:
         if signup.meal_date < today:
             continue
         charge = signup.charge
-        if charge is not None and (
-            charge.deleted_at is not None
-            or is_charge_covered_by_settlement_run(
-                charge,
-                settlements_by_participant.get(charge.participant_id, []),
-            )
-        ):
+        if charge is not None and charge.deleted_at is not None:
             continue
         target = signup.family_member or signup.participant
         is_companion = (
