@@ -521,7 +521,7 @@ class Participant(TimeStampedModel):
     def completed_shifts(self) -> int:
         if hasattr(self, "_completed_shifts_count"):
             return self._completed_shifts_count
-        return self.shift_assignments.count()
+        return self.shift_assignments.filter(family_member__isnull=True).count()
 
     @property
     def is_archived(self) -> bool:
@@ -1441,16 +1441,33 @@ class DailyShiftException(TimeStampedModel):
 class ShiftAssignment(TimeStampedModel):
     shift = models.ForeignKey(Shift, on_delete=models.CASCADE, related_name="assignments")
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="shift_assignments")
+    family_member = models.ForeignKey(
+        ParticipantFamilyMember,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="shift_assignments",
+    )
     offered_for_exchange = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["shift", "participant"]
         constraints = [
-            models.UniqueConstraint(fields=["shift", "participant"], name="unique_shift_assignment"),
+            models.UniqueConstraint(
+                fields=["shift", "participant"],
+                condition=models.Q(family_member__isnull=True),
+                name="unique_shift_assignment",
+            ),
+            models.UniqueConstraint(
+                fields=["shift", "participant", "family_member"],
+                condition=models.Q(family_member__isnull=False),
+                name="unique_family_member_shift_assignment",
+            ),
         ]
 
     def __str__(self):
-        return f"{self.participant} -> {self.shift}"
+        target = self.family_member or self.participant
+        return f"{target} -> {self.shift}"
 
 
 class PushSubscription(TimeStampedModel):

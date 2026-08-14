@@ -4,8 +4,8 @@ import pytest
 from django.urls import reverse
 from django.utils import timezone
 
-from billing.models import Camp, Participant, Shift, ShiftAssignment
-from billing.views import KIOSK_PARTICIPANT_SESSION_KEY
+from billing.models import Camp, Participant, ParticipantFamilyMember, Shift, ShiftAssignment
+from billing.views import KIOSK_FAMILY_MEMBER_SESSION_KEY, KIOSK_PARTICIPANT_SESSION_KEY
 
 
 @pytest.fixture
@@ -93,6 +93,42 @@ def test_kiosk_can_signup_for_shift(logged_in_kiosk_client, active_camp):
     response = logged_in_kiosk_client.post(reverse("kiosk-shifts"), {"action": "signup", "shift_id": shift.pk})
     assert response.status_code == 302
     assert ShiftAssignment.objects.filter(shift=shift, participant=logged_in_kiosk_client.kiosk_user).exists()
+
+
+@pytest.mark.django_db
+def test_companion_can_book_own_shift_without_replacing_guardian_assignment(kiosk_client, active_camp):
+    guardian = Participant.objects.create(camp=active_camp, first_name="Guardian", last_name="User")
+    companion = ParticipantFamilyMember.objects.create(
+        guardian=guardian,
+        first_name="Companion",
+        last_name="User",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    shift = Shift.objects.create(
+        camp=active_camp,
+        name="Gemeinsamer Dienst",
+        date=datetime.date.today() + datetime.timedelta(days=2),
+        required_slots=2,
+    )
+    guardian_assignment = ShiftAssignment.objects.create(shift=shift, participant=guardian)
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = guardian.pk
+    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    session.save()
+
+    response = kiosk_client.post(reverse("kiosk-shifts"), {"action": "signup", "shift_id": shift.pk})
+
+    assert response.status_code == 302
+    assert ShiftAssignment.objects.filter(shift=shift).count() == 2
+    assert ShiftAssignment.objects.filter(shift=shift, participant=guardian, family_member=companion).exists()
+    guardian_assignment.refresh_from_db()
+    assert guardian_assignment.family_member_id is None
+    assert guardian.completed_shifts == 1
+
+    duplicate_response = kiosk_client.post(reverse("kiosk-shifts"), {"action": "signup", "shift_id": shift.pk})
+
+    assert duplicate_response.status_code == 302
+    assert ShiftAssignment.objects.filter(shift=shift, participant=guardian, family_member=companion).count() == 1
 
 
 @pytest.mark.django_db

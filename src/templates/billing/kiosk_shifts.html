@@ -16,7 +16,7 @@
 
     <section class="panel shift-progress">
       <h2>Dein Fortschritt</h2>
-      {% if participant.completed_shifts >= participant.target_shifts %}
+      {% if shift_progress_completed >= shift_progress_target %}
         <div class="shift-progress__celebration">
           <span class="shift-progress__check" aria-hidden="true">✓</span>
           <div>
@@ -26,11 +26,11 @@
         </div>
       {% else %}
         <div class="shift-progress__header">
-          <span class="shift-progress__count">Du hast <strong>{{ participant.completed_shifts }}</strong> von <strong>{{ participant.target_shifts }}</strong> Pflichtdiensten erledigt.</span>
-          <strong class="shift-progress__percent">{% widthratio participant.completed_shifts participant.target_shifts|default:1 100 %} %</strong>
+          <span class="shift-progress__count">Du hast <strong>{{ shift_progress_completed }}</strong> von <strong>{{ shift_progress_target }}</strong> Pflichtdiensten erledigt.</span>
+          <strong class="shift-progress__percent">{% widthratio shift_progress_completed shift_progress_target|default:1 100 %} %</strong>
         </div>
         <div class="progress-track" aria-hidden="true">
-          <div class="progress-fill" style="width: {% widthratio participant.completed_shifts participant.target_shifts|default:1 100 %}%; max-width: 100%;"></div>
+          <div class="progress-fill" style="width: {% widthratio shift_progress_completed shift_progress_target|default:1 100 %}%; max-width: 100%;"></div>
         </div>
       {% endif %}
     </section>
@@ -96,10 +96,10 @@
                       <span class="helptext">Weitere Einteilungen</span>
                       <div class="kiosk-pill-list">
                         {% for assignment in shift.assignments.all %}
-                          {% if assignment.participant.full_name != shift.offered_by %}
+                          {% if assignment.display_name != shift.offered_by %}
                             <span class="coworker-badge">
-                              <span class="coworker-full">{{ assignment.participant.full_name }}</span>
-                              <span class="coworker-short">{{ assignment.participant.first_name }} {{ assignment.participant.last_name|make_list|first }}.</span>
+                              <span class="coworker-full">{{ assignment.display_name }}</span>
+                              <span class="coworker-short">{{ assignment.display_short }}</span>
                             </span>
                           {% endif %}
                         {% endfor %}
@@ -150,10 +150,10 @@
                     <span class="helptext">Zusammen mit</span>
                     <div class="kiosk-pill-list">
                       {% for assignment in shift.assignments.all %}
-                        {% if assignment.participant != participant %}
+                        {% if not assignment.is_current_identity %}
                           <span class="coworker-badge">
-                            <span class="coworker-full">{{ assignment.participant.full_name }}</span>
-                            <span class="coworker-short">{{ assignment.participant.first_name }} {{ assignment.participant.last_name|make_list|first }}.</span>
+                            <span class="coworker-full">{{ assignment.display_name }}</span>
+                            <span class="coworker-short">{{ assignment.display_short }}</span>
                           </span>
                         {% endif %}
                       {% endfor %}
@@ -237,8 +237,8 @@
                     <div class="kiosk-pill-list">
                       {% for assignment in shift.assignments.all %}
                         <span class="coworker-badge">
-                          <span class="coworker-full">{{ assignment.participant.full_name }}</span>
-                          <span class="coworker-short">{{ assignment.participant.first_name }} {{ assignment.participant.last_name|make_list|first }}.</span>
+                          <span class="coworker-full">{{ assignment.display_name }}</span>
+                          <span class="coworker-short">{{ assignment.display_short }}</span>
                         </span>
                       {% endfor %}
                     </div>
