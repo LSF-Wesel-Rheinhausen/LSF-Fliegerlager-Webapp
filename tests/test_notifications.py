@@ -20,6 +20,7 @@ from billing.models import (
     MealSignup,
     Participant,
     ParticipantBookingLink,
+    ParticipantFamilyMember,
     PushMessage,
     PushSubscription,
     Shift,
@@ -971,7 +972,48 @@ def test_scheduled_shift_reminder_uses_one_hour_lead_and_deduplicates():
 
     message = PushMessage.objects.get(category="shifts")
     assert '"Mittagsdienst"' in message.body
-    assert message.dedupe_key == f"shift:{shift.pk}:participant:{participant.pk}:reminder"
+    assert message.dedupe_key == f"shift:{shift.pk}:identity:participant:{participant.pk}:reminder"
+
+
+@pytest.mark.django_db
+def test_scheduled_shift_reminders_are_identity_scoped_for_guardian_companions():
+    now = timezone.make_aware(timezone.datetime(2026, 7, 20, 11, 0))
+    guardian = ParticipantFactory()
+    first = ParticipantFamilyMember.objects.create(
+        guardian=guardian,
+        first_name="First",
+        last_name="Companion",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    second = ParticipantFamilyMember.objects.create(
+        guardian=guardian,
+        first_name="Second",
+        last_name="Companion",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    PushSubscription.objects.create(
+        participant=guardian,
+        endpoint="https://push.example.test/guardian-shifts",
+        p256dh="key",
+        auth="secret",
+        categories=["shifts"],
+    )
+    shift = Shift.objects.create(
+        camp=guardian.camp,
+        name="Familien-Schicht",
+        date=now.date(),
+        start_time=time(12, 0),
+        required_slots=2,
+    )
+    ShiftAssignment.objects.create(shift=shift, participant=guardian, family_member=first)
+    ShiftAssignment.objects.create(shift=shift, participant=guardian, family_member=second)
+
+    generate_scheduled_notifications(now=now)
+
+    messages = list(PushMessage.objects.filter(category="shifts").order_by("pk"))
+    assert len(messages) == 2
+    assert all(any(identity.full_name in message.body for identity in (first, second)) for message in messages)
+    assert len({message.dedupe_key for message in messages}) == 2
 
 
 @pytest.mark.django_db

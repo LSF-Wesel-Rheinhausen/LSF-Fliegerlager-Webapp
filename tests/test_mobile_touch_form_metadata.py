@@ -1,8 +1,11 @@
+from pathlib import Path
+
 import pytest
 
 from billing.forms import (
     EmailOrUsernameAuthenticationForm,
     ExpenseForm,
+    KioskFamilyMemberForm,
     KioskLoginForm,
     KioskSelfEnrollmentForm,
     ParticipantFamilyMemberForm,
@@ -50,6 +53,21 @@ def test_family_member_form_has_name_metadata():
     form = ParticipantFamilyMemberForm()
     assert form.fields["first_name"].widget.attrs.get("autocomplete") == "given-name"
     assert form.fields["last_name"].widget.attrs.get("autocomplete") == "family-name"
+
+
+def test_kiosk_family_member_form_has_name_metadata():
+    form = KioskFamilyMemberForm()
+    assert form.fields["first_name"].widget.attrs.get("autocomplete") == "given-name"
+    assert form.fields["last_name"].widget.attrs.get("autocomplete") == "family-name"
+
+
+def test_mobile_css_covers_standalone_controls_and_table_actions():
+    css = (Path(__file__).parents[1] / "src/static/billing/app-v8.css").read_text(encoding="utf-8")
+    assert 'input[type="checkbox"]' in css
+    assert 'input[type="radio"]' in css
+    assert "min-width: 44px" in css
+    assert ".row-actions a" in css
+    assert ".table-actions a" in css
 
 
 @pytest.mark.django_db

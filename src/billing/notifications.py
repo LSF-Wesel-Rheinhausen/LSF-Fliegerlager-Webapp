@@ -301,25 +301,33 @@ def notify_shift_exchange(
     event: str,
     actor: Participant,
     previous_participant: Participant | None = None,
+    previous_family_member: Any | None = None,
 ) -> None:
     """Notify eligible participants about an offered or completed shift exchange."""
+    family_member = assignment.family_member if assignment.family_member_id else None
+    actor_display_name = family_member.full_name if family_member is not None else actor.full_name
     if event == "offered":
         for participant in assignment.shift.camp.participants.filter(archived_at__isnull=True).exclude(pk=actor.pk):
             queue_participant_notification(
                 participant,
                 category="shifts",
                 title="Dienst zum Tausch angeboten",
-                body=f'{actor.full_name} bietet "{assignment.shift.name}" am {assignment.shift.date:%d.%m.%Y} an.',
+                body=f'{actor_display_name} bietet "{assignment.shift.name}" am {assignment.shift.date:%d.%m.%Y} an.',
                 target_url="/kiosk/shifts/",
                 dedupe_key=f"shift:{assignment.shift_id}:exchange:{assignment.pk}:offered",
             )
         return
     if event == "taken" and previous_participant is not None:
+        previous_display_name = (
+            previous_family_member.full_name if previous_family_member is not None else previous_participant.full_name
+        )
         queue_participant_notification(
             previous_participant,
             category="shifts",
             title="Dienst übernommen",
-            body=f'{actor.full_name} hat deinen Dienst "{assignment.shift.name}" übernommen.',
+            body=(
+                f'{actor_display_name} hat den Dienst von {previous_display_name} "{assignment.shift.name}" übernommen.'
+            ),
             target_url="/kiosk/shifts/",
             dedupe_key=f"shift:{assignment.shift_id}:exchange:{assignment.pk}:taken",
         )
@@ -342,7 +350,7 @@ def generate_scheduled_notifications(*, now: Any | None = None) -> int:
     current = now or timezone.now()
     today = timezone.localdate(current)
     created = 0
-    assignments = ShiftAssignment.objects.select_related("participant", "shift", "shift__camp").filter(
+    assignments = ShiftAssignment.objects.select_related("participant", "family_member", "shift", "shift__camp").filter(
         shift__date__gte=today,
         shift__date__lte=today + timedelta(days=1),
         participant__archived_at__isnull=True,
@@ -350,13 +358,19 @@ def generate_scheduled_notifications(*, now: Any | None = None) -> int:
     for assignment in assignments:
         due_at, event_at = _reminder_time(assignment.shift.date, assignment.shift.start_time)
         if due_at <= current < event_at:
+            identity = assignment.operational_identity
+            identity_key = (
+                f"family:{assignment.family_member_id}"
+                if assignment.family_member_id is not None
+                else f"participant:{assignment.participant_id}"
+            )
             created += queue_participant_notification(
                 assignment.participant,
                 category="shifts",
                 title="Dienst beginnt bald",
-                body=f'"{assignment.shift.name}" beginnt in einer Stunde.',
+                body=f'{identity.full_name}: "{assignment.shift.name}" beginnt in einer Stunde.',
                 target_url="/kiosk/shifts/",
-                dedupe_key=(f"shift:{assignment.shift_id}:participant:{assignment.participant_id}:reminder"),
+                dedupe_key=f"shift:{assignment.shift_id}:identity:{identity_key}:reminder",
                 scheduled_for=due_at,
             )
 

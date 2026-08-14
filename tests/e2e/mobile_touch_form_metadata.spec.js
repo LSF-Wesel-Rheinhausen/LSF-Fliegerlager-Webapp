@@ -43,4 +43,33 @@ test.describe("Mobile Touch Targets & Form Metadata", () => {
     expect(labelBox).not.toBeNull();
     expect(labelBox.height).toBeGreaterThanOrEqual(44);
   });
+
+  test("Kiosk form controls keep 44px targets in portrait and landscape", async ({ page }) => {
+    for (const viewport of [
+      { width: 390, height: 844 },
+      { width: 844, height: 390 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await openKiosk(page, "/kiosk/login/");
+
+      const controls = await page.locator("button, a.button, input, select, textarea, label").evaluateAll((elements) =>
+        elements
+          .filter((element) => {
+            const style = window.getComputedStyle(element);
+            const box = element.getBoundingClientRect();
+            return style.display !== "none" && style.visibility !== "hidden" && box.width > 0 && box.height > 0;
+          })
+          .map((element) => {
+            const box = element.getBoundingClientRect();
+            return { tag: element.tagName, text: element.textContent.trim(), width: box.width, height: box.height };
+          })
+      );
+
+      expect(controls, `${viewport.width}x${viewport.height}`).not.toEqual([]);
+      for (const control of controls) {
+        expect(control.width, `${control.tag} ${control.text}`).toBeGreaterThanOrEqual(44);
+        expect(control.height, `${control.tag} ${control.text}`).toBeGreaterThanOrEqual(44);
+      }
+    }
+  });
 });

@@ -264,3 +264,32 @@ def test_family_member_youth_group_migration_defaults_false_and_rolls_back() -> 
     assert "is_youth_group" not in columns
     executor = MigrationExecutor(connection)
     executor.migrate(executor.loader.graph.leaf_nodes())
+
+
+@pytest.mark.django_db(transaction=True)
+def test_shift_assignment_migration_preserves_legacy_null_identity() -> None:
+    executor = MigrationExecutor(connection)
+    old_target = [("billing", "0059_participantfamilymember_is_youth_group")]
+    executor.migrate(old_target)
+    old_apps = executor.loader.project_state(old_target).apps
+    Camp = old_apps.get_model("billing", "Camp")
+    Participant = old_apps.get_model("billing", "Participant")
+    Shift = old_apps.get_model("billing", "Shift")
+    ShiftAssignment = old_apps.get_model("billing", "ShiftAssignment")
+    camp = Camp.objects.create(name="Shift Migration", year=2030)
+    participant = Participant.objects.create(camp=camp, first_name="Legacy", last_name="Participant")
+    shift = Shift.objects.create(camp=camp, name="Legacy Duty", date="2030-07-20")
+    assignment = ShiftAssignment.objects.create(shift=shift, participant=participant)
+
+    new_target = [("billing", "0060_shiftassignment_family_member")]
+    executor = MigrationExecutor(connection)
+    executor.migrate(new_target)
+    new_assignment = (
+        executor.loader.project_state(new_target)
+        .apps.get_model("billing", "ShiftAssignment")
+        .objects.get(pk=assignment.pk)
+    )
+
+    assert new_assignment.family_member_id is None
+    executor = MigrationExecutor(connection)
+    executor.migrate(executor.loader.graph.leaf_nodes())

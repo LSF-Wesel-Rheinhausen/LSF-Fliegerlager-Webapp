@@ -585,6 +585,14 @@ class PriceRuleForm(forms.ModelForm):
             cleaned_data["camp_flat_role"] = ""
         return cleaned_data
 
+    def save(self, commit: bool = True) -> PriceRule:
+        rule = super().save(commit=commit)
+        if commit and rule.kind == PriceRule.Kind.MEAL and rule.camp:
+            from .services import sync_meal_signup_charges_for_camp
+
+            sync_meal_signup_charges_for_camp(rule.camp)
+        return rule
+
 
 class CampFlatRateSettingsForm(forms.Form):
     participant_1w_price = forms.DecimalField(label="Teilnehmer 1 Woche", min_value=0, max_digits=10, decimal_places=2)
@@ -1036,7 +1044,7 @@ class KioskLoginForm(forms.Form):
         targets.extend(
             {
                 "token": f"family-{family_member.pk}",
-                "label": f"{family_member.full_name} (Begleitung von {family_member.guardian.full_name})",
+                "label": family_member.full_name,
                 "participant": family_member.guardian,
                 "family_member": family_member,
             }
@@ -1047,7 +1055,15 @@ class KioskLoginForm(forms.Form):
             person = target["family_member"] or target["participant"]
             return (person.last_name.casefold(), person.first_name.casefold(), target["token"])
 
-        return sorted(targets, key=name_sort_key)
+        targets = sorted(targets, key=name_sort_key)
+        label_counts: dict[str, int] = {}
+        for target in targets:
+            person = target["family_member"] or target["participant"]
+            base_label = person.full_name
+            label_counts[base_label] = label_counts.get(base_label, 0) + 1
+            occurrence = label_counts[base_label]
+            target["label"] = base_label if occurrence == 1 else f"{base_label} ({occurrence})"
+        return targets
 
     def _target_for_token(self, token: str) -> dict[str, Any] | None:
         return next((target for target in self.login_targets if target["token"] == token), None)
@@ -1443,6 +1459,10 @@ class KioskFamilyMemberForm(forms.ModelForm):
             "last_name": "Nachname",
             "role": "Rolle",
         }
+        widgets = {
+            "first_name": forms.TextInput(attrs={"autocomplete": "given-name", "spellcheck": "false"}),
+            "last_name": forms.TextInput(attrs={"autocomplete": "family-name", "spellcheck": "false"}),
+        }
 
     def clean(self) -> dict[str, Any]:
         """Require a confirmed PIN when the family member receives a login."""
@@ -1694,6 +1714,9 @@ class MealStandardPricesForm(forms.Form):
                             "applies_to_companions": False,
                         },
                     )
+            from .services import sync_meal_signup_charges_for_camp
+
+            sync_meal_signup_charges_for_camp(self.camp)
 
 
 class ShiftForm(forms.ModelForm):

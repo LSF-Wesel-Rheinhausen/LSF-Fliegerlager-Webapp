@@ -1067,7 +1067,7 @@ test("Kiosk masonry and expense cards stay responsive and accessible", async ({ 
   expect(
     Math.abs(adminHeaderLayout.identityCenter - adminHeaderLayout.navigationCenter),
     "Lagerkontext und Navigation sind in einer Zeile ausgerichtet"
-  ).toBeLessThanOrEqual(4);
+  ).toBeLessThanOrEqual(1);
   await assertNoUnexpectedOverflow(page);
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -1080,7 +1080,7 @@ test("Kiosk masonry and expense cards stay responsive and accessible", async ({ 
       columns: new Set(navigationItems.map((item) => Math.round(item.getBoundingClientRect().left))).size,
     };
   });
-  expect(mobileAdminHeader.height, "Mobile Admin-Kopfzeile bleibt überschaubar").toBeLessThanOrEqual(360);
+  expect(mobileAdminHeader.height, "Mobile Admin-Kopfzeile bleibt überschaubar").toBeLessThanOrEqual(280);
   expect(mobileAdminHeader.columns, "Mobile Admin-Aktionen nutzen zwei Spalten").toBe(2);
   await assertNoUnexpectedOverflow(page);
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -1812,8 +1812,8 @@ test("Mobile Kiosk: checkmark for completed shifts is not horizontally distorted
 
   // Assert checkmark circle is perfectly 1:1 ratio and not squished horizontally
   const checkBox = await checkIcon.boundingBox();
-  expect(Math.abs(checkBox.width - checkBox.height)).toBeLessThan(0.5);
-  expect(Math.round(checkBox.width)).toBe(32);
+  expect(checkBox.width).toEqual(checkBox.height);
+  expect(checkBox.width).toBe(32);
 });
 
 test("Mobile Kiosk: fixed bottom navigation bar is present and functional on mobile", async ({ page }) => {

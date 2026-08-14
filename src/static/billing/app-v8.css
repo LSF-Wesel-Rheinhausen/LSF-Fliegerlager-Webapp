@@ -2566,6 +2566,7 @@ input[placeholder="DD.MM.YYYY"] {
 
 :root {
   --mobile-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --mobile-safe-area-top: env(safe-area-inset-top, 0px);
   --mobile-safe-area-left: env(safe-area-inset-left, 0px);
   --mobile-safe-area-right: env(safe-area-inset-right, 0px);
   --mobile-bottom-nav-height: 56px;
@@ -3672,8 +3673,45 @@ main:focus {
   outline: none;
 }
 
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  background-color: rgba(0, 0, 0, 0.05);
+  color: var(--text);
+  padding: 0.15em 0.4em;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--line);
+  font-size: 0.9em;
+}
+
+:root[data-theme="dark"] code {
+  background-color: #222a32;
+  color: #f1f4f6;
+  border-color: #455260;
+}
+
 /* Mobile Touch Target Standards (Issues #346 & #349) */
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
+  .topbar {
+    padding-top: max(8px, var(--mobile-safe-area-top));
+  }
+
+  .admin-topbar > nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-topbar > nav > .theme-toggle {
+    grid-column: 2;
+  }
+
+  .admin-topbar {
+    row-gap: 0;
+    padding-bottom: 0;
+  }
+
+  .admin-topbar > nav {
+    gap: 0 10px;
+  }
+
   .theme-toggle {
     flex: 0 0 44px;
     width: 44px;
@@ -3735,5 +3773,44 @@ main:focus {
     min-height: 22px;
     margin-right: 8px;
     flex-shrink: 0;
+  }
+
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    margin: 0;
+  }
+
+  label:not(.meal-booking-day):has(> input[type="checkbox"]),
+  label:not(.meal-booking-day):has(> input[type="radio"]) {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+
+  .row-actions a,
+  .table-actions a,
+  table td[data-label="Aktion"] a,
+  table td[data-label="Aktionen"] a,
+  table td > a {
+    display: inline-flex;
+    align-items: center;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px;
+  }
+
+  .meal-booking-day {
+    min-width: 0;
+  }
+
+  .meal-booking-day > input[type="checkbox"] {
+    justify-self: start;
   }
 }
