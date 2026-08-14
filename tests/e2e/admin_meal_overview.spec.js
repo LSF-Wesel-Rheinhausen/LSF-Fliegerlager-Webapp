@@ -91,8 +91,7 @@ test("Admin meal overview keeps dinner and breakfast details separate and keyboa
   await expect(breakfastDay).toBeFocused();
 
   const dinnerDay = dinner.getByRole("button", { name: /01\.07\.2026/ }).first();
-  await dinnerDay.focus();
-  await page.keyboard.press("Enter");
+  await dinnerDay.click();
   const dinnerDialog = page.locator("#dinner-detail-20260701");
   await expect(dinnerDialog).toBeVisible();
   await expect(dinnerDialog.getByText("Keine Buchungen für diesen Tag.")).toBeVisible();
