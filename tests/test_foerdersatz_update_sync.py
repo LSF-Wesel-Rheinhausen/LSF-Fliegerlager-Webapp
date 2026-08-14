@@ -3,11 +3,12 @@ from decimal import Decimal
 
 import pytest
 from django.db import DatabaseError
+from django.db.models.query import QuerySet
 from django.urls import reverse
 from django.utils import timezone
 
 from billing.forms import MealStandardPricesForm, PriceRuleForm
-from billing.models import Charge, MealSignup, ParticipantFamilyMember, PriceRule
+from billing.models import Camp, Charge, MealSignup, ParticipantFamilyMember, PriceRule
 from billing.services import (
     calculate_participant_settlement,
     create_settlement_run,
@@ -58,6 +59,28 @@ def _create_dinner_rule(camp, *, foerdersatz, unit_price=Decimal("10.00"), **kwa
         unit_price=unit_price,
         **kwargs,
     )
+
+
+def _capture_price_rule_mutation_lock_order(monkeypatch) -> list[str]:
+    """Record database row locks and PriceRule writes in observed execution order."""
+    events: list[str] = []
+    original_fetch_all = QuerySet._fetch_all
+    original_save = PriceRule.save
+
+    def capture_fetch_all(queryset):
+        was_unfetched = queryset._result_cache is None
+        result = original_fetch_all(queryset)
+        if was_unfetched and queryset.query.select_for_update and queryset.model in {Camp, PriceRule}:
+            events.append(f"lock:{queryset.model.__name__}")
+        return result
+
+    def capture_save(rule, *args, **kwargs):
+        events.append("write:PriceRule")
+        return original_save(rule, *args, **kwargs)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", capture_fetch_all)
+    monkeypatch.setattr(PriceRule, "save", capture_save)
+    return events
 
 
 @pytest.mark.django_db
@@ -550,6 +573,67 @@ def test_non_admin_cannot_edit_or_archive_meal_price_rule(client):
     assert rule.name != "Manipuliert"
     assert rule.foerdersatz == Decimal("0.2000")
     assert rule.is_archived is False
+
+
+@pytest.mark.django_db
+def test_admin_price_rule_create_locks_camp_then_rules_before_write(client, monkeypatch):
+    camp = CampFactory(is_active=True)
+    _create_dinner_rule(camp, foerdersatz=Decimal("0.2000"), is_default=True)
+    client.force_login(SuperUserFactory())
+    events = _capture_price_rule_mutation_lock_order(monkeypatch)
+
+    response = client.post(
+        reverse("price-rule-create", args=[camp.pk]),
+        {
+            "kind": PriceRule.Kind.MEAL,
+            "name": "Festessen",
+            "unit_price": "18.00",
+            "foerdersatz": "60",
+            "meal_type": MealSignup.Meal.DINNER,
+            "meal_date": "2026-08-15",
+            "applies_to_adults": "on",
+        },
+    )
+
+    assert response.status_code == 302
+    assert events[:3] == ["lock:Camp", "lock:PriceRule", "write:PriceRule"]
+
+
+@pytest.mark.django_db
+def test_admin_price_rule_edit_locks_camp_then_rules_before_write(client, monkeypatch):
+    camp = CampFactory(is_active=True)
+    rule = _create_dinner_rule(camp, foerdersatz=Decimal("0.2000"), is_default=True, name="Abendessen")
+    client.force_login(SuperUserFactory())
+    events = _capture_price_rule_mutation_lock_order(monkeypatch)
+
+    response = client.post(
+        reverse("price-rule-edit", args=[rule.pk]),
+        {
+            "kind": PriceRule.Kind.MEAL,
+            "name": "Abendessen",
+            "unit_price": "20.00",
+            "foerdersatz": "80",
+            "meal_type": MealSignup.Meal.DINNER,
+            "is_default": "on",
+            "applies_to_adults": "on",
+        },
+    )
+
+    assert response.status_code == 302
+    assert events[:3] == ["lock:Camp", "lock:PriceRule", "write:PriceRule"]
+
+
+@pytest.mark.django_db
+def test_admin_price_rule_archive_locks_camp_then_rules_before_write(client, monkeypatch):
+    camp = CampFactory(is_active=True)
+    rule = _create_dinner_rule(camp, foerdersatz=Decimal("0.2000"), is_default=False, name="Sonderessen")
+    client.force_login(SuperUserFactory())
+    events = _capture_price_rule_mutation_lock_order(monkeypatch)
+
+    response = client.post(reverse("price-rule-delete", args=[rule.pk]))
+
+    assert response.status_code == 302
+    assert events[:3] == ["lock:Camp", "lock:PriceRule", "write:PriceRule"]
 
 
 @pytest.mark.django_db

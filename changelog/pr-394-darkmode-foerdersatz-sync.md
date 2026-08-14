@@ -9,6 +9,8 @@
 - Protects historical, soft-deleted, and exactly settlement-snapshotted charges
   from resynchronization or kiosk retraction, including future and undated
   charges captured by immutable settlement snapshots.
+- Standardizes administrator price-rule mutations on the global lock order of
+  camp, price rules, then dependent booking rows to avoid kiosk lock inversion.
 - Adds regression tests for canonical server-side pricing, authorization, rule
   lifecycle changes, companion ownership and subsidies, exact snapshot
   membership, rollback behavior, idempotency, and the dark-mode CSS contract.

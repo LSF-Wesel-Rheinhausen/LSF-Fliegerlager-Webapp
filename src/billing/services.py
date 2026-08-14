@@ -1619,6 +1619,27 @@ def is_charge_covered_by_settlement_run(
     return False
 
 
+def lock_camp_price_rules_for_update(camp: Camp | int) -> tuple[Camp, dict[int, PriceRule]]:
+    """Lock a camp and all of its price rules in the global mutation order.
+
+    The caller must already be inside ``transaction.atomic()`` and keep every
+    PriceRule write plus dependent synchronization inside that transaction.
+
+    Args:
+        camp: Camp instance or primary key whose price rules will be mutated.
+
+    Returns:
+        The locked camp and its locked price rules keyed by primary key.
+    """
+    camp_id = camp.pk if isinstance(camp, Camp) else camp
+    locked_camp = Camp.objects.select_for_update(of=("self",)).get(pk=camp_id)
+    locked_rules = {
+        rule.pk: rule
+        for rule in PriceRule.objects.select_for_update(of=("self",)).filter(camp=locked_camp).order_by("pk")
+    }
+    return locked_camp, locked_rules
+
+
 @transaction.atomic
 def sync_meal_signup_charges_for_camp(camp: Camp) -> int:
     """Synchronize unfinalized future meal signups with current meal rules.
@@ -1626,8 +1647,8 @@ def sync_meal_signup_charges_for_camp(camp: Camp) -> int:
     Archived rules, historical bookings, deleted charges, and charges covered
     by a settlement snapshot are intentionally left unchanged.
     """
-    camp = Camp.objects.select_for_update().get(pk=camp.pk)
-    all_rules = list(PriceRule.objects.filter(camp=camp, kind=PriceRule.Kind.MEAL, is_archived=False))
+    camp, locked_rules = lock_camp_price_rules_for_update(camp)
+    all_rules = [rule for rule in locked_rules.values() if rule.kind == PriceRule.Kind.MEAL and not rule.is_archived]
     if not all_rules:
         return 0
 
