@@ -365,23 +365,51 @@ def resolve_meal_price_rule(camp: Camp, meal: str, meal_date: date, *, is_child:
         A date-specific rule for ``meal_date`` when one exists, otherwise the
         default rule with ``meal_date IS NULL``. Archived rules are ignored.
     """
-    base_queryset = PriceRule.objects.filter(
+    rules = PriceRule.objects.filter(
         camp=camp,
         kind=PriceRule.Kind.MEAL,
         meal_type=meal,
         is_archived=False,
+    ).order_by("name", "pk")
+    return _resolve_meal_price_rule_from_rules(
+        rules,
+        meal,
+        meal_date,
+        is_child=is_child,
+        is_companion=is_companion,
     )
-    if is_child:
-        base_queryset = base_queryset.filter(applies_to_children=True)
-    elif is_companion:
-        base_queryset = base_queryset.filter(applies_to_companions=True)
-    else:
-        base_queryset = base_queryset.filter(applies_to_adults=True)
 
-    date_rule = base_queryset.filter(meal_date=meal_date).order_by("name", "pk").first()
+
+def _resolve_meal_price_rule_from_rules(
+    rules: Iterable[PriceRule],
+    meal: str,
+    meal_date: date,
+    *,
+    is_child: bool,
+    is_companion: bool,
+) -> PriceRule | None:
+    """Resolve the canonical meal rule from an already loaded rule collection."""
+    matching_rules = [
+        rule
+        for rule in rules
+        if not rule.is_archived
+        and rule.meal_type == meal
+        and (
+            rule.applies_to_children
+            if is_child
+            else rule.applies_to_companions
+            if is_companion
+            else rule.applies_to_adults
+        )
+    ]
+    matching_rules.sort(key=lambda rule: (rule.name, rule.pk))
+    date_rule = next((rule for rule in matching_rules if rule.meal_date == meal_date), None)
     if date_rule is not None:
         return date_rule
-    return base_queryset.filter(is_default=True, meal_date__isnull=True).order_by("name", "pk").first()
+    return next(
+        (rule for rule in matching_rules if rule.is_default and rule.meal_date is None),
+        None,
+    )
 
 
 def resolve_quick_booking_price_rule(
@@ -1560,3 +1588,124 @@ def get_cost_center_evaluation(camp):
         data["balance"] = data["income"] - data["expense_total"]
 
     return {code: data for code, data in evaluation.items() if data["income_count"] or data["expense_count"]}
+
+
+def is_charge_covered_by_settlement_run(
+    charge: Charge,
+    settlements: Iterable[Settlement] | None = None,
+) -> bool:
+    """Return whether an immutable settlement snapshot contains a charge.
+
+    Args:
+        charge: Charge whose settlement status is checked.
+        settlements: Optional preloaded snapshots for the charge owner.
+
+    Returns:
+        ``True`` when any settlement line explicitly references the charge.
+    """
+    if settlements is None:
+        settlements = Settlement.objects.filter(
+            run__camp_id=charge.participant.camp_id,
+            participant_id=charge.participant_id,
+        ).only("data")
+    singular_source = f"charge:{charge.pk}"
+    for settlement in settlements:
+        for line in settlement.data.get("lines", []):
+            source = line.get("source", "") if isinstance(line, dict) else ""
+            if source == singular_source:
+                return True
+            if source.startswith("charges:") and str(charge.pk) in source.removeprefix("charges:").split(","):
+                return True
+    return False
+
+
+def lock_camp_price_rules_for_update(camp: Camp | int) -> tuple[Camp, dict[int, PriceRule]]:
+    """Lock a camp and all of its price rules in the global mutation order.
+
+    The caller must already be inside ``transaction.atomic()`` and keep every
+    PriceRule write plus dependent synchronization inside that transaction.
+
+    Args:
+        camp: Camp instance or primary key whose price rules will be mutated.
+
+    Returns:
+        The locked camp and its locked price rules keyed by primary key.
+    """
+    camp_id = camp.pk if isinstance(camp, Camp) else camp
+    locked_camp = Camp.objects.select_for_update(of=("self",)).get(pk=camp_id)
+    locked_rules = {
+        rule.pk: rule
+        for rule in PriceRule.objects.select_for_update(of=("self",)).filter(camp=locked_camp).order_by("pk")
+    }
+    return locked_camp, locked_rules
+
+
+@transaction.atomic
+def sync_meal_signup_charges_for_camp(camp: Camp) -> int:
+    """Synchronize unfinalized future meal signups with current meal rules.
+
+    Archived rules, historical bookings, deleted charges, and charges covered
+    by a settlement snapshot are intentionally left unchanged.
+    """
+    camp, locked_rules = lock_camp_price_rules_for_update(camp)
+    all_rules = [rule for rule in locked_rules.values() if rule.kind == PriceRule.Kind.MEAL and not rule.is_archived]
+    if not all_rules:
+        return 0
+
+    updated_count = 0
+    settlements_by_participant: dict[int, list[Settlement]] = {}
+    for settlement in Settlement.objects.filter(run__camp=camp).only("participant_id", "data"):
+        settlements_by_participant.setdefault(settlement.participant_id, []).append(settlement)
+    today = timezone.localdate()
+    signups = MealSignup.objects.filter(participant__camp=camp, status=MealSignup.Status.ACTIVE).select_related(
+        "charge", "family_member", "participant"
+    )
+    for signup in signups:
+        if signup.meal_date < today:
+            continue
+        charge = signup.charge
+        if charge is not None and (
+            charge.deleted_at is not None
+            or is_charge_covered_by_settlement_run(
+                charge,
+                settlements_by_participant.get(charge.participant_id, []),
+            )
+        ):
+            continue
+        target = signup.family_member or signup.participant
+        is_companion = (
+            signup.family_member.role == ParticipantFamilyMember.Role.COMPANION
+            if signup.family_member is not None
+            else signup.participant.is_companion
+        )
+        rule = _resolve_meal_price_rule_from_rules(
+            all_rules,
+            signup.meal,
+            signup.meal_date,
+            is_child=target.is_child,
+            is_companion=is_companion,
+        )
+        if rule is None:
+            continue
+
+        signup_changed = False
+        if signup.foerdersatz != rule.foerdersatz:
+            signup.foerdersatz = rule.foerdersatz
+            signup_changed = True
+
+        if signup_changed:
+            signup.save(update_fields=["foerdersatz", "updated_at"])
+            updated_count += 1
+
+        if charge is not None:
+            charge_changed = False
+            if charge.foerdersatz != rule.foerdersatz:
+                charge.foerdersatz = rule.foerdersatz
+                charge_changed = True
+            if charge.unit_price != rule.unit_price:
+                charge.unit_price = rule.unit_price
+                charge_changed = True
+            if charge_changed:
+                charge.save(update_fields=["foerdersatz", "unit_price", "updated_at"])
+
+    return updated_count

@@ -3671,3 +3671,19 @@ dialog::backdrop {
 main:focus {
   outline: none;
 }
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  background-color: rgba(0, 0, 0, 0.05);
+  color: var(--text);
+  padding: 0.15em 0.4em;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--line);
+  font-size: 0.9em;
+}
+
+:root[data-theme="dark"] code {
+  background-color: #222a32;
+  color: #f1f4f6;
+  border-color: #455260;
+}

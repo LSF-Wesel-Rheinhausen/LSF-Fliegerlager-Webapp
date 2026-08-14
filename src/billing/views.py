@@ -146,9 +146,11 @@ from .services import (
     create_kiosk_action_audit_log,
     create_manual_charge,
     create_settlement_run,
+    is_charge_covered_by_settlement_run,
     is_meal_change_locked,
     kiosk_charge_audit_snapshot,
     kiosk_meal_signup_audit_snapshot,
+    lock_camp_price_rules_for_update,
     meal_change_lock_message,
     meal_order_for_date,
     next_catering_order_date,
@@ -157,6 +159,7 @@ from .services import (
     resolve_meal_price_rule,
     resolve_quick_booking_price_rule,
     restore_booking_from_audit_log,
+    sync_meal_signup_charges_for_camp,
 )
 
 logger = logging.getLogger(__name__)
@@ -1421,11 +1424,19 @@ def pin_set(request, participant_id):
 def price_rule_create(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
     form = PriceRuleForm(request.POST or None)
-    if request.method == "POST" and form.is_valid():
+    saved = False
+    if request.method == "POST":
         with transaction.atomic():
-            rule = form.save(commit=False)
-            rule.camp = camp
-            rule.save()
+            locked_camp, _locked_rules = lock_camp_price_rules_for_update(camp)
+            form = PriceRuleForm(request.POST)
+            if form.is_valid():
+                rule = form.save(commit=False)
+                rule.camp = locked_camp
+                rule.save()
+                if rule.kind == PriceRule.Kind.MEAL:
+                    sync_meal_signup_charges_for_camp(locked_camp)
+                saved = True
+    if saved:
         messages.success(request, "Preisregel wurde gespeichert.")
         return redirect("price-rules-manage", camp_id=camp.pk)
     return render(request, "billing/form.html", {"form": form, "title": "Preisregel anlegen"})
@@ -1466,11 +1477,20 @@ def price_rules_manage(request, camp_id):
 def price_rule_edit(request, price_rule_id):
     rule = get_object_or_404(PriceRule.objects.select_related("camp"), pk=price_rule_id)
     form = PriceRuleForm(request.POST or None, instance=rule)
-    if request.method == "POST" and form.is_valid():
+    saved = False
+    if request.method == "POST":
         with transaction.atomic():
-            form.save()
+            locked_camp, locked_rules = lock_camp_price_rules_for_update(rule.camp_id)
+            locked_rule = locked_rules.get(rule.pk)
+            if locked_rule is None:
+                raise Http404
+            form = PriceRuleForm(request.POST, instance=locked_rule)
+            if form.is_valid():
+                rule = form.save()
+                saved = True
+    if saved:
         messages.success(request, "Preisregel wurde gespeichert.")
-        return redirect("price-rules-manage", camp_id=rule.camp.pk)
+        return redirect("price-rules-manage", camp_id=locked_camp.pk)
     return render(request, "billing/form.html", {"form": form, "title": "Preisregel bearbeiten", "camp": rule.camp})
 
 
@@ -1479,10 +1499,20 @@ def price_rule_edit(request, price_rule_id):
 def price_rule_delete(request, price_rule_id):
     rule = get_object_or_404(PriceRule.objects.select_related("camp"), pk=price_rule_id)
     camp_id = rule.camp_id
-    if not rule.is_default:
-        rule.is_archived = True
-        rule.save()
-        messages.success(request, f"Preisregel '{rule.name}' archiviert.")
+    archived_rule_name = ""
+    with transaction.atomic():
+        locked_camp, locked_rules = lock_camp_price_rules_for_update(camp_id)
+        locked_rule = locked_rules.get(rule.pk)
+        if locked_rule is None:
+            raise Http404
+        if not locked_rule.is_default:
+            locked_rule.is_archived = True
+            locked_rule.save(update_fields=["is_archived", "updated_at"])
+            if locked_rule.kind == PriceRule.Kind.MEAL:
+                sync_meal_signup_charges_for_camp(locked_camp)
+            archived_rule_name = locked_rule.name
+    if archived_rule_name:
+        messages.success(request, f"Preisregel '{archived_rule_name}' archiviert.")
     else:
         messages.error(request, "Standardpreise können nicht gelöscht werden.")
     return redirect("price-rules-manage", camp_id=camp_id)
@@ -3300,6 +3330,8 @@ def _retract_meal_signup(
             != (affected_family_member.pk if affected_family_member is not None else None)
         ):
             return False
+        if is_charge_covered_by_settlement_run(locked_charge):
+            return False
     locked_signup.charge = locked_charge
     booking_link = None
     if affected_participant.pk != actor.pk:
@@ -3395,20 +3427,8 @@ def _is_kiosk_quick_charge_cancelable(
         and charge.kind in {Charge.Kind.DRINK, Charge.Kind.FOOD}
         and charge.created_at >= current_time - KIOSK_QUICK_BOOKING_CANCEL_WINDOW
         and account_authorized
-        and not _is_charge_covered_by_settlement_run(charge)
+        and not is_charge_covered_by_settlement_run(charge)
     )
-
-
-def _is_charge_covered_by_settlement_run(charge: Charge) -> bool:
-    """Return whether a settlement run freezes this charge for kiosk cancellation."""
-    settlement_runs = SettlementRun.objects.filter(
-        camp_id=charge.participant.camp_id,
-        created_at__gte=charge.created_at,
-    ).order_by("created_at")
-    for run in settlement_runs:
-        if charge.occurred_on is None or charge.occurred_on <= timezone.localdate(run.created_at):
-            return True
-    return False
 
 
 def _meal_price_rule_for_targets(camp, meal, meal_date, participant, meal_targets):
