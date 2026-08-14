@@ -1542,7 +1542,12 @@ def price_rule_delete(request, price_rule_id):
 @editor_required
 def shift_manage(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
-    shifts = camp.shifts.prefetch_related("assignments__participant").order_by("date", "start_time", "name")
+    shifts = camp.shifts.prefetch_related("assignments__participant", "assignments__family_member").order_by(
+        "date", "start_time", "name"
+    )
+    for shift in shifts:
+        for assignment in shift.assignments.all():
+            assignment.display_name = assignment.operational_display_name
     return render(request, "billing/shift_manage.html", {"camp": camp, "shifts": shifts})
 
 
@@ -4712,11 +4717,15 @@ def kiosk_shifts(request, kiosk_mode="private"):
                     messages.success(request, f"Du hast dich für '{shift.name}' eingetragen.")
                 else:
                     offered_assignment = (
-                        shift.assignments.filter(offered_for_exchange=True).exclude(participant=participant).first()
+                        shift.assignments.filter(offered_for_exchange=True)
+                        .exclude(participant=participant, family_member=active_family_member)
+                        .select_related("participant", "family_member")
+                        .first()
                     )
                     if offered_assignment:
                         old_participant = offered_assignment.participant
                         old_family_member_id = offered_assignment.family_member_id
+                        old_display_name = offered_assignment.operational_display_name
                         offered_assignment.participant = participant
                         offered_assignment.family_member = active_family_member
                         offered_assignment.offered_for_exchange = False
@@ -4740,7 +4749,7 @@ def kiosk_shifts(request, kiosk_mode="private"):
                                 old_family_member_id,
                             )
                         )
-                        messages.success(request, f"Du hast den Dienst von {old_participant.full_name} übernommen.")
+                        messages.success(request, f"Du hast den Dienst von {old_display_name} übernommen.")
                     else:
                         messages.error(
                             request, "Dieser Dienst ist voll und es wird aktuell kein Platz zum Tausch angeboten."

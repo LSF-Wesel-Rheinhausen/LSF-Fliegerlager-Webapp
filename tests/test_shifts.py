@@ -120,6 +120,26 @@ def test_shift_report_excludes_regular_and_guardian_family_children_without_targ
 
 
 @pytest.mark.django_db
+def test_shift_manage_renders_companion_identity_for_assignment(admin_client, active_camp):
+    guardian = Participant.objects.create(camp=active_camp, first_name="Guardian", last_name="Account")
+    companion = ParticipantFamilyMember.objects.create(
+        guardian=guardian,
+        first_name="Visible",
+        last_name="Companion",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    shift = Shift.objects.create(camp=active_camp, name="Managed Duty", date=datetime.date.today())
+    ShiftAssignment.objects.create(shift=shift, participant=guardian, family_member=companion)
+
+    response = admin_client.get(reverse("shift-manage", args=[active_camp.pk]))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert companion.full_name in content
+    assert f">{guardian.full_name}</a>" not in content
+
+
+@pytest.mark.django_db
 def test_admin_can_create_shift(admin_client, active_camp):
     url = reverse("shift-create", args=[active_camp.pk])
     response = admin_client.post(

@@ -350,7 +350,7 @@ def generate_scheduled_notifications(*, now: Any | None = None) -> int:
     current = now or timezone.now()
     today = timezone.localdate(current)
     created = 0
-    assignments = ShiftAssignment.objects.select_related("participant", "shift", "shift__camp").filter(
+    assignments = ShiftAssignment.objects.select_related("participant", "family_member", "shift", "shift__camp").filter(
         shift__date__gte=today,
         shift__date__lte=today + timedelta(days=1),
         participant__archived_at__isnull=True,
@@ -358,13 +358,19 @@ def generate_scheduled_notifications(*, now: Any | None = None) -> int:
     for assignment in assignments:
         due_at, event_at = _reminder_time(assignment.shift.date, assignment.shift.start_time)
         if due_at <= current < event_at:
+            identity = assignment.operational_identity
+            identity_key = (
+                f"family:{assignment.family_member_id}"
+                if assignment.family_member_id is not None
+                else f"participant:{assignment.participant_id}"
+            )
             created += queue_participant_notification(
                 assignment.participant,
                 category="shifts",
                 title="Dienst beginnt bald",
-                body=f'"{assignment.shift.name}" beginnt in einer Stunde.',
+                body=f'{identity.full_name}: "{assignment.shift.name}" beginnt in einer Stunde.',
                 target_url="/kiosk/shifts/",
-                dedupe_key=(f"shift:{assignment.shift_id}:participant:{assignment.participant_id}:reminder"),
+                dedupe_key=f"shift:{assignment.shift_id}:identity:{identity_key}:reminder",
                 scheduled_for=due_at,
             )
 

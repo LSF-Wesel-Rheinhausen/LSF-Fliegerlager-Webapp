@@ -54,7 +54,7 @@
                 {% if shift.assignments.all %}
                   <ul style="margin: 0; padding-left: 1.2rem;">
                     {% for assignment in shift.assignments.all %}
-                      <li><a href="{% url 'participant-detail' assignment.participant.pk %}">{{ assignment.participant.full_name }}</a></li>
+                      <li><a href="{% url 'participant-detail' assignment.participant.pk %}">{{ assignment.display_name }}</a></li>
                     {% endfor %}
                   </ul>
                 {% else %}

@@ -14,6 +14,11 @@
   from the ranking and give them no shift target.
 - Show guardian-owned Companions in kiosk/login selectors by their own name; duplicate names
   receive deterministic neutral numeric disambiguation without exposing guardian names.
+- Exchange takeover compares the complete operational identity, so one Companion can take a
+  sibling Companion's offer while the exact same identity cannot self-take. Admin shift lists
+  and takeover messages use the canonical Companion name.
+- Shift reminders use Companion-aware identity keys and names while delivering through the
+  Guardian account; validated manager/queryset paths protect bulk and identity-changing writes.
 - Preserve server-side camp and active-family-member authorization checks.
 
 ## Changed files
@@ -26,6 +31,7 @@
 - `tests/test_kiosk_shifts.py`
 - `tests/test_shifts.py`
 - `tests/test_forms.py`
+- `tests/test_migrations.py`
 
 ## Tests
 
@@ -36,11 +42,8 @@
   Companion role/subsidy behavior.
 - RED/GREEN: shift-report coverage reproduces and fixes missing guardian-owned Companions,
   guardian attribution, and regular/family child ranking leakage.
+- RED/GREEN: exchange, admin display, reminder deduplication, migration NULL preservation, and
+  bulk/queryset ownership regressions pass.
 - Full local verification is run before the PR is marked ready.
-
-## Open points
-
-- Companion shift progress uses the Guardian's configured shift target because family
-  members do not currently have an independent stay quota.
 
 Closes #388

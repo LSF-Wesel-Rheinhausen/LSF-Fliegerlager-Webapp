@@ -236,6 +236,96 @@ def test_companion_can_offer_revoke_and_take_without_guardian_self_exchange(kios
 
 
 @pytest.mark.django_db
+def test_companion_can_take_sibling_companion_offer_but_not_own_identity(kiosk_client, active_camp):
+    guardian = Participant.objects.create(camp=active_camp, first_name="Guardian", last_name="User")
+    offered_companion = ParticipantFamilyMember.objects.create(
+        guardian=guardian,
+        first_name="Offered",
+        last_name="Companion",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    taking_companion = ParticipantFamilyMember.objects.create(
+        guardian=guardian,
+        first_name="Taking",
+        last_name="Companion",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    shift = Shift.objects.create(
+        camp=active_camp,
+        name="Sibling Exchange",
+        date=datetime.date.today(),
+        required_slots=1,
+    )
+    offered_assignment = ShiftAssignment.objects.create(
+        shift=shift,
+        participant=guardian,
+        family_member=offered_companion,
+        offered_for_exchange=True,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = guardian.pk
+    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = taking_companion.pk
+    session.save()
+
+    response = kiosk_client.post(reverse("kiosk-shifts"), {"action": "signup", "shift_id": shift.pk})
+
+    assert response.status_code == 302
+    takeover = ShiftAssignment.objects.get(pk=offered_assignment.pk)
+    assert takeover.family_member_id == taking_companion.pk
+    assert "Offered Companion" in " ".join(message.message for message in response.wsgi_request._messages)
+
+
+@pytest.mark.django_db
+def test_shift_assignment_integrity_is_enforced_for_bulk_create_and_queryset_update(active_camp):
+    guardian = Participant.objects.create(camp=active_camp, first_name="Guardian", last_name="User")
+    foreign_guardian = Participant.objects.create(camp=active_camp, first_name="Foreign", last_name="User")
+    foreign_companion = ParticipantFamilyMember.objects.create(
+        guardian=foreign_guardian,
+        first_name="Foreign",
+        last_name="Companion",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    shift = Shift.objects.create(camp=active_camp, name="Integrity", date=datetime.date.today())
+
+    with pytest.raises(ValidationError, match="Begleitung gehört nicht zum Teilnehmerkonto"):
+        ShiftAssignment.objects.bulk_create(
+            [ShiftAssignment(shift=shift, participant=guardian, family_member=foreign_companion)]
+        )
+
+    assignment = ShiftAssignment.objects.create(shift=shift, participant=guardian)
+    with pytest.raises(ValidationError, match="Identitätsänderungen"):
+        ShiftAssignment.objects.filter(pk=assignment.pk).update(family_member=foreign_companion)
+
+
+@pytest.mark.django_db
+def test_shift_assignment_uniqueness_keeps_legacy_null_and_family_branches(active_camp):
+    guardian = Participant.objects.create(camp=active_camp, first_name="Guardian", last_name="User")
+    companion = ParticipantFamilyMember.objects.create(
+        guardian=guardian,
+        first_name="Companion",
+        last_name="User",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    second_companion = ParticipantFamilyMember.objects.create(
+        guardian=guardian,
+        first_name="Second",
+        last_name="Companion",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    shift = Shift.objects.create(camp=active_camp, name="Unique", date=datetime.date.today())
+
+    legacy_assignment = ShiftAssignment.objects.create(shift=shift, participant=guardian)
+    ShiftAssignment.objects.create(shift=shift, participant=guardian, family_member=companion)
+    ShiftAssignment.objects.create(shift=shift, participant=guardian, family_member=second_companion)
+
+    assert legacy_assignment.family_member_id is None
+    with pytest.raises(ValidationError):
+        ShiftAssignment.objects.create(shift=shift, participant=guardian)
+    with pytest.raises(ValidationError):
+        ShiftAssignment.objects.create(shift=shift, participant=guardian, family_member=companion)
+
+
+@pytest.mark.django_db
 def test_shift_assignment_rejects_companion_from_another_guardian(active_camp):
     guardian = Participant.objects.create(camp=active_camp, first_name="Guardian", last_name="User")
     foreign_guardian = Participant.objects.create(camp=active_camp, first_name="Other", last_name="Guardian")

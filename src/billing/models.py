@@ -1465,6 +1465,27 @@ class DailyShiftException(TimeStampedModel):
         return f"Ausnahme am {self.date} für {self.template.name}"
 
 
+class ShiftAssignmentQuerySet(models.QuerySet):
+    """Keep identity-changing writes on validated model/service paths."""
+
+    def update(self, **kwargs: Any) -> int:
+        if {"participant", "participant_id", "family_member", "family_member_id"} & kwargs.keys():
+            raise ValidationError("Identitätsänderungen an Diensten müssen über save() erfolgen.")
+        return super().update(**kwargs)
+
+
+class ShiftAssignmentManager(models.Manager):
+    """Validate cross-table ownership before Django's bulk insert bypasses save()."""
+
+    def get_queryset(self) -> ShiftAssignmentQuerySet:
+        return ShiftAssignmentQuerySet(self.model, using=self._db)
+
+    def bulk_create(self, objs, *args: Any, **kwargs: Any):
+        for assignment in objs:
+            assignment.full_clean()
+        return super().bulk_create(objs, *args, **kwargs)
+
+
 class ShiftAssignment(TimeStampedModel):
     shift = models.ForeignKey(Shift, on_delete=models.CASCADE, related_name="assignments")
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="shift_assignments")
@@ -1476,6 +1497,7 @@ class ShiftAssignment(TimeStampedModel):
         related_name="shift_assignments",
     )
     offered_for_exchange = models.BooleanField(default=False)
+    objects = ShiftAssignmentManager()
 
     class Meta:
         ordering = ["shift", "participant"]
@@ -1503,6 +1525,16 @@ class ShiftAssignment(TimeStampedModel):
         """Validate Guardian ownership on every non-bulk assignment write."""
         self.full_clean()
         super().save(*args, **kwargs)
+
+    @property
+    def operational_identity(self) -> Participant | ParticipantFamilyMember:
+        """Return the person whose operational duty identity this assignment represents."""
+        return self.family_member or self.participant
+
+    @property
+    def operational_display_name(self) -> str:
+        """Return the canonical display name without exposing payer relationships."""
+        return self.operational_identity.full_name
 
     def __str__(self):
         target = self.family_member or self.participant
