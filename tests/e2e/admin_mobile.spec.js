@@ -42,6 +42,7 @@ for (const viewport of [
     await createParticipant(page, viewport.name);
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await page.reload();
+    await page.waitForLoadState("networkidle");
 
     const menu = page.locator(".admin-mobile-menu-toggle");
     await expect(menu).toBeVisible();
