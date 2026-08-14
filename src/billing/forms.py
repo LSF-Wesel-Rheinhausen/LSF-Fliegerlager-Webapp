@@ -183,7 +183,24 @@ class SubsidyPercentField(forms.DecimalField):
         return percentage / Decimal("100")
 
 
-class EmailOrUsernameAuthenticationForm(AuthenticationForm):
+class AccessibleFormMixin:
+    """Mixin to automatically decorate invalid form fields with ARIA attributes."""
+
+    fields: dict[str, Any]
+
+    def add_error(self: Any, field: str | None, error: Any) -> None:
+        super().add_error(field, error)  # type: ignore[misc]
+        if field is None or not hasattr(self, "fields") or field not in self.fields:
+            return
+        self.fields[field].widget.attrs.update(
+            {
+                "aria-describedby": f"id_{field}_error",
+                "aria-invalid": "true",
+            }
+        )
+
+
+class EmailOrUsernameAuthenticationForm(AccessibleFormMixin, AuthenticationForm):
     username = forms.CharField(
         label="Benutzername oder E-Mail",
         widget=forms.TextInput(
@@ -431,7 +448,7 @@ class MealCutoffForm(forms.ModelForm):
         return self.cleaned_data["meal_booking_cutoff_time"] or time(12, 0)
 
 
-class ParticipantForm(forms.ModelForm):
+class ParticipantForm(AccessibleFormMixin, forms.ModelForm):
     class Meta:
         model = Participant
         fields = [
@@ -489,7 +506,7 @@ class ParticipantForm(forms.ModelForm):
         return cleaned_data
 
 
-class ParticipantFamilyMemberForm(forms.ModelForm):
+class ParticipantFamilyMemberForm(AccessibleFormMixin, forms.ModelForm):
     """Validate administrative updates to one guardian-owned family member."""
 
     class Meta:
@@ -1186,7 +1203,7 @@ class KioskPinChangeForm(forms.Form):
         return cleaned_data
 
 
-class KioskSelfEnrollmentForm(forms.ModelForm):
+class KioskSelfEnrollmentForm(AccessibleFormMixin, forms.ModelForm):
     pin = forms.CharField(
         label="Persönliche PIN",
         min_length=4,

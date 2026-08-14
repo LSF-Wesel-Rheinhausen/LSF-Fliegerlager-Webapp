@@ -296,7 +296,20 @@ def _smtp_connection(configuration: EmailConfiguration) -> Any:
 
 
 def _html_body(body: str) -> str:
-    return f"<p>{escape(body).replace(chr(10), '<br>')}</p>"
+    escaped_body = escape(body).replace(chr(10), "<br>")
+    return (
+        "<!DOCTYPE html>\n"
+        '<html lang="de">\n'
+        '<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>\n'
+        '<body style="font-family: system-ui, -apple-system, sans-serif; '
+        'background-color: #f6f7f9; color: #1a2027; margin: 0; padding: 20px;">\n'
+        '<div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; '
+        'padding: 24px; border-radius: 8px; border: 1px solid #b9c3d1;">\n'
+        f'<div style="font-size: 15px; line-height: 1.6; color: #1a2027;">{escaped_body}</div>\n'
+        "</div>\n"
+        "</body>\n"
+        "</html>"
+    )
 
 
 def send_configuration_test_email(configuration: EmailConfiguration, recipient: str) -> None:
