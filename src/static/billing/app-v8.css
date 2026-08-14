@@ -3,19 +3,19 @@
   --bg: #f6f7f9;
   --panel: #ffffff;
   --panel-soft: #fbfcfd;
-  --text: #20252d;
-  --muted: #697386;
-  --line: #dce2ea;
-  --line-strong: #c5ceda;
-  --accent: #005ca9;
-  --accent-dark: #004983;
+  --text: #1a2027;
+  --muted: #4e5868;
+  --line: #b9c3d1;
+  --line-strong: #8c9ba0;
+  --accent: #00569e;
+  --accent-dark: #004077;
   --accent-soft: #e8f1fb;
-  --focus: #7ab6f0;
+  --focus: #00569e;
   --danger: #b42318;
   --danger-soft: #fef3f2;
-  --warning: #8a4b08;
+  --warning: #7c3d00;
   --warning-soft: #fff7ed;
-  --ok: #067647;
+  --ok: #05603a;
   --ok-soft: #ecfdf3;
   --button-bg: var(--accent);
   --button-hover: var(--accent-dark);
@@ -31,13 +31,13 @@
   --panel: #1a2026;
   --panel-soft: #222a32;
   --text: #f1f4f6;
-  --muted: #abb6c2;
-  --line: #35414c;
-  --line-strong: #566574;
+  --muted: #b5c0cc;
+  --line: #455260;
+  --line-strong: #6d7d8e;
   --accent: #6cbaf0;
   --accent-dark: #a8d8f8;
   --accent-soft: #183a52;
-  --focus: #83c5f4;
+  --focus: #6cbaf0;
   --danger: #ff9b93;
   --danger-soft: #452326;
   --warning: #ffd48a;
@@ -48,6 +48,58 @@
   --button-hover: #2388cb;
   --button-text: #ffffff;
   --shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+}
+
+:root[data-theme="high-contrast"] {
+  color-scheme: dark;
+  --bg: #000000;
+  --panel: #0a0a0a;
+  --panel-soft: #141414;
+  --text: #ffffff;
+  --muted: #e0e0e0;
+  --line: #ffffff;
+  --line-strong: #ffffff;
+  --accent: #ffff00;
+  --accent-dark: #ffff80;
+  --accent-soft: #333300;
+  --focus: #ffff00;
+  --danger: #ff6666;
+  --danger-soft: #440000;
+  --warning: #ffcc00;
+  --warning-soft: #443300;
+  --ok: #66ff66;
+  --ok-soft: #004400;
+  --button-bg: #ffffff;
+  --button-hover: #e0e0e0;
+  --button-text: #000000;
+  --shadow: 0 0 0 2px #ffffff;
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    color-scheme: dark;
+    --bg: #000000;
+    --panel: #0a0a0a;
+    --panel-soft: #141414;
+    --text: #ffffff;
+    --muted: #e0e0e0;
+    --line: #ffffff;
+    --line-strong: #ffffff;
+    --accent: #ffff00;
+    --accent-dark: #ffff80;
+    --accent-soft: #333300;
+    --focus: #ffff00;
+    --danger: #ff6666;
+    --danger-soft: #440000;
+    --warning: #ffcc00;
+    --warning-soft: #443300;
+    --ok: #66ff66;
+    --ok-soft: #004400;
+    --button-bg: #ffffff;
+    --button-hover: #e0e0e0;
+    --button-text: #000000;
+    --shadow: 0 0 0 2px #ffffff;
+  }
 }
 
 * {
@@ -3735,5 +3787,30 @@ main:focus {
     min-height: 22px;
     margin-right: 8px;
     flex-shrink: 0;
+  }
+}
+
+/* Forced-Colors Mode & High Contrast Enhancements (Issues #352 & #353) */
+@media (forced-colors: active) {
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 3px solid Highlight !important;
+    outline-offset: 2px !important;
+  }
+
+  button,
+  .button,
+  a.button {
+    border: 2px solid ButtonText !important;
+  }
+
+  input,
+  select,
+  textarea {
+    border: 2px solid FieldText !important;
   }
 }
