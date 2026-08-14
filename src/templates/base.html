@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="{% static 'billing/app-v8.css' %}">
   </head>
   <body>
+    <a class="skip-link" href="#main-content">Zum Hauptinhalt springen</a>
     <header class="topbar admin-topbar">
       <a class="brand admin-brand" href="{% url 'camp-list' %}">
         <img src="{% static 'billing/logo.jpg' %}" alt="Luftsportfreunde Wesel-Rheinhausen e.V.">
@@ -32,19 +33,19 @@
         {% include "includes/theme_toggle.html" %}
         <button class="button button-secondary nav-link" type="button" data-pwa-install hidden>Installieren</button>
         {% if user.is_authenticated %}
-          <a class="button button-secondary nav-link" href="{% url 'admin-guide' %}">Hilfe</a>
+          <a class="button button-secondary nav-link{% if request.resolver_match.url_name == 'admin-guide' %} is-active{% endif %}" href="{% url 'admin-guide' %}"{% if request.resolver_match.url_name == 'admin-guide' %} aria-current="page"{% endif %}>Hilfe</a>
           {% if passkey_enabled %}
-            <a class="button button-secondary nav-link" href="{% url 'passkey-manage' %}">Passkeys</a>
+            <a class="button button-secondary nav-link{% if request.resolver_match.url_name == 'passkey-manage' %} is-active{% endif %}" href="{% url 'passkey-manage' %}"{% if request.resolver_match.url_name == 'passkey-manage' %} aria-current="page"{% endif %}>Passkeys</a>
           {% endif %}
           {% if web_push_enabled %}
-            <a class="button button-secondary nav-link" href="{% url 'notification-settings' %}">Benachrichtigungen</a>
+            <a class="button button-secondary nav-link{% if request.resolver_match.url_name == 'notification-settings' %} is-active{% endif %}" href="{% url 'notification-settings' %}"{% if request.resolver_match.url_name == 'notification-settings' %} aria-current="page"{% endif %}>Benachrichtigungen</a>
           {% endif %}
           {% if user|can_manage_users %}
-            <a class="button button-secondary nav-link" href="{% url 'email-settings' %}">E-Mail</a>
-            <a class="button button-secondary nav-link" href="{% url 'user-list' %}">Nutzer</a>
+            <a class="button button-secondary nav-link{% if request.resolver_match.url_name == 'email-settings' %} is-active{% endif %}" href="{% url 'email-settings' %}"{% if request.resolver_match.url_name == 'email-settings' %} aria-current="page"{% endif %}>E-Mail</a>
+            <a class="button button-secondary nav-link{% if request.resolver_match.url_name == 'user-list' %} is-active{% endif %}" href="{% url 'user-list' %}"{% if request.resolver_match.url_name == 'user-list' %} aria-current="page"{% endif %}>Nutzer</a>
           {% endif %}
           {% if user.is_superuser %}
-            <a class="button button-secondary nav-link" href="{% url 'deployment-update' %}">Updates</a>
+            <a class="button button-secondary nav-link{% if request.resolver_match.url_name == 'deployment-update' %} is-active{% endif %}" href="{% url 'deployment-update' %}"{% if request.resolver_match.url_name == 'deployment-update' %} aria-current="page"{% endif %}>Updates</a>
           {% endif %}
           <div class="nav-user-group">
             <span>{{ user.email|default:user.username }}</span>
@@ -56,7 +57,7 @@
         {% endif %}
       </nav>
     </header>
-    <main class="page">
+    <main id="main-content" class="page" tabindex="-1">
       {% for message in messages %}
         <section class="message {{ message.tags }}" role="status">{{ message }}</section>
       {% endfor %}
