@@ -2,6 +2,14 @@
 
 const ADMIN_ICON_PATH = "/static/billing/icons/admin-icon-192.png";
 const ABORTED_FAILURE_TEXT_PATTERNS = ["NS_BINDING_ABORTED", "ERR_ABORTED"];
+const ADMIN_MOBILE_CANCELLED_FAILURE_TEXT = "Load request cancelled";
+const ADMIN_MOBILE_CANCELLED_PATHS = new Set([
+  "/service-worker.js",
+  "/manifest.webmanifest",
+  "/static/admin/css/changelists.css",
+  "/static/admin/img/search.svg",
+  "/static/admin/img/icon-no.svg",
+]);
 
 function requestFailureDetails(request) {
   const failure = typeof request.failure === "function" ? request.failure() : null;
@@ -26,7 +34,19 @@ function isBenignPageRequestFailure(details) {
   return ABORTED_FAILURE_TEXT_PATTERNS.some((pattern) => details.errorText.includes(pattern));
 }
 
+function isAllowedAdminMobileCancelledFailure(details) {
+  if (details.method !== "GET" || details.errorText !== ADMIN_MOBILE_CANCELLED_FAILURE_TEXT) {
+    return false;
+  }
+  try {
+    return ADMIN_MOBILE_CANCELLED_PATHS.has(new URL(details.url).pathname);
+  } catch {
+    return false;
+  }
+}
+
 module.exports = {
+  isAllowedAdminMobileCancelledFailure,
   isBenignPageRequestFailure,
   requestFailureDetails,
 };

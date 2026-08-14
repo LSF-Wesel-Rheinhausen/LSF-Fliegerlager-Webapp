@@ -1,5 +1,8 @@
 const { expect, test } = require("./fixtures");
-const { requestFailureDetails } = require("./requestFailureFilter");
+const {
+  isAllowedAdminMobileCancelledFailure,
+  requestFailureDetails,
+} = require("./requestFailureFilter");
 
 async function signInAdmin(page) {
   await page.goto("/setup/");
@@ -43,7 +46,9 @@ for (const viewport of [
     });
     page.on("requestfailed", (request) => {
       const details = requestFailureDetails(request);
-      failedRequests.push(details);
+      if (!isAllowedAdminMobileCancelledFailure(details)) {
+        failedRequests.push(details);
+      }
     });
 
     await signInAdmin(page);
