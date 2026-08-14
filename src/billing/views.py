@@ -158,6 +158,7 @@ from .services import (
     resolve_meal_price_rule,
     resolve_quick_booking_price_rule,
     restore_booking_from_audit_log,
+    sync_meal_signup_charges_for_camp,
 )
 
 logger = logging.getLogger(__name__)
@@ -1427,6 +1428,8 @@ def price_rule_create(request, camp_id):
             rule = form.save(commit=False)
             rule.camp = camp
             rule.save()
+            if rule.kind == PriceRule.Kind.MEAL:
+                sync_meal_signup_charges_for_camp(camp)
         messages.success(request, "Preisregel wurde gespeichert.")
         return redirect("price-rules-manage", camp_id=camp.pk)
     return render(request, "billing/form.html", {"form": form, "title": "Preisregel anlegen"})
@@ -1481,8 +1484,11 @@ def price_rule_delete(request, price_rule_id):
     rule = get_object_or_404(PriceRule.objects.select_related("camp"), pk=price_rule_id)
     camp_id = rule.camp_id
     if not rule.is_default:
-        rule.is_archived = True
-        rule.save()
+        with transaction.atomic():
+            rule.is_archived = True
+            rule.save(update_fields=["is_archived", "updated_at"])
+            if rule.kind == PriceRule.Kind.MEAL:
+                sync_meal_signup_charges_for_camp(rule.camp)
         messages.success(request, f"Preisregel '{rule.name}' archiviert.")
     else:
         messages.error(request, "Standardpreise können nicht gelöscht werden.")
@@ -3300,6 +3306,8 @@ def _retract_meal_signup(
             or locked_charge.family_member_id
             != (affected_family_member.pk if affected_family_member is not None else None)
         ):
+            return False
+        if is_charge_covered_by_settlement_run(locked_charge):
             return False
     locked_signup.charge = locked_charge
     booking_link = None
