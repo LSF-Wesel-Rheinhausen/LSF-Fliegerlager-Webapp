@@ -4,7 +4,7 @@ from decimal import Decimal
 import pytest
 from django.urls import reverse
 
-from billing.models import Camp, Participant, Shift
+from billing.models import Camp, Participant, ParticipantFamilyMember, Shift, ShiftAssignment
 
 
 @pytest.fixture
@@ -38,6 +38,85 @@ def test_target_shifts_calculation(active_camp):
     assert p2.target_shifts == 1
     p3 = Participant.objects.create(camp=active_camp, first_name="E", last_name="F", booked_nights=8)
     assert p3.target_shifts == 2
+
+
+@pytest.mark.django_db
+def test_shift_report_ranks_regular_companions_by_their_own_assignments(admin_client, active_camp):
+    active_camp.shift_ratio_per_night = Decimal("0.2")
+    active_camp.save(update_fields=["shift_ratio_per_night", "updated_at"])
+    companion = Participant.objects.create(
+        camp=active_camp,
+        first_name="Regular",
+        last_name="Companion",
+        is_companion=True,
+        booked_nights=5,
+    )
+    shift = Shift.objects.create(camp=active_camp, name="Companion Duty", date=datetime.date.today())
+    ShiftAssignment.objects.create(shift=shift, participant=companion)
+
+    response = admin_client.get(reverse("shift-report", args=[active_camp.pk]))
+
+    assert response.status_code == 200
+    ranked = {participant.full_name: participant for participant in response.context["participants"]}
+    assert ranked[companion.full_name].completed_shifts == 1
+    assert ranked[companion.full_name].target_shifts == 1
+
+
+@pytest.mark.django_db
+def test_shift_report_ranks_guardian_companion_as_own_identity_without_guardian_attribution(admin_client, active_camp):
+    active_camp.shift_ratio_per_night = Decimal("0.2")
+    active_camp.save(update_fields=["shift_ratio_per_night", "updated_at"])
+    guardian = Participant.objects.create(
+        camp=active_camp, first_name="Guardian", last_name="Account", booked_nights=10
+    )
+    companion = ParticipantFamilyMember.objects.create(
+        guardian=guardian,
+        first_name="Family",
+        last_name="Companion",
+        role=ParticipantFamilyMember.Role.COMPANION,
+        arrival_date=datetime.date.today(),
+        departure_date=datetime.date.today() + datetime.timedelta(days=5),
+    )
+    shift = Shift.objects.create(camp=active_camp, name="Family Duty", date=datetime.date.today())
+    ShiftAssignment.objects.create(shift=shift, participant=guardian, family_member=companion)
+
+    response = admin_client.get(reverse("shift-report", args=[active_camp.pk]))
+
+    assert response.status_code == 200
+    ranked = {participant.full_name: participant for participant in response.context["participants"]}
+    assert companion.full_name in ranked
+    assert ranked[companion.full_name].completed_shifts == 1
+    assert ranked[companion.full_name].target_shifts == 1
+    assert ranked[guardian.full_name].completed_shifts == 0
+
+
+@pytest.mark.django_db
+def test_shift_report_excludes_regular_and_guardian_family_children_without_targets(admin_client, active_camp):
+    regular_child = Participant.objects.create(
+        camp=active_camp,
+        first_name="Regular",
+        last_name="Child",
+        is_child=True,
+        booked_nights=10,
+    )
+    guardian = Participant.objects.create(camp=active_camp, first_name="Child", last_name="Guardian")
+    family_child = ParticipantFamilyMember.objects.create(
+        guardian=guardian,
+        first_name="Family",
+        last_name="Child",
+        role=ParticipantFamilyMember.Role.CHILD,
+        arrival_date=datetime.date.today(),
+        departure_date=datetime.date.today() + datetime.timedelta(days=10),
+    )
+
+    response = admin_client.get(reverse("shift-report", args=[active_camp.pk]))
+
+    assert response.status_code == 200
+    ranked_names = {participant.full_name for participant in response.context["participants"]}
+    assert regular_child.full_name not in ranked_names
+    assert family_child.full_name not in ranked_names
+    assert regular_child.target_shifts == 0
+    assert family_child.target_shifts == 0
 
 
 @pytest.mark.django_db

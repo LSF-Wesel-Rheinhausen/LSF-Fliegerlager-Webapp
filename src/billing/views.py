@@ -18,7 +18,7 @@ from django.core import signing
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.core.signing import BadSignature, Signer
 from django.db import IntegrityError, transaction
-from django.db.models import Case, Exists, IntegerField, OuterRef, Prefetch, Q, Value, When
+from django.db.models import Case, Count, Exists, IntegerField, OuterRef, Prefetch, Q, Value, When
 from django.http import FileResponse, Http404, HttpRequest, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -1549,7 +1549,25 @@ def shift_manage(request, camp_id):
 @editor_required
 def shift_report(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
-    participants = list(camp.participants.all())
+    participant_assignments = Count(
+        "shift_assignments",
+        filter=Q(shift_assignments__family_member__isnull=True),
+    )
+    participants = list(
+        camp.participants.filter(archived_at__isnull=True, is_child=False)
+        .select_related("camp")
+        .annotate(_completed_shifts_count=participant_assignments)
+    )
+    participants.extend(
+        ParticipantFamilyMember.objects.filter(
+            guardian__camp=camp,
+            guardian__archived_at__isnull=True,
+            is_active=True,
+            role=ParticipantFamilyMember.Role.COMPANION,
+        )
+        .select_related("guardian", "guardian__camp")
+        .annotate(_completed_shifts_count=Count("shift_assignments"))
+    )
     # Sort by completed / target ratio
     participants.sort(
         key=lambda p: (p.completed_shifts / p.target_shifts if p.target_shifts > 0 else 0, p.completed_shifts),

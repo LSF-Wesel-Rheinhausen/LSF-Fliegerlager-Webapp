@@ -515,10 +515,14 @@ class Participant(TimeStampedModel):
 
     @property
     def target_shifts(self) -> int:
+        if self.is_child:
+            return 0
         return int(round(Decimal(self.booked_nights) * self.camp.shift_ratio_per_night))
 
     @property
     def completed_shifts(self) -> int:
+        if self.is_child:
+            return 0
         if hasattr(self, "_completed_shifts_count"):
             return self._completed_shifts_count
         return self.shift_assignments.filter(family_member__isnull=True).count()
@@ -611,6 +615,15 @@ class ParticipantFamilyMember(TimeStampedModel):
         return self.role == self.Role.CHILD
 
     @property
+    def completed_shifts(self) -> int:
+        """Return assignments belonging to this companion identity only."""
+        if self.is_child:
+            return 0
+        if hasattr(self, "_completed_shifts_count"):
+            return self._completed_shifts_count
+        return self.shift_assignments.count()
+
+    @property
     def booked_nights(self) -> int:
         """Return this member's stay length, falling back to the guardian's stay."""
         if self.arrival_date and self.departure_date:
@@ -620,6 +633,8 @@ class ParticipantFamilyMember(TimeStampedModel):
     @property
     def target_shifts(self) -> int:
         """Return required shifts using the same camp ratio as regular participants."""
+        if self.is_child:
+            return 0
         return int(round(Decimal(self.booked_nights) * self.guardian.camp.shift_ratio_per_night))
 
     def __str__(self):
