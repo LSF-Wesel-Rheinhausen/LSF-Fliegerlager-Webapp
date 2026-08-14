@@ -2,17 +2,24 @@
 
 ## Zusammenfassung
 
-Platzhalter für die responsive, zugängliche mobile Navigation, Tabellen, Filter und
-Leerzustände im Django-Admin.
+Responsive, zugängliche mobile Navigation, Tabellen, Filter und Leerzustände im
+Django-Admin; deutsche Modell- und Feldbezeichnungen bleiben im Admin konsistent.
 
 ## Geänderte Dateien
 
-- Wird nach der Implementierung ergänzt.
+- `src/templates/admin/base_site.html`
+- `src/templates/admin/change_list.html`
+- `src/static/billing/admin-mobile.css` und `admin-mobile.js`
+- `src/billing/models.py` sowie die Metadatenmigration
+- fokussierte Admin-Python- und Playwright-Regressionen
 
 ## Tests
 
-- Wird nach der Implementierung ergänzt.
+- RED/GREEN: `tests/test_admin_mobile.py`
+- Browser-QA: Portrait 390×844 und Landscape 844×390 mit agent-browser
+- Playwright: `tests/e2e/admin_mobile.spec.js`
+- Vollständige lokale Checks folgen vor Commit.
 
 ## Offene Punkte
 
-- Keine Produktionsänderung vor Erstellung des Draft-PRs.
+- Kein neues Paket und keine Änderung an PR #390.
