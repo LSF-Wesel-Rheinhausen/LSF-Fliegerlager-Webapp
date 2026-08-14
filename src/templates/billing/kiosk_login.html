@@ -6,7 +6,7 @@
       <span class="kiosk-hero__eyebrow">⏳ Lagerbeginn</span>
       <strong class="kiosk-pre-camp-countdown__value">{{ days_until_start }}</strong>
       <div>
-        <h1>{% if days_until_start == 1 %}Noch ein Tag{% else %}Noch {{ days_until_start }} Tage{% endif %}</h1>
+        <h2 class="h1-style">{% if days_until_start == 1 %}Noch ein Tag{% else %}Noch {{ days_until_start }} Tage{% endif %}</h2>
         <p>Das Fliegerlager {{ camp.name }} beginnt am {{ camp.starts_on|date:"d.m.Y" }}.</p>
       </div>
     </section>
@@ -47,7 +47,7 @@
         {% if not is_post_camp %}<div class="kiosk-note" style="margin-top: 0.75rem;">
           <strong>Du fehlst in der Liste?</strong>
           <p>Melde dich hier direkt für das Fliegerlager an. Nach der Freigabe durch die Lagerleitung kannst du dich anmelden.</p>
-          <button type="button" class="button button-secondary" style="margin-top: 0.5rem; width: 100%;" onclick="document.getElementById('self-registration-dialog').showModal();">
+          <button type="button" class="button button-secondary" style="margin-top: 0.5rem; width: 100%;" data-dialog-target="self-registration-dialog">
             📝 Für Fliegerlager registrieren
           </button>
         </div>{% endif %}
@@ -57,6 +57,7 @@
 
   {% if not is_post_camp %}
   <dialog id="self-registration-dialog"{% if enrollment_form.errors %} open{% endif %} class="dialog wizard-dialog">
+    <div id="wizard-step-announcer" class="sr-only" aria-live="polite" role="status"></div>
     <form method="post" action="{% if kiosk_mode == 'central' %}{% url 'central-kiosk-self-register' %}{% else %}{% url 'kiosk-self-register' %}{% endif %}" id="self-registration-form" novalidate>
       {% csrf_token %}
       <header class="wizard-header">
@@ -92,7 +93,7 @@
 
       <!-- Schritt 1: Persönliche Daten -->
       <section class="wizard-step is-active" data-wizard-step="1">
-        <h3 class="wizard-step__title">👤 Persönliche Angaben</h3>
+        <h3 class="wizard-step__title" tabindex="-1">👤 Persönliche Angaben</h3>
         <p class="wizard-step__desc">Gib deinen Vor- und Nachnamen ein. Kontaktdaten sind optional.</p>
 
         <div class="form-group{% if enrollment_form.first_name.errors %} has-error{% endif %}">
@@ -119,7 +120,7 @@
 
       <!-- Schritt 2: Aufenthalt & Anreise -->
       <section class="wizard-step" data-wizard-step="2" hidden>
-        <h3 class="wizard-step__title">📅 Anreise & Abreise</h3>
+        <h3 class="wizard-step__title" tabindex="-1">📅 Anreise & Abreise</h3>
         <p class="wizard-step__desc">
           Wähle deine geplanten An- und Abreisetage.
           {% if camp and camp.starts_on and camp.ends_on %}
@@ -158,7 +159,7 @@
 
       <!-- Schritt 3: Status & Tarif -->
       <section class="wizard-step" data-wizard-step="3" hidden>
-        <h3 class="wizard-step__title">🏷️ Status & Ermäßigungen</h3>
+        <h3 class="wizard-step__title" tabindex="-1">🏷️ Status & Ermäßigungen</h3>
         <p class="wizard-step__desc">Wähle deine Abrechnungskategorie. Preisrelevante Angaben werden vor der Freigabe von der Lagerleitung geprüft.</p>
 
         <div class="checkbox-group" style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.5rem;">
@@ -179,7 +180,7 @@
 
       <!-- Schritt 4: PIN-Sicherheit -->
       <section class="wizard-step" data-wizard-step="4" hidden>
-        <h3 class="wizard-step__title">🔒 PIN festlegen</h3>
+        <h3 class="wizard-step__title" tabindex="-1">🔒 PIN festlegen</h3>
         <p class="wizard-step__desc">Mit deiner PIN meldest du dich am Kiosk an. Vergib eine 4- bis 12-stellige PIN.</p>
 
         <div class="form-group{% if enrollment_form.pin.errors %} has-error{% endif %}">
@@ -238,7 +239,7 @@
         updateArrivalNotice();
       }
 
-      const showStep = (stepNum) => {
+      const showStep = (stepNum, shouldFocus = false) => {
         currentStep = stepNum;
         steps.forEach((s) => {
           const isTarget = Number(s.dataset.wizardStep) === currentStep;
@@ -255,6 +256,19 @@
         if (btnPrev) btnPrev.style.display = currentStep > 1 ? "inline-flex" : "none";
         if (btnNext) btnNext.style.display = currentStep < steps.length ? "inline-flex" : "none";
         if (btnSubmit) btnSubmit.style.display = currentStep === steps.length ? "inline-flex" : "none";
+
+        const activeStepEl = steps.find((s) => Number(s.dataset.wizardStep) === currentStep);
+        const titleEl = activeStepEl?.querySelector(".wizard-step__title");
+        const announcer = document.getElementById("wizard-step-announcer");
+        if (announcer && titleEl) {
+          announcer.textContent = `Schritt ${currentStep} von ${steps.length}: ${titleEl.textContent.trim()}`;
+        }
+        if (shouldFocus && activeStepEl) {
+          const focusTarget = titleEl || activeStepEl.querySelector("input, select, textarea");
+          if (focusTarget) {
+            focusTarget.focus();
+          }
+        }
       };
 
       const validateStep = (stepNum) => {
@@ -274,14 +288,14 @@
       if (btnNext) {
         btnNext.addEventListener("click", () => {
           if (validateStep(currentStep)) {
-            showStep(Math.min(currentStep + 1, steps.length));
+            showStep(Math.min(currentStep + 1, steps.length), true);
           }
         });
       }
 
       if (btnPrev) {
         btnPrev.addEventListener("click", () => {
-          showStep(Math.max(currentStep - 1, 1));
+          showStep(Math.max(currentStep - 1, 1), true);
         });
       }
 

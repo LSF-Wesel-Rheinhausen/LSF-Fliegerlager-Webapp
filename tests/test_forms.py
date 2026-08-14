@@ -149,7 +149,7 @@ def test_kiosk_login_form_starts_empty_and_sorts_targets_by_last_name():
     assert list(form.fields["participant"].choices) == [
         ("", "Bitte Teilnehmer auswählen"),
         (f"participant-{adler.pk}", "Berta Adler"),
-        (f"family-{hopper.pk}", "Grace Hopper (Begleitung von Ada lovelace)"),
+        (f"family-{hopper.pk}", "Grace Hopper"),
         (f"participant-{lovelace.pk}", "Ada lovelace"),
     ]
     assert 'value="" selected>Bitte Teilnehmer auswählen</option>' in form.as_p()
@@ -175,7 +175,7 @@ def test_kiosk_login_form_lists_companions_but_not_children():
     form = KioskLoginForm()
     choices = dict(form.fields["participant"].choices)
 
-    assert choices[f"family-{companion.pk}"] == "Grace Hopper (Begleitung von Ada Lovelace)"
+    assert choices[f"family-{companion.pk}"] == "Grace Hopper"
     assert f"family-{child.pk}" not in choices
 
 
@@ -203,6 +203,45 @@ def test_kiosk_login_form_keeps_active_companion_choice_unique():
 
     assert values.count(f"family-{active_companion.pk}") == 1
     assert f"family-{inactive_companion.pk}" not in values
+
+
+@pytest.mark.django_db
+def test_kiosk_login_companion_label_is_own_name_without_guardian_hint():
+    camp = CampFactory(is_active=True)
+    guardian = ParticipantFactory(camp=camp, first_name="Guardian", last_name="Account")
+    companion = ParticipantFamilyMember.objects.create(
+        guardian=guardian,
+        first_name="Own",
+        last_name="Identity",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+
+    form = KioskLoginForm()
+
+    label = dict(form.fields["participant"].choices)[f"family-{companion.pk}"]
+    assert label == companion.full_name
+    assert "Begleitung von" not in label
+
+
+@pytest.mark.django_db
+def test_kiosk_login_duplicate_companion_names_use_neutral_deterministic_suffixes():
+    camp = CampFactory(is_active=True)
+    guardians = [ParticipantFactory(camp=camp, first_name=f"Guardian {index}") for index in (1, 2)]
+    companions = [
+        ParticipantFamilyMember.objects.create(
+            guardian=guardian,
+            first_name="Same",
+            last_name="Name",
+            role=ParticipantFamilyMember.Role.COMPANION,
+        )
+        for guardian in guardians
+    ]
+
+    form = KioskLoginForm()
+    labels = [dict(form.fields["participant"].choices)[f"family-{companion.pk}"] for companion in companions]
+
+    assert labels == ["Same Name", "Same Name (2)"]
+    assert all("Begleitung von" not in label for label in labels)
 
 
 @pytest.mark.django_db
