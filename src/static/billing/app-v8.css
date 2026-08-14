@@ -3671,3 +3671,69 @@ dialog::backdrop {
 main:focus {
   outline: none;
 }
+
+/* Mobile Touch Target Standards (Issues #346 & #349) */
+@media (max-width: 768px) {
+  .theme-toggle {
+    flex: 0 0 44px;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+  }
+
+  button,
+  .button,
+  a.button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    min-height: 44px;
+  }
+
+  select {
+    height: 44px;
+  }
+
+  .dialog-close,
+  [data-dialog-close],
+  button.close,
+  .dialog-heading .button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .checkbox-cell label,
+  .form-grid p:has(input[type="checkbox"]),
+  .form-grid p:has(input[type="radio"]),
+  .form-grid p label,
+  label.checkbox-label,
+  label.radio-label {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 44px;
+    min-width: 44px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    cursor: pointer;
+  }
+
+  .checkbox-cell label input[type="checkbox"],
+  .checkbox-cell label input[type="radio"],
+  .form-grid p input[type="checkbox"],
+  .form-grid p input[type="radio"],
+  label.checkbox-label input[type="checkbox"],
+  label.radio-label input[type="radio"] {
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    min-height: 22px;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+}

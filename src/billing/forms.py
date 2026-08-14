@@ -185,7 +185,14 @@ class SubsidyPercentField(forms.DecimalField):
 
 class EmailOrUsernameAuthenticationForm(AuthenticationForm):
     username = forms.CharField(
-        label="Benutzername oder E-Mail", widget=forms.TextInput(attrs={"autocomplete": "username"})
+        label="Benutzername oder E-Mail",
+        widget=forms.TextInput(
+            attrs={
+                "autocomplete": "username",
+                "spellcheck": "false",
+                "autocapitalize": "none",
+            }
+        ),
     )
     password = forms.CharField(
         label="Passwort", strip=False, widget=forms.PasswordInput(attrs={"autocomplete": "current-password"})
@@ -462,8 +469,12 @@ class ParticipantForm(forms.ModelForm):
             "notes": "Notizen",
         }
         widgets = {
-            "hilfssatz": forms.NumberInput(attrs={"step": "0.0001", "min": "0", "max": "1"}),
-            "berufssatz": forms.NumberInput(attrs={"step": "0.0001", "min": "0", "max": "1"}),
+            "first_name": forms.TextInput(attrs={"autocomplete": "given-name", "spellcheck": "false"}),
+            "last_name": forms.TextInput(attrs={"autocomplete": "family-name", "spellcheck": "false"}),
+            "email": forms.EmailInput(attrs={"autocomplete": "email", "inputmode": "email", "spellcheck": "false"}),
+            "phone": forms.TextInput(attrs={"autocomplete": "tel", "inputmode": "tel"}),
+            "hilfssatz": forms.NumberInput(attrs={"step": "0.0001", "min": "0", "max": "1", "inputmode": "decimal"}),
+            "berufssatz": forms.NumberInput(attrs={"step": "0.0001", "min": "0", "max": "1", "inputmode": "decimal"}),
             "arrival_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "departure_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
         }
@@ -502,6 +513,8 @@ class ParticipantFamilyMemberForm(forms.ModelForm):
             "is_active": "Aktiv",
         }
         widgets = {
+            "first_name": forms.TextInput(attrs={"autocomplete": "given-name", "spellcheck": "false"}),
+            "last_name": forms.TextInput(attrs={"autocomplete": "family-name", "spellcheck": "false"}),
             "arrival_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "departure_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
         }
@@ -773,7 +786,10 @@ class PaymentForm(forms.ModelForm):
             "method": "Zahlungsart",
             "note": "Notiz",
         }
-        widgets = {"paid_on": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"})}
+        widgets = {
+            "amount": forms.NumberInput(attrs={"inputmode": "decimal", "step": "0.01"}),
+            "paid_on": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+        }
 
 
 EXPENSE_CATEGORY_CHOICES = [
@@ -830,6 +846,7 @@ class ExpenseForm(forms.ModelForm):
             "reimbursable": "Erstattungsfähig",
         }
         widgets = {
+            "amount": forms.NumberInput(attrs={"inputmode": "decimal", "step": "0.01"}),
             "paid_on": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "category": forms.Select(choices=EXPENSE_CATEGORY_CHOICES),
             "receipt": forms.FileInput(
@@ -1225,6 +1242,10 @@ class KioskSelfEnrollmentForm(forms.ModelForm):
             "notes": "Anmerkung (optional)",
         }
         widgets = {
+            "first_name": forms.TextInput(attrs={"autocomplete": "given-name", "spellcheck": "false"}),
+            "last_name": forms.TextInput(attrs={"autocomplete": "family-name", "spellcheck": "false"}),
+            "email": forms.EmailInput(attrs={"autocomplete": "email", "inputmode": "email", "spellcheck": "false"}),
+            "phone": forms.TextInput(attrs={"autocomplete": "tel", "inputmode": "tel"}),
             "arrival_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "departure_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "notes": forms.Textarea(attrs={"rows": 2}),
