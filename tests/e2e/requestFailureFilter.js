@@ -8,6 +8,7 @@ function requestFailureDetails(request) {
   return {
     method: typeof request.method === "function" ? request.method() : "",
     url: typeof request.url === "function" ? request.url() : "",
+    resourceType: typeof request.resourceType === "function" ? request.resourceType() : "",
     errorText: failure?.errorText ?? "",
   };
 }

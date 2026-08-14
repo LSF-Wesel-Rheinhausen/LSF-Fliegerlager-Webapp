@@ -1,4 +1,5 @@
 const { expect, test } = require("./fixtures");
+const { requestFailureDetails } = require("./requestFailureFilter");
 
 async function signInAdmin(page) {
   await page.goto("/setup/");
@@ -34,9 +35,16 @@ for (const viewport of [
   test(`Django Admin mobile navigation and table remain usable in ${viewport.name}`, async ({ page }) => {
     const browserErrors = [];
     const failedRequests = [];
+    const httpFailures = [];
     page.on("console", (message) => { if (message.type() === "error") browserErrors.push(message.text()); });
     page.on("pageerror", (error) => browserErrors.push(error.message));
-    page.on("requestfailed", (request) => failedRequests.push(request.url()));
+    page.on("response", (response) => {
+      if (response.status() >= 400) httpFailures.push(`${response.status()} ${response.url()}`);
+    });
+    page.on("requestfailed", (request) => {
+      const details = requestFailureDetails(request);
+      failedRequests.push(details);
+    });
 
     await signInAdmin(page);
     await createParticipant(page, viewport.name);
@@ -46,16 +54,20 @@ for (const viewport of [
 
     const menu = page.locator(".admin-mobile-menu-toggle");
     await expect(menu).toBeVisible();
+    await expect(menu).toHaveCSS("min-width", "44px");
+    await expect(menu).toHaveCSS("min-height", "44px");
     const menuSize = await menu.boundingBox();
     expect(menuSize.width).toBeGreaterThanOrEqual(44);
     expect(menuSize.height).toBeGreaterThanOrEqual(44);
 
     await menu.click();
     await expect(page.locator("#admin-nav-drawer")).toBeVisible();
+    await expect(menu).toHaveAttribute("aria-expanded", "true");
     await expect(page.locator(".admin-nav-drawer__close")).toBeFocused();
     expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).toBe("hidden");
     await page.keyboard.press("Escape");
     await expect(menu).toBeFocused();
+    await expect(menu).toHaveAttribute("aria-expanded", "false");
     expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).not.toBe("hidden");
 
     const results = page.locator(".admin-results-scroll");
@@ -65,8 +77,15 @@ for (const viewport of [
     if (await filterToggle.count()) {
       const filterSize = await filterToggle.boundingBox();
       expect(filterSize.height).toBeGreaterThanOrEqual(44);
+      await filterToggle.click();
+      await expect(page.locator("#admin-filter-drawer")).toHaveAttribute("open", "");
+      await expect(filterToggle).toHaveAttribute("aria-expanded", "true");
+      await filterToggle.click();
+      await expect(filterToggle).toHaveAttribute("aria-expanded", "false");
     }
+    await expect(results).toHaveCSS("overflow-x", "auto");
     expect(browserErrors).toEqual([]);
     expect(failedRequests).toEqual([]);
+    expect(httpFailures).toEqual([]);
   });
 }
