@@ -1847,6 +1847,70 @@ def test_kiosk_books_drink_with_camp_drink_price_and_subsidy_flag(kiosk_client):
 
 
 @pytest.mark.django_db
+def test_companion_uses_own_booking_identity_but_guardian_pays_and_controls_targets(kiosk_client):
+    camp = CampFactory()
+    guardian = ParticipantFactory(camp=camp, first_name="Guardian", last_name="User")
+    companion = ParticipantFamilyMember.objects.create(
+        guardian=guardian,
+        first_name="Companion",
+        last_name="User",
+        role=ParticipantFamilyMember.Role.COMPANION,
+        is_youth_group=True,
+    )
+    rule = PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.DRINK,
+        name="Begleitergetränk",
+        unit_price=Decimal("2.50"),
+        foerdersatz=Decimal("0.2500"),
+        applies_to_adults=False,
+        applies_to_children=False,
+        applies_to_companions=True,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = guardian.pk
+    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    session.save()
+
+    home_response = kiosk_client.get(reverse("kiosk-home"))
+
+    assert [target["token"] for target in home_response.context["meal_targets"]] == [f"family-{companion.pk}"]
+    assert [target["token"] for target in home_response.context["checkin_participants"]] == [f"family-{companion.pk}"]
+
+    unauthorized_response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "quick",
+            "quick-price_rule": rule.pk,
+            "quick-quantity": 1,
+            "quick-target": f"participant-{guardian.pk}",
+            "quick-targets-submitted": "1",
+        },
+    )
+
+    assert unauthorized_response.status_code == 200
+    assert not Charge.objects.filter(participant=guardian, family_member=companion).exists()
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "quick",
+            "quick-price_rule": rule.pk,
+            "quick-quantity": 1,
+            "quick-target": f"family-{companion.pk}",
+        },
+    )
+
+    assert response.status_code == 302
+    charge = Charge.objects.get(participant=guardian, family_member=companion)
+    assert charge.kiosk_booked_by == guardian
+    assert charge.foerdersatz == Decimal("0.2500")
+    audit_log = KioskActionAuditLog.objects.get(charge=charge)
+    assert audit_log.actor_participant == guardian
+    assert audit_log.actor_family_member == companion
+
+
+@pytest.mark.django_db
 def test_kiosk_quick_booking_rejects_explicitly_empty_target_selection(kiosk_client):
     camp = CampFactory()
     participant = ParticipantFactory(camp=camp)

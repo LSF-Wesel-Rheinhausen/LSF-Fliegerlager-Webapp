@@ -610,6 +610,18 @@ class ParticipantFamilyMember(TimeStampedModel):
         """Return whether this family member should use child meal pricing."""
         return self.role == self.Role.CHILD
 
+    @property
+    def booked_nights(self) -> int:
+        """Return this member's stay length, falling back to the guardian's stay."""
+        if self.arrival_date and self.departure_date:
+            return max((self.departure_date - self.arrival_date).days, 0)
+        return self.guardian.booked_nights
+
+    @property
+    def target_shifts(self) -> int:
+        """Return required shifts using the same camp ratio as regular participants."""
+        return int(round(Decimal(self.booked_nights) * self.guardian.camp.shift_ratio_per_night))
+
     def __str__(self):
         return f"{self.full_name} ({self.guardian})"
 
@@ -1464,6 +1476,18 @@ class ShiftAssignment(TimeStampedModel):
                 name="unique_family_member_shift_assignment",
             ),
         ]
+
+    def clean(self) -> None:
+        """Require a family-member assignment to belong to its payer account."""
+        super().clean()
+        if self.family_member_id is not None and self.family_member is not None:
+            if self.family_member.guardian_id != self.participant_id:
+                raise ValidationError("Die Begleitung gehört nicht zum Teilnehmerkonto.")
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Validate Guardian ownership on every non-bulk assignment write."""
+        self.full_clean()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         target = self.family_member or self.participant

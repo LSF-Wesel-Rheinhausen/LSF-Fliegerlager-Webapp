@@ -1,6 +1,8 @@
 import datetime
+from decimal import Decimal
 
 import pytest
+from django.core.exceptions import ValidationError
 from django.urls import reverse
 from django.utils import timezone
 
@@ -129,6 +131,184 @@ def test_companion_can_book_own_shift_without_replacing_guardian_assignment(kios
 
     assert duplicate_response.status_code == 302
     assert ShiftAssignment.objects.filter(shift=shift, participant=guardian, family_member=companion).count() == 1
+
+
+@pytest.mark.django_db
+def test_companion_bulk_signup_keeps_companion_identity(kiosk_client, active_camp):
+    guardian = Participant.objects.create(camp=active_camp, first_name="Guardian", last_name="User")
+    companion = ParticipantFamilyMember.objects.create(
+        guardian=guardian,
+        first_name="Companion",
+        last_name="User",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    shifts = [
+        Shift.objects.create(
+            camp=active_camp,
+            name=f"Bulk Shift {index}",
+            date=datetime.date.today() + datetime.timedelta(days=index + 1),
+        )
+        for index in range(2)
+    ]
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = guardian.pk
+    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-shifts"),
+        {"action": "bulk_signup", "shift_ids": [str(shift.pk) for shift in shifts]},
+    )
+
+    assert response.status_code == 302
+    assert list(
+        ShiftAssignment.objects.filter(participant=guardian, family_member=companion)
+        .order_by("shift_id")
+        .values_list("shift_id", flat=True)
+    ) == [shift.pk for shift in shifts]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(("age_seconds", "should_retract"), [(14 * 60, True), (15 * 60 - 1, True), (16 * 60, False)])
+def test_companion_retract_boundary_uses_companion_assignment(kiosk_client, active_camp, age_seconds, should_retract):
+    guardian = Participant.objects.create(camp=active_camp, first_name="Guardian", last_name="User")
+    companion = ParticipantFamilyMember.objects.create(
+        guardian=guardian,
+        first_name="Companion",
+        last_name="User",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    shift = Shift.objects.create(
+        camp=active_camp,
+        name="Companion Retract",
+        date=datetime.date.today() + datetime.timedelta(days=1),
+    )
+    assignment = ShiftAssignment.objects.create(shift=shift, participant=guardian, family_member=companion)
+    ShiftAssignment.objects.filter(pk=assignment.pk).update(
+        created_at=timezone.now() - datetime.timedelta(seconds=age_seconds)
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = guardian.pk
+    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    session.save()
+
+    response = kiosk_client.post(reverse("kiosk-shifts"), {"action": "retract", "shift_id": shift.pk})
+
+    assert response.status_code == 302
+    assert ShiftAssignment.objects.filter(pk=assignment.pk).exists() is not should_retract
+
+
+@pytest.mark.django_db
+def test_companion_can_offer_revoke_and_take_without_guardian_self_exchange(kiosk_client, active_camp):
+    guardian = Participant.objects.create(camp=active_camp, first_name="Guardian", last_name="User")
+    companion = ParticipantFamilyMember.objects.create(
+        guardian=guardian,
+        first_name="Companion",
+        last_name="User",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    own_shift = Shift.objects.create(camp=active_camp, name="Own Exchange", date=datetime.date.today())
+    own_assignment = ShiftAssignment.objects.create(shift=own_shift, participant=guardian, family_member=companion)
+    other = Participant.objects.create(camp=active_camp, first_name="Other", last_name="User")
+    offered_shift = Shift.objects.create(camp=active_camp, name="Take Exchange", date=datetime.date.today())
+    ShiftAssignment.objects.create(shift=offered_shift, participant=other, offered_for_exchange=True)
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = guardian.pk
+    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    session.save()
+
+    assert kiosk_client.post(reverse("kiosk-shifts"), {"action": "offer", "shift_id": own_shift.pk}).status_code == 302
+    own_assignment.refresh_from_db()
+    assert own_assignment.offered_for_exchange is True
+    assert (
+        kiosk_client.post(reverse("kiosk-shifts"), {"action": "revoke_offer", "shift_id": own_shift.pk}).status_code
+        == 302
+    )
+    own_assignment.refresh_from_db()
+    assert own_assignment.offered_for_exchange is False
+
+    response = kiosk_client.post(reverse("kiosk-shifts"), {"action": "signup", "shift_id": offered_shift.pk})
+
+    assert response.status_code == 302
+    takeover = ShiftAssignment.objects.get(shift=offered_shift)
+    assert takeover.participant_id == guardian.pk
+    assert takeover.family_member_id == companion.pk
+
+
+@pytest.mark.django_db
+def test_shift_assignment_rejects_companion_from_another_guardian(active_camp):
+    guardian = Participant.objects.create(camp=active_camp, first_name="Guardian", last_name="User")
+    foreign_guardian = Participant.objects.create(camp=active_camp, first_name="Other", last_name="Guardian")
+    foreign_companion = ParticipantFamilyMember.objects.create(
+        guardian=foreign_guardian,
+        first_name="Other",
+        last_name="Companion",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    shift = Shift.objects.create(
+        camp=active_camp,
+        name="Autorisierter Dienst",
+        date=datetime.date.today() + datetime.timedelta(days=2),
+    )
+
+    with pytest.raises(ValidationError, match="Begleitung gehört nicht zum Teilnehmerkonto"):
+        ShiftAssignment.objects.create(shift=shift, participant=guardian, family_member=foreign_companion)
+
+
+@pytest.mark.django_db
+def test_companion_shift_progress_uses_companion_stay_target(kiosk_client, active_camp):
+    active_camp.shift_ratio_per_night = Decimal("0.2")
+    active_camp.save(update_fields=["shift_ratio_per_night", "updated_at"])
+    guardian = Participant.objects.create(
+        camp=active_camp,
+        first_name="Guardian",
+        last_name="User",
+        booked_nights=10,
+    )
+    companion = ParticipantFamilyMember.objects.create(
+        guardian=guardian,
+        first_name="Companion",
+        last_name="User",
+        role=ParticipantFamilyMember.Role.COMPANION,
+        arrival_date=datetime.date.today(),
+        departure_date=datetime.date.today() + datetime.timedelta(days=5),
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = guardian.pk
+    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    session.save()
+
+    response = kiosk_client.get(reverse("kiosk-shifts"))
+
+    assert response.status_code == 200
+    assert response.context["shift_progress_target"] == 1
+
+
+@pytest.mark.django_db
+def test_shift_mutation_rejects_deactivated_companion_session(kiosk_client, active_camp):
+    guardian = Participant.objects.create(camp=active_camp, first_name="Guardian", last_name="User")
+    companion = ParticipantFamilyMember.objects.create(
+        guardian=guardian,
+        first_name="Companion",
+        last_name="User",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    shift = Shift.objects.create(
+        camp=active_camp,
+        name="Stale Session Dienst",
+        date=datetime.date.today() + datetime.timedelta(days=2),
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = guardian.pk
+    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    session.save()
+    ParticipantFamilyMember.objects.filter(pk=companion.pk).update(is_active=False)
+
+    response = kiosk_client.post(reverse("kiosk-shifts"), {"action": "signup", "shift_id": shift.pk})
+
+    assert response.status_code == 302
+    assert response.url == reverse("kiosk-login")
+    assert not ShiftAssignment.objects.filter(shift=shift).exists()
 
 
 @pytest.mark.django_db
