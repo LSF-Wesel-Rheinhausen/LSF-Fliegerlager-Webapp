@@ -127,6 +127,10 @@
           </h3>
           <button type="submit" class="button button-secondary">Schließen</button>
         </form>
+        <p>
+          Bestellungen: <strong>{{ row.day.dinner.booking_total }}</strong>
+          (aktiv: {{ row.day.dinner.active_total }}, zurückgenommen: {{ row.day.dinner.retracted_total }})
+        </p>
         {% if row.day.dinner.bookings %}
           <div class="kiosk-table__wrapper">
             <table>
@@ -206,6 +210,10 @@
           </h3>
           <button type="submit" class="button button-secondary">Schließen</button>
         </form>
+        <p>
+          Bestellungen: <strong>{{ day.breakfast.booking_total }}</strong>
+          (aktiv: {{ day.breakfast.active_total }}, zurückgenommen: {{ day.breakfast.retracted_total }})
+        </p>
         {% if day.breakfast.bookings %}
           <div class="kiosk-table__wrapper">
             <table>
@@ -231,7 +239,13 @@
   <script nonce="{{ request.csp_nonce }}">
     document.querySelectorAll("[data-dialog-open]").forEach((button) => {
       button.addEventListener("click", () => {
-        document.getElementById(button.dataset.dialogOpen)?.showModal();
+        const dialog = document.getElementById(button.dataset.dialogOpen);
+        if (!dialog) {
+          return;
+        }
+        dialog.addEventListener("close", () => button.focus(), { once: true });
+        dialog.showModal();
+        dialog.querySelector("button")?.focus();
       });
     });
   </script>

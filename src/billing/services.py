@@ -68,6 +68,11 @@ class MealCount:
     retracted_total: int
     bookings: list[MealBookingDetail] = field(default_factory=list)
 
+    @property
+    def booking_total(self) -> int:
+        """Return the total number of active and retracted booking records."""
+        return len(self.bookings)
+
 
 @dataclass(frozen=True)
 class MealOverviewDay:
@@ -321,12 +326,18 @@ def admin_interface_contacts(user_model: Any) -> list[AdminInterfaceContact]:
 
 def calculate_meal_overview(camp: Camp) -> list[MealOverviewDay]:
     """Aggregate separate dinner and breakfast signups for a camp by day."""
-    signups = list(
-        MealSignup.objects.select_related("participant", "family_member", "family_member__guardian")
-        .filter(participant__camp=camp)
-        .order_by("meal_date", "meal", "variant")
-    )
-    dates = camp_meal_dates(camp, {signup.meal_date for signup in signups})
+    signup_queryset = MealSignup.objects.select_related("participant", "family_member", "family_member__guardian")
+    if camp.starts_on and camp.ends_on and camp.starts_on <= camp.ends_on:
+        dates = camp_meal_dates(camp)
+        signups = list(
+            signup_queryset.filter(
+                participant__camp=camp,
+                meal_date__range=(dates[0], dates[-1]),
+            ).order_by("meal_date", "meal", "variant")
+        )
+    else:
+        signups = list(signup_queryset.filter(participant__camp=camp).order_by("meal_date", "meal", "variant"))
+        dates = camp_meal_dates(camp, {signup.meal_date for signup in signups})
     date_set = set(dates)
     signups = [signup for signup in signups if signup.meal_date in date_set]
     menu_descriptions = {

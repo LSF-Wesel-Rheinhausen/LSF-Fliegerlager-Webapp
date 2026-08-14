@@ -126,8 +126,33 @@ def test_calculate_meal_overview_separates_breakfast_details_and_family_targets(
         ("Sam Muster", "Bea Konto"),
     ]
     assert [booking.status_label for booking in breakfast.bookings] == ["Gebucht", "Zurückgenommen"]
+    assert breakfast.booking_total == 2
     assert overview[0].dinner.active_total == 1
     assert overview[1].breakfast.active_total == 0
+
+
+@pytest.mark.django_db
+def test_calculate_meal_overview_preserves_companion_target_and_guardian_account():
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 1))
+    guardian = ParticipantFactory(camp=camp, first_name="Guardian", last_name="Account")
+    companion = ParticipantFamilyMember.objects.create(
+        guardian=guardian,
+        first_name="Companion",
+        last_name="Identity",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    MealSignup.objects.create(
+        participant=guardian,
+        family_member=companion,
+        meal_date=date(2026, 7, 1),
+        meal=MealSignup.Meal.DINNER,
+        variant=MealSignup.Variant.NORMAL,
+    )
+
+    booking = calculate_meal_overview(camp)[0].dinner.bookings[0]
+
+    assert booking.target_name == "Companion Identity"
+    assert booking.payment_account_name == "Guardian Account"
 
 
 @pytest.mark.django_db
@@ -145,6 +170,8 @@ def test_calculate_meal_overview_uses_bounded_queries_and_ignores_out_of_camp_si
         overview = calculate_meal_overview(camp)
 
     assert len(queries) <= 2
+    signup_query = next(query["sql"] for query in queries if "billing_mealsignup" in query["sql"])
+    assert '"meal_date" BETWEEN' in signup_query
     assert len(overview) == 1
     assert overview[0].breakfast.active_total == 0
 
@@ -210,6 +237,24 @@ def test_camp_meal_overview_renders_booking_details_only_in_their_meal_dialogs(c
     assert "Dora Dinner" not in breakfast_dialog
     assert all(value in dinner_dialog for value in ["Dora Dinner", "Mit Fleisch", "Gebucht"])
     assert "Sam Muster" not in dinner_dialog
+
+
+@pytest.mark.django_db
+def test_camp_meal_overview_escapes_booking_names(client):
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 1))
+    participant = ParticipantFactory(camp=camp, first_name="<script>alert(1)</script>", last_name="Guest")
+    MealSignup.objects.create(
+        participant=participant,
+        meal_date=date(2026, 7, 1),
+        meal=MealSignup.Meal.DINNER,
+        variant=MealSignup.Variant.NORMAL,
+    )
+    client.force_login(SuperUserFactory())
+
+    content = client.get(reverse("camp-meal-overview", args=[camp.pk])).content.decode()
+
+    assert "&lt;script&gt;alert(1)&lt;/script&gt; Guest" in content
+    assert "<script>alert(1)</script> Guest" not in content
 
 
 @pytest.mark.django_db
