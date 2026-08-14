@@ -1562,17 +1562,58 @@ def get_cost_center_evaluation(camp):
     return {code: data for code, data in evaluation.items() if data["income_count"] or data["expense_count"]}
 
 
+def is_charge_covered_by_settlement_run(
+    charge: Charge,
+    settlement_runs: Iterable[SettlementRun] | None = None,
+) -> bool:
+    """Return whether a settlement run already freezes a charge.
+
+    Args:
+        charge: Charge whose settlement status is checked.
+        settlement_runs: Optional preloaded runs for the charge's camp.
+
+    Returns:
+        ``True`` when an existing run was created after the charge and covers
+        the charge's occurrence date, matching the kiosk cancellation rule.
+    """
+    if settlement_runs is None:
+        settlement_runs = SettlementRun.objects.filter(
+            camp_id=charge.participant.camp_id,
+            created_at__gte=charge.created_at,
+        ).order_by("created_at")
+    for run in settlement_runs:
+        if run.created_at < charge.created_at:
+            continue
+        if charge.occurred_on is None or charge.occurred_on <= timezone.localdate(run.created_at):
+            return True
+    return False
+
+
+@transaction.atomic
 def sync_meal_signup_charges_for_camp(camp: Camp) -> int:
-    """Synchronize existing meal signups and charges with current camp price rules."""
-    all_rules = list(PriceRule.objects.filter(camp=camp, kind=PriceRule.Kind.MEAL))
+    """Synchronize unfinalized future meal signups with current meal rules.
+
+    Archived rules, historical bookings, deleted charges, and charges covered
+    by a settlement snapshot are intentionally left unchanged.
+    """
+    all_rules = list(PriceRule.objects.filter(camp=camp, kind=PriceRule.Kind.MEAL, is_archived=False))
     if not all_rules:
         return 0
 
     updated_count = 0
+    settlement_runs = list(SettlementRun.objects.filter(camp=camp).only("created_at").order_by("created_at"))
+    today = timezone.localdate()
     signups = MealSignup.objects.filter(participant__camp=camp, status=MealSignup.Status.ACTIVE).select_related(
         "charge", "family_member"
     )
     for signup in signups:
+        if signup.meal_date < today:
+            continue
+        charge = signup.charge
+        if charge is not None and (
+            charge.deleted_at is not None or is_charge_covered_by_settlement_run(charge, settlement_runs)
+        ):
+            continue
         is_child = signup.variant in (MealSignup.Variant.NORMAL_CHILD, MealSignup.Variant.VEGAN_CHILD) or (
             signup.family_member is not None and signup.family_member.role == ParticipantFamilyMember.Role.CHILD
         )
@@ -1609,8 +1650,7 @@ def sync_meal_signup_charges_for_camp(camp: Camp) -> int:
             signup.save(update_fields=["foerdersatz", "updated_at"])
             updated_count += 1
 
-        if signup.charge is not None:
-            charge = signup.charge
+        if charge is not None:
             charge_changed = False
             if charge.foerdersatz != rule.foerdersatz:
                 charge.foerdersatz = rule.foerdersatz
