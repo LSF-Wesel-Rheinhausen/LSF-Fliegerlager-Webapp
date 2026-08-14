@@ -146,7 +146,6 @@ from .services import (
     create_kiosk_action_audit_log,
     create_manual_charge,
     create_settlement_run,
-    is_charge_covered_by_settlement_run,
     is_meal_change_locked,
     kiosk_charge_audit_snapshot,
     kiosk_meal_signup_audit_snapshot,
@@ -3330,8 +3329,6 @@ def _retract_meal_signup(
             != (affected_family_member.pk if affected_family_member is not None else None)
         ):
             return False
-        if is_charge_covered_by_settlement_run(locked_charge):
-            return False
     locked_signup.charge = locked_charge
     booking_link = None
     if affected_participant.pk != actor.pk:
@@ -3427,7 +3424,6 @@ def _is_kiosk_quick_charge_cancelable(
         and charge.kind in {Charge.Kind.DRINK, Charge.Kind.FOOD}
         and charge.created_at >= current_time - KIOSK_QUICK_BOOKING_CANCEL_WINDOW
         and account_authorized
-        and not is_charge_covered_by_settlement_run(charge)
     )
 
 

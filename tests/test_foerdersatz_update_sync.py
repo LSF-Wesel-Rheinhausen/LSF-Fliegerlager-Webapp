@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -7,12 +7,12 @@ from django.db.models.query import QuerySet
 from django.urls import reverse
 from django.utils import timezone
 
+from billing.exporters import settlement_snapshot_pdf_bytes
 from billing.forms import MealStandardPricesForm, PriceRuleForm
-from billing.models import Camp, Charge, MealSignup, ParticipantFamilyMember, PriceRule
+from billing.models import Camp, Charge, MealSignup, ParticipantFamilyMember, PriceRule, Settlement, SettlementRun
 from billing.services import (
     calculate_participant_settlement,
     create_settlement_run,
-    is_charge_covered_by_settlement_run,
     sync_meal_signup_charges_for_camp,
 )
 from tests.factories import (
@@ -390,19 +390,58 @@ def test_sync_does_not_mutate_past_meal_signup(monkeypatch):
 
 
 @pytest.mark.django_db
-def test_sync_does_not_mutate_charge_in_settlement_snapshot():
+def test_admin_rule_resync_updates_snapshotted_sources_without_mutating_first_snapshot(client, monkeypatch):
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda: date(2026, 8, 14))
+    monkeypatch.setenv("SOURCE_DATE_EPOCH", "946684800")
     camp = CampFactory(is_active=True)
-    signup, charge = _create_meal_signup_with_charge(camp, meal_date=date(2026, 8, 14))
-    _create_dinner_rule(camp, foerdersatz=Decimal("0.8000"), is_default=True, unit_price=Decimal("20.00"))
-    create_settlement_run(camp, None)
+    rule = _create_dinner_rule(camp, foerdersatz=Decimal("0.1000"), is_default=True)
+    signup, charge = _create_meal_signup_with_charge(camp, meal_date=date(2026, 8, 15))
+    participant = signup.participant
+    first_run = create_settlement_run(camp, None)
+    first_snapshot = first_run.settlements.get(participant=participant)
+    first_run_values = SettlementRun.objects.filter(pk=first_run.pk).values().get()
+    first_snapshot_values = Settlement.objects.filter(pk=first_snapshot.pk).values().get()
+    first_pdf = settlement_snapshot_pdf_bytes(first_snapshot)
+    client.force_login(SuperUserFactory())
 
-    assert sync_meal_signup_charges_for_camp(camp) == 0
+    response = client.post(
+        reverse("price-rule-edit", args=[rule.pk]),
+        {
+            "kind": PriceRule.Kind.MEAL,
+            "name": "Abendessen",
+            "unit_price": "20.00",
+            "foerdersatz": "80",
+            "meal_type": MealSignup.Meal.DINNER,
+            "is_default": "on",
+            "applies_to_adults": "on",
+        },
+    )
 
+    assert response.status_code == 302
     signup.refresh_from_db()
     charge.refresh_from_db()
-    assert signup.foerdersatz == Decimal("0.1000")
-    assert charge.foerdersatz == Decimal("0.1000")
-    assert charge.unit_price == Decimal("10.00")
+    assert signup.foerdersatz == Decimal("0.8000")
+    assert charge.foerdersatz == Decimal("0.8000")
+    assert charge.unit_price == Decimal("20.00")
+    assert SettlementRun.objects.filter(pk=first_run.pk).values().get() == first_run_values
+    assert Settlement.objects.filter(pk=first_snapshot.pk).values().get() == first_snapshot_values
+    first_snapshot.refresh_from_db()
+    assert settlement_snapshot_pdf_bytes(first_snapshot) == first_pdf
+
+    second_run = create_settlement_run(camp, None)
+    second_snapshot = second_run.settlements.get(participant=participant)
+
+    assert second_run.version == first_run.version + 1
+    assert second_snapshot.total_due == Decimal("20.00")
+    second_charge_line = next(
+        line for line in second_snapshot.data["lines"] if line["source"] == f"charges:{charge.pk}"
+    )
+    assert second_charge_line["unit_price"] == "20.00"
+    assert second_charge_line["subsidy_rate"] == "0.00"
+    assert SettlementRun.objects.filter(pk=first_run.pk).values().get() == first_run_values
+    assert Settlement.objects.filter(pk=first_snapshot.pk).values().get() == first_snapshot_values
+    first_snapshot.refresh_from_db()
+    assert settlement_snapshot_pdf_bytes(first_snapshot) == first_pdf
 
 
 @pytest.mark.django_db
@@ -723,84 +762,6 @@ def test_sync_uses_companion_rule_and_youth_subsidy_with_guardian_payment_owners
     regular_settlement = calculate_participant_settlement(regular_companion)
     assert family_settlement.total_subsidy == regular_settlement.total_subsidy == Decimal("12.00")
     assert family_settlement.total_due == regular_settlement.total_due == Decimal("0.00")
-
-
-@pytest.mark.django_db
-def test_settlement_protection_matches_exact_snapshot_charge_membership():
-    camp = CampFactory(is_active=True)
-    participant = ParticipantFactory(camp=camp)
-    future_charge = Charge.objects.create(
-        participant=participant,
-        kind=Charge.Kind.FOOD,
-        description="Zukünftiges Essen",
-        quantity=Decimal("1"),
-        unit_price=Decimal("12.00"),
-        occurred_on=timezone.localdate() + timedelta(days=7),
-    )
-    undated_charge = Charge.objects.create(
-        participant=participant,
-        kind=Charge.Kind.FOOD,
-        description="Essen ohne Datum",
-        quantity=Decimal("1"),
-        unit_price=Decimal("8.00"),
-        occurred_on=None,
-    )
-    excluded_charge = Charge.objects.create(
-        participant=participant,
-        kind=Charge.Kind.FOOD,
-        description="Vor Snapshot gelöscht",
-        quantity=Decimal("1"),
-        unit_price=Decimal("9.00"),
-        occurred_on=timezone.localdate(),
-        deleted_at=timezone.now(),
-    )
-    create_settlement_run(camp, None)
-
-    assert is_charge_covered_by_settlement_run(future_charge) is True
-    assert is_charge_covered_by_settlement_run(undated_charge) is True
-    assert is_charge_covered_by_settlement_run(excluded_charge) is False
-
-    later_charge = Charge.objects.create(
-        participant=participant,
-        kind=Charge.Kind.FOOD,
-        description="Nach erstem Snapshot",
-        quantity=Decimal("1"),
-        unit_price=Decimal("7.00"),
-        occurred_on=None,
-    )
-    assert is_charge_covered_by_settlement_run(later_charge) is False
-
-    create_settlement_run(camp, None)
-    assert is_charge_covered_by_settlement_run(later_charge) is True
-
-
-@pytest.mark.django_db
-def test_sync_protects_future_and_undated_charges_present_in_settlement_snapshot(monkeypatch):
-    monkeypatch.setattr(
-        "billing.services.timezone.localdate",
-        lambda value=None, timezone=None: date(2026, 8, 14),
-    )
-    camp = CampFactory(is_active=True)
-    rule = _create_dinner_rule(camp, foerdersatz=Decimal("0.1000"), is_default=True)
-    future_signup, future_charge = _create_meal_signup_with_charge(camp, meal_date=date(2026, 8, 15))
-    undated_signup, undated_charge = _create_meal_signup_with_charge(camp, meal_date=date(2026, 8, 16))
-    undated_charge.occurred_on = None
-    undated_charge.save(update_fields=["occurred_on"])
-    run = create_settlement_run(camp, None)
-    original_snapshot = run.settlements.get(participant=future_signup.participant).data
-    rule.foerdersatz = Decimal("0.8000")
-    rule.unit_price = Decimal("20.00")
-    rule.save(update_fields=["foerdersatz", "unit_price"])
-
-    assert sync_meal_signup_charges_for_camp(camp) == 0
-
-    for signup, charge in ((future_signup, future_charge), (undated_signup, undated_charge)):
-        signup.refresh_from_db()
-        charge.refresh_from_db()
-        assert signup.foerdersatz == Decimal("0.1000")
-        assert charge.foerdersatz == Decimal("0.1000")
-        assert charge.unit_price == Decimal("10.00")
-    assert run.settlements.get(participant=future_signup.participant).data == original_snapshot
 
 
 @pytest.mark.django_db
