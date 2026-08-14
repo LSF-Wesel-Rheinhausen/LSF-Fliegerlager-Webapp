@@ -2683,6 +2683,11 @@ input[placeholder="DD.MM.YYYY"] {
     width: 100%;
   }
 
+  .admin-topbar .admin-brand__copy {
+    gap: 0;
+    line-height: 1;
+  }
+
   .brand {
     justify-content: center;
     align-items: center;
