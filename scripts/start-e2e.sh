@@ -32,6 +32,7 @@ else
 fi
 
 $PYTHON src/manage.py migrate --noinput
+$PYTHON src/manage.py collectstatic --noinput
 $PYTHON src/manage.py shell -c '
 from datetime import timedelta
 from django.utils import timezone
