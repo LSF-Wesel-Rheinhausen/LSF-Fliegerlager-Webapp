@@ -515,13 +515,17 @@ class Participant(TimeStampedModel):
 
     @property
     def target_shifts(self) -> int:
+        if self.is_child:
+            return 0
         return int(round(Decimal(self.booked_nights) * self.camp.shift_ratio_per_night))
 
     @property
     def completed_shifts(self) -> int:
+        if self.is_child:
+            return 0
         if hasattr(self, "_completed_shifts_count"):
             return self._completed_shifts_count
-        return self.shift_assignments.count()
+        return self.shift_assignments.filter(family_member__isnull=True).count()
 
     @property
     def is_archived(self) -> bool:
@@ -609,6 +613,29 @@ class ParticipantFamilyMember(TimeStampedModel):
     def is_child(self) -> bool:
         """Return whether this family member should use child meal pricing."""
         return self.role == self.Role.CHILD
+
+    @property
+    def completed_shifts(self) -> int:
+        """Return assignments belonging to this companion identity only."""
+        if self.is_child:
+            return 0
+        if hasattr(self, "_completed_shifts_count"):
+            return self._completed_shifts_count
+        return self.shift_assignments.count()
+
+    @property
+    def booked_nights(self) -> int:
+        """Return this member's stay length, falling back to the guardian's stay."""
+        if self.arrival_date and self.departure_date:
+            return max((self.departure_date - self.arrival_date).days, 0)
+        return self.guardian.booked_nights
+
+    @property
+    def target_shifts(self) -> int:
+        """Return required shifts using the same camp ratio as regular participants."""
+        if self.is_child:
+            return 0
+        return int(round(Decimal(self.booked_nights) * self.guardian.camp.shift_ratio_per_night))
 
     def __str__(self):
         return f"{self.full_name} ({self.guardian})"
@@ -1438,19 +1465,80 @@ class DailyShiftException(TimeStampedModel):
         return f"Ausnahme am {self.date} für {self.template.name}"
 
 
+class ShiftAssignmentQuerySet(models.QuerySet):
+    """Keep identity-changing writes on validated model/service paths."""
+
+    def update(self, **kwargs: Any) -> int:
+        if {"participant", "participant_id", "family_member", "family_member_id"} & kwargs.keys():
+            raise ValidationError("Identitätsänderungen an Diensten müssen über save() erfolgen.")
+        return super().update(**kwargs)
+
+
+class ShiftAssignmentManager(models.Manager):
+    """Validate cross-table ownership before Django's bulk insert bypasses save()."""
+
+    def get_queryset(self) -> ShiftAssignmentQuerySet:
+        return ShiftAssignmentQuerySet(self.model, using=self._db)
+
+    def bulk_create(self, objs, *args: Any, **kwargs: Any):
+        for assignment in objs:
+            assignment.full_clean()
+        return super().bulk_create(objs, *args, **kwargs)
+
+
 class ShiftAssignment(TimeStampedModel):
     shift = models.ForeignKey(Shift, on_delete=models.CASCADE, related_name="assignments")
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="shift_assignments")
+    family_member = models.ForeignKey(
+        ParticipantFamilyMember,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="shift_assignments",
+    )
     offered_for_exchange = models.BooleanField(default=False)
+    objects = ShiftAssignmentManager()
 
     class Meta:
         ordering = ["shift", "participant"]
         constraints = [
-            models.UniqueConstraint(fields=["shift", "participant"], name="unique_shift_assignment"),
+            models.UniqueConstraint(
+                fields=["shift", "participant"],
+                condition=models.Q(family_member__isnull=True),
+                name="unique_shift_assignment",
+            ),
+            models.UniqueConstraint(
+                fields=["shift", "participant", "family_member"],
+                condition=models.Q(family_member__isnull=False),
+                name="unique_family_member_shift_assignment",
+            ),
         ]
 
+    def clean(self) -> None:
+        """Require a family-member assignment to belong to its payer account."""
+        super().clean()
+        if self.family_member_id is not None and self.family_member is not None:
+            if self.family_member.guardian_id != self.participant_id:
+                raise ValidationError("Die Begleitung gehört nicht zum Teilnehmerkonto.")
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Validate Guardian ownership on every non-bulk assignment write."""
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    @property
+    def operational_identity(self) -> Participant | ParticipantFamilyMember:
+        """Return the person whose operational duty identity this assignment represents."""
+        return self.family_member or self.participant
+
+    @property
+    def operational_display_name(self) -> str:
+        """Return the canonical display name without exposing payer relationships."""
+        return self.operational_identity.full_name
+
     def __str__(self):
-        return f"{self.participant} -> {self.shift}"
+        target = self.family_member or self.participant
+        return f"{target} -> {self.shift}"
 
 
 class PushSubscription(TimeStampedModel):

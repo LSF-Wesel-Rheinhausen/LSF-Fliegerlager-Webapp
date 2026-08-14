@@ -1027,7 +1027,7 @@ class KioskLoginForm(forms.Form):
         targets.extend(
             {
                 "token": f"family-{family_member.pk}",
-                "label": f"{family_member.full_name} (Begleitung von {family_member.guardian.full_name})",
+                "label": family_member.full_name,
                 "participant": family_member.guardian,
                 "family_member": family_member,
             }
@@ -1038,7 +1038,15 @@ class KioskLoginForm(forms.Form):
             person = target["family_member"] or target["participant"]
             return (person.last_name.casefold(), person.first_name.casefold(), target["token"])
 
-        return sorted(targets, key=name_sort_key)
+        targets = sorted(targets, key=name_sort_key)
+        label_counts: dict[str, int] = {}
+        for target in targets:
+            person = target["family_member"] or target["participant"]
+            base_label = person.full_name
+            label_counts[base_label] = label_counts.get(base_label, 0) + 1
+            occurrence = label_counts[base_label]
+            target["label"] = base_label if occurrence == 1 else f"{base_label} ({occurrence})"
+        return targets
 
     def _target_for_token(self, token: str) -> dict[str, Any] | None:
         return next((target for target in self.login_targets if target["token"] == token), None)

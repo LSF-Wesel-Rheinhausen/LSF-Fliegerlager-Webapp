@@ -18,7 +18,7 @@ from django.core import signing
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.core.signing import BadSignature, Signer
 from django.db import IntegrityError, transaction
-from django.db.models import Case, Exists, IntegerField, OuterRef, Prefetch, Q, Value, When
+from django.db.models import Case, Count, Exists, IntegerField, OuterRef, Prefetch, Q, Value, When
 from django.http import FileResponse, Http404, HttpRequest, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -559,16 +559,23 @@ def _notify_shift_exchange_by_id(
     event: str,
     actor_id: int,
     previous_participant_id: int | None = None,
+    previous_family_member_id: int | None = None,
 ) -> None:
     """Load committed shift records and enqueue an exchange notification."""
     previous_participant = (
         Participant.objects.get(pk=previous_participant_id) if previous_participant_id is not None else None
     )
+    previous_family_member = (
+        ParticipantFamilyMember.objects.get(pk=previous_family_member_id)
+        if previous_family_member_id is not None
+        else None
+    )
     notify_shift_exchange(
-        ShiftAssignment.objects.select_related("shift", "shift__camp").get(pk=assignment_id),
+        ShiftAssignment.objects.select_related("shift", "shift__camp", "family_member").get(pk=assignment_id),
         event=event,
         actor=Participant.objects.get(pk=actor_id),
         previous_participant=previous_participant,
+        previous_family_member=previous_family_member,
     )
 
 
@@ -585,11 +592,48 @@ def _kiosk_shift_redirect(request: HttpRequest, kiosk_mode: str):
     return redirect(f"{target}?{query}" if query else target)
 
 
+def _lock_kiosk_shift_identity(
+    participant: Participant,
+    family_member: ParticipantFamilyMember | None,
+) -> tuple[Participant, ParticipantFamilyMember | None] | None:
+    """Lock the account and active Companion identity for one shift mutation."""
+    locked_participant = (
+        Participant.objects.select_for_update()
+        .select_related("camp")
+        .filter(pk=participant.pk, camp__is_active=True, archived_at__isnull=True)
+        .first()
+    )
+    if locked_participant is None:
+        return None
+    if family_member is None:
+        return locked_participant, None
+    locked_family_member = (
+        ParticipantFamilyMember.objects.select_for_update()
+        .filter(
+            pk=family_member.pk,
+            guardian=locked_participant,
+            role=ParticipantFamilyMember.Role.COMPANION,
+            is_active=True,
+        )
+        .first()
+    )
+    if locked_family_member is None:
+        return None
+    return locked_participant, locked_family_member
+
+
 def _book_open_kiosk_shifts(
-    participant: Participant, shift_ids: list[int], today: date
+    participant: Participant,
+    shift_ids: list[int],
+    today: date,
+    family_member: ParticipantFamilyMember | None = None,
 ) -> tuple[list[Shift], str | None]:
     """Book several open shifts atomically after locking their capacity rows."""
     with transaction.atomic():
+        locked_identity = _lock_kiosk_shift_identity(participant, family_member)
+        if locked_identity is None:
+            return [], "Die Begleitung ist nicht mehr für dieses Konto verfügbar."
+        participant, family_member = locked_identity
         locked_shifts = list(
             Shift.objects.select_for_update().filter(pk__in=shift_ids, camp=participant.camp).order_by("pk")
         )
@@ -598,7 +642,7 @@ def _book_open_kiosk_shifts(
 
         assignments = list(
             ShiftAssignment.objects.filter(shift_id__in=shift_ids).values(
-                "shift_id", "participant_id", "offered_for_exchange"
+                "shift_id", "participant_id", "family_member_id", "offered_for_exchange"
             )
         )
         assignments_by_shift: dict[int, list[Any]] = {shift.pk: [] for shift in locked_shifts}
@@ -609,7 +653,11 @@ def _book_open_kiosk_shifts(
             shift_assignments = assignments_by_shift[shift.pk]
             if shift.date < today:
                 return [], "Ein ausgewählter Dienst liegt in der Vergangenheit. Es wurde nichts gebucht."
-            if any(item["participant_id"] == participant.pk for item in shift_assignments):
+            if any(
+                item["participant_id"] == participant.pk
+                and item["family_member_id"] == getattr(family_member, "pk", None)
+                for item in shift_assignments
+            ):
                 return (
                     [],
                     "Du bist für mindestens einen ausgewählten Dienst bereits eingetragen. Es wurde nichts gebucht.",
@@ -620,7 +668,10 @@ def _book_open_kiosk_shifts(
                 return [], "Mindestens ein ausgewählter Dienst ist inzwischen voll. Es wurde nichts gebucht."
 
         ShiftAssignment.objects.bulk_create(
-            [ShiftAssignment(shift=shift, participant=participant) for shift in locked_shifts]
+            [
+                ShiftAssignment(shift=shift, participant=participant, family_member=family_member)
+                for shift in locked_shifts
+            ]
         )
         return locked_shifts, None
 
@@ -1521,14 +1572,37 @@ def price_rule_delete(request, price_rule_id):
 @editor_required
 def shift_manage(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
-    shifts = camp.shifts.prefetch_related("assignments__participant").order_by("date", "start_time", "name")
+    shifts = camp.shifts.prefetch_related("assignments__participant", "assignments__family_member").order_by(
+        "date", "start_time", "name"
+    )
+    for shift in shifts:
+        for assignment in shift.assignments.all():
+            assignment.display_name = assignment.operational_display_name
     return render(request, "billing/shift_manage.html", {"camp": camp, "shifts": shifts})
 
 
 @editor_required
 def shift_report(request, camp_id):
     camp = get_object_or_404(Camp, pk=camp_id)
-    participants = list(camp.participants.all())
+    participant_assignments = Count(
+        "shift_assignments",
+        filter=Q(shift_assignments__family_member__isnull=True),
+    )
+    participants = list(
+        camp.participants.filter(archived_at__isnull=True, is_child=False)
+        .select_related("camp")
+        .annotate(_completed_shifts_count=participant_assignments)
+    )
+    participants.extend(
+        ParticipantFamilyMember.objects.filter(
+            guardian__camp=camp,
+            guardian__archived_at__isnull=True,
+            is_active=True,
+            role=ParticipantFamilyMember.Role.COMPANION,
+        )
+        .select_related("guardian", "guardian__camp")
+        .annotate(_completed_shifts_count=Count("shift_assignments"))
+    )
     # Sort by completed / target ratio
     participants.sort(
         key=lambda p: (p.completed_shifts / p.target_shifts if p.target_shifts > 0 else 0, p.completed_shifts),
@@ -3624,7 +3698,11 @@ def kiosk_home(request, kiosk_mode="private"):
         if not is_pre_camp or _pre_camp_meal_booking_allowed(participant.camp, meal)
     }
     show_meal_area = not is_pre_camp and not is_post_camp
+    session_family_member_id = request.session.get(KIOSK_FAMILY_MEMBER_SESSION_KEY)
     active_family_member = _kiosk_family_member(request, participant)
+    if session_family_member_id and active_family_member is None:
+        _clear_kiosk_session(request)
+        return redirect(_kiosk_route(kiosk_mode, "login"))
     default_booking_target = active_family_member or participant
     default_booking_target_token = (
         f"family-{active_family_member.pk}" if active_family_member is not None else f"participant-{participant.pk}"
@@ -3655,6 +3733,17 @@ def kiosk_home(request, kiosk_mode="private"):
         family_members=family_members,
         linked_participants=linked_participants,
     )
+    if active_family_member is not None:
+        companion_allowed_tokens = {default_booking_target_token}
+        for linked_participant in linked_participants:
+            companion_allowed_tokens.add(f"participant-{linked_participant.pk}")
+            companion_allowed_tokens.update(
+                f"family-{member.pk}" for member in linked_participant.active_kiosk_family_members
+            )
+        meal_targets = [target for target in meal_targets if target["token"] in companion_allowed_tokens]
+        checkin_participants = [
+            target for target in checkin_participants if target["token"] in companion_allowed_tokens
+        ]
     quick_form = QuickBookingForm(
         participant=participant,
         target_groups=quick_booking_target_groups,
@@ -3912,6 +4001,7 @@ def kiosk_home(request, kiosk_mode="private"):
                                     unit_price=effective_rule.unit_price,
                                     foerdersatz=effective_rule.foerdersatz,
                                     occurred_on=occurred_on,
+                                    family_member=target_family_member,
                                     kiosk_booked_by=locked_actor,
                                     kiosk_confirmation_nonce=(confirmation_nonce if booking_index == 0 else None),
                                 )
@@ -4587,6 +4677,11 @@ def kiosk_shifts(request, kiosk_mode="private"):
         return redirect(_kiosk_route(kiosk_mode, "login"))
     if operation_redirect := _kiosk_operation_redirect(request, participant, kiosk_mode):
         return operation_redirect
+    session_family_member_id = request.session.get(KIOSK_FAMILY_MEMBER_SESSION_KEY)
+    active_family_member = _kiosk_family_member(request, participant)
+    if session_family_member_id and active_family_member is None:
+        _clear_kiosk_session(request)
+        return redirect(_kiosk_route(kiosk_mode, "login"))
 
     today = timezone.localdate()
     if request.method == "POST":
@@ -4601,7 +4696,10 @@ def kiosk_shifts(request, kiosk_mode="private"):
             else:
                 try:
                     booked_shifts, error_message = _book_open_kiosk_shifts(
-                        participant, [shift_id for shift_id in shift_ids if shift_id is not None], today
+                        participant,
+                        [shift_id for shift_id in shift_ids if shift_id is not None],
+                        today,
+                        active_family_member,
                     )
                 except IntegrityError:
                     booked_shifts, error_message = (
@@ -4625,23 +4723,41 @@ def kiosk_shifts(request, kiosk_mode="private"):
 
         if action == "signup":
             with transaction.atomic():
+                locked_identity = _lock_kiosk_shift_identity(participant, active_family_member)
+                if locked_identity is None:
+                    messages.error(request, "Die Begleitung ist nicht mehr für dieses Konto verfügbar.")
+                    return _kiosk_shift_redirect(request, kiosk_mode)
+                participant, active_family_member = locked_identity
                 shift = Shift.objects.select_for_update().get(pk=shift_id, camp=participant.camp)
-                if ShiftAssignment.objects.filter(shift=shift, participant=participant).exists():
+                own_assignment_filter = {"participant": participant, "family_member": active_family_member}
+                if ShiftAssignment.objects.filter(shift=shift, **own_assignment_filter).exists():
                     messages.error(request, "Du bist für diesen Dienst bereits eingetragen.")
                 elif not shift.is_full:
-                    ShiftAssignment.objects.create(shift=shift, participant=participant)
+                    ShiftAssignment.objects.create(shift=shift, **own_assignment_filter)
                     messages.success(request, f"Du hast dich für '{shift.name}' eingetragen.")
                 else:
                     offered_assignment = (
-                        shift.assignments.filter(offered_for_exchange=True).exclude(participant=participant).first()
+                        shift.assignments.filter(offered_for_exchange=True)
+                        .exclude(participant=participant, family_member=active_family_member)
+                        .select_related("participant", "family_member")
+                        .first()
                     )
                     if offered_assignment:
                         old_participant = offered_assignment.participant
+                        old_family_member_id = offered_assignment.family_member_id
+                        old_display_name = offered_assignment.operational_display_name
                         offered_assignment.participant = participant
+                        offered_assignment.family_member = active_family_member
                         offered_assignment.offered_for_exchange = False
                         offered_assignment.created_at = timezone.now()
                         offered_assignment.save(
-                            update_fields=["participant", "offered_for_exchange", "created_at", "updated_at"]
+                            update_fields=[
+                                "participant",
+                                "family_member",
+                                "offered_for_exchange",
+                                "created_at",
+                                "updated_at",
+                            ]
                         )
                         transaction.on_commit(
                             partial(
@@ -4650,49 +4766,87 @@ def kiosk_shifts(request, kiosk_mode="private"):
                                 "taken",
                                 participant.pk,
                                 old_participant.pk,
+                                old_family_member_id,
                             )
                         )
-                        messages.success(request, f"Du hast den Dienst von {old_participant.full_name} übernommen.")
+                        messages.success(request, f"Du hast den Dienst von {old_display_name} übernommen.")
                     else:
                         messages.error(
                             request, "Dieser Dienst ist voll und es wird aktuell kein Platz zum Tausch angeboten."
                         )
         elif action == "retract":
-            assignment = ShiftAssignment.objects.filter(shift=shift, participant=participant).first()
-            if assignment and assignment.created_at >= timezone.now() - timedelta(minutes=15):
-                assignment.delete()
-                messages.success(request, f"Du hast dich aus '{shift.name}' ausgetragen.")
-            else:
-                messages.error(
-                    request,
-                    "Das Zurückziehen ist nur innerhalb von 15 Minuten nach dem Eintragen möglich. "
-                    "Bitte biete deinen Dienst zum Tausch an oder wende dich an die Lagerleitung.",
-                )
-        elif action == "offer":
-            if shift.date < today:
-                messages.error(request, "Du kannst keine vergangenen Dienste zum Tausch anbieten.")
-            else:
-                updated = ShiftAssignment.objects.filter(shift=shift, participant=participant).update(
-                    offered_for_exchange=True
-                )
-                if updated:
-                    assignment = ShiftAssignment.objects.get(shift=shift, participant=participant)
-                    transaction.on_commit(
-                        partial(_notify_shift_exchange_by_id, assignment.pk, "offered", participant.pk)
+            with transaction.atomic():
+                locked_identity = _lock_kiosk_shift_identity(participant, active_family_member)
+                if locked_identity is None:
+                    messages.error(request, "Die Begleitung ist nicht mehr für dieses Konto verfügbar.")
+                else:
+                    participant, active_family_member = locked_identity
+                    shift = Shift.objects.select_for_update().get(pk=shift_id, camp=participant.camp)
+                    assignment = (
+                        ShiftAssignment.objects.select_for_update()
+                        .filter(shift=shift, participant=participant, family_member=active_family_member)
+                        .first()
                     )
-                    messages.success(request, f"Dein Dienst '{shift.name}' wird nun zum Tausch angeboten.")
+                    if assignment and assignment.created_at >= timezone.now() - timedelta(minutes=15):
+                        assignment.delete()
+                        messages.success(request, f"Du hast dich aus '{shift.name}' ausgetragen.")
+                    else:
+                        messages.error(
+                            request,
+                            "Das Zurückziehen ist nur innerhalb von 15 Minuten nach dem Eintragen möglich. "
+                            "Bitte biete deinen Dienst zum Tausch an oder wende dich an die Lagerleitung.",
+                        )
+        elif action == "offer":
+            with transaction.atomic():
+                locked_identity = _lock_kiosk_shift_identity(participant, active_family_member)
+                if locked_identity is None:
+                    messages.error(request, "Die Begleitung ist nicht mehr für dieses Konto verfügbar.")
+                else:
+                    participant, active_family_member = locked_identity
+                    shift = Shift.objects.select_for_update().get(pk=shift_id, camp=participant.camp)
+                    if shift.date < timezone.localdate():
+                        messages.error(request, "Du kannst keine vergangenen Dienste zum Tausch anbieten.")
+                    else:
+                        assignment = (
+                            ShiftAssignment.objects.select_for_update()
+                            .filter(shift=shift, participant=participant, family_member=active_family_member)
+                            .first()
+                        )
+                        if assignment is not None:
+                            assignment.offered_for_exchange = True
+                            assignment.save(update_fields=["offered_for_exchange", "updated_at"])
+                            transaction.on_commit(
+                                partial(
+                                    _notify_shift_exchange_by_id,
+                                    assignment.pk,
+                                    "offered",
+                                    participant.pk,
+                                )
+                            )
+                            messages.success(request, f"Dein Dienst '{shift.name}' wird nun zum Tausch angeboten.")
         elif action == "revoke_offer":
-            updated = ShiftAssignment.objects.filter(shift=shift, participant=participant).update(
-                offered_for_exchange=False
-            )
-            if updated:
-                messages.success(request, f"Du hast das Tauschangebot für '{shift.name}' zurückgezogen.")
+            with transaction.atomic():
+                locked_identity = _lock_kiosk_shift_identity(participant, active_family_member)
+                if locked_identity is None:
+                    messages.error(request, "Die Begleitung ist nicht mehr für dieses Konto verfügbar.")
+                else:
+                    participant, active_family_member = locked_identity
+                    shift = Shift.objects.select_for_update().get(pk=shift_id, camp=participant.camp)
+                    assignment = (
+                        ShiftAssignment.objects.select_for_update()
+                        .filter(shift=shift, participant=participant, family_member=active_family_member)
+                        .first()
+                    )
+                    if assignment is not None and assignment.offered_for_exchange:
+                        assignment.offered_for_exchange = False
+                        assignment.save(update_fields=["offered_for_exchange", "updated_at"])
+                        messages.success(request, f"Du hast das Tauschangebot für '{shift.name}' zurückgezogen.")
 
         return _kiosk_shift_redirect(request, kiosk_mode)
 
     shifts = (
         participant.camp.shifts.filter(date__gte=today)
-        .prefetch_related("assignments__participant")
+        .prefetch_related("assignments__participant", "assignments__family_member")
         .order_by("date", "start_time")
     )
     shift_date_filter = request.GET.get("date", "").strip()
@@ -4705,17 +4859,45 @@ def kiosk_shifts(request, kiosk_mode="private"):
     retract_cutoff = timezone.now() - timedelta(minutes=15)
     for shift in shifts:
         shift_assignments = list(shift.assignments.all())
-        shift.my_assignment = next((a for a in shift_assignments if a.participant_id == participant.pk), None)
+        for assignment in shift_assignments:
+            display_target = assignment.family_member or assignment.participant
+            assignment.display_name = display_target.full_name
+            assignment.display_short = f"{display_target.first_name} {display_target.last_name[:1]}."
+            assignment.is_current_identity = (
+                assignment.participant_id == participant.pk
+                and assignment.family_member_id == getattr(active_family_member, "pk", None)
+            )
+        shift.my_assignment = next(
+            (
+                a
+                for a in shift_assignments
+                if a.participant_id == participant.pk
+                and a.family_member_id == getattr(active_family_member, "pk", None)
+            ),
+            None,
+        )
         shift.can_retract = bool(shift.my_assignment and shift.my_assignment.created_at >= retract_cutoff)
-        shift.has_offers = any(a.offered_for_exchange and a.participant_id != participant.pk for a in shift_assignments)
+        shift.has_offers = any(
+            a.offered_for_exchange
+            and (a.participant_id, a.family_member_id) != (participant.pk, getattr(active_family_member, "pk", None))
+            for a in shift_assignments
+        )
 
         if shift.my_assignment:
             my_shifts.append(shift)
         elif shift.has_offers:
             offered_assignment = next(
-                a for a in shift_assignments if a.offered_for_exchange and a.participant_id != participant.pk
+                a
+                for a in shift_assignments
+                if a.offered_for_exchange
+                and (a.participant_id, a.family_member_id)
+                != (participant.pk, getattr(active_family_member, "pk", None))
             )
-            shift.offered_by = offered_assignment.participant.full_name
+            shift.offered_by = (
+                offered_assignment.family_member.full_name
+                if offered_assignment.family_member_id
+                else offered_assignment.participant.full_name
+            )
             offered_shifts.append(shift)
         else:
             open_shifts.append(shift)
@@ -4735,6 +4917,18 @@ def kiosk_shifts(request, kiosk_mode="private"):
         "billing/kiosk_shifts.html",
         {
             "participant": participant,
+            "active_family_member": active_family_member,
+            "shift_progress_completed": (
+                ShiftAssignment.objects.filter(
+                    participant=participant,
+                    family_member=active_family_member,
+                ).count()
+                if active_family_member is not None
+                else participant.completed_shifts
+            ),
+            "shift_progress_target": (
+                active_family_member.target_shifts if active_family_member is not None else participant.target_shifts
+            ),
             "open_shifts": open_shifts,
             "offered_shifts": offered_shifts,
             "my_shifts": my_shifts,
