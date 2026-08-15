@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from io import BytesIO
 
@@ -10,7 +10,7 @@ from openpyxl import load_workbook
 
 from billing.models import Charge, Expense, MealSignup, Settlement, SettlementRun
 from billing.permissions import EDITOR_GROUP
-from billing.services import create_settlement_run
+from billing.services import _cost_center_expense_snapshot, create_settlement_run
 from tests.factories import ChargeFactory, ExpenseFactory, ParticipantFactory, SuperUserFactory, UserFactory
 
 
@@ -100,6 +100,23 @@ def test_admin_can_create_settlement_run_with_subsidized_charge(client):
             "amount": "5.00",
         }
     ]
+
+
+def test_cost_center_expense_snapshot_uses_created_at_when_unpaid():
+    assert _cost_center_expense_snapshot(
+        {
+            "paid_on": None,
+            "created_at": datetime(2026, 7, 2, 12, 30),
+            "participant": None,
+            "description": "Förderung",
+            "amount": Decimal("5.00"),
+        }
+    ) == {
+        "paid_date": "2026-07-02",
+        "applicant_name": "Unbekannt",
+        "description": "Förderung",
+        "amount": "5.00",
+    }
 
 
 @pytest.mark.django_db
