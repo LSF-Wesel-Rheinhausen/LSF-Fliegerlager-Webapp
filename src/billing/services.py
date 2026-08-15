@@ -1204,6 +1204,29 @@ def _settlement_snapshot_data(result: SettlementResult) -> dict[str, Any]:
     }
 
 
+def _cost_center_expense_snapshot(expense: Expense | Mapping[str, Any]) -> dict[str, str]:
+    """Serialize an ORM expense or a normalized subsidy expense detail."""
+    if isinstance(expense, Expense):
+        paid_date = expense.paid_on or expense.created_at.date()
+        participant = expense.participant
+        description = expense.description
+        amount = expense.amount
+    else:
+        paid_date = expense.get("paid_on")
+        created_at = expense.get("created_at")
+        if paid_date is None and created_at is not None:
+            paid_date = created_at.date()
+        participant = expense.get("participant")
+        description = expense["description"]
+        amount = expense["amount"]
+    return {
+        "paid_date": paid_date.isoformat() if paid_date else "",
+        "applicant_name": participant.full_name if participant else "Unbekannt",
+        "description": description,
+        "amount": str(money(amount)),
+    }
+
+
 def _cost_center_snapshot_data(camp: Camp) -> list[dict[str, Any]]:
     evaluation = get_cost_center_evaluation(camp)
     snapshot: list[dict[str, Any]] = []
@@ -1237,15 +1260,7 @@ def _cost_center_snapshot_data(camp: Camp) -> list[dict[str, Any]]:
                     )
                     for signup in data["income_details"]
                 ],
-                "expense_details": [
-                    {
-                        "paid_date": (expense.paid_on or expense.created_at.date()).isoformat(),
-                        "applicant_name": expense.participant.full_name if expense.participant else "Unbekannt",
-                        "description": expense.description,
-                        "amount": str(money(expense.amount)),
-                    }
-                    for expense in data["expense_details"]
-                ],
+                "expense_details": [_cost_center_expense_snapshot(expense) for expense in data["expense_details"]],
             }
         )
     return snapshot

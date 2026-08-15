@@ -83,7 +83,7 @@ def test_admin_can_create_and_view_settlement_run(client):
 def test_admin_can_create_settlement_run_with_subsidized_charge(client):
     user = SuperUserFactory()
     participant = ParticipantFactory(is_youth_group=True, hilfssatz=Decimal("1.0000"), berufssatz=Decimal("1.0000"))
-    ChargeFactory(participant=participant, foerdersatz=Decimal("0.5000"))
+    ChargeFactory(participant=participant, occurred_on=date(2026, 7, 1), foerdersatz=Decimal("0.5000"))
     client.force_login(user)
 
     response = client.post(reverse("settlement-run-create", args=[participant.camp_id]))
@@ -91,7 +91,15 @@ def test_admin_can_create_settlement_run_with_subsidized_charge(client):
     assert response.status_code == 302
     run = SettlementRun.objects.get()
     assert run.total_subsidy == Decimal("5.00")
-    assert run.cost_center_data
+    subsidy_center = next(item for item in run.cost_center_data if item["code"] == "subsidies")
+    assert subsidy_center["expense_details"] == [
+        {
+            "paid_date": "2026-07-01",
+            "applicant_name": participant.full_name,
+            "description": "Förderung für Kostenposition",
+            "amount": "5.00",
+        }
+    ]
 
 
 @pytest.mark.django_db
