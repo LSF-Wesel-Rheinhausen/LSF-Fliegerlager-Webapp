@@ -32,6 +32,29 @@ from .models import (
 from .permissions import ADMIN_GROUP, EDITOR_GROUP, HUEBERS_GROUP
 
 ZERO = Decimal("0.00")
+
+
+class ExpenseReceiptStorageError(RuntimeError):
+    """Report a receipt storage failure without exposing backend details to users."""
+
+
+def save_expense(expense: Expense) -> None:
+    """Save an expense and normalize failures while persisting a new receipt.
+
+    Raises:
+        ExpenseReceiptStorageError: If the attached, uncommitted receipt cannot
+            be written to the configured storage.
+        OSError: If an unrelated storage-level error occurs.
+    """
+    try:
+        expense.save()
+    except OSError as error:
+        receipt = expense.receipt
+        if receipt and not getattr(receipt, "_committed", True):
+            raise ExpenseReceiptStorageError from error
+        raise
+
+
 MEAL_VARIANT_ORDER = [
     MealSignup.Variant.NORMAL,
     MealSignup.Variant.VEGAN,

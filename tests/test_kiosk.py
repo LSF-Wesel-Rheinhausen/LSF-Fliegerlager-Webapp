@@ -1127,6 +1127,34 @@ def test_kiosk_home_renders_balance_with_correct_signs(kiosk_client):
 
 
 @pytest.mark.django_db
+def test_kiosk_shared_expense_upload_storage_failure_is_a_form_error(kiosk_client, monkeypatch):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    def fail_storage_save(*args, **kwargs):
+        raise OSError("media storage unavailable")
+
+    monkeypatch.setattr("django.core.files.storage.FileSystemStorage.save", fail_storage_save)
+    response = kiosk_client.post(
+        reverse("kiosk-shared-expense-request"),
+        {
+            "category": "Verbrauchsmaterial",
+            "description": "Schrauben",
+            "amount": "12.50",
+            "paid_on": "2026-07-01",
+            "receipt": SimpleUploadedFile("rechnung.pdf", b"%PDF-1.7\ntest receipt", content_type="application/pdf"),
+        },
+    )
+
+    assert response.status_code == 200
+    assert b"Rechnungsbeleg konnte nicht gespeichert werden" in response.content
+    assert not Expense.objects.filter(participant=participant, description="Schrauben").exists()
+
+
+@pytest.mark.django_db
 def test_kiosk_shared_expense_upload_shows_receipt_link_and_serves_file(kiosk_client):
     camp = CampFactory()
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")

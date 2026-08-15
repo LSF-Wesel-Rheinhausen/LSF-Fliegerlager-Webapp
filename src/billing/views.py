@@ -135,6 +135,7 @@ from .roles import (
     user_role,
 )
 from .services import (
+    ExpenseReceiptStorageError,
     admin_interface_contacts,
     calculate_camp_settlements,
     calculate_meal_overview,
@@ -158,6 +159,7 @@ from .services import (
     resolve_meal_price_rule,
     resolve_quick_booking_price_rule,
     restore_booking_from_audit_log,
+    save_expense,
     sync_meal_signup_charges_for_camp,
 )
 
@@ -1792,12 +1794,16 @@ def expense_create(request, camp_id):
     form = ExpenseForm(request.POST or None, request.FILES or None)
     form.fields["participant"].queryset = Participant.objects.filter(camp=camp, archived_at__isnull=True)
     if request.method == "POST" and form.is_valid():
-        with transaction.atomic():
-            expense = form.save(commit=False)
-            expense.camp = camp
-            expense.save()
-        messages.success(request, "Auslage wurde gespeichert.")
-        return redirect("camp-detail", camp_id=camp.pk)
+        try:
+            with transaction.atomic():
+                expense = form.save(commit=False)
+                expense.camp = camp
+                save_expense(expense)
+        except ExpenseReceiptStorageError:
+            form.add_error("receipt", "Der Rechnungsbeleg konnte nicht gespeichert werden.")
+        else:
+            messages.success(request, "Auslage wurde gespeichert.")
+            return redirect("camp-detail", camp_id=camp.pk)
     return render(
         request,
         "billing/form.html",
@@ -4638,19 +4644,23 @@ def kiosk_shared_expense_request(request, kiosk_mode="private"):
 
     form = SharedExpenseRequestForm(request.POST or None, request.FILES or None)
     if request.method == "POST" and form.is_valid():
-        with transaction.atomic():
-            expense = form.save(commit=False)
-            expense.camp = participant.camp
-            expense.participant = participant
-            expense.reimbursable = True
-            expense.save()
-            transaction.on_commit(
-                lambda expense_id=expense.pk: notify_expense_submitted(
-                    Expense.objects.select_related("participant").get(pk=expense_id)
+        try:
+            with transaction.atomic():
+                expense = form.save(commit=False)
+                expense.camp = participant.camp
+                expense.participant = participant
+                expense.reimbursable = True
+                save_expense(expense)
+                transaction.on_commit(
+                    lambda expense_id=expense.pk: notify_expense_submitted(
+                        Expense.objects.select_related("participant").get(pk=expense_id)
+                    )
                 )
-            )
-        messages.success(request, "Antrag auf Gemeinschaftsausgabe eingereicht.")
-        return redirect(_kiosk_route(kiosk_mode, "home"))
+        except ExpenseReceiptStorageError:
+            form.add_error("receipt", "Der Rechnungsbeleg konnte nicht gespeichert werden.")
+        else:
+            messages.success(request, "Antrag auf Gemeinschaftsausgabe eingereicht.")
+            return redirect(_kiosk_route(kiosk_mode, "home"))
 
     return render(
         request,
