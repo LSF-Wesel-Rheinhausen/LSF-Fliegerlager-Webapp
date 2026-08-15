@@ -84,7 +84,8 @@ def _capture_price_rule_mutation_lock_order(monkeypatch) -> list[str]:
 
 
 @pytest.mark.django_db
-def test_updating_meal_price_rules_syncs_existing_meal_signup_and_charge_foerdersatz():
+def test_updating_meal_price_rules_syncs_existing_meal_signup_and_charge_foerdersatz(monkeypatch):
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda: date(2026, 8, 14))
     camp = CampFactory(is_active=True, name="Camp Alpha 2026")
     participant = ParticipantFactory(
         camp=camp, is_youth_group=True, hilfssatz=Decimal("1.0000"), berufssatz=Decimal("1.0000")
@@ -153,7 +154,8 @@ def test_updating_meal_price_rules_syncs_existing_meal_signup_and_charge_foerder
 
 
 @pytest.mark.django_db
-def test_child_family_member_meal_signup_syncs_with_child_price_rule():
+def test_child_family_member_meal_signup_syncs_with_child_price_rule(monkeypatch):
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda: date(2026, 8, 14))
     camp = CampFactory(is_active=True, name="Camp Beta 2026")
     guardian = ParticipantFactory(
         camp=camp, is_youth_group=True, hilfssatz=Decimal("1.0000"), berufssatz=Decimal("1.0000")
@@ -220,7 +222,8 @@ def test_child_family_member_meal_signup_syncs_with_child_price_rule():
 
 
 @pytest.mark.django_db
-def test_pricerule_form_save_triggers_meal_signup_sync():
+def test_pricerule_form_save_triggers_meal_signup_sync(monkeypatch):
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda: date(2026, 8, 14))
     camp = CampFactory(is_active=True, name="Camp Gamma 2026")
     participant = ParticipantFactory(
         camp=camp, is_youth_group=True, hilfssatz=Decimal("1.0000"), berufssatz=Decimal("1.0000")
