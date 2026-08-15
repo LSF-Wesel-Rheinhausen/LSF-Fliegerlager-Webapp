@@ -80,6 +80,21 @@ def test_admin_can_create_and_view_settlement_run(client):
 
 
 @pytest.mark.django_db
+def test_admin_can_create_settlement_run_with_subsidized_charge(client):
+    user = SuperUserFactory()
+    participant = ParticipantFactory(is_youth_group=True, hilfssatz=Decimal("1.0000"), berufssatz=Decimal("1.0000"))
+    ChargeFactory(participant=participant, foerdersatz=Decimal("0.5000"))
+    client.force_login(user)
+
+    response = client.post(reverse("settlement-run-create", args=[participant.camp_id]))
+
+    assert response.status_code == 302
+    run = SettlementRun.objects.get()
+    assert run.total_subsidy == Decimal("5.00")
+    assert run.cost_center_data
+
+
+@pytest.mark.django_db
 def test_camp_detail_labels_automatic_settlement_run_as_system(client):
     user = SuperUserFactory()
     participant = ParticipantFactory()
