@@ -21,7 +21,7 @@
     <div class="toolbar compact-toolbar">
       <div>
         <h2>Nächster Tag: {{ next_order_date|date:"d.m.Y" }}</h2>
-        {% if next_meal_order %}
+        {% if next_meal_order and next_meal_order.is_sent %}
           <p>Bestellung wurde um {{ next_meal_order.ordered_at|date:"d.m.Y H:i" }} Uhr abgeschickt.</p>
         {% else %}
           <p>Prüfe die Abendessen-Zahlen und markiere die Caterer-Bestellung danach als abgeschickt.</p>
@@ -29,9 +29,12 @@
       </div>
       <form method="post" action="{% url 'meal-order-mark-sent' camp.pk %}">
         {% csrf_token %}
-        <button type="submit" {% if next_meal_order %}class="button-secondary"{% endif %}>
-          {% if next_meal_order %}Erneut als bestellt markieren{% else %}Bestellung ist abgeschickt{% endif %}
-        </button>
+        {% if next_meal_order and next_meal_order.is_sent %}
+          <input type="hidden" name="state" value="not_sent">
+          <button type="submit" class="button-secondary">Als nicht bestellt markieren</button>
+        {% else %}
+          <button type="submit">Bestellung als abgeschickt markieren</button>
+        {% endif %}
       </form>
     </div>
     {% if next_order_day %}
@@ -74,6 +77,7 @@
             <th>Vegan Kind</th>
             <th>Aktiv</th>
             <th>Zurückgenommen</th>
+            <th>Status / Steuerung</th>
           </tr>
         </thead>
         <tbody>
@@ -105,10 +109,33 @@
                 {% endfor %}
                 <td><strong>{{ meal.active_total }}</strong></td>
                 <td>{{ meal.retracted_total }}</td>
+                <td>
+                  {% if row.dinner_state.state == "manual_open" %}<span>Manuell geöffnet</span>
+                  {% elif row.dinner_state.state == "manual_closed" %}<span>Manuell geschlossen</span>
+                  {% elif row.dinner_state.state == "automatic_cutoff" %}
+                    <span>Automatisch geschlossen</span>
+                  {% elif row.dinner_state.state == "order_sent" %}
+                    <span>Bestellung abgeschickt</span>
+                  {% else %}<span>Offen</span>{% endif %}
+                  {% if row.day.meal_date > today %}
+                    <form method="post" action="{% url 'meal-booking-override' camp.pk %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="meal_date" value="{{ row.day.meal_date|date:'Y-m-d' }}">
+                      <input type="hidden" name="meal" value="dinner">
+                      {% if row.dinner_state.state == "manual_open" %}
+                        <input type="hidden" name="state" value="closed">
+                        <button type="submit" class="button-secondary">Manuell schließen</button>
+                      {% else %}
+                        <input type="hidden" name="state" value="open">
+                        <button type="submit">Wieder öffnen</button>
+                      {% endif %}
+                    </form>
+                  {% endif %}
+                </td>
               </tr>
             {% endfor %}
           {% empty %}
-            <tr><td colspan="9">Noch keine Lagertage vorhanden.</td></tr>
+            <tr><td colspan="10">Noch keine Lagertage vorhanden.</td></tr>
           {% endfor %}
         </tbody>
         </table>
@@ -172,10 +199,12 @@
           <th>Vegan Kind</th>
           <th>Aktiv</th>
           <th>Zurückgenommen</th>
+          <th>Status / Steuerung</th>
         </tr>
       </thead>
       <tbody>
-        {% for day in meal_overview_days %}
+        {% for row in meal_plan_rows %}
+          {% with day=row.day %}
           <tr>
             <td>
               <button
@@ -190,9 +219,30 @@
             {% for _variant, count in day.breakfast.variant_counts.items %}<td>{{ count }}</td>{% endfor %}
             <td><strong>{{ day.breakfast.active_total }}</strong></td>
             <td>{{ day.breakfast.retracted_total }}</td>
+            <td>
+              {% if row.breakfast_state.state == "manual_open" %}<span>Manuell geöffnet</span>
+              {% elif row.breakfast_state.state == "manual_closed" %}<span>Manuell geschlossen</span>
+              {% elif row.breakfast_state.state == "automatic_cutoff" %}<span>Automatisch geschlossen</span>
+              {% else %}<span>Offen</span>{% endif %}
+              {% if day.meal_date > today %}
+                <form method="post" action="{% url 'meal-booking-override' camp.pk %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="meal_date" value="{{ day.meal_date|date:'Y-m-d' }}">
+                  <input type="hidden" name="meal" value="breakfast">
+                  {% if row.breakfast_state.state == "manual_open" %}
+                    <input type="hidden" name="state" value="closed">
+                    <button type="submit" class="button-secondary">Manuell schließen</button>
+                  {% else %}
+                    <input type="hidden" name="state" value="open">
+                    <button type="submit">Wieder öffnen</button>
+                  {% endif %}
+                </form>
+              {% endif %}
+            </td>
           </tr>
+          {% endwith %}
         {% empty %}
-          <tr><td colspan="7">Noch keine Lagertage vorhanden.</td></tr>
+          <tr><td colspan="8">Noch keine Lagertage vorhanden.</td></tr>
         {% endfor %}
       </tbody>
       </table>

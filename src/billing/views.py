@@ -92,6 +92,7 @@ from .models import (
     Expense,
     FirstAdminBootstrapLock,
     KioskActionAuditLog,
+    MealBookingOverride,
     MealOrder,
     MealPlanEntry,
     MealSignup,
@@ -151,6 +152,7 @@ from .services import (
     kiosk_charge_audit_snapshot,
     kiosk_meal_signup_audit_snapshot,
     lock_camp_price_rules_for_update,
+    meal_booking_state,
     meal_change_lock_message,
     meal_order_for_date,
     next_catering_order_date,
@@ -3542,7 +3544,7 @@ def _kiosk_meal_calendar(camp, participant, meal_signups, meal_targets, meal=Mea
         for entry in MealPlanEntry.objects.filter(camp=camp, meal=meal, meal_date__in=meal_dates)
     }
     sent_order_dates = set(
-        MealOrder.objects.filter(camp=camp, meal_date__in=meal_dates).values_list("meal_date", flat=True)
+        MealOrder.objects.filter(camp=camp, meal_date__in=meal_dates, is_sent=True).values_list("meal_date", flat=True)
     )
     meal_labels = dict(MealSignup.Meal.choices)
     days = []
@@ -3552,10 +3554,11 @@ def _kiosk_meal_calendar(camp, participant, meal_signups, meal_targets, meal=Mea
         active_signups = [signup for signup in scoped if signup.status == MealSignup.Status.ACTIVE]
         retracted_signups = [signup for signup in scoped if signup.status == MealSignup.Status.RETRACTED]
         pre_camp_booking_unlocked = _pre_camp_meal_booking_unlocked(camp, meal, meal_date, sent_order_dates)
-        locked = not pre_camp_booking_unlocked and is_meal_change_locked(
-            camp, meal_date, sent_order_dates=sent_order_dates
-        )
-        lock_message = meal_change_lock_message(camp, meal_date, sent_order_dates=sent_order_dates) if locked else ""
+        state = meal_booking_state(camp, meal_date, sent_order_dates=sent_order_dates, meal=meal)
+        locked = bool(state["locked"])
+        if pre_camp_booking_unlocked and state["state"] in {"open", "automatic_cutoff"}:
+            locked = False
+        lock_message = str(state["message"]) if locked else ""
         if active_signups and retracted_signups:
             status = "mixed"
             status_label = "Teilweise zurückgenommen"
@@ -3586,6 +3589,7 @@ def _kiosk_meal_calendar(camp, participant, meal_signups, meal_targets, meal=Mea
             "retracted_signups": retracted_signups,
             "locked": locked,
             "lock_message": lock_message,
+            "booking_state": state["state"],
             "description": menu_descriptions.get(meal_date, ""),
             "price_rule": price_rule,
             "unit_price": price_rule.unit_price if price_rule else None,
@@ -3599,6 +3603,7 @@ def _kiosk_meal_calendar(camp, participant, meal_signups, meal_targets, meal=Mea
                 "status_label": slot["status_label"],
                 "locked": slot["locked"],
                 "lock_message": slot["lock_message"],
+                "booking_state": slot["booking_state"],
                 "price_rule": slot["price_rule"],
                 "unit_price": slot["unit_price"],
                 "description": slot["description"],
@@ -3652,6 +3657,8 @@ def camp_meal_overview(request, camp_id):
         {
             "day": day,
             "description_field": meal_plan_form[MealPlanForm.field_name(day.meal_date)],
+            "dinner_state": meal_booking_state(camp, day.meal_date, meal=MealSignup.Meal.DINNER),
+            "breakfast_state": meal_booking_state(camp, day.meal_date, meal=MealSignup.Meal.BREAKFAST),
         }
         for day in meal_overview_days
     ]
@@ -3666,6 +3673,7 @@ def camp_meal_overview(request, camp_id):
             "next_order_day": next((day for day in meal_overview_days if day.meal_date == next_order_date), None),
             "next_order_date": next_order_date,
             "next_meal_order": meal_order_for_date(camp, next_order_date),
+            "today": timezone.localdate(),
         },
     )
 
@@ -3673,15 +3681,61 @@ def camp_meal_overview(request, camp_id):
 @meal_manager_required
 @require_POST
 def meal_order_mark_sent(request, camp_id):
-    """Mark tomorrow's catering meal order as sent."""
+    """Set or reverse the sent marker for tomorrow's dinner order."""
     camp = get_object_or_404(Camp, pk=camp_id)
     meal_date = next_catering_order_date()
-    MealOrder.objects.update_or_create(
-        camp=camp,
-        meal_date=meal_date,
-        defaults={"ordered_at": timezone.now(), "ordered_by": request.user},
-    )
-    messages.success(request, f"Essensbestellung für {meal_date:%d.%m.%Y} wurde als abgeschickt markiert.")
+    now = timezone.now()
+    with transaction.atomic():
+        order, _created = MealOrder.objects.select_for_update().get_or_create(
+            camp=camp,
+            meal_date=meal_date,
+            defaults={"ordered_at": now, "ordered_by": request.user, "is_sent": True},
+        )
+        if request.POST.get("state") == "not_sent":
+            order.is_sent = False
+            order.unmarked_at = now
+            order.unmarked_by = request.user
+            order.save(update_fields=["is_sent", "unmarked_at", "unmarked_by", "updated_at"])
+            messages.success(request, f"Essensbestellung für {meal_date:%d.%m.%Y} ist wieder offen.")
+        else:
+            order.is_sent = True
+            order.ordered_at = now
+            order.ordered_by = request.user
+            order.save(update_fields=["is_sent", "ordered_at", "ordered_by", "updated_at"])
+            messages.success(request, f"Essensbestellung für {meal_date:%d.%m.%Y} wurde als abgeschickt markiert.")
+    return redirect("camp-meal-overview", camp_id=camp.pk)
+
+
+@meal_manager_required
+@require_POST
+def meal_booking_override(request, camp_id):
+    """Persist one explicit future-day booking state for a meal manager."""
+    camp = get_object_or_404(Camp, pk=camp_id)
+    try:
+        meal_date = date.fromisoformat(request.POST.get("meal_date", ""))
+        meal = MealSignup.Meal(request.POST.get("meal", ""))
+        state = MealBookingOverride.State(request.POST.get("state", ""))
+    except (TypeError, ValueError):
+        messages.error(request, "Ungültiger Essensstatus.")
+        return redirect("camp-meal-overview", camp_id=camp.pk)
+    if meal_date not in set(camp_meal_dates(camp)) or meal_date <= timezone.localdate():
+        messages.error(request, "Nur zukünftige Lagertage können geändert werden.")
+        return redirect("camp-meal-overview", camp_id=camp.pk)
+    with transaction.atomic():
+        locked_camp = Camp.objects.select_for_update().get(pk=camp.pk)
+        override, _created = MealBookingOverride.objects.select_for_update().get_or_create(
+            camp=locked_camp,
+            meal_date=meal_date,
+            meal=meal,
+            defaults={"state": state, "changed_by": request.user, "changed_at": timezone.now()},
+        )
+        if override.state != state or override.changed_by_id != request.user.pk:
+            override.state = state
+            override.changed_by = request.user
+            override.changed_at = timezone.now()
+            override.save(update_fields=["state", "changed_by", "changed_at", "updated_at"])
+    label = "geöffnet" if state == MealBookingOverride.State.OPEN else "geschlossen"
+    messages.success(request, f"{meal_date:%d.%m.%Y}: {meal.label} wurde manuell {label}.")
     return redirect("camp-meal-overview", camp_id=camp.pk)
 
 
@@ -4194,26 +4248,30 @@ def kiosk_home(request, kiosk_mode="private"):
                 meal_dates = meal_form.cleaned_data["meal_dates"]
                 meal = meal_form.cleaned_data["meal"]
                 sent_order_dates = set(
-                    MealOrder.objects.filter(camp=participant.camp, meal_date__in=meal_dates).values_list(
+                    MealOrder.objects.filter(camp=participant.camp, meal_date__in=meal_dates, is_sent=True).values_list(
                         "meal_date", flat=True
                     )
                 )
                 for meal_date in meal_dates:
-                    if not _pre_camp_meal_booking_unlocked(
-                        participant.camp,
-                        meal,
-                        meal_date,
-                        sent_order_dates,
-                    ) and is_meal_change_locked(
+                    booking_state = meal_booking_state(
                         participant.camp,
                         meal_date,
+                        meal=meal,
                         sent_order_dates=sent_order_dates,
-                    ):
+                    )
+                    pre_camp_unlocked = _pre_camp_meal_booking_unlocked(
+                        participant.camp, meal, meal_date, sent_order_dates
+                    )
+                    state_is_locked = bool(booking_state["locked"])
+                    if pre_camp_unlocked and booking_state["state"] in {"open", "automatic_cutoff"}:
+                        state_is_locked = False
+                    if state_is_locked:
                         meal_form.add_error(
                             None,
                             meal_change_lock_message(
                                 participant.camp,
                                 meal_date,
+                                meal=meal,
                                 sent_order_dates=sent_order_dates,
                             ),
                         )
@@ -4366,8 +4424,8 @@ def kiosk_home(request, kiosk_mode="private"):
                 )
             if signup is None or _target_token_for_signup(signup) not in targets_by_token:
                 messages.error(request, "Essensanmeldung wurde nicht gefunden.")
-            elif is_meal_change_locked(participant.camp, signup.meal_date):
-                messages.error(request, meal_change_lock_message(participant.camp, signup.meal_date))
+            elif is_meal_change_locked(participant.camp, signup.meal_date, meal=signup.meal):
+                messages.error(request, meal_change_lock_message(participant.camp, signup.meal_date, meal=signup.meal))
             elif signup.participant_id != participant.pk and not _matches_kiosk_meal_retraction(
                 request.POST.get("meal_retraction_token", ""),
                 participant,
@@ -4617,7 +4675,8 @@ def kiosk_home(request, kiosk_mode="private"):
         "kiosk_contacts": admin_interface_contacts(User),
         "next_order_date": next_order_date,
         "next_meal_order": next_meal_order,
-        "next_order_locked": bool(next_meal_order) or is_meal_change_locked(participant.camp, next_order_date),
+        "next_order_locked": bool(next_meal_order and next_meal_order.is_sent)
+        or is_meal_change_locked(participant.camp, next_order_date),
         "today": today,
         "tomorrow": tomorrow,
         "participant_expenses": participant.expenses.annotate(

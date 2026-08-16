@@ -413,7 +413,7 @@ def generate_scheduled_notifications(*, now: Any | None = None) -> int:
                 dedupe_key=f"meal:{camp.pk}:{meal_date}:participant:{participant.pk}:deadline",
                 scheduled_for=due_at,
             )
-        if not MealOrder.objects.filter(camp=camp, meal_date=meal_date).exists():
+        if not MealOrder.objects.filter(camp=camp, meal_date=meal_date, is_sent=True).exists():
             for user in _administrative_users(include_meal_managers=True):
                 created += queue_user_notification(
                     user,
