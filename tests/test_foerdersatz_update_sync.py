@@ -280,7 +280,8 @@ def test_pricerule_form_save_triggers_meal_signup_sync(monkeypatch):
 
 
 @pytest.mark.django_db
-def test_date_specific_meal_price_rule_takes_precedence_in_sync():
+def test_date_specific_meal_price_rule_takes_precedence_in_sync(monkeypatch):
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda: date(2026, 8, 14))
     camp = CampFactory(is_active=True, name="Camp Delta 2026")
     participant = ParticipantFactory(
         camp=camp, is_youth_group=True, hilfssatz=Decimal("1.0000"), berufssatz=Decimal("1.0000")
@@ -338,7 +339,8 @@ def test_date_specific_meal_price_rule_takes_precedence_in_sync():
 
 
 @pytest.mark.django_db
-def test_sync_ignores_archived_meal_price_rules():
+def test_sync_ignores_archived_meal_price_rules(monkeypatch):
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda: date(2026, 8, 14))
     camp = CampFactory(is_active=True)
     signup, charge = _create_meal_signup_with_charge(camp, meal_date=date(2026, 8, 15))
     _create_dinner_rule(camp, foerdersatz=Decimal("0.2000"), is_default=True)
@@ -449,6 +451,7 @@ def test_admin_rule_resync_updates_snapshotted_sources_without_mutating_first_sn
 
 @pytest.mark.django_db
 def test_sync_rolls_back_signup_when_charge_update_fails(monkeypatch):
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda: date(2026, 8, 14))
     camp = CampFactory(is_active=True)
     signup, charge = _create_meal_signup_with_charge(camp, meal_date=date(2026, 8, 15))
     _create_dinner_rule(camp, foerdersatz=Decimal("0.8000"), is_default=True, unit_price=Decimal("20.00"))
@@ -471,7 +474,8 @@ def test_sync_rolls_back_signup_when_charge_update_fails(monkeypatch):
 
 
 @pytest.mark.django_db
-def test_sync_is_idempotent_for_already_synchronized_future_signup():
+def test_sync_is_idempotent_for_already_synchronized_future_signup(monkeypatch):
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda: date(2026, 8, 14))
     camp = CampFactory(is_active=True)
     signup, charge = _create_meal_signup_with_charge(camp, meal_date=date(2026, 8, 15))
     _create_dinner_rule(camp, foerdersatz=Decimal("0.8000"), is_default=True, unit_price=Decimal("20.00"))
