@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 import json
 import subprocess
 from pathlib import Path
@@ -70,5 +71,55 @@ def build_manifest() -> list[dict[str, str]]:
     return sorted(entries, key=lambda entry: (int(entry["version"]), entry["path"]))
 
 
+def _render(entries: list[dict[str, str]]) -> str:
+    return json.dumps(entries, ensure_ascii=False, separators=(",", ":")) + "\n"
+
+
+def _truncate_utf8(value: str, max_bytes: int) -> str:
+    """Return the longest prefix of value that fits in max_bytes when encoded."""
+    return value.encode("utf-8")[:max_bytes].decode("utf-8", errors="ignore")
+
+
+def _fit_oversized_entry(entry: dict[str, str], max_bytes: int) -> dict[str, str]:
+    """Truncate an oversized entry body without splitting a UTF-8 code point."""
+    candidate = dict(entry)
+    body = candidate["body"]
+    low, high = 0, len(body.encode("utf-8"))
+    while low < high:
+        body_bytes = (low + high + 1) // 2
+        candidate["body"] = _truncate_utf8(body, body_bytes)
+        if len(_render([candidate]).encode("utf-8")) <= max_bytes:
+            low = body_bytes
+        else:
+            high = body_bytes - 1
+
+    candidate["body"] = _truncate_utf8(body, low)
+    if len(_render([candidate]).encode("utf-8")) > max_bytes:
+        candidate["body"] = ""
+    if len(_render([candidate]).encode("utf-8")) > max_bytes:
+        raise ValueError("max_bytes is too small for the changelog entry metadata")
+    return candidate
+
+
+def render_bounded_manifest(max_bytes: int) -> str:
+    """Render the newest changelog entries within an inclusive UTF-8 byte budget."""
+    if max_bytes <= 0:
+        raise ValueError("max_bytes must be positive")
+
+    selected: list[dict[str, str]] = []
+    for entry in reversed(build_manifest()):
+        candidate = [entry, *selected]
+        if len(_render(candidate).encode("utf-8")) <= max_bytes:
+            selected = candidate
+        elif not selected:
+            selected = [_fit_oversized_entry(entry, max_bytes)]
+
+    return _render(selected)
+
+
 if __name__ == "__main__":
-    print(json.dumps(build_manifest(), ensure_ascii=False, separators=(",", ":")))
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--max-bytes", type=int)
+    args = parser.parse_args()
+    output = render_bounded_manifest(args.max_bytes) if args.max_bytes is not None else _render(build_manifest())
+    print(output, end="")
