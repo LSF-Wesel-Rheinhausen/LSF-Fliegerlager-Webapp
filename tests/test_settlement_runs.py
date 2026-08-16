@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from io import BytesIO
 
@@ -10,7 +10,7 @@ from openpyxl import load_workbook
 
 from billing.models import Charge, Expense, MealSignup, Settlement, SettlementRun
 from billing.permissions import EDITOR_GROUP
-from billing.services import create_settlement_run
+from billing.services import _cost_center_expense_snapshot, create_settlement_run
 from tests.factories import ChargeFactory, ExpenseFactory, ParticipantFactory, SuperUserFactory, UserFactory
 
 
@@ -77,6 +77,46 @@ def test_admin_can_create_and_view_settlement_run(client):
     assert detail.status_code == 200
     assert b"V1" in detail.content
     assert b"Manuell" in detail.content
+
+
+@pytest.mark.django_db
+def test_admin_can_create_settlement_run_with_subsidized_charge(client):
+    user = SuperUserFactory()
+    participant = ParticipantFactory(is_youth_group=True, hilfssatz=Decimal("1.0000"), berufssatz=Decimal("1.0000"))
+    ChargeFactory(participant=participant, occurred_on=date(2026, 7, 1), foerdersatz=Decimal("0.5000"))
+    client.force_login(user)
+
+    response = client.post(reverse("settlement-run-create", args=[participant.camp_id]))
+
+    assert response.status_code == 302
+    run = SettlementRun.objects.get()
+    assert run.total_subsidy == Decimal("5.00")
+    subsidy_center = next(item for item in run.cost_center_data if item["code"] == "subsidies")
+    assert subsidy_center["expense_details"] == [
+        {
+            "paid_date": "2026-07-01",
+            "applicant_name": participant.full_name,
+            "description": "Förderung für Kostenposition",
+            "amount": "5.00",
+        }
+    ]
+
+
+def test_cost_center_expense_snapshot_uses_created_at_when_unpaid():
+    assert _cost_center_expense_snapshot(
+        {
+            "paid_on": None,
+            "created_at": datetime(2026, 7, 2, 12, 30),
+            "participant": None,
+            "description": "Förderung",
+            "amount": Decimal("5.00"),
+        }
+    ) == {
+        "paid_date": "2026-07-02",
+        "applicant_name": "Unbekannt",
+        "description": "Förderung",
+        "amount": "5.00",
+    }
 
 
 @pytest.mark.django_db
