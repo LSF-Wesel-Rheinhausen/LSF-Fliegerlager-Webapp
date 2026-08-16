@@ -173,8 +173,15 @@ test("Admin meal overview shows populated details and contains long names on mob
     await page.setViewportSize({ width: 390, height: 844 });
     await page.emulateMedia({ colorScheme: "dark" });
 
+    const reopenButton = page.getByRole("button", { name: "Wieder öffnen" }).first();
+    await expect(reopenButton).toBeVisible();
+    await reopenButton.focus();
+    await expect(reopenButton).toBeFocused();
+
     const breakfast = page.locator('[data-meal-section="breakfast"]');
-    const breakfastDay = breakfast.locator("tbody tr:has(td strong:text-is('1'))").getByRole("button");
+    const breakfastDay = breakfast
+      .locator("tbody tr:has(td strong:text-is('1'))")
+      .getByRole("button", { name: /^\d{2}\.\d{2}\.\d{4}$/ });
     await breakfastDay.click();
     const dialog = page.locator("dialog:visible").last();
     await expect(dialog).toBeVisible();
@@ -186,7 +193,9 @@ test("Admin meal overview shows populated details and contains long names on mob
     await expect(breakfastDay).toBeFocused();
 
     const dinner = page.locator('[data-meal-section="dinner"]');
-    const dinnerDay = dinner.locator("tbody tr:has(td strong:text-is('1'))").getByRole("button");
+    const dinnerDay = dinner
+      .locator("tbody tr:has(td strong:text-is('1'))")
+      .getByRole("button", { name: /^\d{2}\.\d{2}\.\d{4}$/ });
     await dinnerDay.click();
     const dinnerDialog = page.locator("dialog:visible").last();
     await expect(dinnerDialog).toContainText(`Alexandra ${longName}`);

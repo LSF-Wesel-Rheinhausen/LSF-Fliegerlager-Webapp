@@ -1221,6 +1221,15 @@ class MealOrder(TimeStampedModel):
         blank=True,
         related_name="sent_meal_orders",
     )
+    is_sent = models.BooleanField(default=True)
+    unmarked_at = models.DateTimeField(null=True, blank=True)
+    unmarked_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="unmarked_meal_orders",
+    )
 
     class Meta:
         ordering = ["-meal_date"]
@@ -1230,6 +1239,39 @@ class MealOrder(TimeStampedModel):
 
     def __str__(self):
         return f"{self.camp}: Bestellung {self.meal_date}"
+
+
+class MealBookingOverride(TimeStampedModel):
+    """Persist the explicit booking state for one camp day and meal type."""
+
+    class State(models.TextChoices):
+        OPEN = "open", "Offen"
+        CLOSED = "closed", "Geschlossen"
+
+    camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="meal_booking_overrides")
+    meal_date = models.DateField()
+    meal = models.CharField(max_length=20, choices=MealSignup.Meal.choices)
+    state = models.CharField(max_length=10, choices=State.choices)
+    changed_at = models.DateTimeField(default=timezone.now)
+    changed_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="meal_booking_overrides",
+    )
+
+    class Meta:
+        ordering = ["meal_date", "meal"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["camp", "meal_date", "meal"],
+                name="unique_meal_booking_override",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.camp}: {self.meal_date} {self.get_meal_display()} ({self.get_state_display()})"
 
 
 class MealPlanEntry(TimeStampedModel):

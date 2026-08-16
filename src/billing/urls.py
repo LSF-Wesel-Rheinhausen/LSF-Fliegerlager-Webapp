@@ -122,6 +122,11 @@ urlpatterns = [
     path("camps/<int:camp_id>/meals/", views.camp_meal_overview, name="camp-meal-overview"),
     path("camps/<int:camp_id>/meals/cutoff/", views.meal_cutoff_edit, name="meal-cutoff-edit"),
     path("camps/<int:camp_id>/meals/order-sent/", views.meal_order_mark_sent, name="meal-order-mark-sent"),
+    path(
+        "camps/<int:camp_id>/meals/booking-state/",
+        views.meal_booking_override,
+        name="meal-booking-override",
+    ),
     path("camps/<int:camp_id>/participants/new/", views.participant_create, name="participant-create"),
     path("participants/<int:participant_id>/", views.participant_detail, name="participant-detail"),
     path("participants/<int:participant_id>/edit/", views.participant_edit, name="participant-edit"),

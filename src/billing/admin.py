@@ -17,6 +17,7 @@ from .models import (
     DrinkEntry,
     Expense,
     KioskActionAuditLog,
+    MealBookingOverride,
     MealOrder,
     MealPlanEntry,
     MealSignup,
@@ -342,9 +343,16 @@ class MealSignupAdmin(admin.ModelAdmin):
 
 @admin.register(MealOrder)
 class MealOrderAdmin(admin.ModelAdmin):
-    list_display = ("camp", "meal_date", "ordered_at", "ordered_by")
+    list_display = ("camp", "meal_date", "is_sent", "ordered_at", "ordered_by", "unmarked_at", "unmarked_by")
     list_filter = ("camp", "meal_date", "ordered_at")
     search_fields = ("camp__name", "ordered_by__username", "ordered_by__email")
+
+
+@admin.register(MealBookingOverride)
+class MealBookingOverrideAdmin(admin.ModelAdmin):
+    list_display = ("camp", "meal_date", "meal", "state", "changed_at", "changed_by")
+    list_filter = ("camp", "meal", "state", "meal_date")
+    search_fields = ("camp__name", "changed_by__username", "changed_by__email")
 
 
 @admin.register(MealPlanEntry)
