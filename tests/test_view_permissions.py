@@ -419,6 +419,35 @@ def test_editor_post_views_allow_editor_and_admin(
 
 
 @pytest.mark.django_db
+def test_expense_create_storage_failure_is_a_form_error(client, editor_user, permission_dataset, monkeypatch):
+    client.force_login(editor_user)
+
+    def fail_storage_save(*args, **kwargs):
+        raise OSError("media storage unavailable")
+
+    monkeypatch.setattr("django.core.files.storage.FileSystemStorage.save", fail_storage_save)
+    response = client.post(
+        reverse("expense-create", args=[permission_dataset["camp"].pk]),
+        {
+            "participant": permission_dataset["participant"].pk,
+            "category": "Verbrauchsmaterial",
+            "description": "Nicht gespeicherter Beleg",
+            "amount": "12.50",
+            "receipt": SimpleUploadedFile(
+                "rechnung.pdf",
+                b"%PDF-1.7\ntest receipt",
+                content_type="application/pdf",
+            ),
+            "reimbursable": "on",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Rechnungsbeleg konnte nicht gespeichert werden" in response.content.decode()
+    assert not Expense.objects.filter(description="Nicht gespeicherter Beleg").exists()
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize(
     ("route_name", "arg_getter", "payload", "count_model"),
     [
