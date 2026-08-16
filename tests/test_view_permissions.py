@@ -123,14 +123,32 @@ def test_admin_only_get_views_allow_admin(client, admin_user, permission_dataset
 
 
 @pytest.mark.django_db
-def test_expense_receipt_download_allows_editor(client, editor_user, permission_dataset):
+@pytest.mark.parametrize(
+    ("filename", "content_type", "expected_disposition"),
+    [
+        ("rechnung.pdf", "application/pdf", "inline"),
+        ("rechnung.png", "image/png", "inline"),
+        ("rechnung.jpg", "image/jpeg", "inline"),
+        ("rechnung.heic", "image/heic", "inline"),
+        ("rechnung.legacy", "application/octet-stream", "attachment"),
+    ],
+)
+def test_expense_receipt_download_sets_safe_preview_headers(
+    client,
+    editor_user,
+    permission_dataset,
+    filename,
+    content_type,
+    expected_disposition,
+):
+    receipt_content = b"editor receipt"
     expense = Expense.objects.create(
         camp=permission_dataset["camp"],
         participant=permission_dataset["participant"],
         category="Einkauf",
         description="Belegtest",
         amount=Decimal("7.50"),
-        receipt=SimpleUploadedFile("rechnung.pdf", b"editor receipt", content_type="application/pdf"),
+        receipt=SimpleUploadedFile(filename, receipt_content, content_type=content_type),
     )
     client.force_login(editor_user)
 
@@ -138,8 +156,9 @@ def test_expense_receipt_download_allows_editor(client, editor_user, permission_
         response = client.get(reverse("expense-receipt", args=[expense.pk]))
 
         assert response.status_code == 200
-        assert response["Content-Disposition"].startswith('attachment; filename="rechnung')
-        assert b"".join(response.streaming_content) == b"editor receipt"
+        assert response["Content-Disposition"].startswith(f'{expected_disposition}; filename="rechnung')
+        assert response["Content-Type"] == content_type
+        assert b"".join(response.streaming_content) == receipt_content
     finally:
         expense.receipt.delete(save=False)
 

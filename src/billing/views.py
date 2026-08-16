@@ -1840,10 +1840,25 @@ def expense_receipt_download(request: HttpRequest, expense_id: int) -> FileRespo
         )
         raise Http404("Rechnungsbeleg wurde nicht gefunden.")
 
+    receipt_filename = receipt_name.rsplit("/", 1)[-1]
+    preview_content_types = {
+        ".pdf": "application/pdf",
+        ".jpeg": "image/jpeg",
+        ".jpg": "image/jpeg",
+        ".png": "image/png",
+        ".heic": "image/heic",
+    }
+    content_type = preview_content_types.get(
+        "." + receipt_filename.rsplit(".", 1)[-1].lower() if "." in receipt_filename else "",
+        "application/octet-stream",
+    )
+    as_attachment = content_type == "application/octet-stream"
+
     return FileResponse(
         expense.receipt.open("rb"),
-        as_attachment=True,
-        filename=receipt_name.rsplit("/", 1)[-1],
+        as_attachment=as_attachment,
+        content_type=content_type,
+        filename=receipt_filename,
     )
 
 
