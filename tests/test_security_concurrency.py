@@ -1,14 +1,27 @@
 from concurrent.futures import ThreadPoolExecutor
-from threading import Barrier, Lock
+from datetime import timedelta
+from decimal import Decimal
+from threading import Barrier, Event, Lock
 
 import pytest
 from django.contrib.auth.models import User
-from django.db import close_old_connections, connection
+from django.db import close_old_connections, connection, connections
 from django.test import Client
 from django.urls import reverse
+from django.utils import timezone
 
-from billing.models import FirstAdminBootstrapLock, ParticipantFamilyMember, ParticipantFamilyMemberPin, ParticipantPin
-from tests.factories import ParticipantFactory
+from billing.kiosk_access import KIOSK_PARTICIPANT_SESSION_KEY
+from billing.models import (
+    Charge,
+    FirstAdminBootstrapLock,
+    MealBookingOverride,
+    MealSignup,
+    ParticipantFamilyMember,
+    ParticipantFamilyMemberPin,
+    ParticipantPin,
+    PriceRule,
+)
+from tests.factories import CampFactory, ParticipantFactory, PriceRuleFactory
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -104,3 +117,165 @@ def test_pin_failure_counter_is_atomic_across_postgresql_connections(pin_kind):
     pin.refresh_from_db()
     assert results == [False, False]
     assert pin.failed_attempts == 2
+
+
+def test_manual_close_committed_after_initial_read_blocks_concurrent_meal_booking(kiosk_client, monkeypatch):
+    _require_postgresql()
+    today = timezone.localdate()
+    meal_date = today + timedelta(days=2)
+    camp = CampFactory(starts_on=today, ends_on=meal_date)
+    participant = ParticipantFactory(camp=camp)
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        is_default=True,
+        applies_to_children=False,
+        applies_to_adults=True,
+        unit_price=Decimal("7.00"),
+    )
+    manager = User.objects.create_superuser(username="meal-manager-booking", password="test-password")
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    initial_state_read = Event()
+    continue_booking = Event()
+    state_lock = Lock()
+    state_calls = 0
+    from billing import views
+
+    real_meal_booking_state = views.meal_booking_state
+
+    def pause_after_initial_state_read(*args, **kwargs):
+        nonlocal state_calls
+        state = real_meal_booking_state(*args, **kwargs)
+        with state_lock:
+            state_calls += 1
+            is_initial_read = state_calls == 1
+        if is_initial_read:
+            initial_state_read.set()
+            assert continue_booking.wait(timeout=10)
+        return state
+
+    monkeypatch.setattr(views, "meal_booking_state", pause_after_initial_state_read)
+
+    def submit_booking() -> int:
+        close_old_connections()
+        try:
+            return kiosk_client.post(
+                reverse("kiosk-home"),
+                {
+                    "action": "meal",
+                    "meal-meal_dates": [meal_date.isoformat()],
+                    "meal-meal": MealSignup.Meal.DINNER,
+                    "meal-variant": MealSignup.Variant.NORMAL,
+                    "meal-target": [f"participant-{participant.pk}"],
+                    f"meal-variant-participant-{participant.pk}": MealSignup.Variant.NORMAL,
+                },
+            ).status_code
+        finally:
+            connections.close_all()
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        booking_future = executor.submit(submit_booking)
+        assert initial_state_read.wait(timeout=10)
+        manager_client = Client()
+        manager_client.force_login(manager)
+        try:
+            response = manager_client.post(
+                reverse("meal-booking-override", args=[camp.pk]),
+                {
+                    "meal_date": meal_date.isoformat(),
+                    "meal": MealSignup.Meal.DINNER,
+                    "state": MealBookingOverride.State.CLOSED,
+                },
+            )
+        finally:
+            continue_booking.set()
+        booking_status = booking_future.result(timeout=10)
+
+    assert response.status_code == 302
+    assert booking_status == 302
+    assert MealBookingOverride.objects.filter(
+        camp=camp,
+        meal_date=meal_date,
+        meal=MealSignup.Meal.DINNER,
+        state=MealBookingOverride.State.CLOSED,
+    ).exists()
+    assert not MealSignup.objects.filter(participant=participant, meal_date=meal_date).exists()
+    assert not Charge.objects.filter(participant=participant, occurred_on=meal_date).exists()
+
+
+def test_manual_close_committed_after_initial_read_blocks_concurrent_meal_retraction(kiosk_client, monkeypatch):
+    _require_postgresql()
+    today = timezone.localdate()
+    meal_date = today + timedelta(days=2)
+    camp = CampFactory(starts_on=today, ends_on=meal_date)
+    participant = ParticipantFactory(camp=camp)
+    charge = Charge.objects.create(
+        participant=participant,
+        kind=Charge.Kind.FOOD,
+        description="Abendessen",
+        quantity=1,
+        unit_price=Decimal("7.00"),
+        occurred_on=meal_date,
+    )
+    signup = MealSignup.objects.create(
+        participant=participant,
+        meal_date=meal_date,
+        meal=MealSignup.Meal.DINNER,
+        variant=MealSignup.Variant.NORMAL,
+        charge=charge,
+    )
+    manager = User.objects.create_superuser(username="meal-manager-retraction", password="test-password")
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    initial_state_read = Event()
+    continue_retraction = Event()
+    from billing import services
+
+    real_meal_booking_state = services.meal_booking_state
+
+    def pause_after_initial_state_read(*args, **kwargs):
+        state = real_meal_booking_state(*args, **kwargs)
+        initial_state_read.set()
+        assert continue_retraction.wait(timeout=10)
+        return state
+
+    monkeypatch.setattr(services, "meal_booking_state", pause_after_initial_state_read)
+
+    def submit_retraction() -> int:
+        close_old_connections()
+        try:
+            return kiosk_client.post(
+                reverse("kiosk-home"),
+                {"action": "meal_retract", "meal_signup_id": signup.pk},
+            ).status_code
+        finally:
+            connections.close_all()
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        retraction_future = executor.submit(submit_retraction)
+        assert initial_state_read.wait(timeout=10)
+        manager_client = Client()
+        manager_client.force_login(manager)
+        try:
+            response = manager_client.post(
+                reverse("meal-booking-override", args=[camp.pk]),
+                {
+                    "meal_date": meal_date.isoformat(),
+                    "meal": MealSignup.Meal.DINNER,
+                    "state": MealBookingOverride.State.CLOSED,
+                },
+            )
+        finally:
+            continue_retraction.set()
+        retraction_status = retraction_future.result(timeout=10)
+
+    signup.refresh_from_db()
+    charge.refresh_from_db()
+    assert response.status_code == 302
+    assert retraction_status == 200
+    assert signup.status == MealSignup.Status.ACTIVE
+    assert charge.deleted_at is None

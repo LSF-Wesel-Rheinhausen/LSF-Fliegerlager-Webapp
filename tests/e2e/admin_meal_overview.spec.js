@@ -4,19 +4,43 @@ const { isBenignPageRequestFailure, requestFailureDetails } = require("./request
 
 test.use({ serviceWorkers: "block" });
 
+const berlinDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/Berlin",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+function berlinDateParts(date) {
+  return Object.fromEntries(
+    berlinDateFormatter
+      .formatToParts(date)
+      .filter(({ type }) => type !== "literal")
+      .map(({ type, value }) => [type, value]),
+  );
+}
+
 function addDays(date, days) {
-  const result = new Date(date);
-  result.setDate(result.getDate() + days);
-  return result;
+  const { year, month, day } = berlinDateParts(date);
+  return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day) + days, 12));
 }
 
 function dateInputValue(date) {
-  return date.toISOString().slice(0, 10);
+  const { year, month, day } = berlinDateParts(date);
+  return `${year}-${month}-${day}`;
 }
 
 function germanDateValue(date) {
-  return `${String(date.getDate()).padStart(2, "0")}.${String(date.getMonth() + 1).padStart(2, "0")}.${date.getFullYear()}`;
+  const { year, month, day } = berlinDateParts(date);
+  return `${day}.${month}.${year}`;
 }
+
+test("date helpers use the Europe/Berlin calendar date", () => {
+  const instant = new Date("2026-08-17T22:30:00Z");
+
+  expect(dateInputValue(instant)).toBe("2026-08-18");
+  expect(germanDateValue(instant)).toBe("18.08.2026");
+});
 
 async function loginAsAdmin(page) {
   await page.goto("/login/");

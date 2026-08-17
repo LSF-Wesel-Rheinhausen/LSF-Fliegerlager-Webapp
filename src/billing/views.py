@@ -3406,6 +3406,12 @@ def _retract_meal_signup(
         or locked_signup.family_member_id != (affected_family_member.pk if affected_family_member is not None else None)
     ):
         return False
+    if meal_booking_state(
+        locked_camp,
+        locked_signup.meal_date,
+        meal=locked_signup.meal,
+    )["locked"]:
+        return False
     locked_charge = None
     if locked_signup.charge_id is not None:
         locked_charge = Charge.objects.select_for_update(of=("self",)).filter(pk=locked_signup.charge_id).first()
@@ -4336,6 +4342,15 @@ def kiosk_home(request, kiosk_mode="private"):
                                 camp=participant.camp,
                             )
                         )
+                        for meal_date in meal_dates:
+                            locked_booking_state = meal_booking_state(
+                                _locked_camp,
+                                meal_date,
+                                meal=meal,
+                            )
+                            if locked_booking_state["locked"]:
+                                messages.error(request, locked_booking_state["message"])
+                                return redirect(f"{reverse(_kiosk_route(kiosk_mode, 'home'))}?dialog=meal-calendar")
                         if (
                             set(locked_participants) != expected_participant_ids
                             or set(locked_family_members) != expected_family_member_ids

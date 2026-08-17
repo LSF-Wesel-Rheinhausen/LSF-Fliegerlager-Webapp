@@ -1,15 +1,17 @@
 from datetime import date, datetime, time
+from decimal import Decimal
 
 import pytest
+from django.db.models import QuerySet
 from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
 
 from billing.kiosk_access import KIOSK_PARTICIPANT_SESSION_KEY
-from billing.models import MealBookingOverride, MealSignup
+from billing.models import Camp, Charge, MealBookingOverride, MealSignup, PriceRule
 from billing.permissions import HUEBERS_GROUP
 from billing.services import meal_booking_state
-from tests.factories import CampFactory, GroupFactory, ParticipantFactory, UserFactory
+from tests.factories import CampFactory, GroupFactory, ParticipantFactory, PriceRuleFactory, UserFactory
 
 
 @pytest.mark.django_db
@@ -169,3 +171,123 @@ def test_repeated_override_post_is_idempotent(client, monkeypatch):
     assert client.post(url, payload).status_code == 302
 
     assert MealBookingOverride.objects.filter(camp=camp, meal="dinner").count() == 1
+
+
+@pytest.mark.django_db
+def test_booking_rechecks_manual_close_after_acquiring_camp_lock(kiosk_client, monkeypatch):
+    fixed_now = timezone.make_aware(datetime(2026, 6, 30, 10, 0))
+    monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
+    first_meal_date = date(2026, 7, 1)
+    meal_date = date(2026, 7, 2)
+    camp = CampFactory(starts_on=fixed_now.date(), ends_on=meal_date)
+    participant = ParticipantFactory(camp=camp)
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        is_default=True,
+        applies_to_children=False,
+        applies_to_adults=True,
+        unit_price=Decimal("7.00"),
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    original_fetch_all = QuerySet._fetch_all
+    override_injected = False
+
+    def close_booking_before_camp_lock(queryset):
+        nonlocal override_injected
+        was_unfetched = queryset._result_cache is None
+        if was_unfetched and not override_injected and queryset.query.select_for_update and queryset.model is Camp:
+            override_injected = True
+            MealBookingOverride.objects.create(
+                camp=camp,
+                meal_date=meal_date,
+                meal=MealSignup.Meal.DINNER,
+                state=MealBookingOverride.State.CLOSED,
+            )
+        original_fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", close_booking_before_camp_lock)
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "meal",
+            "meal-meal_dates": [first_meal_date.isoformat(), meal_date.isoformat()],
+            "meal-meal": MealSignup.Meal.DINNER,
+            "meal-variant": MealSignup.Variant.NORMAL,
+            "meal-target": [f"participant-{participant.pk}"],
+            f"meal-variant-participant-{participant.pk}": MealSignup.Variant.NORMAL,
+        },
+    )
+
+    assert override_injected is True
+    assert response.status_code == 302
+    assert not MealSignup.objects.filter(
+        participant=participant,
+        meal_date__in=[first_meal_date, meal_date],
+    ).exists()
+    assert not Charge.objects.filter(
+        participant=participant,
+        occurred_on__in=[first_meal_date, meal_date],
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_retraction_rechecks_manual_close_after_acquiring_camp_lock(kiosk_client, monkeypatch):
+    fixed_now = timezone.make_aware(datetime(2026, 6, 30, 10, 0))
+    monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
+    meal_date = date(2026, 7, 2)
+    camp = CampFactory(starts_on=fixed_now.date(), ends_on=meal_date)
+    participant = ParticipantFactory(camp=camp)
+    charge = Charge.objects.create(
+        participant=participant,
+        kind=Charge.Kind.FOOD,
+        description="Abendessen",
+        quantity=1,
+        unit_price=Decimal("7.00"),
+        occurred_on=meal_date,
+    )
+    signup = MealSignup.objects.create(
+        participant=participant,
+        meal_date=meal_date,
+        meal=MealSignup.Meal.DINNER,
+        variant=MealSignup.Variant.NORMAL,
+        charge=charge,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    original_fetch_all = QuerySet._fetch_all
+    override_injected = False
+
+    def close_booking_before_camp_lock(queryset):
+        nonlocal override_injected
+        was_unfetched = queryset._result_cache is None
+        if was_unfetched and not override_injected and queryset.query.select_for_update and queryset.model is Camp:
+            override_injected = True
+            MealBookingOverride.objects.create(
+                camp=camp,
+                meal_date=meal_date,
+                meal=MealSignup.Meal.DINNER,
+                state=MealBookingOverride.State.CLOSED,
+            )
+        original_fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", close_booking_before_camp_lock)
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {"action": "meal_retract", "meal_signup_id": signup.pk},
+    )
+
+    signup.refresh_from_db()
+    charge.refresh_from_db()
+    assert override_injected is True
+    assert response.status_code == 200
+    assert signup.status == MealSignup.Status.ACTIVE
+    assert charge.deleted_at is None
