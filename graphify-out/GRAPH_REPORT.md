@@ -5,12 +5,12 @@
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2558 nodes · 6119 edges · 381 communities (148 shown, 233 thin omitted)
+- 2554 nodes · 6119 edges · 377 communities (148 shown, 229 thin omitted)
 - Extraction: 74% EXTRACTED · 26% INFERRED · 0% AMBIGUOUS · INFERRED: 1572 edges (avg confidence: 0.56)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `3369735b`
+- Built from commit: `de839b73`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -266,12 +266,8 @@
 - skillPath
 - source
 - sourceType
-- computedHash
 - Community 287
-- skillPath
 - Community 289
-- source
-- sourceType
 - skills
 - agent-browser
 - cavecrew
@@ -387,7 +383,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (381 total, 233 thin omitted)
+## Communities (377 total, 229 thin omitted)
 
 ### Community 0 - "Django Admin Integration"
 Cohesion: 0.04
@@ -834,9 +830,9 @@ Cohesion: 0.06
 Nodes (42): Command, BaseCommand, Generate a VAPID key pair suitable for environment configuration., AutheliaSSOMiddleware, HttpRequest, HttpResponse, Create a Django session from a trusted Authelia email header when enabled., Attach application-wide browser security headers to dynamic and static responses (+34 more)
 
 ## Knowledge Gaps
-- **468 isolated node(s):** `app-entrypoint.sh script`, `name`, `private`, `start:e2e`, `test:e2e` (+463 more)
+- **464 isolated node(s):** `app-entrypoint.sh script`, `name`, `private`, `start:e2e`, `test:e2e` (+459 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **233 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **229 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_

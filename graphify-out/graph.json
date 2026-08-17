@@ -24786,42 +24786,6 @@
       "id": "skills_lock_skills_caveman_commit"
     },
     {
-      "label": "source",
-      "file_type": "code",
-      "source_file": "skills-lock.json",
-      "source_location": "L23",
-      "community": 290,
-      "norm_label": "source",
-      "id": "skills_lock_caveman_commit_source"
-    },
-    {
-      "label": "sourceType",
-      "file_type": "code",
-      "source_file": "skills-lock.json",
-      "source_location": "L24",
-      "community": 291,
-      "norm_label": "sourcetype",
-      "id": "skills_lock_caveman_commit_sourcetype"
-    },
-    {
-      "label": "skillPath",
-      "file_type": "code",
-      "source_file": "skills-lock.json",
-      "source_location": "L25",
-      "community": 288,
-      "norm_label": "skillpath",
-      "id": "skills_lock_caveman_commit_skillpath"
-    },
-    {
-      "label": "computedHash",
-      "file_type": "code",
-      "source_file": "skills-lock.json",
-      "source_location": "L26",
-      "community": 286,
-      "norm_label": "computedhash",
-      "id": "skills_lock_caveman_commit_computedhash"
-    },
-    {
       "label": "caveman-compress",
       "file_type": "code",
       "source_file": "skills-lock.json",
@@ -89527,5 +89491,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "3369735bbc697c9d224e9d11c3151d5dc7468e41"
+  "built_at_commit": "de839b73542a8fce443ebd80b074083e4bd1c029"
 }
