@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-17T09:35:28.211307+00:00",
+  "generated_at": "2026-08-17T09:47:26.186108+00:00",
   "nodes": {
     "src_billing_views_kiosk_context": {
       "code_fingerprint": "9a66aa113be5ef8c3a235878a4f9e898a672d2bd5f5fad973e3b242c0f51f28a",
@@ -12,7 +12,7 @@
           "q": "timer läuft im public login screen auch"
         }
       ],
-      "score": 0.621182492,
+      "score": 0.621063237,
       "source_file": "src/billing/views.py",
       "status": "tentative",
       "uses": 1
@@ -28,7 +28,7 @@
           "q": "timer läuft im public login screen auch"
         }
       ],
-      "score": 0.621182492,
+      "score": 0.621063237,
       "source_file": "src/billing/views.py",
       "status": "tentative",
       "uses": 1
