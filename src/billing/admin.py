@@ -343,9 +343,23 @@ class MealSignupAdmin(admin.ModelAdmin):
 
 @admin.register(MealOrder)
 class MealOrderAdmin(admin.ModelAdmin):
+    """Expose catering-order markers without bypassing the serialized application workflow."""
+
     list_display = ("camp", "meal_date", "is_sent", "ordered_at", "ordered_by", "unmarked_at", "unmarked_by")
     list_filter = ("camp", "meal_date", "ordered_at")
     search_fields = ("camp__name", "ordered_by__username", "ordered_by__email")
+
+    def has_add_permission(self, request):
+        """Require the meal overview for creating sent markers."""
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        """Keep the raw Django admin as a read-only audit view."""
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        """Require the meal overview for reversing sent markers."""
+        return False
 
 
 @admin.register(MealBookingOverride)

@@ -18,6 +18,7 @@ from billing.models import (
     Charge,
     Expense,
     MealBookingOverride,
+    MealOrder,
     MealSignup,
     Participant,
     ParticipantBookingLink,
@@ -1072,6 +1073,28 @@ def test_scheduled_meal_deadline_skips_manually_closed_dinner_day():
         meal=MealSignup.Meal.DINNER,
         state=MealBookingOverride.State.CLOSED,
     )
+
+    generate_scheduled_notifications(now=now)
+
+    assert not PushMessage.objects.filter(category="meal_deadlines").exists()
+
+
+@pytest.mark.django_db
+def test_scheduled_meal_deadline_skips_sent_catering_order():
+    now = timezone.make_aware(timezone.datetime(2026, 7, 20, 11, 0))
+    participant = ParticipantFactory()
+    camp = participant.camp
+    camp.meal_booking_cutoff_time = time(12, 0)
+    camp.is_active = True
+    camp.save(update_fields=["meal_booking_cutoff_time", "is_active"])
+    PushSubscription.objects.create(
+        participant=participant,
+        endpoint="https://push.example.test/meal-sent",
+        p256dh="key",
+        auth="secret",
+        categories=["meal_deadlines"],
+    )
+    MealOrder.objects.create(camp=camp, meal_date=now.date() + timedelta(days=1), is_sent=True)
 
     generate_scheduled_notifications(now=now)
 

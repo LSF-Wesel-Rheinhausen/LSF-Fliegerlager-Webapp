@@ -144,7 +144,7 @@ Die wichtigsten Übersichten liegen zusätzlich als HTML vor:
 
 ## Essenskalender
 
-Die Essensübersicht zeigt Abendessen als responsive Tageskarten. Heute und zukünftige Tage können manuell gesperrt oder entsperrt werden; Frühstück bleibt ohne diese Steuerung. Die angezeigte Richtzeit löst keine automatische Sperre aus.
+Die Essensübersicht zeigt Abendessen als responsive Tageskarten. Heute und zukünftige Tage können manuell gesperrt oder entsperrt werden; Frühstück bleibt ohne diese Steuerung. Die angezeigte Richtzeit löst keine automatische Sperre aus. Eine als versandt markierte Caterer-Bestellung sperrt den Abendessen-Tag jedoch unabhängig vom manuellen Override, bis sie als nicht bestellt markiert wird.
 
 ![Abendessen-Tageskalender auf dem Desktop](images/manual-dinner-booking-calendar-desktop-light.png)
 

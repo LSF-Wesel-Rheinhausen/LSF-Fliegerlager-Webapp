@@ -61,7 +61,7 @@
     </div>
     <div class="meal-day-card-grid" aria-label="Abendessen nach Lagertag">
       {% for row in meal_plan_rows %}
-        <article class="meal-day-card meal-day-card--{% if row.day.meal_date < today %}past{% elif row.dinner_state.state == 'manual_closed' %}closed{% else %}open{% endif %}">
+        <article class="meal-day-card meal-day-card--{% if row.day.meal_date < today %}past{% elif row.dinner_state.locked %}closed{% else %}open{% endif %}">
           <div class="meal-day-card__heading">
             <h3>{{ row.day.meal_date|date:"l" }}</h3>
             <time datetime="{{ row.day.meal_date|date:'Y-m-d' }}">{{ row.day.meal_date|date:"d.m.Y" }}</time>
@@ -69,6 +69,8 @@
           <p class="meal-day-card__state">
             {% if row.day.meal_date < today %}
               Vergangen
+            {% elif row.dinner_state.state == "order_sent" %}
+              Bestellung versandt
             {% elif row.dinner_state.state == "manual_closed" %}
               Gesperrt
             {% else %}
@@ -76,18 +78,31 @@
             {% endif %}
           </p>
           {% if row.day.meal_date >= today %}
-            <form method="post" action="{% url 'meal-booking-override' camp.pk %}" class="meal-day-card__action">
-              {% csrf_token %}
-              <input type="hidden" name="meal_date" value="{{ row.day.meal_date|date:'Y-m-d' }}">
-              <input type="hidden" name="meal" value="dinner">
-              {% if row.dinner_state.state == "manual_closed" %}
+            {% if row.dinner_state.state == "order_sent" %}
+              <form method="post" action="{% url 'meal-order-mark-sent' camp.pk %}" class="meal-day-card__action">
+                {% csrf_token %}
+                <input type="hidden" name="meal_date" value="{{ row.day.meal_date|date:'Y-m-d' }}">
+                <input type="hidden" name="state" value="not_sent">
+                <button
+                  type="submit"
+                  class="button-secondary"
+                  aria-label="Abendessen am {{ row.day.meal_date|date:'d.m.Y' }} – Als nicht bestellt markieren"
+                >Als nicht bestellt markieren</button>
+              </form>
+            {% else %}
+              <form method="post" action="{% url 'meal-booking-override' camp.pk %}" class="meal-day-card__action">
+                {% csrf_token %}
+                <input type="hidden" name="meal_date" value="{{ row.day.meal_date|date:'Y-m-d' }}">
+                <input type="hidden" name="meal" value="dinner">
+                {% if row.dinner_state.state == "manual_closed" %}
                 <input type="hidden" name="state" value="open">
                 <button type="submit" class="button-secondary" aria-label="Abendessen am {{ row.day.meal_date|date:'d.m.Y' }} – Entsperren">Entsperren</button>
-              {% else %}
-                <input type="hidden" name="state" value="closed">
-                <button type="submit" class="button-secondary" aria-label="Abendessen am {{ row.day.meal_date|date:'d.m.Y' }} – Sperren">Sperren</button>
-              {% endif %}
-            </form>
+                {% else %}
+                  <input type="hidden" name="state" value="closed">
+                  <button type="submit" class="button-secondary" aria-label="Abendessen am {{ row.day.meal_date|date:'d.m.Y' }} – Sperren">Sperren</button>
+                {% endif %}
+              </form>
+            {% endif %}
           {% endif %}
         </article>
       {% empty %}
@@ -155,6 +170,7 @@
                 <td>{{ meal.retracted_total }}</td>
                 <td>
                   {% if row.dinner_state.state == "past" %}<span>Vergangen</span>
+                  {% elif row.dinner_state.state == "order_sent" %}<span>Bestellung versandt</span>
                   {% elif row.dinner_state.state == "manual_open" %}<span>Manuell geöffnet</span>
                   {% elif row.dinner_state.state == "manual_closed" %}<span>Gesperrt</span>
                   {% else %}<span>Offen</span>{% endif %}

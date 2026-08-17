@@ -239,17 +239,19 @@ def is_meal_change_locked(
     meal_date: date,
     meal: str = MealSignup.Meal.DINNER,
     now: datetime | None = None,
+    sent_order_dates: set[date] | None = None,
 ) -> bool:
-    """Return whether manual policy closes kiosk changes for one meal date.
+    """Return whether policy closes kiosk changes for one meal date.
 
     Args:
-        camp: Camp whose dinner-day overrides control kiosk meal changes.
+        camp: Camp whose dinner-day state controls kiosk meal changes.
         meal_date: Meal date the participant wants to book or retract.
         meal: Breakfast or dinner.
         now: Optional timezone-aware timestamp for tests.
+        sent_order_dates: Optional preloaded dates with a sent catering order.
 
     Returns:
-        True for past dates or a manually closed dinner day.
+        True for past dates, sent dinner orders, or manually closed dinners.
     """
     return bool(
         meal_booking_state(
@@ -257,6 +259,7 @@ def is_meal_change_locked(
             meal_date,
             meal=meal,
             now=now,
+            sent_order_dates=sent_order_dates,
         )["locked"]
     )
 
@@ -268,14 +271,26 @@ def meal_booking_state(
     meal: str = MealSignup.Meal.DINNER,
     now: datetime | None = None,
     override_states: Mapping[tuple[date, str], str] | None = None,
+    sent_order_dates: set[date] | None = None,
 ) -> dict[str, str | bool]:
-    """Return the effective manual booking state for one meal slot.
+    """Return the effective booking state for one meal slot.
 
-    Breakfast is open for today and future dates. Dinner is open unless a meal
-    manager stored an explicit closed override. Catering-order markers and the
-    camp's reminder time are informational and never close a slot. Callers that
-    resolve several days can pass preloaded override states to avoid per-day
-    database queries.
+    Breakfast is open for today and future dates. A sent catering order closes
+    dinner booking before manual overrides are considered; marking that order
+    as not sent restores the stored manual state. The camp's reminder time is
+    informational. Callers resolving several days can pass both preloaded
+    collections to avoid per-day database queries.
+
+    Args:
+        camp: Camp whose dinner booking state is resolved.
+        meal_date: Calendar date of the meal slot.
+        meal: Breakfast or dinner.
+        now: Optional timezone-aware timestamp for deterministic callers.
+        override_states: Optional preloaded override states keyed by date and meal.
+        sent_order_dates: Optional preloaded dates with a sent catering order.
+
+    Returns:
+        A state identifier, lock flag, and user-facing explanation.
     """
     current_time = timezone.localtime(now) if now is not None else timezone.localtime()
     today = current_time.date() if now is not None else timezone.localdate()
@@ -287,6 +302,17 @@ def meal_booking_state(
         }
     if meal != MealSignup.Meal.DINNER:
         return {"state": "open", "locked": False, "message": ""}
+    order_was_sent = (
+        meal_date in sent_order_dates
+        if sent_order_dates is not None
+        else MealOrder.objects.filter(camp=camp, meal_date=meal_date, is_sent=True).exists()
+    )
+    if order_was_sent:
+        return {
+            "state": "order_sent",
+            "locked": True,
+            "message": f"Die Bestellung für {meal_date:%d.%m.%Y} wurde bereits abgeschickt.",
+        }
     override_state = (
         override_states.get((meal_date, meal))
         if override_states is not None
@@ -305,10 +331,44 @@ def meal_booking_state(
     return {"state": "open", "locked": False, "message": ""}
 
 
+def preload_meal_booking_state_inputs(
+    camp: Camp,
+    meal_dates: Iterable[date],
+    *,
+    meal: str,
+) -> tuple[dict[tuple[date, str], str], set[date]]:
+    """Load all persisted state inputs needed to resolve several meal dates.
+
+    Args:
+        camp: Camp whose persisted meal state is loaded.
+        meal_dates: Dates that will be resolved in one batch.
+        meal: Breakfast or dinner; breakfast returns empty collections.
+
+    Returns:
+        Override states keyed by date and meal plus dates with sent orders.
+    """
+    dates = set(meal_dates)
+    if meal != MealSignup.Meal.DINNER or not dates:
+        return {}, set()
+    override_states = {
+        (meal_date, stored_meal): state
+        for meal_date, stored_meal, state in MealBookingOverride.objects.filter(
+            camp=camp,
+            meal_date__in=dates,
+            meal=meal,
+        ).values_list("meal_date", "meal", "state")
+    }
+    sent_order_dates = set(
+        MealOrder.objects.filter(camp=camp, meal_date__in=dates, is_sent=True).values_list("meal_date", flat=True)
+    )
+    return override_states, sent_order_dates
+
+
 def meal_change_lock_message(
     camp: Camp,
     meal_date: date,
     meal: str = MealSignup.Meal.DINNER,
+    sent_order_dates: set[date] | None = None,
 ) -> str:
     """Return the user-facing message for a closed kiosk meal slot."""
     return str(
@@ -316,6 +376,7 @@ def meal_change_lock_message(
             camp,
             meal_date,
             meal=meal,
+            sent_order_dates=sent_order_dates,
         )["message"]
     )
 

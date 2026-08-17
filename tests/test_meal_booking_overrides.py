@@ -1,14 +1,15 @@
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
 import pytest
+from django.contrib.messages import get_messages
 from django.db.models import QuerySet
 from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
 
 from billing.kiosk_access import KIOSK_PARTICIPANT_SESSION_KEY
-from billing.models import Camp, Charge, MealBookingOverride, MealSignup, PriceRule
+from billing.models import Camp, Charge, MealBookingOverride, MealOrder, MealSignup, PriceRule
 from billing.permissions import HUEBERS_GROUP
 from billing.services import meal_booking_state
 from tests.factories import CampFactory, GroupFactory, ParticipantFactory, PriceRuleFactory, UserFactory
@@ -53,6 +54,55 @@ def test_meal_manager_can_reopen_tomorrow_after_cutoff_per_meal(kiosk_client, mo
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize("override_state", [MealBookingOverride.State.OPEN, MealBookingOverride.State.CLOSED])
+def test_sent_catering_order_takes_precedence_over_manual_override(override_state):
+    today = timezone.localdate()
+    meal_date = today + timedelta(days=1)
+    camp = CampFactory(starts_on=today, ends_on=meal_date)
+    MealBookingOverride.objects.create(
+        camp=camp,
+        meal_date=meal_date,
+        meal=MealSignup.Meal.DINNER,
+        state=override_state,
+    )
+    MealOrder.objects.create(camp=camp, meal_date=meal_date, is_sent=True)
+
+    state = meal_booking_state(camp, meal_date, meal=MealSignup.Meal.DINNER)
+
+    assert state == {
+        "state": "order_sent",
+        "locked": True,
+        "message": f"Die Bestellung für {meal_date:%d.%m.%Y} wurde bereits abgeschickt.",
+    }
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("override_state", "expected_state", "expected_locked"),
+    [
+        (MealBookingOverride.State.OPEN, "manual_open", False),
+        (MealBookingOverride.State.CLOSED, "manual_closed", True),
+    ],
+)
+def test_not_sent_order_restores_stored_manual_state(override_state, expected_state, expected_locked):
+    today = timezone.localdate()
+    meal_date = today + timedelta(days=1)
+    camp = CampFactory(starts_on=today, ends_on=meal_date)
+    MealBookingOverride.objects.create(
+        camp=camp,
+        meal_date=meal_date,
+        meal=MealSignup.Meal.DINNER,
+        state=override_state,
+    )
+    MealOrder.objects.create(camp=camp, meal_date=meal_date, is_sent=False)
+
+    state = meal_booking_state(camp, meal_date, meal=MealSignup.Meal.DINNER)
+
+    assert state["state"] == expected_state
+    assert state["locked"] is expected_locked
+
+
+@pytest.mark.django_db
 def test_manual_closed_dinner_is_independent_by_camp(client, monkeypatch):
     fixed_now = timezone.make_aware(datetime(2026, 7, 1, 12, 1))
     monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
@@ -87,6 +137,7 @@ def test_stale_breakfast_closed_override_is_ignored_for_today_and_future(meal_da
         meal=MealSignup.Meal.BREAKFAST,
         state=MealBookingOverride.State.CLOSED,
     )
+    MealOrder.objects.create(camp=camp, meal_date=meal_date, is_sent=True)
 
     state = meal_booking_state(camp, meal_date, meal=MealSignup.Meal.BREAKFAST, now=fixed_now)
 
@@ -171,6 +222,31 @@ def test_repeated_override_post_is_idempotent(client, monkeypatch):
     assert client.post(url, payload).status_code == 302
 
     assert MealBookingOverride.objects.filter(camp=camp, meal="dinner").count() == 1
+
+
+@pytest.mark.django_db
+def test_open_override_for_sent_order_explains_that_order_still_locks(client, monkeypatch):
+    today = date(2026, 7, 1)
+    meal_date = date(2026, 7, 2)
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda: today)
+    monkeypatch.setattr("billing.views.timezone.localdate", lambda: today)
+    camp = CampFactory(starts_on=today, ends_on=meal_date)
+    MealOrder.objects.create(camp=camp, meal_date=meal_date, is_sent=True)
+    manager = UserFactory()
+    manager.groups.add(GroupFactory(name=HUEBERS_GROUP))
+    client.force_login(manager)
+
+    response = client.post(
+        reverse("meal-booking-override", args=[camp.pk]),
+        {"meal_date": meal_date.isoformat(), "meal": "dinner", "state": "open"},
+    )
+
+    response_messages = [str(message) for message in get_messages(response.wsgi_request)]
+    assert response.status_code == 302
+    assert any(
+        "wegen der versandten Bestellung" in message and "bis zur Markierung als nicht bestellt gesperrt" in message
+        for message in response_messages
+    )
 
 
 @pytest.mark.django_db

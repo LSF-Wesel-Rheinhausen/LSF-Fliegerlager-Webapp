@@ -207,7 +207,7 @@ def test_kiosk_books_each_released_meal_before_camp(kiosk_client, monkeypatch, m
         (MealSignup.Meal.DINNER, "allow_dinner_prebooking_before_camp"),
     ],
 )
-def test_kiosk_keeps_sent_preorder_day_bookable(kiosk_client, monkeypatch, meal, flag):
+def test_kiosk_keeps_sent_dinner_preorder_locked_but_breakfast_bookable(kiosk_client, monkeypatch, meal, flag):
     monkeypatch.setattr("billing.services.timezone.localdate", lambda: date(2026, 6, 30))
     monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 6, 30))
     camp = CampFactory(
@@ -235,8 +235,12 @@ def test_kiosk_keeps_sent_preorder_day_bookable(kiosk_client, monkeypatch, meal,
     calendar = response.context[calendar_key]
     sent_slot = next(day for day in calendar if day["date"] == sent_date)
 
-    assert sent_slot["locked"] is False
-    assert sent_slot["booking_state"] == "open"
+    if meal == MealSignup.Meal.BREAKFAST:
+        assert sent_slot["locked"] is False
+        assert sent_slot["booking_state"] == "open"
+    else:
+        assert sent_slot["locked"] is True
+        assert sent_slot["booking_state"] == "order_sent"
 
     response = kiosk_client.post(
         reverse("kiosk-home"),
@@ -248,8 +252,12 @@ def test_kiosk_keeps_sent_preorder_day_bookable(kiosk_client, monkeypatch, meal,
         },
     )
 
-    assert response.status_code == 302
-    assert MealSignup.objects.filter(participant=participant, meal=meal, meal_date=sent_date).exists()
+    if meal == MealSignup.Meal.BREAKFAST:
+        assert response.status_code == 302
+        assert MealSignup.objects.filter(participant=participant, meal=meal, meal_date=sent_date).exists()
+    else:
+        assert response.status_code == 200
+        assert not MealSignup.objects.filter(participant=participant, meal=meal, meal_date=sent_date).exists()
 
 
 @pytest.mark.django_db

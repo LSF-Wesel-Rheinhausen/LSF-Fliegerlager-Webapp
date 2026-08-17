@@ -399,12 +399,15 @@ def generate_scheduled_notifications(*, now: Any | None = None) -> int:
             state=MealBookingOverride.State.CLOSED,
         ).values_list("camp_id", flat=True)
     )
+    sent_order_camp_ids = set(
+        MealOrder.objects.filter(meal_date=meal_date, is_sent=True).values_list("camp_id", flat=True)
+    )
     for camp in Camp.objects.filter(is_active=True):
         cutoff_at = timezone.make_aware(datetime.combine(today, camp.meal_booking_cutoff_time))
         due_at = cutoff_at - timedelta(hours=1)
         if not due_at <= current < cutoff_at:
             continue
-        if camp.pk not in manually_closed_camp_ids:
+        if camp.pk not in manually_closed_camp_ids and camp.pk not in sent_order_camp_ids:
             booked_ids = MealSignup.objects.filter(
                 participant__camp=camp,
                 meal_date=meal_date,
@@ -425,7 +428,7 @@ def generate_scheduled_notifications(*, now: Any | None = None) -> int:
                     dedupe_key=f"meal:{camp.pk}:{meal_date}:participant:{participant.pk}:deadline",
                     scheduled_for=due_at,
                 )
-        if not MealOrder.objects.filter(camp=camp, meal_date=meal_date, is_sent=True).exists():
+        if camp.pk not in sent_order_camp_ids:
             for user in _administrative_users(include_meal_managers=True):
                 created += queue_user_notification(
                     user,
