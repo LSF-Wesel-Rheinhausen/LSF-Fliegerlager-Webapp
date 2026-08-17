@@ -350,9 +350,23 @@ class MealOrderAdmin(admin.ModelAdmin):
 
 @admin.register(MealBookingOverride)
 class MealBookingOverrideAdmin(admin.ModelAdmin):
+    """Expose current meal booking overrides as read-only records."""
+
     list_display = ("camp", "meal_date", "meal", "state", "changed_at", "changed_by")
     list_filter = ("camp", "meal", "state", "meal_date")
     search_fields = ("camp__name", "changed_by__username", "changed_by__email")
+
+    def has_add_permission(self, request):
+        """Require the application calendar for creating overrides."""
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        """Keep the raw Django admin as a read-only audit view."""
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        """Require the application calendar for changing the current state."""
+        return False
 
 
 @admin.register(MealPlanEntry)

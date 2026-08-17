@@ -17,3 +17,7 @@ Servergerenderte Django-Templates.
 - `billing/import_preview.html`: Importformular und Vorschautabelle.
 - `billing/shift_manage.html`, `billing/shift_report.html`, `billing/shift_templates_manage.html`: Dienstverwaltung, Soll-/Ist-Auswertung und tägliche Vorlagen.
 - `billing/kiosk_base.html`, `billing/kiosk_login.html`, `billing/kiosk_home.html`, `billing/kiosk_shifts.html`: Kiosk-Layout mit Auto-Logout-Timer, PIN-geschuetztem Login, Selbstregistrierung, Buchungsoberflaeche und Dienstwahl/Tausch.
+
+## Essenskalender
+
+`camp_meal_overview.html` rendert ausschließlich für Abendessen Tageskarten mit den Zuständen Vergangen, Gesperrt und Offen; POST-Steuerungen sind auf heute und zukünftige Lagertage begrenzt.

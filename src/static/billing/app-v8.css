@@ -3687,3 +3687,35 @@ code {
   color: #f1f4f6;
   border-color: #455260;
 }
+
+
+/* Admin dinner booking calendar: status remains textual for color-independent use. */
+.meal-day-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.meal-day-card {
+  display: grid;
+  gap: 8px;
+  min-height: 150px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text);
+}
+
+.meal-day-card--past { opacity: 0.7; }
+.meal-day-card--closed { border-inline-start: 5px solid var(--muted); }
+.meal-day-card--open { border-inline-start: 5px solid var(--accent); }
+.meal-day-card__heading { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.meal-day-card__heading h3 { margin: 0; font-size: 1rem; }
+.meal-day-card__heading time { font-weight: 800; font-variant-numeric: tabular-nums; }
+.meal-day-card__state { margin: 0; font-weight: 800; }
+.meal-day-card__action { margin-top: auto; }
+
+@media (max-width: 560px) {
+  .meal-day-card-grid { grid-template-columns: 1fr; }
+}

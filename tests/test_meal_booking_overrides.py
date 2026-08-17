@@ -51,7 +51,7 @@ def test_meal_manager_can_reopen_tomorrow_after_cutoff_per_meal(kiosk_client, mo
 
 
 @pytest.mark.django_db
-def test_manual_closed_is_independent_by_meal_and_camp(client, monkeypatch):
+def test_manual_closed_dinner_is_independent_by_camp(client, monkeypatch):
     fixed_now = timezone.make_aware(datetime(2026, 7, 1, 12, 1))
     monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
     monkeypatch.setattr("billing.services.timezone.localdate", lambda: fixed_now.date())
@@ -63,12 +63,33 @@ def test_manual_closed_is_independent_by_meal_and_camp(client, monkeypatch):
 
     response = client.post(
         reverse("meal-booking-override", args=[camp.pk]),
-        {"meal_date": "2026-07-02", "meal": "breakfast", "state": "closed"},
+        {"meal_date": "2026-07-02", "meal": "dinner", "state": "closed"},
     )
 
     assert response.status_code == 302
-    assert MealBookingOverride.objects.filter(camp=camp, meal="breakfast", state="closed").exists()
+    assert MealBookingOverride.objects.filter(camp=camp, meal="dinner", state="closed").exists()
     assert MealBookingOverride.objects.filter(camp=other_camp).exists() is False
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("meal_date", [date(2026, 7, 1), date(2026, 7, 2)])
+def test_stale_breakfast_closed_override_is_ignored_for_today_and_future(meal_date, monkeypatch):
+    today = date(2026, 7, 1)
+    fixed_now = timezone.make_aware(datetime(2026, 7, 1, 10, 0))
+    monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda: today)
+    camp = CampFactory(starts_on=today, ends_on=date(2026, 7, 2))
+    MealBookingOverride.objects.create(
+        camp=camp,
+        meal_date=meal_date,
+        meal=MealSignup.Meal.BREAKFAST,
+        state=MealBookingOverride.State.CLOSED,
+    )
+
+    state = meal_booking_state(camp, meal_date, meal=MealSignup.Meal.BREAKFAST, now=fixed_now)
+
+    assert state["state"] == "open"
+    assert state["locked"] is False
 
 
 @pytest.mark.django_db
@@ -76,8 +97,8 @@ def test_manual_closed_is_independent_by_meal_and_camp(client, monkeypatch):
     ("current_time", "expected_state"),
     [
         (time(11, 59), "open"),
-        (time(12, 0), "automatic_cutoff"),
-        (time(12, 1), "automatic_cutoff"),
+        (time(12, 0), "open"),
+        (time(12, 1), "open"),
     ],
 )
 def test_effective_booking_state_uses_cutoff_boundaries(monkeypatch, current_time, expected_state):
@@ -105,6 +126,33 @@ def test_override_post_requires_csrf_and_rejects_get_and_invalid_date():
     assert client.get(url).status_code == 405
     assert client.post(url, {"meal_date": "not-a-date", "meal": "dinner", "state": "open"}).status_code == 403
     assert not MealBookingOverride.objects.exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("meal_date", "meal", "expected_count"),
+    [
+        ("2026-07-01", "dinner", 1),
+        ("2026-06-30", "dinner", 0),
+        ("2026-07-01", "breakfast", 0),
+    ],
+)
+def test_override_post_accepts_today_dinner_only_and_rejects_past_or_breakfast(
+    client, monkeypatch, meal_date, meal, expected_count
+):
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda: date(2026, 7, 1))
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 2))
+    manager = UserFactory()
+    manager.groups.add(GroupFactory(name=HUEBERS_GROUP))
+    client.force_login(manager)
+
+    response = client.post(
+        reverse("meal-booking-override", args=[camp.pk]),
+        {"meal_date": meal_date, "meal": meal, "state": "closed"},
+    )
+
+    assert response.status_code == 302
+    assert MealBookingOverride.objects.filter(camp=camp, meal=meal).count() == expected_count
 
 
 @pytest.mark.django_db

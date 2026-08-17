@@ -4,7 +4,7 @@
   <div class="toolbar">
     <div>
       <h1>Essensübersicht</h1>
-      <p>{{ camp }} · Stichzeitpunkt {{ camp.meal_booking_cutoff_time|time:"H:i" }} Uhr</p>
+      <p>{{ camp }} · unverbindliche Richtzeit {{ camp.meal_booking_cutoff_time|time:"H:i" }} Uhr</p>
     </div>
     <div class="actions">
       {% if user|is_huebers_user %}
@@ -13,7 +13,7 @@
       {% else %}
         <a class="button button-secondary" href="{% url 'camp-detail' camp.pk %}">Zur Übersicht</a>
       {% endif %}
-      <a class="button" href="{% url 'meal-cutoff-edit' camp.pk %}">Stichzeitpunkt ändern</a>
+      <a class="button" href="{% url 'meal-cutoff-edit' camp.pk %}">Richtzeit ändern</a>
     </div>
   </div>
 
@@ -50,6 +50,50 @@
     {% else %}
       <p class="hint">Für den nächsten Tag sind keine Lagerdaten vorhanden.</p>
     {% endif %}
+  </section>
+
+  <section class="panel stack meal-calendar-panel" data-meal-calendar="dinner">
+    <div class="toolbar compact-toolbar">
+      <div>
+        <h2>Abendessen · Tagessteuerung</h2>
+        <p>Die Richtzeit ist unverbindlich. Steuere jeden Lagertag bei Bedarf manuell.</p>
+      </div>
+    </div>
+    <div class="meal-day-card-grid" aria-label="Abendessen nach Lagertag">
+      {% for row in meal_plan_rows %}
+        <article class="meal-day-card meal-day-card--{% if row.day.meal_date < today %}past{% elif row.dinner_state.state == 'manual_closed' %}closed{% else %}open{% endif %}">
+          <div class="meal-day-card__heading">
+            <h3>{{ row.day.meal_date|date:"l" }}</h3>
+            <time datetime="{{ row.day.meal_date|date:'Y-m-d' }}">{{ row.day.meal_date|date:"d.m.Y" }}</time>
+          </div>
+          <p class="meal-day-card__state">
+            {% if row.day.meal_date < today %}
+              Vergangen
+            {% elif row.dinner_state.state == "manual_closed" %}
+              Gesperrt
+            {% else %}
+              Offen
+            {% endif %}
+          </p>
+          {% if row.day.meal_date >= today %}
+            <form method="post" action="{% url 'meal-booking-override' camp.pk %}" class="meal-day-card__action">
+              {% csrf_token %}
+              <input type="hidden" name="meal_date" value="{{ row.day.meal_date|date:'Y-m-d' }}">
+              <input type="hidden" name="meal" value="dinner">
+              {% if row.dinner_state.state == "manual_closed" %}
+                <input type="hidden" name="state" value="open">
+                <button type="submit" class="button-secondary" aria-label="Abendessen am {{ row.day.meal_date|date:'d.m.Y' }} – Entsperren">Entsperren</button>
+              {% else %}
+                <input type="hidden" name="state" value="closed">
+                <button type="submit" class="button-secondary" aria-label="Abendessen am {{ row.day.meal_date|date:'d.m.Y' }} – Sperren">Sperren</button>
+              {% endif %}
+            </form>
+          {% endif %}
+        </article>
+      {% empty %}
+        <p class="hint">Noch keine Lagertage vorhanden.</p>
+      {% endfor %}
+    </div>
   </section>
 
   <section class="panel stack" data-meal-section="dinner">
@@ -110,27 +154,10 @@
                 <td><strong>{{ meal.active_total }}</strong></td>
                 <td>{{ meal.retracted_total }}</td>
                 <td>
-                  {% if row.dinner_state.state == "manual_open" %}<span>Manuell geöffnet</span>
-                  {% elif row.dinner_state.state == "manual_closed" %}<span>Manuell geschlossen</span>
-                  {% elif row.dinner_state.state == "automatic_cutoff" %}
-                    <span>Automatisch geschlossen</span>
-                  {% elif row.dinner_state.state == "order_sent" %}
-                    <span>Bestellung abgeschickt</span>
+                  {% if row.dinner_state.state == "past" %}<span>Vergangen</span>
+                  {% elif row.dinner_state.state == "manual_open" %}<span>Manuell geöffnet</span>
+                  {% elif row.dinner_state.state == "manual_closed" %}<span>Gesperrt</span>
                   {% else %}<span>Offen</span>{% endif %}
-                  {% if row.day.meal_date > today %}
-                    <form method="post" action="{% url 'meal-booking-override' camp.pk %}">
-                      {% csrf_token %}
-                      <input type="hidden" name="meal_date" value="{{ row.day.meal_date|date:'Y-m-d' }}">
-                      <input type="hidden" name="meal" value="dinner">
-                      {% if row.dinner_state.state == "manual_open" %}
-                        <input type="hidden" name="state" value="closed">
-                        <button type="submit" class="button-secondary">Manuell schließen</button>
-                      {% else %}
-                        <input type="hidden" name="state" value="open">
-                        <button type="submit">Wieder öffnen</button>
-                      {% endif %}
-                    </form>
-                  {% endif %}
                 </td>
               </tr>
             {% endfor %}
@@ -220,24 +247,8 @@
             <td><strong>{{ day.breakfast.active_total }}</strong></td>
             <td>{{ day.breakfast.retracted_total }}</td>
             <td>
-              {% if row.breakfast_state.state == "manual_open" %}<span>Manuell geöffnet</span>
-              {% elif row.breakfast_state.state == "manual_closed" %}<span>Manuell geschlossen</span>
-              {% elif row.breakfast_state.state == "automatic_cutoff" %}<span>Automatisch geschlossen</span>
+              {% if row.breakfast_state.state == "past" %}<span>Vergangen</span>
               {% else %}<span>Offen</span>{% endif %}
-              {% if day.meal_date > today %}
-                <form method="post" action="{% url 'meal-booking-override' camp.pk %}">
-                  {% csrf_token %}
-                  <input type="hidden" name="meal_date" value="{{ day.meal_date|date:'Y-m-d' }}">
-                  <input type="hidden" name="meal" value="breakfast">
-                  {% if row.breakfast_state.state == "manual_open" %}
-                    <input type="hidden" name="state" value="closed">
-                    <button type="submit" class="button-secondary">Manuell schließen</button>
-                  {% else %}
-                    <input type="hidden" name="state" value="open">
-                    <button type="submit">Wieder öffnen</button>
-                  {% endif %}
-                </form>
-              {% endif %}
             </td>
           </tr>
           {% endwith %}

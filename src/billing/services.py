@@ -239,18 +239,17 @@ def is_meal_change_locked(
     meal_date: date,
     meal: str = MealSignup.Meal.DINNER,
     now: datetime | None = None,
-    sent_order_dates: set[date] | None = None,
 ) -> bool:
-    """Return whether kiosk meal changes are closed for the requested meal date.
+    """Return whether manual policy closes kiosk changes for one meal date.
 
     Args:
-        camp: Camp whose cutoff time controls kiosk meal changes.
+        camp: Camp whose dinner-day overrides control kiosk meal changes.
         meal_date: Meal date the participant wants to book or retract.
+        meal: Breakfast or dinner.
         now: Optional timezone-aware timestamp for tests.
-        sent_order_dates: Optional preloaded dates whose catering orders were sent.
 
     Returns:
-        True when the catering order was sent, the meal date is in the past, or tomorrow's bookings are past cutoff.
+        True for past dates or a manually closed dinner day.
     """
     return bool(
         meal_booking_state(
@@ -258,7 +257,6 @@ def is_meal_change_locked(
             meal_date,
             meal=meal,
             now=now,
-            sent_order_dates=sent_order_dates,
         )["locked"]
     )
 
@@ -269,50 +267,40 @@ def meal_booking_state(
     *,
     meal: str = MealSignup.Meal.DINNER,
     now: datetime | None = None,
-    sent_order_dates: set[date] | None = None,
+    override_states: Mapping[tuple[date, str], str] | None = None,
 ) -> dict[str, str | bool]:
-    """Return the effective booking state after applying all lock precedences."""
+    """Return the effective manual booking state for one meal slot.
+
+    Breakfast is open for today and future dates. Dinner is open unless a meal
+    manager stored an explicit closed override. Catering-order markers and the
+    camp's reminder time are informational and never close a slot. Callers that
+    resolve several days can pass preloaded override states to avoid per-day
+    database queries.
+    """
     current_time = timezone.localtime(now) if now is not None else timezone.localtime()
     today = current_time.date() if now is not None else timezone.localdate()
-    if meal_date <= today:
+    if meal_date < today:
         return {
             "state": "past",
             "locked": True,
             "message": f"Buchungen und Rücknahmen für {meal_date:%d.%m.%Y} sind geschlossen.",
         }
-    override = MealBookingOverride.objects.filter(camp=camp, meal_date=meal_date, meal=meal).first()
-    if override is not None:
-        if override.state == MealBookingOverride.State.OPEN:
+    if meal != MealSignup.Meal.DINNER:
+        return {"state": "open", "locked": False, "message": ""}
+    override_state = (
+        override_states.get((meal_date, meal))
+        if override_states is not None
+        else MealBookingOverride.objects.filter(camp=camp, meal_date=meal_date, meal=meal)
+        .values_list("state", flat=True)
+        .first()
+    )
+    if override_state is not None:
+        if override_state == MealBookingOverride.State.OPEN:
             return {"state": "manual_open", "locked": False, "message": "Manuell wieder geöffnet."}
         return {
             "state": "manual_closed",
             "locked": True,
             "message": f"Buchungen und Rücknahmen für {meal_date:%d.%m.%Y} wurden manuell geschlossen.",
-        }
-    order_was_sent = meal == MealSignup.Meal.DINNER and (
-        meal_date in sent_order_dates
-        if sent_order_dates is not None
-        else MealOrder.objects.filter(camp=camp, meal_date=meal_date, is_sent=True).exists()
-    )
-    if order_was_sent:
-        return {
-            "state": "order_sent",
-            "locked": True,
-            "message": f"Die Bestellung für {meal_date:%d.%m.%Y} wurde bereits abgeschickt.",
-        }
-    cutoff_at = datetime.combine(
-        current_time.date(),
-        camp.meal_booking_cutoff_time,
-        tzinfo=current_time.tzinfo,
-    )
-    if meal_date == today + timedelta(days=1) and current_time >= cutoff_at:
-        return {
-            "state": "automatic_cutoff",
-            "locked": True,
-            "message": (
-                f"Buchungen und Rücknahmen für {meal_date:%d.%m.%Y} sind nach "
-                f"{camp.meal_booking_cutoff_time:%H:%M} Uhr geschlossen."
-            ),
         }
     return {"state": "open", "locked": False, "message": ""}
 
@@ -321,7 +309,6 @@ def meal_change_lock_message(
     camp: Camp,
     meal_date: date,
     meal: str = MealSignup.Meal.DINNER,
-    sent_order_dates: set[date] | None = None,
 ) -> str:
     """Return the user-facing message for a closed kiosk meal slot."""
     return str(
@@ -329,7 +316,6 @@ def meal_change_lock_message(
             camp,
             meal_date,
             meal=meal,
-            sent_order_dates=sent_order_dates,
         )["message"]
     )
 

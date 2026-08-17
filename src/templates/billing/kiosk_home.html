@@ -384,7 +384,7 @@
           {% elif next_order_locked %}
             <p>Die Buchung ist geschlossen. Falls du noch nicht bestellt hast, melde dich bitte bei der Lagerleitung.</p>
           {% else %}
-            <p>Die Buchung ist bis {{ participant.camp.meal_booking_cutoff_time|time:"H:i" }} Uhr möglich.</p>
+            <p>Die Richtzeit ist {{ participant.camp.meal_booking_cutoff_time|time:"H:i" }} Uhr; die Buchung bleibt bis zur manuellen Sperre möglich.</p>
           {% endif %}
         </div>
         <form method="post" class="form-grid kiosk-meal-form" id="meal-booking-form">

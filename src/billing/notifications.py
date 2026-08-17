@@ -17,6 +17,7 @@ from .models import (
     Charge,
     Expense,
     KioskActionAuditLog,
+    MealBookingOverride,
     MealOrder,
     MealSignup,
     Participant,
@@ -391,28 +392,39 @@ def generate_scheduled_notifications(*, now: Any | None = None) -> int:
             )
 
     meal_date = today + timedelta(days=1)
+    manually_closed_camp_ids = set(
+        MealBookingOverride.objects.filter(
+            meal_date=meal_date,
+            meal=MealSignup.Meal.DINNER,
+            state=MealBookingOverride.State.CLOSED,
+        ).values_list("camp_id", flat=True)
+    )
     for camp in Camp.objects.filter(is_active=True):
         cutoff_at = timezone.make_aware(datetime.combine(today, camp.meal_booking_cutoff_time))
         due_at = cutoff_at - timedelta(hours=1)
         if not due_at <= current < cutoff_at:
             continue
-        booked_ids = MealSignup.objects.filter(
-            participant__camp=camp,
-            meal_date=meal_date,
-            meal=MealSignup.Meal.DINNER,
-            status=MealSignup.Status.ACTIVE,
-            family_member__isnull=True,
-        ).values_list("participant_id", flat=True)
-        for participant in camp.participants.filter(archived_at__isnull=True).exclude(pk__in=booked_ids):
-            created += queue_participant_notification(
-                participant,
-                category="meal_deadlines",
-                title="Essensfrist endet bald",
-                body=f"Abendessen für morgen kann noch bis {camp.meal_booking_cutoff_time:%H:%M} gebucht werden.",
-                target_url="/kiosk/#meal-calendar",
-                dedupe_key=f"meal:{camp.pk}:{meal_date}:participant:{participant.pk}:deadline",
-                scheduled_for=due_at,
-            )
+        if camp.pk not in manually_closed_camp_ids:
+            booked_ids = MealSignup.objects.filter(
+                participant__camp=camp,
+                meal_date=meal_date,
+                meal=MealSignup.Meal.DINNER,
+                status=MealSignup.Status.ACTIVE,
+                family_member__isnull=True,
+            ).values_list("participant_id", flat=True)
+            for participant in camp.participants.filter(archived_at__isnull=True).exclude(pk__in=booked_ids):
+                created += queue_participant_notification(
+                    participant,
+                    category="meal_deadlines",
+                    title="Abendessen für morgen prüfen",
+                    body=(
+                        f"Die unverbindliche Richtzeit ist {camp.meal_booking_cutoff_time:%H:%M} Uhr; "
+                        "Buchungen bleiben bis zur manuellen Sperre möglich."
+                    ),
+                    target_url="/kiosk/#meal-calendar",
+                    dedupe_key=f"meal:{camp.pk}:{meal_date}:participant:{participant.pk}:deadline",
+                    scheduled_for=due_at,
+                )
         if not MealOrder.objects.filter(camp=camp, meal_date=meal_date, is_sent=True).exists():
             for user in _administrative_users(include_meal_managers=True):
                 created += queue_user_notification(

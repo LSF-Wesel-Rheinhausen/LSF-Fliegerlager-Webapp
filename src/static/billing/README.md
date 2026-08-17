@@ -9,3 +9,7 @@ Statische Assets der Billing-Oberflaeche.
 Das Layout ist fuer Desktop-Viewports von 1280 bis 2560 Pixel Breite sowie iPhone-Viewports um 390 bis 430 Pixel Breite ausgelegt.
 
 Dokumentations-Screenshots werden getrennt von Laufzeit-Assets unter `docs/images/` gepflegt.
+
+## Essenskalender-Styles
+
+Die Day-Card-Regeln in `app-v8.css` sind mobile-first, statusbeschreibend und für helle sowie dunkle Themes ausgelegt.

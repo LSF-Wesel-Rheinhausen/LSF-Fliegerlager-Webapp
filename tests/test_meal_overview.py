@@ -1,12 +1,13 @@
-from datetime import date
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+from django.utils import timezone
 
-from billing.models import Charge, MealOrder, MealPlanEntry, MealSignup, ParticipantFamilyMember
+from billing.models import Charge, MealBookingOverride, MealOrder, MealPlanEntry, MealSignup, ParticipantFamilyMember
 from billing.permissions import HUEBERS_GROUP
 from billing.services import calculate_meal_overview
 from tests.factories import CampFactory, GroupFactory, ParticipantFactory, SuperUserFactory, UserFactory
@@ -199,6 +200,46 @@ def test_camp_meal_overview_renders_counts_for_admin(client):
     assert b'data-meal-section="dinner"' in response.content
     assert b'data-meal-section="breakfast"' in response.content
     assert b"<strong>1</strong>" in response.content
+
+
+@pytest.mark.django_db
+def test_camp_meal_overview_exposes_dinner_calendar_states_without_breakfast_locks(client, monkeypatch):
+    today = date(2026, 7, 1)
+    fixed_now = timezone.make_aware(datetime(2026, 7, 1, 10, 0))
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda: today)
+    monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
+    camp = CampFactory(starts_on=today - timedelta(days=1), ends_on=date(2026, 7, 2))
+    client.force_login(SuperUserFactory())
+
+    content = client.get(reverse("camp-meal-overview", args=[camp.pk])).content.decode()
+
+    calendar = content.split('data-meal-calendar="dinner"', 1)[1].split('data-meal-section="dinner"', 1)[0]
+    breakfast = content.split('data-meal-section="breakfast"', 1)[1]
+    assert "Vergangen" in calendar
+    assert "Offen" in calendar
+    assert not any(label in breakfast for label in ("Sperren", "Entsperren"))
+
+
+@pytest.mark.django_db
+def test_camp_meal_overview_preloads_manual_dinner_states_for_all_days(client):
+    today = timezone.localdate()
+    camp = CampFactory(starts_on=today, ends_on=today + timedelta(days=6))
+    user = SuperUserFactory()
+    MealBookingOverride.objects.create(
+        camp=camp,
+        meal_date=today + timedelta(days=1),
+        meal=MealSignup.Meal.DINNER,
+        state=MealBookingOverride.State.CLOSED,
+        changed_by=user,
+    )
+    client.force_login(user)
+
+    with CaptureQueriesContext(connection) as queries:
+        response = client.get(reverse("camp-meal-overview", args=[camp.pk]))
+
+    override_queries = [query for query in queries if "billing_mealbookingoverride" in query["sql"]]
+    assert response.status_code == 200
+    assert len(override_queries) == 1
 
 
 @pytest.mark.django_db
