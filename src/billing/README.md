@@ -37,3 +37,7 @@ Wichtige Modelle:
 - `SettlementRun` versioniert unveränderliche Lagerabrechnungen; `Settlement` speichert darin den jeweiligen Teilnehmer-Snapshot mit Positionen und Summen.
 - `EmailConfiguration`, `EmailTestLog`, `EmailBatch` und `EmailDelivery` speichern verschluesselte SMTP-Einstellungen,
   sichere Verbindungstests sowie die nachvollziehbare manuelle Versand-Outbox.
+
+## Essenskalender
+
+Die responsive Abendessen-Tagessteuerung trennt Status und manuelle Sperrung von den Detailtabellen. Die interne `meal_booking_cutoff_time` wird nur als unverbindliche Richtzeit für Erinnerungen verwendet. Für Abendessen entscheidet an heutigen und zukünftigen Lagertagen ausschließlich `MealBookingOverride`; Frühstück ist dort immer buch- und stornierbar. Vergangene Tage bleiben unveränderlich.

@@ -241,16 +241,17 @@ def is_meal_change_locked(
     now: datetime | None = None,
     sent_order_dates: set[date] | None = None,
 ) -> bool:
-    """Return whether kiosk meal changes are closed for the requested meal date.
+    """Return whether policy closes kiosk changes for one meal date.
 
     Args:
-        camp: Camp whose cutoff time controls kiosk meal changes.
+        camp: Camp whose dinner-day state controls kiosk meal changes.
         meal_date: Meal date the participant wants to book or retract.
+        meal: Breakfast or dinner.
         now: Optional timezone-aware timestamp for tests.
-        sent_order_dates: Optional preloaded dates whose catering orders were sent.
+        sent_order_dates: Optional preloaded dates with a sent catering order.
 
     Returns:
-        True when the catering order was sent, the meal date is in the past, or tomorrow's bookings are past cutoff.
+        True for past dates, sent dinner orders, or manually closed dinners.
     """
     return bool(
         meal_booking_state(
@@ -269,27 +270,39 @@ def meal_booking_state(
     *,
     meal: str = MealSignup.Meal.DINNER,
     now: datetime | None = None,
+    override_states: Mapping[tuple[date, str], str] | None = None,
     sent_order_dates: set[date] | None = None,
 ) -> dict[str, str | bool]:
-    """Return the effective booking state after applying all lock precedences."""
+    """Return the effective booking state for one meal slot.
+
+    Breakfast is open for today and future dates. A sent catering order closes
+    dinner booking before manual overrides are considered; marking that order
+    as not sent restores the stored manual state. The camp's reminder time is
+    informational. Callers resolving several days can pass both preloaded
+    collections to avoid per-day database queries.
+
+    Args:
+        camp: Camp whose dinner booking state is resolved.
+        meal_date: Calendar date of the meal slot.
+        meal: Breakfast or dinner.
+        now: Optional timezone-aware timestamp for deterministic callers.
+        override_states: Optional preloaded override states keyed by date and meal.
+        sent_order_dates: Optional preloaded dates with a sent catering order.
+
+    Returns:
+        A state identifier, lock flag, and user-facing explanation.
+    """
     current_time = timezone.localtime(now) if now is not None else timezone.localtime()
     today = current_time.date() if now is not None else timezone.localdate()
-    if meal_date <= today:
+    if meal_date < today:
         return {
             "state": "past",
             "locked": True,
             "message": f"Buchungen und Rücknahmen für {meal_date:%d.%m.%Y} sind geschlossen.",
         }
-    override = MealBookingOverride.objects.filter(camp=camp, meal_date=meal_date, meal=meal).first()
-    if override is not None:
-        if override.state == MealBookingOverride.State.OPEN:
-            return {"state": "manual_open", "locked": False, "message": "Manuell wieder geöffnet."}
-        return {
-            "state": "manual_closed",
-            "locked": True,
-            "message": f"Buchungen und Rücknahmen für {meal_date:%d.%m.%Y} wurden manuell geschlossen.",
-        }
-    order_was_sent = meal == MealSignup.Meal.DINNER and (
+    if meal != MealSignup.Meal.DINNER:
+        return {"state": "open", "locked": False, "message": ""}
+    order_was_sent = (
         meal_date in sent_order_dates
         if sent_order_dates is not None
         else MealOrder.objects.filter(camp=camp, meal_date=meal_date, is_sent=True).exists()
@@ -300,21 +313,55 @@ def meal_booking_state(
             "locked": True,
             "message": f"Die Bestellung für {meal_date:%d.%m.%Y} wurde bereits abgeschickt.",
         }
-    cutoff_at = datetime.combine(
-        current_time.date(),
-        camp.meal_booking_cutoff_time,
-        tzinfo=current_time.tzinfo,
+    override_state = (
+        override_states.get((meal_date, meal))
+        if override_states is not None
+        else MealBookingOverride.objects.filter(camp=camp, meal_date=meal_date, meal=meal)
+        .values_list("state", flat=True)
+        .first()
     )
-    if meal_date == today + timedelta(days=1) and current_time >= cutoff_at:
+    if override_state is not None:
+        if override_state == MealBookingOverride.State.OPEN:
+            return {"state": "manual_open", "locked": False, "message": "Manuell wieder geöffnet."}
         return {
-            "state": "automatic_cutoff",
+            "state": "manual_closed",
             "locked": True,
-            "message": (
-                f"Buchungen und Rücknahmen für {meal_date:%d.%m.%Y} sind nach "
-                f"{camp.meal_booking_cutoff_time:%H:%M} Uhr geschlossen."
-            ),
+            "message": f"Buchungen und Rücknahmen für {meal_date:%d.%m.%Y} wurden manuell geschlossen.",
         }
     return {"state": "open", "locked": False, "message": ""}
+
+
+def preload_meal_booking_state_inputs(
+    camp: Camp,
+    meal_dates: Iterable[date],
+    *,
+    meal: str,
+) -> tuple[dict[tuple[date, str], str], set[date]]:
+    """Load all persisted state inputs needed to resolve several meal dates.
+
+    Args:
+        camp: Camp whose persisted meal state is loaded.
+        meal_dates: Dates that will be resolved in one batch.
+        meal: Breakfast or dinner; breakfast returns empty collections.
+
+    Returns:
+        Override states keyed by date and meal plus dates with sent orders.
+    """
+    dates = set(meal_dates)
+    if meal != MealSignup.Meal.DINNER or not dates:
+        return {}, set()
+    override_states = {
+        (meal_date, stored_meal): state
+        for meal_date, stored_meal, state in MealBookingOverride.objects.filter(
+            camp=camp,
+            meal_date__in=dates,
+            meal=meal,
+        ).values_list("meal_date", "meal", "state")
+    }
+    sent_order_dates = set(
+        MealOrder.objects.filter(camp=camp, meal_date__in=dates, is_sent=True).values_list("meal_date", flat=True)
+    )
+    return override_states, sent_order_dates
 
 
 def meal_change_lock_message(

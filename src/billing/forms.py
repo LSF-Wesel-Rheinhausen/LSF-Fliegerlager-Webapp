@@ -350,7 +350,7 @@ class UserPasswordResetForm(SetPasswordForm):
 
 class CampForm(forms.ModelForm):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        """Initialize optional cutoff input with the project default."""
+        """Initialize the optional meal reminder time with the project default."""
         super().__init__(*args, **kwargs)
         self.fields["meal_booking_cutoff_time"].required = False
         self.fields["meal_booking_cutoff_time"].initial = time(12, 0)
@@ -376,7 +376,7 @@ class CampForm(forms.ModelForm):
             "starts_on": "Beginn",
             "ends_on": "Ende",
             "is_active": "Aktiv",
-            "meal_booking_cutoff_time": "Essens-Stichzeitpunkt",
+            "meal_booking_cutoff_time": "Richtzeit",
             "shift_ratio_per_night": "Dienste pro gebuchter Nacht",
             "iban": "IBAN",
             "paypal_link": "PayPal.me Link",
@@ -390,7 +390,7 @@ class CampForm(forms.ModelForm):
         }
 
     def clean_meal_booking_cutoff_time(self):
-        """Return the default noon cutoff when the form field is omitted."""
+        """Return the default noon reminder time when the field is omitted."""
         return self.cleaned_data["meal_booking_cutoff_time"] or time(12, 0)
 
     def clean_is_active(self):
@@ -411,16 +411,16 @@ class MealPreorderSettingsForm(forms.ModelForm):
 
 
 class MealCutoffForm(forms.ModelForm):
-    """Edit the camp meal booking cutoff without exposing other camp settings."""
+    """Edit the camp's non-binding meal reminder time."""
 
     class Meta:
         model = Camp
         fields = ["meal_booking_cutoff_time"]
-        labels = {"meal_booking_cutoff_time": "Essens-Stichzeitpunkt"}
+        labels = {"meal_booking_cutoff_time": "Richtzeit"}
         widgets = {"meal_booking_cutoff_time": forms.TimeInput(attrs={"type": "time"})}
 
     def clean_meal_booking_cutoff_time(self):
-        """Return the default noon cutoff when the form field is omitted."""
+        """Return the default noon reminder time when the field is omitted."""
         return self.cleaned_data["meal_booking_cutoff_time"] or time(12, 0)
 
 

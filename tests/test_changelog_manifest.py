@@ -41,6 +41,26 @@ def test_bounded_manifest_keeps_newest_complete_entries_within_byte_budget(monke
     assert [entry["version"] for entry in json.loads(rendered)] == ["2"]
 
 
+def test_bounded_manifest_does_not_skip_overflowing_entry_and_include_older_entries(monkeypatch):
+    entries = [
+        {"version": "1", "revision": "rev1", "path": "changelog/old.md", "title": "Old", "body": "old"},
+        {
+            "version": "2",
+            "revision": "rev2",
+            "path": "changelog/middle.md",
+            "title": "Middle",
+            "body": "m" * 500,
+        },
+        {"version": "3", "revision": "rev3", "path": "changelog/new.md", "title": "New", "body": "new"},
+    ]
+    monkeypatch.setattr(build_changelog_manifest, "build_manifest", lambda: entries)
+    max_bytes = len(build_changelog_manifest._render([entries[0], entries[2]]).encode("utf-8"))
+
+    rendered = build_changelog_manifest.render_bounded_manifest(max_bytes=max_bytes)
+
+    assert [entry["version"] for entry in json.loads(rendered)] == ["3"]
+
+
 def test_bounded_manifest_truncates_oversized_latest_entry_on_utf8_boundary(monkeypatch):
     entries = [
         {

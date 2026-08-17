@@ -113,6 +113,8 @@ def render_bounded_manifest(max_bytes: int) -> str:
             selected = candidate
         elif not selected:
             selected = [_fit_oversized_entry(entry, max_bytes)]
+        else:
+            break
 
     return _render(selected)
 

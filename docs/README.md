@@ -141,3 +141,11 @@ Die wichtigsten Übersichten liegen zusätzlich als HTML vor:
 - [`architecture.html`](architecture.html): Architektur, Datenfluss und Abrechnungslogik.
 - [`operations.html`](operations.html): Setup, Betrieb, Tests und typische Admin-Abläufe.
 - [`development.html`](development.html): Beitragsregeln, Tooling, Security, ORM, Tests und UI-Konventionen.
+
+## Essenskalender
+
+Die Essensübersicht zeigt Abendessen als responsive Tageskarten. Heute und zukünftige Tage können manuell gesperrt oder entsperrt werden; Frühstück bleibt ohne diese Steuerung. Die angezeigte Richtzeit löst keine automatische Sperre aus. Eine als versandt markierte Caterer-Bestellung sperrt den Abendessen-Tag jedoch unabhängig vom manuellen Override, bis sie als nicht bestellt markiert wird.
+
+![Abendessen-Tageskalender auf dem Desktop](images/manual-dinner-booking-calendar-desktop-light.png)
+
+![Abendessen-Tageskalender mobil im Dark Mode](images/manual-dinner-booking-calendar-mobile-dark.png)

@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import resolve, reverse
 from django.utils import timezone
 
@@ -17,6 +19,7 @@ from billing.models import (
     Charge,
     Expense,
     KioskActionAuditLog,
+    MealBookingOverride,
     MealOrder,
     MealPlanEntry,
     MealSignup,
@@ -1453,6 +1456,16 @@ def test_kiosk_home_shows_order_sent_for_next_day(kiosk_client, monkeypatch):
     )
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     MealOrder.objects.create(camp=camp, meal_date=date(2026, 7, 2))
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        is_default=True,
+        applies_to_children=False,
+        applies_to_adults=True,
+        name="Abendessen",
+        unit_price=Decimal("7.00"),
+    )
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session.save()
@@ -1466,6 +1479,25 @@ def test_kiosk_home_shows_order_sent_for_next_day(kiosk_client, monkeypatch):
     next_day_end = content.index("</button>", next_day_start)
     assert "Geschlossen" in content[next_day_start:next_day_end]
     assert 'data-meal-date="2026-07-02"' not in content
+
+
+@pytest.mark.django_db
+def test_kiosk_home_does_not_show_not_sent_order_as_dispatched(kiosk_client, monkeypatch):
+    fixed_now = timezone.make_aware(datetime(2026, 7, 1, 10, 30))
+    monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 2))
+    participant = ParticipantFactory(camp=camp)
+    MealOrder.objects.create(camp=camp, meal_date=date(2026, 7, 2), is_sent=False)
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.get(reverse("kiosk-home"))
+
+    assert response.status_code == 200
+    assert b"Die Bestellung wurde abgeschickt." not in response.content
+    assert b"bis zur manuellen Sperre m\xc3\xb6glich" in response.content
 
 
 @pytest.mark.django_db
@@ -1533,7 +1565,7 @@ def test_kiosk_menu_explains_destinations_and_has_an_explicit_trigger(kiosk_clie
 
 
 @pytest.mark.django_db
-def test_kiosk_home_shows_meal_booking_cutoff_time_before_order_sent(kiosk_client, monkeypatch):
+def test_kiosk_home_shows_soft_meal_richtzeit_before_order_sent(kiosk_client, monkeypatch):
     fixed_now = timezone.make_aware(datetime(2026, 7, 1, 10, 30))
     monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
     monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
@@ -1546,7 +1578,8 @@ def test_kiosk_home_shows_meal_booking_cutoff_time_before_order_sent(kiosk_clien
     response = kiosk_client.get(reverse("kiosk-home"))
 
     assert response.status_code == 200
-    assert b"Die Buchung ist bis 14:45 Uhr m\xc3\xb6glich." in response.content
+    assert b"Die Richtzeit ist 14:45 Uhr" in response.content
+    assert b"bis zur manuellen Sperre m\xc3\xb6glich" in response.content
 
 
 @pytest.mark.django_db
@@ -1593,6 +1626,36 @@ def test_kiosk_meal_calendar_renders_all_camp_days_with_menu_and_participant_pri
 
 
 @pytest.mark.django_db
+def test_kiosk_meal_calendar_preloads_dinner_overrides_and_sent_orders(kiosk_client, monkeypatch):
+    fixed_now = timezone.make_aware(datetime(2026, 7, 1, 10, 0))
+    monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
+    camp = CampFactory(starts_on=fixed_now.date(), ends_on=fixed_now.date() + timedelta(days=6))
+    participant = ParticipantFactory(camp=camp)
+    MealBookingOverride.objects.create(
+        camp=camp,
+        meal_date=fixed_now.date() + timedelta(days=1),
+        meal=MealSignup.Meal.DINNER,
+        state=MealBookingOverride.State.CLOSED,
+    )
+    MealOrder.objects.create(camp=camp, meal_date=fixed_now.date() + timedelta(days=2), is_sent=True)
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    with CaptureQueriesContext(connection) as queries:
+        response = kiosk_client.get(reverse("kiosk-home"))
+
+    override_queries = [query for query in queries if "billing_mealbookingoverride" in query["sql"]]
+    sent_order_queries = [
+        query for query in queries if "billing_mealorder" in query["sql"] and '"meal_date" IN' in query["sql"]
+    ]
+    assert response.status_code == 200
+    assert len(override_queries) == 1
+    assert len(sent_order_queries) == 1
+
+
+@pytest.mark.django_db
 def test_kiosk_meal_calendar_shows_closed_days_without_booking_action(kiosk_client, monkeypatch):
     fixed_now = timezone.make_aware(datetime(2026, 7, 2, 10, 0))
     monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
@@ -1625,7 +1688,7 @@ def test_kiosk_meal_calendar_shows_closed_days_without_booking_action(kiosk_clie
 
 
 @pytest.mark.django_db
-def test_kiosk_home_shows_contact_hint_after_cutoff_before_order_sent(kiosk_client, monkeypatch):
+def test_kiosk_home_keeps_manual_lock_hint_after_richtzeit(kiosk_client, monkeypatch):
     fixed_now = timezone.make_aware(datetime(2026, 7, 1, 18, 30))
     monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
     monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
@@ -1640,8 +1703,10 @@ def test_kiosk_home_shows_contact_hint_after_cutoff_before_order_sent(kiosk_clie
     assert response.status_code == 200
     content = response.content.decode()
     meal_section_start = content.index('id="meal-calendar-dialog"')
-    assert "melde dich bitte bei der Lagerleitung" in content[meal_section_start:]
-    status_start = content.index("Die Buchung ist geschlossen.")
+    assert "Richtzeit ist 12:00 Uhr" in content[meal_section_start:]
+    assert "bis zur manuellen Sperre möglich" in content[meal_section_start:]
+    assert "melde dich bitte bei der Lagerleitung" not in content[meal_section_start:]
+    status_start = content.index("Die Richtzeit ist 12:00 Uhr")
     calendar_start = content.index('<div class="meal-status-calendar"')
     assert meal_section_start < status_start < calendar_start
 
@@ -1674,7 +1739,7 @@ def test_kiosk_meal_status_calendar_shows_day_states_and_detail_dialog(kiosk_cli
     content = response.content.decode()
     assert response.status_code == 200
     assert content.count("meal-status-day") >= 3
-    assert "meal-status-day meal-status-day--closed" in content
+    assert "meal-status-day meal-status-day--empty" in content
     assert "meal-status-day meal-status-day--booked" in content
     assert "meal-status-day meal-status-day--retracted" in content
     assert 'id="meal-day-detail-2026-07-02"' in content
@@ -2465,6 +2530,12 @@ def test_kiosk_rejects_entire_meal_batch_when_one_date_is_locked(kiosk_client, m
         name="Abendessen",
         unit_price=Decimal("7.00"),
     )
+    MealBookingOverride.objects.create(
+        camp=camp,
+        meal_date=second_date,
+        meal=MealSignup.Meal.DINNER,
+        state=MealBookingOverride.State.CLOSED,
+    )
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session.save()
@@ -2585,7 +2656,7 @@ def test_kiosk_rejects_unknown_meal_target_without_partial_booking(kiosk_client,
 
 
 @pytest.mark.django_db
-def test_kiosk_meal_signup_for_tomorrow_closes_after_camp_cutoff(kiosk_client, monkeypatch):
+def test_kiosk_meal_signup_for_tomorrow_stays_open_after_camp_cutoff(kiosk_client, monkeypatch):
     fixed_now = timezone.make_aware(datetime(2026, 7, 1, 12, 1))
     monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
     camp = CampFactory(
@@ -2618,10 +2689,8 @@ def test_kiosk_meal_signup_for_tomorrow_closes_after_camp_cutoff(kiosk_client, m
         },
     )
 
-    assert response.status_code == 200
-    assert b"sind nach 12:00 Uhr geschlossen" in response.content
-    assert not MealSignup.objects.filter(participant=participant).exists()
-    assert not Charge.objects.filter(participant=participant, kind=Charge.Kind.FOOD).exists()
+    assert response.status_code == 302
+    assert MealSignup.objects.filter(participant=participant, status=MealSignup.Status.ACTIVE).exists()
 
 
 @pytest.mark.django_db
@@ -2667,7 +2736,7 @@ def test_kiosk_meal_signup_for_past_date_is_locked(kiosk_client, monkeypatch):
     fixed_now = timezone.make_aware(datetime(2026, 7, 2, 10, 0))
     monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
     monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
-    camp = CampFactory()
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 2))
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     PriceRuleFactory(
         camp=camp,
@@ -2700,16 +2769,17 @@ def test_kiosk_meal_signup_for_past_date_is_locked(kiosk_client, monkeypatch):
 
 
 @pytest.mark.django_db
-def test_kiosk_meal_signup_for_today_is_locked(kiosk_client, monkeypatch):
+@pytest.mark.parametrize("meal", [MealSignup.Meal.BREAKFAST, MealSignup.Meal.DINNER])
+def test_kiosk_meal_signup_for_today_is_open(kiosk_client, monkeypatch, meal):
     fixed_now = timezone.make_aware(datetime(2026, 7, 2, 10, 0))
     monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
     monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
-    camp = CampFactory()
+    camp = CampFactory(starts_on=date(2026, 7, 2), ends_on=date(2026, 7, 2))
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     PriceRuleFactory(
         camp=camp,
         kind=PriceRule.Kind.MEAL,
-        meal_type=MealSignup.Meal.DINNER,
+        meal_type=meal,
         is_default=True,
         applies_to_children=False,
         applies_to_adults=True,
@@ -2725,14 +2795,13 @@ def test_kiosk_meal_signup_for_today_is_locked(kiosk_client, monkeypatch):
         {
             "action": "meal",
             "meal-meal_dates": date(2026, 7, 2).isoformat(),
-            "meal-meal": MealSignup.Meal.DINNER,
+            "meal-meal": meal,
             "meal-variant": MealSignup.Variant.NORMAL,
         },
     )
 
-    assert response.status_code == 200
-    assert b"Buchungen und R\xc3\xbccknahmen" in response.content
-    assert not MealSignup.objects.filter(participant=participant).exists()
+    assert response.status_code == 302
+    assert MealSignup.objects.filter(participant=participant, meal=meal, meal_date=date(2026, 7, 2)).exists()
 
 
 @pytest.mark.django_db
@@ -2809,7 +2878,7 @@ def test_kiosk_allows_meal_retraction_after_charge_appeared_in_settlement_snapsh
 
 
 @pytest.mark.django_db
-def test_kiosk_still_rejects_snapshotted_meal_retraction_after_catering_order(kiosk_client, monkeypatch):
+def test_kiosk_rejects_snapshotted_meal_retraction_after_catering_order(kiosk_client, monkeypatch):
     _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 7, 1, 10, 0)))
     camp = CampFactory()
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
@@ -2882,7 +2951,8 @@ def test_kiosk_rejects_retraction_for_past_meal_signup(kiosk_client, monkeypatch
 
 
 @pytest.mark.django_db
-def test_kiosk_rejects_retraction_for_today_meal_signup(kiosk_client, monkeypatch):
+@pytest.mark.parametrize("meal", [MealSignup.Meal.BREAKFAST, MealSignup.Meal.DINNER])
+def test_kiosk_allows_retraction_for_today_meal_signup(kiosk_client, monkeypatch, meal):
     fixed_now = timezone.make_aware(datetime(2026, 7, 2, 10, 0))
     monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
     monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
@@ -2891,7 +2961,7 @@ def test_kiosk_rejects_retraction_for_today_meal_signup(kiosk_client, monkeypatc
     charge = Charge.objects.create(
         participant=participant,
         kind=Charge.Kind.FOOD,
-        description="Abendessen Abendessen",
+        description="Frühstück" if meal == MealSignup.Meal.BREAKFAST else "Abendessen Abendessen",
         quantity=1,
         unit_price=Decimal("7.00"),
         occurred_on=date(2026, 7, 2),
@@ -2899,7 +2969,7 @@ def test_kiosk_rejects_retraction_for_today_meal_signup(kiosk_client, monkeypatc
     signup = MealSignup.objects.create(
         participant=participant,
         meal_date=date(2026, 7, 2),
-        meal=MealSignup.Meal.DINNER,
+        meal=meal,
         variant=MealSignup.Variant.NORMAL,
         charge=charge,
     )
@@ -2909,12 +2979,12 @@ def test_kiosk_rejects_retraction_for_today_meal_signup(kiosk_client, monkeypatc
 
     response = kiosk_client.post(reverse("kiosk-home"), {"action": "meal_retract", "meal_signup_id": signup.pk})
 
-    assert response.status_code == 200
+    assert response.status_code == 302
     signup.refresh_from_db()
     charge.refresh_from_db()
-    assert signup.status == MealSignup.Status.ACTIVE
-    assert signup.retracted_at is None
-    assert charge.deleted_at is None
+    assert signup.status == MealSignup.Status.RETRACTED
+    assert signup.retracted_at is not None
+    assert charge.deleted_at is not None
 
 
 @pytest.mark.django_db
@@ -3750,7 +3820,7 @@ def test_kiosk_books_breakfast_for_family_member(kiosk_client, monkeypatch):
 
 
 @pytest.mark.django_db
-def test_kiosk_breakfast_booking_respects_cutoff(kiosk_client, monkeypatch):
+def test_kiosk_breakfast_booking_stays_open_after_richtzeit(kiosk_client, monkeypatch):
     fixed_now = timezone.make_aware(datetime(2026, 6, 30, 13, 0))
     _freeze_meal_lock_time(monkeypatch, fixed_now)
     meal_date = date(2026, 7, 1)
@@ -3779,9 +3849,12 @@ def test_kiosk_breakfast_booking_respects_cutoff(kiosk_client, monkeypatch):
         },
     )
 
-    assert response.status_code == 200
-    assert "Buchungen und Rücknahmen".encode() in response.content
-    assert not MealSignup.objects.filter(participant=participant).exists()
+    assert response.status_code == 302
+    assert MealSignup.objects.filter(
+        participant=participant,
+        meal=MealSignup.Meal.BREAKFAST,
+        meal_date=meal_date,
+    ).exists()
 
 
 @pytest.mark.django_db

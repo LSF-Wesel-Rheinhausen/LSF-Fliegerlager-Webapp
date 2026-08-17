@@ -43,6 +43,12 @@ from billing.views import (
 from tests.factories import CampFactory, ParticipantFactory, PriceRuleFactory, SuperUserFactory
 
 
+def _freeze_meal_booking_time(monkeypatch):
+    fixed_now = timezone.make_aware(datetime(2026, 6, 30, 10, 0))
+    monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
+    monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
+
+
 def test_kiosk_action_audit_log_model_is_registered():
     """Partner actions need a dedicated participant-aware audit trail."""
     assert "kioskactionauditlog" in apps.all_models["billing"]
@@ -2390,6 +2396,7 @@ def test_paid_partner_meal_retraction_requires_signed_confirmation(kiosk_client,
 
 @pytest.mark.django_db
 def test_partner_meal_retraction_rejects_charge_changed_after_signup_lock(monkeypatch):
+    _freeze_meal_booking_time(monkeypatch)
     actor = ParticipantFactory()
     partner = ParticipantFactory(camp=actor.camp)
     ParticipantBookingLink.objects.create(
@@ -2450,7 +2457,8 @@ def test_partner_meal_retraction_rejects_charge_changed_after_signup_lock(monkey
 
 
 @pytest.mark.django_db
-def test_partner_meal_retraction_rejects_charge_reassigned_after_confirmation():
+def test_partner_meal_retraction_rejects_charge_reassigned_after_confirmation(monkeypatch):
+    _freeze_meal_booking_time(monkeypatch)
     actor = ParticipantFactory()
     partner = ParticipantFactory(camp=actor.camp)
     unrelated_participant = ParticipantFactory(camp=actor.camp)
@@ -2496,7 +2504,8 @@ def test_partner_meal_retraction_rejects_charge_reassigned_after_confirmation():
 
 
 @pytest.mark.django_db
-def test_family_meal_retraction_rejects_ambiguous_historical_charge_without_mutating_signup():
+def test_family_meal_retraction_rejects_ambiguous_historical_charge_without_mutating_signup(monkeypatch):
+    _freeze_meal_booking_time(monkeypatch)
     guardian = ParticipantFactory()
     member = ParticipantFamilyMember.objects.create(
         guardian=guardian,
@@ -2587,7 +2596,8 @@ def test_partner_meal_retraction_revalidates_stale_state_after_row_lock(
 
 
 @pytest.mark.django_db
-def test_partner_meal_retraction_confirmation_cannot_be_replayed_after_rebooking():
+def test_partner_meal_retraction_confirmation_cannot_be_replayed_after_rebooking(monkeypatch):
+    _freeze_meal_booking_time(monkeypatch)
     actor = ParticipantFactory()
     partner = ParticipantFactory(camp=actor.camp)
     ParticipantBookingLink.objects.create(
@@ -2668,6 +2678,7 @@ def test_partner_meal_retraction_confirmation_cannot_be_replayed_after_rebooking
 
 @pytest.mark.django_db
 def test_meal_signup_row_locks_exclude_nullable_postgresql_joins(monkeypatch):
+    _freeze_meal_booking_time(monkeypatch)
     participant = ParticipantFactory()
     price_rule = PriceRuleFactory(
         camp=participant.camp,
@@ -2720,6 +2731,7 @@ def test_meal_signup_row_locks_exclude_nullable_postgresql_joins(monkeypatch):
 
 @pytest.mark.django_db
 def test_partner_meal_workflows_lock_camp_and_identities_before_signup_and_authorization(monkeypatch):
+    _freeze_meal_booking_time(monkeypatch)
     actor = ParticipantFactory()
     partner = ParticipantFactory(camp=actor.camp)
     ParticipantBookingLink.objects.create(

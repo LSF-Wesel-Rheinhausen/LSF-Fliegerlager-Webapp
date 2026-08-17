@@ -4,15 +4,43 @@ const { isBenignPageRequestFailure, requestFailureDetails } = require("./request
 
 test.use({ serviceWorkers: "block" });
 
+const berlinDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/Berlin",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+function berlinDateParts(date) {
+  return Object.fromEntries(
+    berlinDateFormatter
+      .formatToParts(date)
+      .filter(({ type }) => type !== "literal")
+      .map(({ type, value }) => [type, value]),
+  );
+}
+
 function addDays(date, days) {
-  const result = new Date(date);
-  result.setDate(result.getDate() + days);
-  return result;
+  const { year, month, day } = berlinDateParts(date);
+  return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day) + days, 12));
 }
 
 function dateInputValue(date) {
-  return date.toISOString().slice(0, 10);
+  const { year, month, day } = berlinDateParts(date);
+  return `${year}-${month}-${day}`;
 }
+
+function germanDateValue(date) {
+  const { year, month, day } = berlinDateParts(date);
+  return `${day}.${month}.${year}`;
+}
+
+test("date helpers use the Europe/Berlin calendar date", () => {
+  const instant = new Date("2026-08-17T22:30:00Z");
+
+  expect(dateInputValue(instant)).toBe("2026-08-18");
+  expect(germanDateValue(instant)).toBe("18.08.2026");
+});
 
 async function loginAsAdmin(page) {
   await page.goto("/login/");
@@ -76,7 +104,8 @@ test("Admin meal overview keeps dinner and breakfast details separate and keyboa
   await expect(breakfast.getByRole("heading", { name: "Frühstücksvorbestellungen" })).toBeVisible();
   await expect(dinner.locator("[data-meal-section='breakfast']")).toHaveCount(0);
   await expect(breakfast.locator("[data-meal-section='dinner']")).toHaveCount(0);
-  await expect(page.locator('[data-meal-section="combined"], [data-meal-calendar]')).toHaveCount(0);
+  await expect(page.locator('[data-meal-section="combined"]')).toHaveCount(0);
+  await expect(page.locator('[data-meal-calendar="dinner"]')).toHaveCount(1);
 
   const breakfastDay = breakfast.getByRole("button", { name: /01\.07\.2026/ }).first();
   await breakfastDay.focus();
@@ -98,6 +127,35 @@ test("Admin meal overview keeps dinner and breakfast details separate and keyboa
   await dinnerDialog.getByRole("button", { name: "Schließen" }).click();
   await expect(dinnerDialog).toBeHidden();
   await expect(dinnerDay).toBeFocused();
+});
+
+test("Admin meal overview locks a dynamic dinner day without breakfast controls", async ({ page }) => {
+  await setupFirstAdmin(page);
+  const today = new Date();
+  const startDate = addDays(today, -1);
+  const endDate = addDays(today, 1);
+  const campName = `Dynamisches Essenslager ${Date.now()}`;
+  await page.getByRole("link", { name: "Lager anlegen" }).click();
+  await page.getByLabel("Name").fill(campName);
+  await page.getByLabel("Jahr").fill(String(startDate.getFullYear()));
+  await page.getByLabel("Beginn").fill(dateInputValue(startDate));
+  await page.getByLabel("Ende").fill(dateInputValue(endDate));
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await page.getByRole("link", { name: "Essensübersicht" }).first().click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ colorScheme: "dark" });
+
+  const dinner = page.locator('[data-meal-calendar="dinner"]');
+  await expect(dinner).toContainText("Vergangen");
+  await expect(dinner).toContainText("Offen");
+  const currentDate = germanDateValue(today);
+  const lock = dinner.getByRole("button", { name: new RegExp(`${currentDate}.*Sperren|Sperren.*${currentDate}`) });
+  await expect(lock).toBeVisible();
+  await lock.click();
+  await expect(dinner).toContainText("Gesperrt");
+  await expect(dinner.getByRole("button", { name: new RegExp(`${currentDate}.*Entsperren|Entsperren.*${currentDate}`) })).toBeVisible();
+  await expect(page.locator('[data-meal-section="breakfast"] button', { hasText: /Sperren|Entsperren/ })).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
 });
 
 test("Admin meal overview shows populated details and contains long names on mobile", async ({ page, browser, baseURL }) => {
@@ -173,10 +231,10 @@ test("Admin meal overview shows populated details and contains long names on mob
     await page.setViewportSize({ width: 390, height: 844 });
     await page.emulateMedia({ colorScheme: "dark" });
 
-    const reopenButton = page.getByRole("button", { name: "Wieder öffnen" }).first();
-    await expect(reopenButton).toBeVisible();
-    await reopenButton.focus();
-    await expect(reopenButton).toBeFocused();
+    const lockButton = page.locator('[data-meal-calendar="dinner"]').getByRole("button", { name: /Sperren/ }).first();
+    await expect(lockButton).toBeVisible();
+    await lockButton.focus();
+    await expect(lockButton).toBeFocused();
 
     const breakfast = page.locator('[data-meal-section="breakfast"]');
     const breakfastDay = breakfast
