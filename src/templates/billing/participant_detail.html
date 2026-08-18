@@ -174,9 +174,6 @@
         <h2>Zahlungen</h2>
         <p>Erfasste Zahlungseingänge dieses Zahlungskontos.</p>
       </div>
-      {% if not participant.is_archived %}
-        <a class="button" href="{% url 'payment-create' participant.pk %}">Zahlung erfassen</a>
-      {% endif %}
     </div>
     <table class="responsive-record-table">
       <thead>
