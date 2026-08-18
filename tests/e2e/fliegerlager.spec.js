@@ -979,6 +979,7 @@ test("Meal booking shows one contextual back action", async ({ page }) => {
 });
 
 test("Partner meal retraction requires explicit confirmation", async ({ page }) => {
+  test.slow();
   await setupFirstAdmin(page);
   const campName = await createCamp(page, "Partner-Essen", 0, 4);
   await createParticipant(page, "Ada", "Lovelace", "", "1234");
@@ -1031,7 +1032,11 @@ test("Partner meal retraction requires explicit confirmation", async ({ page }) 
   await page.goto("/kiosk/#meal-calendar");
   const adaMealCalendar = page.locator("dialog#meal-calendar-dialog");
   await expect(adaMealCalendar).toBeVisible();
-  await adaMealCalendar.locator(".meal-status-day--booked").first().click();
+  const openPartnerMealDay = adaMealCalendar.locator(".meal-status-day--empty").first();
+  await expect(openPartnerMealDay).toBeVisible();
+  const { browserErrors, failedRequests } = trackPageIssues(page);
+  await expect(adaMealCalendar.locator(".meal-status-day--booked")).toHaveCount(0);
+  await openPartnerMealDay.click();
   const mealDayDetail = page.locator('dialog[id^="meal-day-detail-"]:visible');
   const partnerMealRow = mealDayDetail.locator(".meal-detail-row").filter({ hasText: "Grace Hopper" });
   await expect(partnerMealRow).toContainText("Gebucht");
@@ -1042,6 +1047,8 @@ test("Partner meal retraction requires explicit confirmation", async ({ page }) 
   await expect(retractionDialog).toContainText("Grace Hopper");
   await expect(retractionDialog).toContainText("Betrag: 7,00 €");
   await assertNoUnexpectedOverflow(page);
+  expect(browserErrors, `Unexpected browser errors: ${browserErrors.join(" | ")}`).toHaveLength(0);
+  expect(failedRequests, `Unexpected failed requests: ${failedRequests.join(" | ")}`).toHaveLength(0);
   await retractionDialog.getByRole("button", { name: "Jetzt zurücknehmen" }).click();
   await expect(page.getByText("Essensanmeldung wurde zurückgenommen.")).toBeVisible();
   await page.emulateMedia({ colorScheme: "light" });

@@ -1751,6 +1751,109 @@ def test_kiosk_meal_status_calendar_shows_day_states_and_detail_dialog(kiosk_cli
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize("meal", [MealSignup.Meal.BREAKFAST, MealSignup.Meal.DINNER])
+@pytest.mark.parametrize(
+    ("signup_status", "expected_owner_status"),
+    [
+        (MealSignup.Status.ACTIVE, "booked"),
+        (MealSignup.Status.RETRACTED, "retracted"),
+    ],
+)
+def test_kiosk_linked_meal_signup_does_not_set_current_calendar_status(
+    kiosk_client, monkeypatch, meal, signup_status, expected_owner_status
+):
+    """A partner signup stays visible without changing the current account's calendar state."""
+    _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 7, 1, 10, 0)))
+    meal_date = date(2026, 7, 2)
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 3))
+    owner = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    linked = ParticipantFactory(camp=camp, first_name="Grace", last_name="Hopper")
+    ParticipantBookingLink.objects.create(
+        inviter=owner,
+        invitee=linked,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    signup = MealSignup.objects.create(
+        participant=owner,
+        meal_date=meal_date,
+        meal=meal,
+        variant=MealSignup.Variant.NORMAL,
+        status=signup_status,
+        retracted_at=timezone.now() if signup_status == MealSignup.Status.RETRACTED else None,
+    )
+    Charge.objects.create(
+        participant=owner,
+        kind=Charge.Kind.FOOD,
+        description="Abendessen" if meal == MealSignup.Meal.DINNER else "Frühstück",
+        quantity=1,
+        unit_price=Decimal("7.00"),
+        occurred_on=meal_date,
+    )
+
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = linked.pk
+    session.save()
+    linked_response = kiosk_client.get(reverse("kiosk-home"))
+
+    assert linked_response.status_code == 200
+    calendar_key = "breakfast_calendar_days" if meal == MealSignup.Meal.BREAKFAST else "dinner_calendar_days"
+    linked_days = linked_response.context[calendar_key]
+    linked_day = next(day for day in linked_days if day["date"] == meal_date)
+    linked_slot = linked_day["meals"][0]
+    assert linked_slot["status"] == "empty"
+    assert signup in linked_slot["signups"]
+    assert signup in linked_response.context["meal_signups"]
+    assert not Charge.objects.filter(participant=linked).exists()
+    assert not MealSignup.objects.filter(participant=linked).exists()
+
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = owner.pk
+    session.save()
+    owner_response = kiosk_client.get(reverse("kiosk-home"))
+    owner_days = owner_response.context[calendar_key]
+    owner_day = next(day for day in owner_days if day["date"] == meal_date)
+    assert owner_day["meals"][0]["status"] == expected_owner_status
+
+
+@pytest.mark.django_db
+def test_kiosk_own_active_signup_is_not_mixed_with_retracted_partner_signup(kiosk_client, monkeypatch):
+    _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 7, 1, 10, 0)))
+    meal_date = date(2026, 7, 2)
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 3))
+    owner = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    partner = ParticipantFactory(camp=camp, first_name="Grace", last_name="Hopper")
+    ParticipantBookingLink.objects.create(
+        inviter=owner,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    MealSignup.objects.create(
+        participant=owner,
+        meal_date=meal_date,
+        meal=MealSignup.Meal.DINNER,
+        variant=MealSignup.Variant.NORMAL,
+        status=MealSignup.Status.ACTIVE,
+    )
+    partner_signup = MealSignup.objects.create(
+        participant=partner,
+        meal_date=meal_date,
+        meal=MealSignup.Meal.DINNER,
+        variant=MealSignup.Variant.NORMAL,
+        status=MealSignup.Status.RETRACTED,
+        retracted_at=timezone.now(),
+    )
+
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = owner.pk
+    session.save()
+    response = kiosk_client.get(reverse("kiosk-home"))
+
+    day = next(day for day in response.context["dinner_calendar_days"] if day["date"] == meal_date)
+    slot = day["meals"][0]
+    assert slot["status"] == "booked"
+    assert partner_signup in slot["signups"]
+
+
+@pytest.mark.django_db
 def test_kiosk_meal_day_detail_opens_booking_for_the_selected_date(kiosk_client, monkeypatch):
     _freeze_meal_lock_time(monkeypatch, timezone.make_aware(datetime(2026, 7, 1, 10, 0)))
     meal_date = date(2026, 7, 2)
