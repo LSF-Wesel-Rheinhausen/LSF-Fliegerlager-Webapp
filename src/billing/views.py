@@ -3561,8 +3561,9 @@ def _kiosk_meal_calendar(camp, participant, meal_signups, meal_targets, meal=Mea
     for meal_date in meal_dates:
         meals = []
         scoped = signups_by_date_meal.get((meal_date, meal), [])
-        active_signups = [signup for signup in scoped if signup.status == MealSignup.Status.ACTIVE]
-        retracted_signups = [signup for signup in scoped if signup.status == MealSignup.Status.RETRACTED]
+        account_scoped = [signup for signup in scoped if signup.participant_id == participant.pk]
+        active_signups = [signup for signup in account_scoped if signup.status == MealSignup.Status.ACTIVE]
+        retracted_signups = [signup for signup in account_scoped if signup.status == MealSignup.Status.RETRACTED]
         state = meal_booking_state(
             camp,
             meal_date,
