@@ -33,7 +33,7 @@ Wichtige Modelle:
 - `MealSignup` speichert Essensanmeldungen eindeutig pro Teilnehmer, Datum und Mahlzeit.
 - `DrinkEntry` ist ein historisches Getraenke-Modell; aktuelle Kiosk-Getraenkebuchungen werden als `Charge` mit Art `DRINK` gespeichert.
 - `BookingAuditLog` protokolliert Admin-Korrekturen an Buchungen.
-- `Shift`, `DailyShiftTemplate`, `DailyShiftException` und `ShiftAssignment` bilden Dienste, tägliche Vorlagen, Tagesausnahmen, Besetzungen und Tauschangebote ab.
+- `Shift`, `DailyShiftTemplate`, `DailyShiftException` und `ShiftAssignment` bilden Dienste, tägliche Vorlagen, Tagesausnahmen, Besetzungen und Tauschangebote ab. Vorlagen und einzelne Dienste besitzen Beschreibungstexte für die Aufgabeninformation; die Generierung kopiert Vorlagentexte nur in neue Dienste und bewahrt individuelle Änderungen.
 - `SettlementRun` versioniert unveränderliche Lagerabrechnungen; `Settlement` speichert darin den jeweiligen Teilnehmer-Snapshot mit Positionen und Summen.
 - `EmailConfiguration`, `EmailTestLog`, `EmailBatch` und `EmailDelivery` speichern verschluesselte SMTP-Einstellungen,
   sichere Verbindungstests sowie die nachvollziehbare manuelle Versand-Outbox.

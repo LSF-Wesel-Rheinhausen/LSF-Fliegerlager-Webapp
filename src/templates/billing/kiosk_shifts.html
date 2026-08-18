@@ -85,6 +85,7 @@
                   <h3 class="shift-card__title">
                     {{ shift.name }}
                     <span class="shift-badge shift-badge--ok">Tauschangebot</span>
+                    {% include "includes/shift_info_button.html" with shift=shift only %}
                   </h3>
                   <div class="shift-card__meta">
                     <span>📅 {{ shift.date|date:"l, d.m.Y" }}</span>
@@ -137,7 +138,7 @@
           {% for shift in my_shifts %}
             <article class="shift-card">
               <div class="shift-card__info">
-                <h3 class="shift-card__title">{{ shift.name }}</h3>
+                <h3 class="shift-card__title">{{ shift.name }} {% include "includes/shift_info_button.html" with shift=shift only %}</h3>
                 <div class="shift-card__meta">
                   <span>📅 {{ shift.date|date:"l, d.m.Y" }}</span>
                   {% if shift.start_time %}<span>⏰ {{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}</span>{% endif %}
@@ -217,7 +218,7 @@
           {% for shift in open_shifts %}
             <article class="shift-card">
               <div class="shift-card__info">
-                <h3 class="shift-card__title">{{ shift.name }}</h3>
+                <h3 class="shift-card__title">{{ shift.name }} {% include "includes/shift_info_button.html" with shift=shift only %}</h3>
                 <div class="shift-card__meta">
                   {% if not shift.is_full %}
                     <label class="shift-selection">

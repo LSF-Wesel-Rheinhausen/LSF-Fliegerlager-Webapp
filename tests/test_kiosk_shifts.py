@@ -98,6 +98,68 @@ def test_kiosk_can_signup_for_shift(logged_in_kiosk_client, active_camp):
 
 
 @pytest.mark.django_db
+def test_every_shift_category_exposes_description_info_button(logged_in_kiosk_client, active_camp):
+    """Each rendered shift card carries its own safe description and dialog title."""
+    today = timezone.localdate()
+    open_shift = Shift.objects.create(
+        camp=active_camp,
+        name="Offener Dienst",
+        date=today + datetime.timedelta(days=2),
+        required_slots=1,
+        description="Offene Beschreibung",
+    )
+    own_shift = Shift.objects.create(
+        camp=active_camp,
+        name="Eigener Dienst",
+        date=today + datetime.timedelta(days=3),
+        required_slots=1,
+        description="Eigene Beschreibung",
+    )
+    ShiftAssignment.objects.create(shift=own_shift, participant=logged_in_kiosk_client.kiosk_user)
+    offered_shift = Shift.objects.create(
+        camp=active_camp,
+        name="Angebotener Dienst",
+        date=today + datetime.timedelta(days=4),
+        required_slots=1,
+        description="Angebotene Beschreibung",
+    )
+    other = Participant.objects.create(camp=active_camp, first_name="Andere", last_name="Person")
+    ShiftAssignment.objects.create(shift=offered_shift, participant=other, offered_for_exchange=True)
+
+    content = logged_in_kiosk_client.get(reverse("kiosk-shifts")).content.decode()
+
+    for shift in (open_shift, own_shift, offered_shift):
+        assert f'aria-label="Informationen zu {shift.name}"' in content
+        assert f'data-help-title="Informationen zu {shift.name}"' in content
+        assert f'data-help-text="{shift.description}"' in content
+    assert content.count('class="kiosk-help-button kiosk-help-button--shift"') == 3
+
+
+@pytest.mark.django_db
+def test_shift_info_button_uses_fallback_and_escapes_script_like_description(logged_in_kiosk_client, active_camp):
+    Shift.objects.create(
+        camp=active_camp,
+        name="Unbeschriebener Dienst",
+        date=timezone.localdate() + datetime.timedelta(days=2),
+        required_slots=1,
+    )
+    malicious_description = '<script>alert("xss")</script>'
+    Shift.objects.create(
+        camp=active_camp,
+        name="Sicherer Dienst",
+        date=timezone.localdate() + datetime.timedelta(days=3),
+        required_slots=1,
+        description=malicious_description,
+    )
+
+    content = logged_in_kiosk_client.get(reverse("kiosk-shifts")).content.decode()
+
+    assert 'data-help-text="Für diesen Dienst sind noch keine Informationen hinterlegt."' in content
+    assert 'data-help-text="&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;"' in content
+    assert malicious_description not in content
+
+
+@pytest.mark.django_db
 def test_companion_can_book_own_shift_without_replacing_guardian_assignment(kiosk_client, active_camp):
     guardian = Participant.objects.create(camp=active_camp, first_name="Guardian", last_name="User")
     companion = ParticipantFamilyMember.objects.create(

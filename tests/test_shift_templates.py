@@ -38,6 +38,22 @@ def test_shift_template_create(admin_client, active_camp):
 
 
 @pytest.mark.django_db
+def test_shift_template_create_persists_description(admin_client, active_camp):
+    response = admin_client.post(
+        reverse("shift-template-create", args=[active_camp.pk]),
+        {
+            "name": "Küchendienst",
+            "description": "Arbeitsflächen reinigen und Vorräte prüfen.",
+            "required_slots": 2,
+            "is_active": True,
+        },
+    )
+    assert response.status_code == 302
+    template = DailyShiftTemplate.objects.get(camp=active_camp, name="Küchendienst")
+    assert template.description == "Arbeitsflächen reinigen und Vorräte prüfen."
+
+
+@pytest.mark.django_db
 def test_shift_template_edit(admin_client, active_camp):
     template = DailyShiftTemplate.objects.create(camp=active_camp, name="Old Name", required_slots=2)
     url = reverse("shift-template-edit", args=[template.pk])
@@ -54,8 +70,25 @@ def test_shift_template_edit(admin_client, active_camp):
 
 
 @pytest.mark.django_db
+def test_shift_template_edit_persists_description(admin_client, active_camp):
+    template = DailyShiftTemplate.objects.create(camp=active_camp, name="Küchendienst", required_slots=2)
+    response = admin_client.post(
+        reverse("shift-template-edit", args=[template.pk]),
+        {"name": "Küchendienst", "description": "Neue Aufgabenbeschreibung", "required_slots": 3, "is_active": True},
+    )
+    assert response.status_code == 302
+    template.refresh_from_db()
+    assert template.description == "Neue Aufgabenbeschreibung"
+
+
+@pytest.mark.django_db
 def test_shift_templates_generate(admin_client, active_camp):
-    DailyShiftTemplate.objects.create(camp=active_camp, name="Spüldienst", required_slots=3)
+    DailyShiftTemplate.objects.create(
+        camp=active_camp,
+        name="Spüldienst",
+        description="Geschirr spülen und Küche ordentlich hinterlassen.",
+        required_slots=3,
+    )
     DailyShiftTemplate.objects.create(camp=active_camp, name="Putzdienst", required_slots=2)
 
     url = reverse("shift-templates-generate", args=[active_camp.pk])
@@ -64,3 +97,26 @@ def test_shift_templates_generate(admin_client, active_camp):
 
     # 3 days total (starts_on to ends_on inclusive), 2 templates -> 6 shifts total
     assert Shift.objects.filter(camp=active_camp).count() == 6
+
+    assert {shift.description for shift in Shift.objects.filter(camp=active_camp, name="Spüldienst")} == {
+        "Geschirr spülen und Küche ordentlich hinterlassen."
+    }
+
+
+@pytest.mark.django_db
+def test_shift_templates_generate_preserves_individual_description(admin_client, active_camp):
+    template = DailyShiftTemplate.objects.create(
+        camp=active_camp, name="Spüldienst", description="Vorlagenbeschreibung", required_slots=2
+    )
+    existing_shift = Shift.objects.create(
+        camp=active_camp,
+        date=active_camp.starts_on,
+        name=template.name,
+        description="Individuelle Beschreibung",
+        required_slots=1,
+    )
+    response = admin_client.post(reverse("shift-templates-generate", args=[active_camp.pk]))
+    assert response.status_code == 302
+    existing_shift.refresh_from_db()
+    assert existing_shift.description == "Individuelle Beschreibung"
+    assert existing_shift.required_slots == 2
