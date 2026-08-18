@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% load billing_format %}
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1>Positionsauswertung</h1>
+      <p>{{ camp }}</p>
+    </div>
+    <div class="actions">
+      <a class="button button-secondary" href="{% url 'camp-detail' camp.pk %}">Zur Übersicht</a>
+    </div>
+  </div>
+
+  <section class="metrics" aria-label="Lagerkennzahlen">
+    <article class="metric"><span>Buchungen</span><strong>{{ report.booking_total }}</strong></article>
+    <article class="metric"><span>Buchungswert</span><strong>{{ report.gross_total }} EUR</strong></article>
+    <article class="metric"><span>Übernachtungen</span><strong>{{ report.person_nights }}</strong></article>
+    {% if report.peak_day %}
+      <article class="metric"><span>Stärkster Tag</span><strong>{{ report.peak_day.total }} am {{ report.peak_day.day|date:"d.m." }}</strong></article>
+    {% endif %}
+  </section>
+
+  <section class="panel stack">
+    <div class="toolbar compact-toolbar">
+      <div>
+        <h2>Buchungen je Artikel</h2>
+        <p>Aktive Buchungen dieses Lagers, gruppiert nach Art und Beschreibung. Gelöschte Buchungen sind nicht enthalten.</p>
+      </div>
+    </div>
+    <table class="responsive-record-table">
+      <thead>
+        <tr>
+          <th>Art</th><th>Beschreibung</th><th>Buchungen</th><th>Menge</th><th>Summe</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for article in report.articles %}
+          <tr>
+            <td data-label="Art">{{ article.kind_label }}</td>
+            <td data-label="Beschreibung">{{ article.description }}</td>
+            <td data-label="Buchungen">{{ article.booking_count }}</td>
+            <td data-label="Menge">{{ article.quantity_total }}</td>
+            <td data-label="Summe">{{ article.gross_total|money_eur }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5">Keine Buchungen in diesem Lager erfasst.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel stack">
+    <div class="toolbar compact-toolbar">
+      <div>
+        <h2>Mahlzeiten gesamt</h2>
+        <p>Aktive Essensbuchungen über den gesamten Lagerzeitraum. Zurückgenommene Buchungen sind nicht enthalten.</p>
+      </div>
+    </div>
+    <table class="responsive-record-table">
+      <thead>
+        <tr>
+          <th>Mahlzeit</th>
+          {% for variant_label in report.meals.0.variant_counts.keys %}
+            <th>{{ variant_label }}</th>
+          {% endfor %}
+          <th>Gesamt</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for meal in report.meals %}
+          <tr>
+            <td data-label="Mahlzeit">{{ meal.meal_label }}</td>
+            {% for variant_label, count in meal.variant_counts.items %}
+              <td data-label="{{ variant_label }}">{{ count }}</td>
+            {% endfor %}
+            <td data-label="Gesamt">{{ meal.total }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel stack">
+    <div class="toolbar compact-toolbar">
+      <div>
+        <h2>Anwesenheit pro Tag</h2>
+        <p>Personen, deren An- und Abreise den jeweiligen Tag einschließt. Familienmitglieder zählen einzeln.</p>
+      </div>
+    </div>
+    <table class="responsive-record-table">
+      <thead>
+        <tr>
+          <th>Tag</th><th>Zahlungskonten</th><th>Familienmitglieder</th><th>Personen gesamt</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for day in report.attendance_days %}
+          <tr>
+            <td data-label="Tag">{{ day.day|date:"d.m.Y" }}</td>
+            <td data-label="Zahlungskonten">{{ day.participant_count }}</td>
+            <td data-label="Familienmitglieder">{{ day.family_member_count }}</td>
+            <td data-label="Personen gesamt">{{ day.total }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4">Keine Lagertage hinterlegt.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel stack">
+    <div class="toolbar compact-toolbar">
+      <div>
+        <h2>Anwesenheitstage gesamt</h2>
+        <p>Übernachtungen je Person aufsummiert. Zahlungskonten zählen tatsächliche Nächte, ersatzweise die gebuchten.</p>
+      </div>
+    </div>
+    <table class="responsive-record-table">
+      <thead>
+        <tr><th>Gruppe</th><th>Übernachtungen</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td data-label="Gruppe">Zahlungskonten</td>
+          <td data-label="Übernachtungen">{{ report.participant_nights }}</td>
+        </tr>
+        <tr>
+          <td data-label="Gruppe">Familienmitglieder</td>
+          <td data-label="Übernachtungen">{{ report.family_member_nights }}</td>
+        </tr>
+        <tr>
+          <td data-label="Gruppe"><strong>Gesamt</strong></td>
+          <td data-label="Übernachtungen"><strong>{{ report.person_nights }}</strong></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+{% endblock %}

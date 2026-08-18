@@ -14,6 +14,7 @@
       <a class="button" href="{% url 'expense-create' camp.pk %}">Auslage erfassen</a>
       <a class="button" href="{% url 'participant-import' camp.pk %}">Teilnehmer importieren</a>
       {% if user|can_manage_users %}
+        <a class="button" href="{% url 'camp-position-report' camp.pk %}">Positionsauswertung</a>
         <a class="button" href="{% url 'information-email-compose' camp.pk %}">Information versenden</a>
         <a class="button" href="{% url 'camp-kiosk-access-settings' camp.pk %}">Lager-PIN verwalten</a>
       {% endif %}
