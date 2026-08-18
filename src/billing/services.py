@@ -26,6 +26,8 @@ from .models import (
     Participant,
     ParticipantBookingLink,
     ParticipantFamilyMember,
+    Payment,
+    PaymentAuditLog,
     PriceRule,
     Settlement,
     SettlementRun,
@@ -832,6 +834,88 @@ def restore_booking_from_audit_log(audit_log: BookingAuditLog, changed_by: Any) 
     return restored_charge
 
 
+def payment_audit_snapshot(payment: Payment) -> dict[str, str | None]:
+    """Return the auditable business fields for a recorded payment.
+
+    Args:
+        payment: The payment to serialize.
+
+    Returns:
+        A JSON-serializable snapshot of the payment fields an admin may review.
+    """
+    return {
+        "payment_reference": payment.payment_reference,
+        "amount": str(money(Decimal(str(payment.amount)))),
+        "paid_on": payment.paid_on.isoformat() if payment.paid_on else None,
+        "method": payment.method,
+        "note": payment.note,
+    }
+
+
+def create_payment_delete_audit_log(
+    payment: Payment,
+    before: dict[str, str | None],
+    changed_by: Any,
+) -> PaymentAuditLog:
+    """Persist an audit entry before a recorded payment is soft-deleted.
+
+    Args:
+        payment: The payment that will be marked deleted after the audit row exists.
+        before: Snapshot captured before deletion.
+        changed_by: User who performed the deletion.
+
+    Returns:
+        The created audit log entry. The payment relation stays intact because
+        deletion is represented by soft-delete fields on the payment.
+    """
+    return PaymentAuditLog.objects.create(
+        participant=payment.participant,
+        payment=payment,
+        changed_by=changed_by,
+        action=PaymentAuditLog.Action.DELETED,
+        before=before,
+        after={},
+    )
+
+
+def restore_payment_from_audit_log(audit_log: PaymentAuditLog, changed_by: Any) -> Payment:
+    """Restore a soft-deleted payment referenced by its deletion audit entry.
+
+    Args:
+        audit_log: The deletion audit row that points at the deleted payment.
+        changed_by: User who requested the restoration.
+
+    Returns:
+        The restored payment.
+
+    Raises:
+        ValidationError: If the audit row is not a restorable deletion snapshot.
+    """
+    if audit_log.action != PaymentAuditLog.Action.DELETED:
+        raise ValidationError("Nur gelöschte Zahlungen können wiederhergestellt werden.")
+    restored_payment = audit_log.payment
+    if audit_log.payment_id is None or restored_payment is None:
+        raise ValidationError("Diese Zahlung kann ohne ursprüngliche Zahlung nicht wiederhergestellt werden.")
+    if restored_payment.deleted_at is None:
+        raise ValidationError("Diese Zahlung wurde bereits wiederhergestellt.")
+    if audit_log.participant_id is None:
+        raise ValidationError("Diese Zahlung kann keinem Teilnehmer mehr zugeordnet werden.")
+
+    before = payment_audit_snapshot(restored_payment)
+    restored_payment.deleted_at = None
+    restored_payment.deleted_by = None
+    restored_payment.save(update_fields=["deleted_at", "deleted_by"])
+    PaymentAuditLog.objects.create(
+        participant=audit_log.participant,
+        payment=restored_payment,
+        changed_by=changed_by,
+        action=PaymentAuditLog.Action.RESTORED,
+        before=before,
+        after=payment_audit_snapshot(restored_payment),
+    )
+    return restored_payment
+
+
 def participant_camp_flat_duration(participant):
     nights = participant.actual_nights or participant.booked_nights or 0
     if nights > 7:
@@ -1146,7 +1230,7 @@ def calculate_participant_settlement(participant):
         .prefetch_related(
             Prefetch("charges", queryset=Charge.objects.select_related("family_member")),
             "family_members",
-            "payments",
+            Prefetch("payments", queryset=Payment.objects.filter(deleted_at__isnull=True)),
             "expenses",
             "drink_entries",
             "expense_allocations__expense",
@@ -1167,7 +1251,7 @@ def calculate_participant_settlement(participant):
     total_gross = money(sum((line.gross_total for line in lines), ZERO))
     total_subsidy = money(sum((line.subsidy_amount for line in lines), ZERO))
     total_due = money(sum((line.total for line in lines), ZERO))
-    total_paid = money(participant.payments.aggregate(total=Sum("amount"))["total"])
+    total_paid = money(participant.payments.filter(deleted_at__isnull=True).aggregate(total=Sum("amount"))["total"])
     total_advanced = money(
         Expense.objects.filter(
             participant=participant,
@@ -1231,7 +1315,11 @@ def calculate_participant_settlements(
                 queryset=ExpenseAllocation.objects.select_related("expense"),
                 to_attr="settlement_expense_allocations",
             ),
-            Prefetch("payments", to_attr="settlement_payments"),
+            Prefetch(
+                "payments",
+                queryset=Payment.objects.filter(deleted_at__isnull=True),
+                to_attr="settlement_payments",
+            ),
             Prefetch(
                 "expenses",
                 queryset=Expense.objects.filter(

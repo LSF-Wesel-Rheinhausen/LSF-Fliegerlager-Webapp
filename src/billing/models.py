@@ -1066,12 +1066,62 @@ class Payment(TimeStampedModel):
     paid_on = models.DateField()
     method = models.CharField(max_length=80, blank=True)
     note = models.CharField(max_length=180, blank=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    deleted_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="deleted_payments",
+    )
 
     class Meta:
         ordering = ["-paid_on", "participant"]
+        indexes = [models.Index(fields=["participant", "deleted_at"], name="payment_participant_active")]
+
+    @property
+    def payment_reference(self) -> str:
+        """Return the human-readable payment identifier."""
+        if self._state.adding:
+            return ""
+        return f"Z#{self.pk:05d}"
 
     def __str__(self):
         return f"{self.participant}: {self.amount}"
+
+
+class PaymentAuditLog(models.Model):
+    """Record administrative deletions and restorations of recorded payments."""
+
+    class Action(models.TextChoices):
+        DELETED = "deleted", "Gelöscht"
+        RESTORED = "restored", "Wiederhergestellt"
+
+    participant = models.ForeignKey(
+        Participant,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payment_audit_logs",
+    )
+    payment = models.ForeignKey(Payment, on_delete=models.SET_NULL, null=True, blank=True, related_name="audit_logs")
+    changed_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payment_audit_logs",
+    )
+    action = models.CharField(max_length=20, choices=Action.choices, default=Action.DELETED)
+    before = models.JSONField(default=dict)
+    after = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"{self.payment}: {self.get_action_display()} am {self.created_at:%Y-%m-%d %H:%M}"
 
 
 class Expense(TimeStampedModel):

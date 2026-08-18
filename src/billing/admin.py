@@ -25,6 +25,7 @@ from .models import (
     ParticipantBookingLink,
     ParticipantFamilyMember,
     Payment,
+    PaymentAuditLog,
     PriceRule,
     Settlement,
     SettlementRun,
@@ -35,7 +36,10 @@ from .models import (
 from .services import (
     charge_audit_snapshot,
     create_booking_delete_audit_log,
+    create_payment_delete_audit_log,
+    payment_audit_snapshot,
     restore_booking_from_audit_log,
+    restore_payment_from_audit_log,
 )
 
 admin.site.unregister(User)
@@ -301,7 +305,87 @@ class BookingAuditLogAdmin(admin.ModelAdmin):
         self.message_user(request, f"{restored_count} Buchung(en) wurden aus dem Audit-Protokoll wiederhergestellt.")
 
 
-admin.site.register(Payment)
+@admin.register(Payment)
+class PaymentAdmin(admin.ModelAdmin):
+    list_display = ("payment_reference", "participant", "amount", "paid_on", "method", "deleted_at")
+    list_filter = ("deleted_at", "method")
+    search_fields = ("id", "note", "participant__first_name", "participant__last_name")
+    readonly_fields = ("deleted_at", "deleted_by")
+    actions = ["soft_delete_selected_payments", "restore_selected_payments"]
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("participant")
+
+    @admin.display(description="Zahlungsnr.", ordering="id")
+    def payment_reference(self, payment: Payment) -> str:
+        """Return the formatted payment reference for the admin changelist."""
+        return payment.payment_reference
+
+    @admin.action(description="Ausgewählte Zahlungen als gelöscht markieren (Soft-Delete)")
+    def soft_delete_selected_payments(self, request, queryset):
+        active_payments = list(queryset.filter(deleted_at__isnull=True))
+        if not active_payments:
+            self.message_user(request, "Keine aktiven Zahlungen zum Löschen ausgewählt.", level="warning")
+            return
+        now = timezone.now()
+        with transaction.atomic():
+            for payment in active_payments:
+                before = payment_audit_snapshot(payment)
+                create_payment_delete_audit_log(payment, before, request.user)
+                payment.deleted_at = now
+                payment.deleted_by = request.user
+                payment.save(update_fields=["deleted_at", "deleted_by"])
+        self.message_user(request, f"{len(active_payments)} Zahlung(en) wurden als gelöscht markiert.")
+
+    @admin.action(description="Ausgewählte gelöschte Zahlungen wiederherstellen")
+    def restore_selected_payments(self, request, queryset):
+        deleted_payments = list(queryset.filter(deleted_at__isnull=False))
+        if not deleted_payments:
+            self.message_user(request, "Keine gelöschten Zahlungen zur Wiederherstellung ausgewählt.", level="warning")
+            return
+        restored_count = 0
+        with transaction.atomic():
+            for payment in deleted_payments:
+                audit_log = (
+                    PaymentAuditLog.objects.filter(payment=payment, action=PaymentAuditLog.Action.DELETED)
+                    .order_by("-created_at")
+                    .first()
+                )
+                if audit_log is None:
+                    continue
+                try:
+                    restore_payment_from_audit_log(audit_log, request.user)
+                except Exception:
+                    continue
+                restored_count += 1
+        self.message_user(request, f"{restored_count} Zahlung(en) wurden wiederhergestellt.")
+
+
+@admin.register(PaymentAuditLog)
+class PaymentAuditLogAdmin(admin.ModelAdmin):
+    list_display = ("participant", "payment", "action", "changed_by", "created_at")
+    list_filter = ("action", "created_at")
+    search_fields = ("participant__first_name", "participant__last_name")
+    readonly_fields = ("participant", "payment", "action", "changed_by", "before", "after", "created_at")
+    actions = ["restore_payments_from_audit_log"]
+
+    @admin.action(description="Ausgewählte Zahlungen aus Audit-Protokoll wiederherstellen")
+    def restore_payments_from_audit_log(self, request, queryset):
+        deletion_logs = list(queryset.filter(action=PaymentAuditLog.Action.DELETED))
+        if not deletion_logs:
+            self.message_user(request, "Keine Löschungs-Protokolleinträge ausgewählt.", level="warning")
+            return
+        restored_count = 0
+        with transaction.atomic():
+            for log in deletion_logs:
+                if log.payment is None or log.payment.deleted_at is None:
+                    continue
+                try:
+                    restore_payment_from_audit_log(log, request.user)
+                except Exception:
+                    continue
+                restored_count += 1
+        self.message_user(request, f"{restored_count} Zahlung(en) wurden aus dem Audit-Protokoll wiederhergestellt.")
 
 
 @admin.register(Expense)

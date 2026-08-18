@@ -171,6 +171,112 @@
   <section class="panel stack">
     <div class="toolbar compact-toolbar">
       <div>
+        <h2>Zahlungen</h2>
+        <p>Erfasste Zahlungseingänge dieses Zahlungskontos.</p>
+      </div>
+      {% if not participant.is_archived %}
+        <a class="button" href="{% url 'payment-create' participant.pk %}">Zahlung erfassen</a>
+      {% endif %}
+    </div>
+    <table class="responsive-record-table">
+      <thead>
+        <tr>
+          <th>Nr.</th><th>Datum</th><th>Betrag</th><th>Zahlungsart</th><th>Notiz</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for payment in payments %}
+          <tr>
+            <td data-label="Nr.">{{ payment.payment_reference }}</td>
+            <td data-label="Datum">{{ payment.paid_on }}</td>
+            <td data-label="Betrag">{{ payment.amount|money_eur }}</td>
+            <td data-label="Zahlungsart">{{ payment.method|default:"-" }}</td>
+            <td data-label="Notiz">{{ payment.note|default:"-" }}</td>
+            <td data-label="Aktionen">
+              {% if user|can_manage_users %}
+                <form method="post" action="{% url 'payment-delete' payment.pk %}" style="display: inline;">
+                  {% csrf_token %}
+                  <button
+                    type="submit"
+                    class="button-link button-link-danger"
+                    onclick="return confirm('Diese Zahlung wirklich löschen?');"
+                  >
+                    Löschen
+                  </button>
+                </form>
+              {% else %}
+                -
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6">Keine Zahlungen erfasst.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel stack">
+    <div class="toolbar compact-toolbar">
+      <div>
+        <h2>Zahlungsprotokoll</h2>
+        <p>Protokoll gelöschter Zahlungen und deren Wiederherstellung.</p>
+      </div>
+    </div>
+    <table class="responsive-record-table">
+      <thead>
+        <tr>
+          <th>Zeitpunkt</th><th>Bearbeiter</th><th>Zahlung</th><th>Vorher</th><th>Nachher</th><th>Aktion</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in payment_audit_logs %}
+          <tr>
+            <td data-label="Zeitpunkt">{{ log.created_at }}</td>
+            <td data-label="Bearbeiter">{{ log.changed_by.email|default:log.changed_by.username|default:"System" }}</td>
+            <td data-label="Zahlung">{{ log.before.payment_reference|default:"-" }}</td>
+            <td data-label="Vorher">
+              {% if log.action == "restored" %}
+                -
+              {% else %}
+                {{ log.before.amount }} EUR · {{ log.before.paid_on|default:"-" }} ·
+                {{ log.before.method|default:"-" }} · {{ log.before.note|default:"-" }}
+              {% endif %}
+            </td>
+            <td data-label="Nachher">
+              {% if log.action == "deleted" %}
+                Gelöscht
+              {% else %}
+                Wiederhergestellt
+              {% endif %}
+            </td>
+            <td data-label="Aktion">
+              {% if user|can_manage_users and log.action == "deleted" and log.payment.deleted_at and log.participant %}
+                <form method="post" action="{% url 'payment-audit-restore' log.pk %}" style="display: inline;">
+                  {% csrf_token %}
+                  <button
+                    type="submit"
+                    class="button-link"
+                    onclick="return confirm('Diese Zahlung wiederherstellen?');"
+                  >
+                    Wiederherstellen
+                  </button>
+                </form>
+              {% else %}
+                -
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6">Noch keine Zahlungen gelöscht oder wiederhergestellt.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel stack">
+    <div class="toolbar compact-toolbar">
+      <div>
         <h2>Familienmitglieder</h2>
         <p>Aktive und historische Mitglieder, deren Buchungen dem Zahlungskonto zugeordnet bleiben.</p>
       </div>

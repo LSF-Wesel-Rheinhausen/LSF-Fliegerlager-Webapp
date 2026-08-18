@@ -101,6 +101,8 @@ from .models import (
     ParticipantFamilyMember,
     ParticipantFamilyMemberPin,
     ParticipantPin,
+    Payment,
+    PaymentAuditLog,
     PriceRule,
     Settlement,
     SettlementRun,
@@ -147,6 +149,7 @@ from .services import (
     create_booking_delete_audit_log,
     create_kiosk_action_audit_log,
     create_manual_charge,
+    create_payment_delete_audit_log,
     create_settlement_run,
     is_meal_change_locked,
     kiosk_charge_audit_snapshot,
@@ -158,10 +161,12 @@ from .services import (
     next_catering_order_date,
     participant_kiosk_summaries,
     participant_kiosk_summary,
+    payment_audit_snapshot,
     preload_meal_booking_state_inputs,
     resolve_meal_price_rule,
     resolve_quick_booking_price_rule,
     restore_booking_from_audit_log,
+    restore_payment_from_audit_log,
     save_expense,
     sync_meal_signup_charges_for_camp,
 )
@@ -1154,9 +1159,13 @@ def participant_detail(request, participant_id):
         .select_related("family_member", "charge")
         .order_by("-meal_date", "meal")
     )
+    payments = participant.payments.filter(deleted_at__isnull=True).order_by("-paid_on", "-id")
     audit_logs = BookingAuditLog.objects.filter(
         Q(participant=participant) | Q(charge__participant=participant)
     ).select_related("changed_by", "charge")
+    payment_audit_logs = PaymentAuditLog.objects.filter(
+        Q(participant=participant) | Q(payment__participant=participant)
+    ).select_related("changed_by", "payment")
     settlement_snapshots = participant.settlements.filter(run__isnull=False).select_related("run", "run__camp")
     family_audit_logs = (
         KioskActionAuditLog.objects.filter(target_participant=participant, target_family_member__isnull=False)
@@ -1171,10 +1180,12 @@ def participant_detail(request, participant_id):
             "participant": participant,
             "settlement": settlement,
             "charges": charges,
+            "payments": payments,
             "family_members": family_members,
             "family_meal_signups": family_meal_signups,
             "family_audit_logs": family_audit_logs,
             "audit_logs": audit_logs,
+            "payment_audit_logs": payment_audit_logs,
             "settlement_snapshots": settlement_snapshots,
             "manual_charge_form": manual_charge_form,
         },
@@ -1418,6 +1429,46 @@ def payment_create(request, participant_id):
         messages.success(request, "Zahlung wurde gespeichert.")
         return redirect("participant-detail", participant_id=participant.pk)
     return render(request, "billing/form.html", {"form": form, "title": "Zahlung erfassen"})
+
+
+@admin_required
+@require_POST
+def payment_delete(request: HttpRequest, payment_id: int) -> HttpResponse:
+    """Mark a recorded payment as deleted and keep an audit snapshot for later review."""
+    payment = get_object_or_404(
+        Payment.objects.select_related("participant").filter(deleted_at__isnull=True), pk=payment_id
+    )
+    participant_id = payment.participant_id
+    before = payment_audit_snapshot(payment)
+    with transaction.atomic():
+        create_payment_delete_audit_log(payment, before, request.user)
+        payment.deleted_at = timezone.now()
+        payment.deleted_by_id = request.user.pk
+        payment.save(update_fields=["deleted_at", "deleted_by"])
+    messages.success(request, "Zahlung wurde gelöscht und protokolliert.")
+    return redirect("participant-detail", participant_id=participant_id)
+
+
+@admin_required
+@require_POST
+def payment_audit_restore(request: HttpRequest, audit_log_id: int) -> HttpResponse:
+    """Restore a deleted payment from a deletion audit entry."""
+    audit_log = get_object_or_404(
+        PaymentAuditLog.objects.select_related("participant", "payment"),
+        pk=audit_log_id,
+    )
+    participant_id = audit_log.participant_id
+    try:
+        with transaction.atomic():
+            restored_payment = restore_payment_from_audit_log(audit_log, request.user)
+    except ValidationError as error:
+        messages.error(request, error.message)
+        if participant_id is None:
+            return redirect("camp-list")
+        return redirect("participant-detail", participant_id=participant_id)
+
+    messages.success(request, f"Zahlung „{restored_payment.payment_reference}“ wurde wiederhergestellt.")
+    return redirect("participant-detail", participant_id=restored_payment.participant_id)
 
 
 @admin_required
