@@ -148,6 +148,7 @@ from .services import (
     create_kiosk_action_audit_log,
     create_manual_charge,
     create_settlement_run,
+    generate_shifts_from_templates,
     is_meal_change_locked,
     kiosk_charge_audit_snapshot,
     kiosk_meal_signup_audit_snapshot,
@@ -1660,10 +1661,6 @@ def shift_template_edit(request, template_id):
 @editor_required
 @require_POST
 def shift_templates_generate(request, camp_id):
-    import datetime
-
-    from .models import Shift
-
     camp = get_object_or_404(Camp, pk=camp_id)
 
     if not camp.starts_on or not camp.ends_on:
@@ -1674,47 +1671,7 @@ def shift_templates_generate(request, camp_id):
         )
         return redirect("shift-templates-manage", camp_id=camp.pk)
 
-    templates = camp.daily_shift_templates.all()
-
-    generated_count = 0
-    skipped_count = 0
-    with transaction.atomic():
-        for template in templates:
-            current_date = camp.starts_on
-            exceptions_by_date = {ex.date: ex for ex in template.exceptions.all()}
-            while current_date <= camp.ends_on:
-                exception = exceptions_by_date.get(current_date)
-                if exception and exception.is_skipped:
-                    skipped_count += 1
-                else:
-                    slots = (
-                        exception.custom_required_slots
-                        if exception and exception.custom_required_slots is not None
-                        else template.required_slots
-                    )
-                    start_t = (
-                        exception.custom_start_time
-                        if exception and exception.custom_start_time is not None
-                        else template.start_time
-                    )
-                    end_t = (
-                        exception.custom_end_time
-                        if exception and exception.custom_end_time is not None
-                        else template.end_time
-                    )
-                    Shift.objects.update_or_create(
-                        camp=camp,
-                        date=current_date,
-                        name=template.name,
-                        start_time=start_t,
-                        defaults={
-                            "end_time": end_t,
-                            "required_slots": slots,
-                        },
-                    )
-                    generated_count += 1
-                current_date += datetime.timedelta(days=1)
-
+    generated_count, skipped_count = generate_shifts_from_templates(camp.daily_shift_templates.all())
     messages.success(request, f"{generated_count} Dienste generiert, {skipped_count} übersprungen.")
     return redirect("shift-templates-manage", camp_id=camp.pk)
 

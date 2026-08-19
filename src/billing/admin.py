@@ -35,6 +35,7 @@ from .models import (
 from .services import (
     charge_audit_snapshot,
     create_booking_delete_audit_log,
+    generate_shifts_from_templates,
     restore_booking_from_audit_log,
 )
 
@@ -469,54 +470,7 @@ class DailyShiftTemplateAdmin(admin.ModelAdmin):
 
     @admin.action(description="Dienste für ausgewählte Vorlagen generieren")
     def generate_shifts_for_templates(self, request, queryset):
-        import datetime
-
-        from .models import Shift
-
-        generated_count = 0
-        skipped_count = 0
-        for template in queryset:
-            camp = template.camp
-            if not camp.starts_on or not camp.ends_on:
-                continue
-            current_date = camp.starts_on
-            exceptions_by_date = {ex.date: ex for ex in template.exceptions.all()}
-
-            while current_date <= camp.ends_on:
-                exception = exceptions_by_date.get(current_date)
-
-                if exception and exception.is_skipped:
-                    skipped_count += 1
-                else:
-                    slots = (
-                        exception.custom_required_slots
-                        if exception and exception.custom_required_slots is not None
-                        else template.required_slots
-                    )
-                    start_t = (
-                        exception.custom_start_time
-                        if exception and exception.custom_start_time is not None
-                        else template.start_time
-                    )
-                    end_t = (
-                        exception.custom_end_time
-                        if exception and exception.custom_end_time is not None
-                        else template.end_time
-                    )
-
-                    Shift.objects.update_or_create(
-                        camp=camp,
-                        date=current_date,
-                        name=template.name,
-                        start_time=start_t,
-                        defaults={
-                            "end_time": end_t,
-                            "required_slots": slots,
-                        },
-                    )
-                    generated_count += 1
-                current_date += datetime.timedelta(days=1)
-
+        generated_count, skipped_count = generate_shifts_from_templates(queryset)
         self.message_user(
             request, f"{generated_count} Dienste generiert, {skipped_count} wegen Ausnahmen übersprungen."
         )

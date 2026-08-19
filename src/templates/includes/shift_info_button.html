@@ -1,0 +1,11 @@
+{% with shift_description=shift.description|default:"Für diesen Dienst sind noch keine Informationen hinterlegt." %}
+  <button
+    type="button"
+    class="kiosk-help-button kiosk-help-button--shift"
+    data-help-title="Informationen zu {{ shift.name }}"
+    data-help-text="{{ shift_description }}"
+    aria-label="Informationen zu {{ shift.name }}"
+  >
+    Info
+  </button>
+{% endwith %}

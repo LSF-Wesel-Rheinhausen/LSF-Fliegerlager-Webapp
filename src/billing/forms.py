@@ -1697,15 +1697,17 @@ class MealStandardPricesForm(forms.Form):
 class ShiftForm(forms.ModelForm):
     class Meta:
         model = Shift
-        fields = ["name", "date", "start_time", "end_time", "required_slots"]
+        fields = ["name", "description", "date", "start_time", "end_time", "required_slots"]
         labels = {
             "name": "Name des Dienstes",
+            "description": "Beschreibung / Aufgaben",
             "date": "Datum",
             "start_time": "Startzeit",
             "end_time": "Endzeit",
             "required_slots": "Benötigte Helfer",
         }
         widgets = {
+            "description": forms.Textarea(attrs={"rows": 4}),
             "date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "start_time": forms.TimeInput(attrs={"type": "time"}),
             "end_time": forms.TimeInput(attrs={"type": "time"}),
@@ -1715,14 +1717,16 @@ class ShiftForm(forms.ModelForm):
 class DailyShiftTemplateForm(forms.ModelForm):
     class Meta:
         model = DailyShiftTemplate
-        fields = ["name", "required_slots", "start_time", "end_time"]
+        fields = ["name", "description", "required_slots", "start_time", "end_time"]
         labels = {
             "name": "Bezeichnung",
+            "description": "Beschreibung / Aufgaben",
             "required_slots": "Benötigte Personen",
             "start_time": "Startzeit",
             "end_time": "Endzeit",
         }
         widgets = {
+            "description": forms.Textarea(attrs={"rows": 4}),
             "start_time": forms.TimeInput(attrs={"type": "time"}),
             "end_time": forms.TimeInput(attrs={"type": "time"}),
         }

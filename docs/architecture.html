@@ -41,7 +41,7 @@
         <p><code>UserProfile</code> ergänzt Django-Nutzer um Anwendungsdaten. <code>Charge</code>, <code>Payment</code> und <code>Expense</code> bilden Kosten, Zahlungen und vorgestreckte Beträge ab. <code>CampKioskAccess</code> hält den Hash des gemeinsamen Lager-PINs und eine rotierbare Widerrufsgeneration; <code>ParticipantPin</code> schützt anschließend die persönliche Kiosk-Identität mit gehashtem PIN, Fehlversuchszähler und zeitlich begrenzter Sperre.</p>
         <p><code>MealSignup</code> speichert Essensanmeldungen eindeutig pro Teilnehmer, Datum und Mahlzeit. <code>DrinkEntry</code> bleibt für ältere Getränkedaten erhalten; aktuelle Kiosk-Getränke werden als <code>Charge</code> gespeichert.</p>
         <p><code>BookingAuditLog</code> protokolliert Admin-Korrekturen an Buchungen. <code>SettlementRun</code> hält fortlaufend versionierte Lagerläufe; zugehörige <code>Settlement</code>-Datensätze speichern unveränderliche Teilnehmer-Snapshots.</p>
-        <p><code>Shift</code>, <code>DailyShiftTemplate</code>, <code>DailyShiftException</code> und <code>ShiftAssignment</code> bilden einzelne Dienste, tägliche Vorlagen, Tagesausnahmen, Besetzungen und Tauschangebote ab.</p>
+        <p><code>Shift</code>, <code>DailyShiftTemplate</code>, <code>DailyShiftException</code> und <code>ShiftAssignment</code> bilden einzelne Dienste, tägliche Vorlagen, Tagesausnahmen, Besetzungen und Tauschangebote ab. <code>DailyShiftTemplate.description</code> dient als Text für die Massenerstellung; <code>Shift.description</code> ist der individuelle, für Teilnehmer sichtbare Beschreibungstext.</p>
       </section>
 
       <section>
@@ -78,10 +78,16 @@
         <h2>Dienstplan-Datenfluss</h2>
         <ol>
           <li>Admins definieren tägliche Vorlagen und optionale Ausnahmen für einzelne Tage.</li>
+          <li>Vorlagen können eine Beschreibung der Aufgaben enthalten. Bei der Generierung wird sie nur für neu angelegte <code>Shift</code>-Datensätze übernommen; eine erneute Generierung überschreibt individuelle Beschreibungen nicht.</li>
           <li>Die Generierung verwendet <code>update_or_create()</code> und bleibt bei wiederholter Ausführung idempotent.</li>
           <li>Besetzungen und Tauschangebote werden als <code>ShiftAssignment</code> gespeichert.</li>
           <li>Admin-Auswertung und Kiosk-Fortschritt vergleichen erledigte mit erforderlichen Diensten.</li>
         </ol>
+      </section>
+
+      <section>
+        <h2>Dienstinformationen im Kiosk</h2>
+        <p>Jede Dienstkarte enthält einen Info-Button. Der native Hilfedialog setzt Titel und Inhalt als reinen Text; HTML und Markdown werden nicht interpretiert. Für leere Beschreibungen wird ein neutraler Fallback angezeigt. Das gilt gleichermaßen für offene Dienste, eigene Dienste und Tauschangebote.</p>
       </section>
 
       <section>
