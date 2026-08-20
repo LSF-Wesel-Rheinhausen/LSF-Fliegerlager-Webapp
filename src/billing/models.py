@@ -1,3 +1,4 @@
+import datetime
 import uuid
 from collections.abc import Collection
 from datetime import date, time, timedelta
@@ -481,6 +482,8 @@ class Participant(TimeStampedModel):
     )
     arrival_date = models.DateField(null=True, blank=True)
     departure_date = models.DateField(null=True, blank=True)
+    birth_date = models.DateField(null=True, blank=True)
+    attendance_tracking_enabled = models.BooleanField(default=False)
     booked_nights = models.PositiveIntegerField(default=0)
     actual_nights = models.PositiveIntegerField(default=0)
     notes = models.TextField(blank=True)
@@ -517,7 +520,29 @@ class Participant(TimeStampedModel):
     def target_shifts(self) -> int:
         if self.is_child:
             return 0
-        return int(round(Decimal(self.booked_nights) * self.camp.shift_ratio_per_night))
+        return int(round(Decimal(self.effective_attendance_nights) * self.camp.shift_ratio_per_night))
+
+    def age_on(self, reference_date: date) -> int | None:
+        """Return the completed age on reference_date, rejecting future birth dates."""
+        if self.birth_date is None:
+            return None
+        if self.birth_date > reference_date:
+            raise ValidationError("Das Geburtsdatum darf nicht in der Zukunft liegen.")
+        return (
+            reference_date.year
+            - self.birth_date.year
+            - ((reference_date.month, reference_date.day) < (self.birth_date.month, self.birth_date.day))
+        )
+
+    @property
+    def effective_attendance_nights(self) -> int:
+        """Return tracked present nights, or the legacy actual/booked fallback."""
+        if self.attendance_tracking_enabled:
+            prefetched_records = getattr(self, "prefetched_attendance_days", None)
+            if prefetched_records is not None:
+                return sum(record.is_present and record.family_member_id is None for record in prefetched_records)
+            return self.attendance_days.filter(family_member__isnull=True, is_present=True).count()
+        return self.actual_nights or self.booked_nights
 
     @property
     def completed_shifts(self) -> int:
@@ -592,6 +617,8 @@ class ParticipantFamilyMember(TimeStampedModel):
     guardian = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="family_members")
     first_name = models.CharField(max_length=120)
     last_name = models.CharField(max_length=120)
+    email = models.EmailField(blank=True)
+    phone = models.CharField(max_length=80, blank=True)
     role = models.CharField(max_length=20, choices=Role.choices)
     is_youth_group = models.BooleanField(
         default=False,
@@ -599,6 +626,8 @@ class ParticipantFamilyMember(TimeStampedModel):
     )
     arrival_date = models.DateField(null=True, blank=True)
     departure_date = models.DateField(null=True, blank=True)
+    birth_date = models.DateField(null=True, blank=True)
+    attendance_tracking_enabled = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -635,10 +664,107 @@ class ParticipantFamilyMember(TimeStampedModel):
         """Return required shifts using the same camp ratio as regular participants."""
         if self.is_child:
             return 0
-        return int(round(Decimal(self.booked_nights) * self.guardian.camp.shift_ratio_per_night))
+        return int(round(Decimal(self.effective_attendance_nights) * self.guardian.camp.shift_ratio_per_night))
+
+    def age_on(self, reference_date: date) -> int | None:
+        """Return the completed age on reference_date, rejecting future birth dates."""
+        if self.birth_date is None:
+            return None
+        if self.birth_date > reference_date:
+            raise ValidationError("Das Geburtsdatum darf nicht in der Zukunft liegen.")
+        return (
+            reference_date.year
+            - self.birth_date.year
+            - ((reference_date.month, reference_date.day) < (self.birth_date.month, self.birth_date.day))
+        )
+
+    @property
+    def effective_attendance_nights(self) -> int:
+        """Return tracked present nights, or the established family stay fallback."""
+        if self.attendance_tracking_enabled:
+            prefetched_records = getattr(self, "prefetched_attendance_days", None)
+            if prefetched_records is not None:
+                return sum(record.is_present and record.family_member_id == self.pk for record in prefetched_records)
+            return self.attendance_days.filter(is_present=True).count()
+        if self.arrival_date and self.departure_date and self.departure_date > self.arrival_date:
+            return (self.departure_date - self.arrival_date).days
+        return self.guardian.actual_nights or self.guardian.booked_nights
+
+    @property
+    def effective_target_shifts(self) -> int:
+        """Return required shifts calculated from tracked attendance when enabled."""
+        if self.is_child:
+            return 0
+        return int(round(Decimal(self.effective_attendance_nights) * self.guardian.camp.shift_ratio_per_night))
 
     def __str__(self):
         return f"{self.full_name} ({self.guardian})"
+
+
+class AttendanceDay(TimeStampedModel):
+    """Store one presence decision for a participant or one of their family members."""
+
+    participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="attendance_days")
+    family_member = models.ForeignKey(
+        ParticipantFamilyMember,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="attendance_days",
+    )
+    date = models.DateField()
+    is_present = models.BooleanField(default=False)
+    comment = models.CharField(max_length=500, blank=True)
+
+    class Meta:
+        ordering = ["date", "pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["participant", "date"],
+                condition=models.Q(family_member__isnull=True),
+                name="unique_participant_attendance_day",
+            ),
+            models.UniqueConstraint(
+                fields=["family_member", "date"],
+                condition=models.Q(family_member__isnull=False),
+                name="unique_family_attendance_day",
+            ),
+        ]
+
+    @property
+    def overnight(self) -> tuple[datetime.date, datetime.date]:
+        """Return the arrival-inclusive, following-day-exclusive overnight range."""
+        return self.date, self.date + timedelta(days=1)
+
+    def clean(self) -> None:
+        """Validate that the attendance target belongs to the account and stays within its visit."""
+        super().clean()
+        if self.participant_id is None:
+            raise ValidationError({"participant": "Ein Zielkonto ist erforderlich."})
+        target_arrival = self.participant.arrival_date
+        target_departure = self.participant.departure_date
+        if self.family_member is not None:
+            if self.family_member.guardian_id != self.participant_id:
+                raise ValidationError({"family_member": "Das Familienmitglied gehört nicht zum Zielkonto."})
+            target_arrival = self.family_member.arrival_date or target_arrival
+            target_departure = self.family_member.departure_date or target_departure
+        if target_arrival and self.date < target_arrival or target_departure and self.date >= target_departure:
+            raise ValidationError({"date": "Der Anwesenheitstag liegt außerhalb des Aufenthaltsbereichs."})
+        camp = self.participant.camp
+        earliest = camp.starts_on - timedelta(days=4) if camp.starts_on else None
+        latest = camp.ends_on + timedelta(days=4) if camp.ends_on else None
+        if earliest and self.date < earliest or latest and self.date >= latest:
+            raise ValidationError({"date": "Der Anwesenheitstag liegt außerhalb des Lagerfensters."})
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Validate attendance records even when callers bypass service helpers."""
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        family_member = self.family_member
+        target = family_member.full_name if family_member is not None else self.participant.full_name
+        return f"{target}: {self.date}"
 
 
 class ParticipantFamilyMemberPin(TimeStampedModel):
@@ -923,6 +1049,7 @@ class KioskActionAuditLog(models.Model):
         MEAL_BOOKED = "meal_booked", "Essensanmeldung gespeichert"
         MEAL_RETRACTED = "meal_retracted", "Essensanmeldung zurückgenommen"
         CHECKIN_UPDATED = "checkin_updated", "Anwesenheit geändert"
+        PROFILE_UPDATED = "profile_updated", "Stammdaten geändert"
 
     camp = models.ForeignKey(Camp, on_delete=models.PROTECT, related_name="kiosk_action_audit_logs")
     actor_participant = models.ForeignKey(

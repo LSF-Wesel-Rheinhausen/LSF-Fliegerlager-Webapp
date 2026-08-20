@@ -13,7 +13,7 @@ from django.utils import timezone
 from openpyxl import load_workbook
 
 from billing.forms import ParticipantFamilyMemberForm
-from billing.models import Charge, KioskActionAuditLog, MealSignup, PriceRule
+from billing.models import AttendanceDay, Charge, KioskActionAuditLog, MealSignup, PriceRule
 from billing.permissions import EDITOR_GROUP
 from billing.services import (
     calculate_camp_settlements,
@@ -482,6 +482,52 @@ def test_family_charges_and_meal_signups_are_query_bounded_and_visible_in_guardi
     assert {line.target_name for result in results.values() for line in result.lines} == {
         member.full_name for member in members
     }
+
+
+@pytest.mark.django_db
+def test_tracked_attendance_keeps_batch_settlements_query_bounded(django_assert_num_queries):
+    """Attendance rows are loaded once per target type, not once per person or price rule."""
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 14))
+    PriceRuleFactory(camp=camp, kind=PriceRule.Kind.NIGHT, is_default=True)
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.CAMP_FLAT,
+        camp_flat_role=PriceRule.CampFlatRole.PARTICIPANT,
+        camp_flat_duration=PriceRule.CampFlatDuration.ONE_WEEK,
+        is_default=True,
+    )
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.CAMP_FLAT,
+        camp_flat_role=PriceRule.CampFlatRole.COMPANION,
+        camp_flat_duration=PriceRule.CampFlatDuration.ONE_WEEK,
+        applies_to_adults=False,
+        is_default=True,
+    )
+    guardians = []
+    for _index in range(3):
+        guardian = ParticipantFactory(camp=camp, attendance_tracking_enabled=True)
+        companion = ParticipantFamilyMemberFactory(
+            guardian=guardian,
+            role=ParticipantFamilyMemberFactory._meta.model.Role.COMPANION,
+            attendance_tracking_enabled=True,
+        )
+        AttendanceDay.objects.create(participant=guardian, date=date(2026, 7, 2), is_present=True)
+        AttendanceDay.objects.create(
+            participant=guardian,
+            family_member=companion,
+            date=date(2026, 7, 2),
+            is_present=True,
+        )
+        guardians.append(guardian)
+
+    with django_assert_num_queries(10):
+        results = calculate_participant_settlements(guardians)
+
+    assert {result.participant.pk for result in results.values()} == {guardian.pk for guardian in guardians}
+    assert {
+        line.quantity for result in results.values() for line in result.lines if line.source.startswith("price_rule:")
+    } == {Decimal("1")}
 
 
 @pytest.mark.django_db

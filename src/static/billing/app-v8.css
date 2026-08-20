@@ -1555,6 +1555,14 @@ textarea {
   margin: 0;
 }
 
+.attendance-matrix-scroll > table {
+  display: table;
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+  overflow: visible;
+}
+
 .kiosk-table__wrapper td,
 .kiosk-table__wrapper th {
   white-space: nowrap;

@@ -179,6 +179,10 @@
       <button class="button button-secondary">Schließen</button>
     </form>
     <nav class="kiosk-menu" aria-label="Kiosk-Bereiche">
+      <a class="kiosk-menu__item" href="{{ kiosk_profile_url }}">
+        <span>Mein Profil</span>
+        <small>Kontaktdaten und Geburtsdatum bearbeiten.</small>
+      </a>
       {% if not is_pre_camp and not is_post_camp %}
         <button type="button" class="kiosk-menu__item hide-on-mobile" data-dialog-target="meal-calendar-dialog">
           <span>Abendessen (Kalender)</span>
@@ -478,15 +482,18 @@
         </div>
       </section>
 
-      <section class="panel kiosk-card kiosk-card--muted" data-kiosk-card="check-in">
-        <div class="kiosk-card__header kiosk-section-heading">
-          <div class="kiosk-card__header-main">
-            <h2 class="kiosk-title">Check-in</h2>
-            <p>Pflege An- und Abreise für dein eigenes und freigegebene Partnerkonten samt Familie.</p>
+      {% endif %}
+
+      {% if checkin_available %}
+        <section class="panel kiosk-card kiosk-card--muted" data-kiosk-card="check-in">
+          <div class="kiosk-card__header kiosk-section-heading">
+            <div class="kiosk-card__header-main">
+              <h2 class="kiosk-title">Check-in</h2>
+              <p>Pflege An- und Abreise für dein eigenes und freigegebene Partnerkonten samt Familie.</p>
+            </div>
+            <button type="button" class="button kiosk-card__action" data-open-checkin-dialog>Eintragen</button>
           </div>
-          <button type="button" class="button kiosk-card__action" data-open-checkin-dialog>Eintragen</button>
-        </div>
-      </section>
+        </section>
       {% endif %}
 
     </div>
@@ -1156,7 +1163,16 @@
     </form>
   </dialog>{% endif %}
 
-  {% if not is_pre_camp %}
+  {% if not checkin_available %}
+    {% if not participant.camp.starts_on or not participant.camp.ends_on or participant.camp.starts_on >= participant.camp.ends_on %}
+      <section class="panel notice notice-warning" role="status" aria-labelledby="checkin-data-warning-title">
+        <h2 id="checkin-data-warning-title">Check-in derzeit nicht verfügbar</h2>
+        <p>Der Lagerzeitraum fehlt oder ist ungültig. Bitte wende dich an die Lagerleitung, damit Beginn und Ende des Lagers ergänzt werden.</p>
+      </section>
+    {% endif %}
+  {% endif %}
+
+  {% if checkin_available %}
   <dialog id="checkin-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="checkin-dialog-title">
     <form method="dialog" class="dialog-heading">
       <div>
@@ -1177,9 +1193,7 @@
               {% if checkin_target.camp.starts_on or checkin_target.camp.ends_on %}
                 <span>
                   Erlaubter Zeitraum:
-                  {% if checkin_target.camp.starts_on %}{{ checkin_target.camp.starts_on|date:"d.m.Y" }}{% endif %}
-                  {% if checkin_target.camp.starts_on and checkin_target.camp.ends_on %}–{% endif %}
-                  {% if checkin_target.camp.ends_on %}{{ checkin_target.camp.ends_on|date:"d.m.Y" }}{% endif %}
+                  {% if checkin_target.attendance_window %}{{ checkin_target.attendance_window.0|date:"d.m.Y" }}–{{ checkin_target.attendance_window.1|date:"d.m.Y" }}{% endif %}
                 </span>
               {% endif %}
             </div>
@@ -1189,6 +1203,7 @@
               name="checkin_state_{{ checkin_target.token }}"
               value="{{ checkin_target.state_token }}"
             >
+            <input type="hidden" name="attendance-submitted_{{ checkin_target.token }}" value="1">
             <p class="dialog-field">
               <label for="arrival-date-{{ checkin_target.token }}">Anreise</label>
               <input
@@ -1211,6 +1226,23 @@
                 {% if checkin_target.camp.ends_on %}data-max-date-label="{{ checkin_target.camp.ends_on|date:'d.m.Y' }}"{% endif %}
               >
             </p>
+            <fieldset class="dialog-field">
+              <legend>Übernachtungen</legend>
+              {% for day in checkin_target.calendar %}
+                <label for="attendance-present-{{ checkin_target.token }}-{{ day.date|date:'Ymd' }}">
+                  <input
+                    id="attendance-present-{{ checkin_target.token }}-{{ day.date|date:'Ymd' }}"
+                    type="checkbox"
+                    name="attendance-present_{{ checkin_target.token }}"
+                    value="{{ day.date|date:'Y-m-d' }}"
+                    aria-label="{{ checkin_target.name }} am {{ day.date|date:'d.m.Y' }} anwesend"
+                    {% if day.is_present %}checked{% endif %}
+                    {% if day.disabled %}disabled{% endif %}
+                  >
+                  {{ day.date|date:"d.m.Y" }}
+                </label>
+              {% endfor %}
+            </fieldset>
           </article>
         {% endfor %}
       </div>
