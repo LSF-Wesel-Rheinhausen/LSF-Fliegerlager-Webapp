@@ -9,6 +9,7 @@
 - Prefetches participant and family attendance during cost-center evaluation to keep query counts constant.
 - Renders age zero for participants and family members while reserving `-` for missing ages.
 - Validates profile birth dates against Django's configured local date at timezone boundaries.
+- Normalizes profile-form imports in the kiosk profile tests for consistent code-quality analysis.
 
 Changed areas/files:
 

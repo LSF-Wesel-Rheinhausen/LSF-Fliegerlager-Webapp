@@ -5,6 +5,7 @@ import pytest
 from django.test import RequestFactory
 from django.utils import timezone
 
+import billing.profile_forms as profile_forms
 from billing.kiosk_access import KIOSK_FAMILY_MEMBER_SESSION_KEY, KIOSK_PARTICIPANT_SESSION_KEY
 from billing.models import KioskActionAuditLog, Participant, ParticipantFamilyMember
 from tests.factories import ParticipantFactory, ParticipantFamilyMemberFactory
@@ -22,10 +23,8 @@ def _request(method, path, *, data, participant=None, family_member=None):
 
 @pytest.mark.django_db
 def test_participant_profile_form_whitelists_and_normalizes_contact_fields():
-    from billing.profile_forms import ParticipantProfileForm
-
     participant = ParticipantFactory(first_name="Old", last_name="Name", email="old@example.test", phone="0")
-    form = ParticipantProfileForm(
+    form = profile_forms.ParticipantProfileForm(
         {
             "first_name": "  Ada  ",
             "last_name": "  Lovelace ",
@@ -66,9 +65,7 @@ def test_participant_profile_form_whitelists_and_normalizes_contact_fields():
     ],
 )
 def test_profile_form_rejects_blank_names_and_future_birth_date(data, field):
-    from billing.profile_forms import ParticipantProfileForm
-
-    form = ParticipantProfileForm(data, instance=ParticipantFactory())
+    form = profile_forms.ParticipantProfileForm(data, instance=ParticipantFactory())
 
     assert not form.is_valid()
     assert field in form.errors
@@ -76,8 +73,6 @@ def test_profile_form_rejects_blank_names_and_future_birth_date(data, field):
 
 @pytest.mark.django_db
 def test_profile_form_uses_configured_local_date_at_midnight_boundary(monkeypatch):
-    import billing.profile_forms as profile_forms
-
     monkeypatch.setattr(profile_forms, "timezone", SimpleNamespace(localdate=lambda: date(2026, 7, 2)), raising=False)
     monkeypatch.setattr(profile_forms, "date", SimpleNamespace(today=lambda: date(2026, 7, 1)), raising=False)
     form = profile_forms.ParticipantProfileForm(
@@ -90,12 +85,10 @@ def test_profile_form_uses_configured_local_date_at_midnight_boundary(monkeypatc
 
 @pytest.mark.django_db
 def test_profile_form_rejects_case_insensitive_same_camp_participant_name_collision():
-    from billing.profile_forms import ParticipantProfileForm
-
     participant = ParticipantFactory(first_name="Original", last_name="Person")
     ParticipantFactory(camp=participant.camp, first_name="Existing", last_name="Name")
 
-    form = ParticipantProfileForm(
+    form = profile_forms.ParticipantProfileForm(
         {"first_name": " existing ", "last_name": " NAME "},
         instance=participant,
     )
