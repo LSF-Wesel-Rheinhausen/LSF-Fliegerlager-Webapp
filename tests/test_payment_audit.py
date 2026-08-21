@@ -9,7 +9,6 @@ from django.urls import reverse
 from django.utils import timezone
 
 import billing.admin as billing_admin
-from billing.admin import PaymentAdmin, PaymentAuditLogAdmin
 from billing.models import Payment, PaymentAuditLog
 from billing.permissions import EDITOR_GROUP
 from billing.services import (
@@ -34,7 +33,7 @@ def test_payment_reference_uses_human_readable_payment_id():
 
 
 def test_payment_admin_exposes_soft_delete_actions():
-    admin = PaymentAdmin(Payment, AdminSite())
+    admin = billing_admin.PaymentAdmin(Payment, AdminSite())
 
     assert "payment_reference" in admin.list_display
     assert "deleted_at" in admin.readonly_fields
@@ -60,7 +59,7 @@ def test_payment_audit_admin_reports_expected_validation_errors(monkeypatch):
     request = RequestFactory().post("/admin/billing/paymentauditlog/")
     request.user = admin_user
     request._messages = MagicMock()
-    admin = PaymentAuditLogAdmin(PaymentAuditLog, AdminSite())
+    admin = billing_admin.PaymentAuditLogAdmin(PaymentAuditLog, AdminSite())
 
     def raise_validation_error(_audit_log, _changed_by):
         raise ValidationError("already restored")
@@ -100,7 +99,7 @@ def test_payment_audit_admin_propagates_unexpected_errors_and_rolls_back(monkeyp
     request = RequestFactory().post("/admin/billing/paymentauditlog/")
     request.user = admin_user
     request._messages = MagicMock()
-    admin = PaymentAuditLogAdmin(PaymentAuditLog, AdminSite())
+    admin = billing_admin.PaymentAuditLogAdmin(PaymentAuditLog, AdminSite())
 
     def restore_with_unexpected_failure(audit_log, changed_by):
         if audit_log.pk == audit_logs[0].pk:
@@ -143,8 +142,8 @@ def test_editor_cannot_execute_payment_admin_actions_or_mutate_payment_audit():
     request = RequestFactory().post("/admin/billing/payment/")
     request.user = editor
     request._messages = MagicMock()
-    payment_admin = PaymentAdmin(Payment, AdminSite())
-    audit_admin = PaymentAuditLogAdmin(PaymentAuditLog, AdminSite())
+    payment_admin = billing_admin.PaymentAdmin(Payment, AdminSite())
+    audit_admin = billing_admin.PaymentAuditLogAdmin(PaymentAuditLog, AdminSite())
 
     with pytest.raises(PermissionDenied):
         payment_admin.soft_delete_selected_payments(request, Payment.objects.filter(pk=payment.pk))
@@ -171,7 +170,9 @@ def test_superuser_can_execute_payment_admin_action():
     request.user = admin_user
     request._messages = MagicMock()
 
-    PaymentAdmin(Payment, AdminSite()).soft_delete_selected_payments(request, Payment.objects.filter(pk=payment.pk))
+    billing_admin.PaymentAdmin(Payment, AdminSite()).soft_delete_selected_payments(
+        request, Payment.objects.filter(pk=payment.pk)
+    )
 
     payment.refresh_from_db()
     assert payment.deleted_at is not None
