@@ -1311,7 +1311,7 @@ def test_kiosk_expense_receipt_rejects_other_participants(kiosk_client):
     try:
         response = kiosk_client.get(reverse("expense-receipt", args=[expense.pk]))
 
-        assert response.status_code == 403
+        assert response.status_code == 404
     finally:
         expense.receipt.delete(save=False)
 

@@ -223,11 +223,46 @@ def test_unauthorized_receipt_requests_do_not_reveal_receipt_existence(client, c
             client.get(reverse("expense-receipt", args=[expense.pk])) for expense in (with_receipt, without_receipt)
         ]
 
-        assert responses[0].status_code == 403
-        assert responses[1].status_code == 403
+        expected_status = 404 if caller == "unauthorized_kiosk" else 403
+        assert responses[0].status_code == expected_status
+        assert responses[1].status_code == expected_status
         assert responses[0].content == responses[1].content
     finally:
         with_receipt.receipt.delete(save=False)
+
+
+@pytest.mark.django_db
+def test_unauthorized_kiosk_receipt_requests_do_not_reveal_expense_row_existence(client):
+    camp = CampFactory(is_active=True, name="Expense-ID-Oracle-Testlager")
+    owner = ParticipantFactory(camp=camp, first_name="Owner")
+    stranger = ParticipantFactory(camp=camp, first_name="Stranger")
+    expense = Expense.objects.create(
+        camp=camp,
+        participant=owner,
+        category="Einkauf",
+        description="Privater Beleg",
+        amount=Decimal("7.50"),
+        receipt=SimpleUploadedFile("existing.pdf", b"private receipt", content_type="application/pdf"),
+    )
+    access = CampKioskAccess.objects.create(camp=camp)
+    access.set_pin("246810")
+    access.save()
+    cookie_response = HttpResponse()
+    set_kiosk_access_cookie(cookie_response, access)
+    client.cookies[KIOSK_ACCESS_COOKIE_NAME] = cookie_response.cookies[KIOSK_ACCESS_COOKIE_NAME].value
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = stranger.pk
+    session.save()
+
+    try:
+        existing_response = client.get(reverse("expense-receipt", args=[expense.pk]))
+        unknown_response = client.get(reverse("expense-receipt", args=[expense.pk + 1]))
+
+        assert existing_response.status_code == 404
+        assert unknown_response.status_code == 404
+        assert existing_response.content == unknown_response.content
+    finally:
+        expense.receipt.delete(save=False)
 
 
 @pytest.mark.django_db

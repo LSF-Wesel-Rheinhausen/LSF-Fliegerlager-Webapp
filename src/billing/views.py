@@ -1934,7 +1934,7 @@ def expense_receipt_download(request: HttpRequest, expense_id: int) -> FileRespo
     participant = _kiosk_participant(request)
     can_view_own_receipt = participant is not None and expense.participant_id == participant.pk
     if not can_view_own_receipt and not is_editor(request.user):
-        raise PermissionDenied
+        raise Http404("Rechnungsbeleg wurde nicht gefunden.")
     if not expense.receipt:
         raise Http404("Kein Rechnungsbeleg vorhanden.")
 
