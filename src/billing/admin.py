@@ -316,6 +316,9 @@ class PaymentAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("participant")
 
+    def has_delete_permission(self, request, obj=None):
+        """Disable hard deletes so payments remain auditable via soft-delete."""
+        return False
     @admin.display(description="Zahlungsnr.", ordering="id")
     def payment_reference(self, payment: Payment) -> str:
         """Return the formatted payment reference for the admin changelist."""
