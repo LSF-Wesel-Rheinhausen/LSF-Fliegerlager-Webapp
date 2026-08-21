@@ -508,10 +508,17 @@ def test_tracked_attendance_keeps_batch_settlements_query_bounded(django_assert_
     )
     guardians = []
     for _index in range(3):
-        guardian = ParticipantFactory(camp=camp, attendance_tracking_enabled=True)
+        guardian = ParticipantFactory(
+            camp=camp,
+            arrival_date=date(2026, 7, 1),
+            departure_date=date(2026, 7, 3),
+            attendance_tracking_enabled=True,
+        )
         companion = ParticipantFamilyMemberFactory(
             guardian=guardian,
             role=ParticipantFamilyMemberFactory._meta.model.Role.COMPANION,
+            arrival_date=date(2026, 7, 1),
+            departure_date=date(2026, 7, 3),
             attendance_tracking_enabled=True,
         )
         AttendanceDay.objects.create(participant=guardian, date=date(2026, 7, 2), is_present=True)

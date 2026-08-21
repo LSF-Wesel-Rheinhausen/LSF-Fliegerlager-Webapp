@@ -546,6 +546,8 @@ class Participant(TimeStampedModel):
         if self.attendance_tracking_enabled:
             if self.camp.starts_on is None or self.camp.ends_on is None or self.camp.starts_on >= self.camp.ends_on:
                 return 0
+            if self.arrival_date is None or self.departure_date is None or self.arrival_date >= self.departure_date:
+                return 0
             window_start = self.camp.starts_on - timedelta(days=4)
             window_end = self.camp.ends_on + timedelta(days=4)
             prefetched_records = getattr(self, "prefetched_attendance_days", None)
@@ -718,6 +720,8 @@ class ParticipantFamilyMember(TimeStampedModel):
             window_end = camp.ends_on + timedelta(days=4)
             arrival_date = self.arrival_date or self.guardian.arrival_date
             departure_date = self.departure_date or self.guardian.departure_date
+            if arrival_date is None or departure_date is None or arrival_date >= departure_date:
+                return 0
             prefetched_records = getattr(self, "prefetched_attendance_days", None)
             if prefetched_records is not None:
                 return sum(
