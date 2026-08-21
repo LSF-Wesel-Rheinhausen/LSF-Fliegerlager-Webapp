@@ -35,6 +35,25 @@ Standardbefehle:
 npm run test:e2e
 ```
 
-Die gemeinsame lokale Beispieldatenbank wird mit `.venv/bin/python src/manage.py seed_local_test_db` erzeugt. Der zweite Lauf erzeugt keine Duplikate und verändert keine fremden Seed-Datensätze. pytest, CI und parallele Playwright-Worker verwenden weiterhin isolierte Datenbanken; nur ein serieller lokaler E2E-/Review-Lauf darf bewusst gegen dieselbe lokale Seed-Datenbank zeigen.
+Die gemeinsame lokale Beispieldatenbank wird mit der festgelegten SQLite-URL und diesen Befehlen erzeugt:
+
+```bash
+export DATABASE_URL=sqlite:////Users/jansellerbeck/git/LSF-Fliegerlager-Webapp/src/db.sqlite3
+.venv/bin/python src/manage.py migrate --noinput
+.venv/bin/python src/manage.py seed_local_test_db
+```
+
+Der Seed ist idempotent, lokal-only und nicht für Produktion bestimmt. Die deterministischen lokalen Logins sind:
+
+- `local-admin` / `LocalAdmin-417-Only!` (aktiv, Admin)
+- `local-editor` / `LocalEditor-417-Only!` (aktiv, Editor)
+- `local-huebers` / `LocalHuebers-417-Only!` (aktiv, Huebers)
+- `local-inactive` / `LocalInactive-417-Only!` (deaktiviert; Anmeldung wird abgelehnt)
+- Lager-Kiosk-PIN: `864208`
+- `AdultComplete Synthetic` / persönliche PIN `2468`
+- `ChildPartial Synthetic` / persönliche PIN `8642` (gesperrt)
+- `FamilyCompanion Synthetic` / persönliche PIN `9753`
+
+pytest, CI und parallele Playwright-Worker verwenden weiterhin isolierte Datenbanken; nur ein serieller lokaler E2E-/Review-Lauf darf bewusst gegen dieselbe lokale Seed-Datenbank zeigen.
 
 Der lokale Sammellauf ist `npm run test:local`; die Logs werden unter `.test-local-logs/<timestamp>/` abgelegt.
