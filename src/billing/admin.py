@@ -320,6 +320,7 @@ class PaymentAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         """Disable hard deletes so payments remain auditable via soft-delete."""
         return False
+
     @admin.display(description="Zahlungsnr.", ordering="id")
     def payment_reference(self, payment: Payment) -> str:
         """Return the formatted payment reference for the admin changelist."""
@@ -341,22 +342,6 @@ class PaymentAdmin(admin.ModelAdmin):
                 payment.save(update_fields=["deleted_at", "deleted_by"])
         self.message_user(request, f"{len(active_payments)} Zahlung(en) wurden als gelöscht markiert.")
 
-    @admin.action(description="Ausgewählte gelöschte Zahlungen wiederherstellen")
-    def restore_selected_payments(self, request, queryset):
-        deleted_payments = list(queryset.filter(deleted_at__isnull=False))
-        if not deleted_payments:
-            self.message_user(request, "Keine gelöschten Zahlungen zur Wiederherstellung ausgewählt.", level="warning")
-            return
-        restored_count = 0
-        with transaction.atomic():
-            for payment in deleted_payments:
-                audit_log = (
-                    PaymentAuditLog.objects.filter(payment=payment, action=PaymentAuditLog.Action.DELETED)
-                    .order_by("-created_at")
-                    .first()
-                )
-                if audit_log is None:
-                    continue
     @admin.action(description="Ausgewählte gelöschte Zahlungen wiederherstellen")
     def restore_selected_payments(self, request, queryset):
         from django.core.exceptions import ValidationError
