@@ -32,6 +32,7 @@ from .attendance import (
     build_target_attendance_calendar,
     prepare_attendance_replacement_payload,
     target_attendance_records,
+    target_stay_for,
 )
 from .daily_settlement_backups import update_daily_backup_settings
 from .deployment_updates import UpdateAgentError, check_for_update, deployment_status, install_update
@@ -1145,7 +1146,20 @@ def participant_restore(request, participant_id):
 
 @editor_required
 def participant_detail(request, participant_id):
-    participant = get_object_or_404(Participant.objects.select_related("camp"), pk=participant_id)
+    can_view_profile_pii = is_admin(request.user)
+    participant_queryset = Participant.objects.select_related("camp")
+    if can_view_profile_pii:
+        participant_queryset = participant_queryset.prefetch_related(
+            Prefetch(
+                "attendance_days",
+                queryset=AttendanceDay.objects.filter(family_member__isnull=True).order_by("date", "pk"),
+                to_attr=_ATTENDANCE_PREFETCH_ATTRIBUTE,
+            )
+        )
+    participant = get_object_or_404(
+        participant_queryset,
+        pk=participant_id,
+    )
     manual_charge_form = ManualChargeForm(camp=participant.camp)
 
     if request.method == "POST" and request.POST.get("action") == "add_manual_charge":
@@ -1178,7 +1192,16 @@ def participant_detail(request, participant_id):
         .select_related("family_member")
         .order_by("-created_at", "-id")
     )
-    family_members = list(participant.family_members.all().order_by("-is_active", "last_name", "first_name", "pk"))
+    family_members_queryset = participant.family_members
+    if can_view_profile_pii:
+        family_members_queryset = family_members_queryset.prefetch_related(
+            Prefetch(
+                "attendance_days",
+                queryset=AttendanceDay.objects.order_by("date", "pk"),
+                to_attr=_ATTENDANCE_PREFETCH_ATTRIBUTE,
+            )
+        )
+    family_members = list(family_members_queryset.order_by("-is_active", "last_name", "first_name", "pk"))
     family_meal_signups = (
         MealSignup.objects.filter(participant=participant, family_member__isnull=False)
         .select_related("family_member", "charge")
@@ -1204,7 +1227,6 @@ def participant_detail(request, participant_id):
 
     for member in family_members:
         member.age_at_camp_start = age_at_camp_start(member)
-    can_view_profile_pii = is_admin(request.user)
     attendance_people = []
     if can_view_profile_pii:
         attendance_people = [
@@ -2962,7 +2984,7 @@ def _kiosk_attendance_audit_snapshot(target: Participant | ParticipantFamilyMemb
     """Return a safe attendance audit projection without free-text comments."""
     return {
         "attendance_tracking_enabled": target.attendance_tracking_enabled,
-        "attendance_present_nights": sum(record.is_present for record in target.attendance_days.all()),
+        "attendance_present_nights": sum(record.is_present for record in target_attendance_records(target)),
     }
 
 
@@ -2992,7 +3014,21 @@ def _update_kiosk_checkin_dates(request, participant, checkin_participants):
         _validate_kiosk_checkin_dates(target["object"], target["camp"], arrival_date, departure_date, errors)
         attendance_submitted = request.POST.get(f"attendance-submitted_{token}") == "1"
         attendance_payload = None
-        if attendance_submitted:
+        submitted_stay = target_stay_for(
+            target["object"],
+            target["camp"],
+            arrival_date=arrival_date,
+            departure_date=departure_date,
+            use_submitted_stay=True,
+        )
+        target_has_own_stay = target["object"].arrival_date is not None or target["object"].departure_date is not None
+        submitted_stay_is_complete = arrival_date is not None and departure_date is not None
+        attendance_replacement_allowed = submitted_stay is not None and (
+            submitted_stay_is_complete
+            or isinstance(target["object"], ParticipantFamilyMember)
+            and not target_has_own_stay
+        )
+        if attendance_submitted and attendance_replacement_allowed:
             try:
                 attendance_payload = prepare_attendance_replacement_payload(
                     request.POST,

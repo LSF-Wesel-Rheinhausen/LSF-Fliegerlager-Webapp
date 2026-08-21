@@ -1,3 +1,4 @@
+import json
 import re
 from datetime import date
 from hashlib import sha256
@@ -369,6 +370,168 @@ def test_child_without_own_dates_saves_attendance_for_the_guardian_stay(kiosk_cl
         (date(2026, 7, 4), False, ""),
         (date(2026, 7, 5), True, ""),
     ]
+
+
+@pytest.mark.django_db
+def test_incomplete_attendance_target_does_not_block_another_valid_checkin_update(kiosk_client, monkeypatch):
+    monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 7, 5))
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 10))
+    participant = ParticipantFactory(camp=camp, arrival_date=date(2026, 7, 3), departure_date=date(2026, 7, 6))
+    member = ParticipantFamilyMemberFactory(
+        guardian=participant,
+        arrival_date=date(2026, 7, 3),
+        departure_date=date(2026, 7, 6),
+    )
+    _set_kiosk_identity(kiosk_client, participant=participant)
+    targets, _response = _checkin_targets(kiosk_client)
+    participant_target = targets[f"participant-{participant.pk}"]
+    member_target = targets[f"family-{member.pk}"]
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            **_attendance_payload(
+                participant_target,
+                arrival="2026-07-02",
+                departure="2026-07-06",
+                present=["2026-07-02"],
+            ),
+            "checkin_target": [participant_target["token"], member_target["token"]],
+            f"checkin_state_{member_target['token']}": member_target["state_token"],
+            f"arrival_date_{member_target['token']}": "",
+            f"departure_date_{member_target['token']}": "",
+            f"attendance-submitted_{member_target['token']}": "1",
+            f"attendance-present_{member_target['token']}": ["2026-07-03"],
+        },
+    )
+
+    assert response.status_code == 302
+    participant.refresh_from_db()
+    member.refresh_from_db()
+    assert (participant.arrival_date, participant.departure_date) == (date(2026, 7, 2), date(2026, 7, 6))
+    assert (member.arrival_date, member.departure_date) == (None, None)
+    assert list(AttendanceDay.objects.filter(family_member=member)) == []
+
+
+@pytest.mark.django_db
+def test_checkin_audit_counts_only_the_exact_attendance_target(kiosk_client, monkeypatch):
+    monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 7, 5))
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 10))
+    participant = ParticipantFactory(camp=camp, arrival_date=date(2026, 7, 3), departure_date=date(2026, 7, 6))
+    member = ParticipantFamilyMemberFactory(
+        guardian=participant,
+        arrival_date=date(2026, 7, 3),
+        departure_date=date(2026, 7, 6),
+    )
+    AttendanceDay.objects.create(participant=participant, family_member=member, date=date(2026, 7, 3), is_present=True)
+    _set_kiosk_identity(kiosk_client, participant=participant)
+    targets, _response = _checkin_targets(kiosk_client)
+    target = targets[f"participant-{participant.pk}"]
+
+    response = kiosk_client.post(reverse("kiosk-home"), _attendance_payload(target, present=["2026-07-03"]))
+
+    audit_log = KioskActionAuditLog.objects.get(action=KioskActionAuditLog.Action.CHECKIN_UPDATED)
+    assert response.status_code == 302
+    assert audit_log.before["attendance_present_nights"] == 0
+    assert audit_log.after["attendance_present_nights"] == 1
+
+
+@pytest.mark.django_db
+def test_checkin_audit_snapshots_expose_only_allowed_attendance_metadata(kiosk_client, monkeypatch):
+    monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 7, 5))
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 10))
+    participant = ParticipantFactory(
+        camp=camp,
+        arrival_date=date(2026, 7, 3),
+        departure_date=date(2026, 7, 6),
+        email="private-audit@example.test",
+        phone="+49 999 417",
+        birth_date=date(1990, 1, 2),
+    )
+    AttendanceDay.objects.create(
+        participant=participant,
+        date=date(2026, 7, 3),
+        is_present=False,
+        comment="secret attendance comment",
+    )
+    _set_kiosk_identity(kiosk_client, participant=participant)
+    targets, _response = _checkin_targets(kiosk_client)
+    target = targets[f"participant-{participant.pk}"]
+
+    response = kiosk_client.post(reverse("kiosk-home"), _attendance_payload(target, present=["2026-07-03"]))
+
+    audit_log = KioskActionAuditLog.objects.get(action=KioskActionAuditLog.Action.CHECKIN_UPDATED)
+    allowed_keys = {
+        "arrival_date",
+        "departure_date",
+        "booked_nights",
+        "attendance_tracking_enabled",
+        "attendance_present_nights",
+    }
+    assert response.status_code == 302
+    assert set(audit_log.before) == allowed_keys
+    assert set(audit_log.after) == allowed_keys
+    snapshot = json.dumps({"before": audit_log.before, "after": audit_log.after})
+    assert "secret attendance comment" not in snapshot
+    assert "private-audit@example.test" not in snapshot
+    assert "+49 999 417" not in snapshot
+    assert "1990-01-02" not in snapshot
+
+
+def _participant_detail_attendance_query_count(client, participant):
+    with CaptureQueriesContext(connection) as queries:
+        response = client.get(reverse("participant-detail", kwargs={"participant_id": participant.pk}))
+
+    assert response.status_code == 200
+    return [query["sql"] for query in queries]
+
+
+@pytest.mark.django_db
+def test_admin_participant_detail_attendance_queries_are_constant_across_family_sizes(client):
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 4))
+    participants = []
+    for family_size in (1, 4):
+        participant = ParticipantFactory(camp=camp, arrival_date=date(2026, 7, 1), departure_date=date(2026, 7, 4))
+        AttendanceDay.objects.create(participant=participant, date=date(2026, 7, 1), is_present=True)
+        for _ in range(family_size):
+            member = ParticipantFamilyMemberFactory(
+                guardian=participant,
+                arrival_date=date(2026, 7, 1),
+                departure_date=date(2026, 7, 4),
+            )
+            AttendanceDay.objects.create(
+                participant=participant,
+                family_member=member,
+                date=date(2026, 7, 1),
+                is_present=True,
+            )
+        participants.append(participant)
+    client.force_login(SuperUserFactory())
+
+    one_member_queries = _participant_detail_attendance_query_count(client, participants[0])
+    four_member_queries = _participant_detail_attendance_query_count(client, participants[1])
+    one_member_attendance_queries = [query for query in one_member_queries if "billing_attendanceday" in query.lower()]
+    four_member_attendance_queries = [
+        query for query in four_member_queries if "billing_attendanceday" in query.lower()
+    ]
+
+    assert len(one_member_attendance_queries) == 2
+    assert len(four_member_attendance_queries) == 2
+
+
+@pytest.mark.django_db
+def test_editor_participant_detail_does_not_query_attendance(client):
+    participant = ParticipantFactory()
+    member = ParticipantFamilyMemberFactory(guardian=participant)
+    AttendanceDay.objects.create(participant=participant, date=date(2026, 7, 3), is_present=True)
+    AttendanceDay.objects.create(participant=participant, family_member=member, date=date(2026, 7, 3), is_present=True)
+    editor = UserFactory(username="attendance-editor")
+    editor.groups.add(GroupFactory(name=EDITOR_GROUP))
+    client.force_login(editor)
+
+    queries = _participant_detail_attendance_query_count(client, participant)
+
+    assert [query for query in queries if "billing_attendanceday" in query.lower()] == []
 
 
 @pytest.mark.django_db

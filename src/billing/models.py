@@ -483,7 +483,7 @@ class Participant(TimeStampedModel):
     arrival_date = models.DateField(null=True, blank=True)
     departure_date = models.DateField(null=True, blank=True)
     birth_date = models.DateField(null=True, blank=True)
-    attendance_tracking_enabled = models.BooleanField(default=False)
+    attendance_tracking_enabled = models.BooleanField(default=False, editable=False)
     booked_nights = models.PositiveIntegerField(default=0)
     actual_nights = models.PositiveIntegerField(default=0)
     notes = models.TextField(blank=True)
@@ -544,16 +544,22 @@ class Participant(TimeStampedModel):
     def effective_attendance_nights(self) -> int:
         """Return tracked present nights, or the legacy actual/booked fallback."""
         if self.attendance_tracking_enabled:
+            if self.camp.starts_on is None or self.camp.ends_on is None or self.camp.starts_on >= self.camp.ends_on:
+                return 0
+            window_start = self.camp.starts_on - timedelta(days=4)
+            window_end = self.camp.ends_on + timedelta(days=4)
             prefetched_records = getattr(self, "prefetched_attendance_days", None)
             if prefetched_records is not None:
                 return sum(
                     record.is_present
                     and record.family_member_id is None
+                    and window_start <= record.date < window_end
                     and (self.arrival_date is None or record.date >= self.arrival_date)
                     and (self.departure_date is None or record.date < self.departure_date)
                     for record in prefetched_records
                 )
             records = self.attendance_days.filter(family_member__isnull=True, is_present=True)
+            records = records.filter(date__gte=window_start, date__lt=window_end)
             if self.arrival_date is not None:
                 records = records.filter(date__gte=self.arrival_date)
             if self.departure_date is not None:
@@ -644,7 +650,7 @@ class ParticipantFamilyMember(TimeStampedModel):
     arrival_date = models.DateField(null=True, blank=True)
     departure_date = models.DateField(null=True, blank=True)
     birth_date = models.DateField(null=True, blank=True)
-    attendance_tracking_enabled = models.BooleanField(default=False)
+    attendance_tracking_enabled = models.BooleanField(default=False, editable=False)
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -705,6 +711,11 @@ class ParticipantFamilyMember(TimeStampedModel):
     def effective_attendance_nights(self) -> int:
         """Return tracked present nights, or the established family stay fallback."""
         if self.attendance_tracking_enabled:
+            camp = self.guardian.camp
+            if camp.starts_on is None or camp.ends_on is None or camp.starts_on >= camp.ends_on:
+                return 0
+            window_start = camp.starts_on - timedelta(days=4)
+            window_end = camp.ends_on + timedelta(days=4)
             arrival_date = self.arrival_date or self.guardian.arrival_date
             departure_date = self.departure_date or self.guardian.departure_date
             prefetched_records = getattr(self, "prefetched_attendance_days", None)
@@ -712,11 +723,13 @@ class ParticipantFamilyMember(TimeStampedModel):
                 return sum(
                     record.is_present
                     and record.family_member_id == self.pk
+                    and window_start <= record.date < window_end
                     and (arrival_date is None or record.date >= arrival_date)
                     and (departure_date is None or record.date < departure_date)
                     for record in prefetched_records
                 )
             records = self.attendance_days.filter(is_present=True)
+            records = records.filter(date__gte=window_start, date__lt=window_end)
             if arrival_date is not None:
                 records = records.filter(date__gte=arrival_date)
             if departure_date is not None:

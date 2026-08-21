@@ -2,17 +2,27 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+from django.contrib import admin
 from django.core.exceptions import ValidationError
+from django.db.models import Prefetch
+from django.test import RequestFactory
 
+from billing.admin import ParticipantAdmin, ParticipantFamilyMemberAdmin
 from billing.forms import ParticipantFamilyMemberForm, ParticipantForm
-from billing.models import AttendanceDay, KioskActionAuditLog, PriceRule
+from billing.models import AttendanceDay, KioskActionAuditLog, Participant, ParticipantFamilyMember, PriceRule
 from billing.services import (
     calculate_participant_settlement,
     family_member_camp_flat_duration,
     replace_attendance_days,
     save_attendance_day,
 )
-from tests.factories import CampFactory, ParticipantFactory, ParticipantFamilyMemberFactory, PriceRuleFactory
+from tests.factories import (
+    CampFactory,
+    ParticipantFactory,
+    ParticipantFamilyMemberFactory,
+    PriceRuleFactory,
+    SuperUserFactory,
+)
 
 
 @pytest.mark.django_db
@@ -101,7 +111,11 @@ def test_without_explicit_attendance_mode_legacy_actual_nights_remains_billable(
 
 @pytest.mark.django_db
 def test_selected_presence_count_is_scoped_to_its_target_and_drives_shift_target():
-    camp = CampFactory(shift_ratio_per_night=Decimal("0.5000"))
+    camp = CampFactory(
+        starts_on=date(2026, 7, 1),
+        ends_on=date(2026, 7, 7),
+        shift_ratio_per_night=Decimal("0.5000"),
+    )
     guardian = ParticipantFactory(camp=camp, booked_nights=6, actual_nights=6)
     member = ParticipantFamilyMemberFactory(
         guardian=guardian,
@@ -244,7 +258,9 @@ def test_all_administrative_profile_forms_reject_future_birth_dates():
 
 @pytest.mark.django_db
 def test_effective_attendance_excludes_records_outside_the_current_stay():
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 4))
     guardian = ParticipantFactory(
+        camp=camp,
         arrival_date=date(2026, 7, 1),
         departure_date=date(2026, 7, 4),
         attendance_tracking_enabled=True,
@@ -272,6 +288,116 @@ def test_effective_attendance_excludes_records_outside_the_current_stay():
 
     assert guardian.effective_attendance_nights == 2
     assert member.effective_attendance_nights == 1
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("cleared_bounds", [{"starts_on": None}, {"ends_on": None}])
+def test_tracked_attendance_is_clamped_to_the_current_camp_window_after_camp_bounds_change(cleared_bounds):
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 20), shift_ratio_per_night=Decimal("0.5"))
+    guardian = ParticipantFactory(
+        camp=camp,
+        arrival_date=date(2026, 7, 1),
+        departure_date=date(2026, 7, 20),
+        attendance_tracking_enabled=True,
+    )
+    member = ParticipantFamilyMemberFactory(
+        guardian=guardian,
+        role="companion",
+        arrival_date=date(2026, 7, 1),
+        departure_date=date(2026, 7, 20),
+        attendance_tracking_enabled=True,
+    )
+    for attendance_date in (date(2026, 7, 1), date(2026, 7, 18)):
+        AttendanceDay.objects.create(participant=guardian, date=attendance_date, is_present=True)
+        AttendanceDay.objects.create(
+            participant=guardian,
+            family_member=member,
+            date=attendance_date,
+            is_present=True,
+        )
+
+    camp.starts_on = cleared_bounds.get("starts_on", date(2026, 7, 10))
+    camp.ends_on = cleared_bounds.get("ends_on", date(2026, 7, 12))
+    camp.save(update_fields=[*cleared_bounds, "updated_at"])
+
+    assert guardian.effective_attendance_nights == 0
+    assert member.effective_attendance_nights == 0
+    assert guardian.target_shifts == 0
+    assert member.target_shifts == 0
+
+
+@pytest.mark.django_db
+def test_tracked_attendance_uses_a_shortened_valid_camp_window_for_database_and_prefetched_records():
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 20))
+    guardian = ParticipantFactory(
+        camp=camp,
+        arrival_date=date(2026, 6, 25),
+        departure_date=date(2026, 7, 20),
+        attendance_tracking_enabled=True,
+    )
+    member = ParticipantFamilyMemberFactory(
+        guardian=guardian,
+        arrival_date=date(2026, 6, 25),
+        departure_date=date(2026, 7, 20),
+        attendance_tracking_enabled=True,
+    )
+    for attendance_date in (date(2026, 7, 5), date(2026, 7, 6), date(2026, 7, 15), date(2026, 7, 16)):
+        AttendanceDay.objects.create(participant=guardian, date=attendance_date, is_present=True)
+        AttendanceDay.objects.create(
+            participant=guardian,
+            family_member=member,
+            date=attendance_date,
+            is_present=True,
+        )
+
+    camp.starts_on = date(2026, 7, 10)
+    camp.ends_on = date(2026, 7, 12)
+    camp.save(update_fields=["starts_on", "ends_on", "updated_at"])
+
+    guardian_from_database = Participant.objects.select_related("camp").get(pk=guardian.pk)
+    guardian_prefetched = (
+        Participant.objects.select_related("camp")
+        .prefetch_related(
+            Prefetch(
+                "attendance_days",
+                queryset=AttendanceDay.objects.order_by("date", "pk"),
+                to_attr="prefetched_attendance_days",
+            )
+        )
+        .get(pk=guardian.pk)
+    )
+    member_from_database = ParticipantFamilyMember.objects.select_related("guardian__camp").get(pk=member.pk)
+    member_prefetched = (
+        ParticipantFamilyMember.objects.select_related("guardian__camp")
+        .prefetch_related(
+            Prefetch(
+                "attendance_days",
+                queryset=AttendanceDay.objects.order_by("date", "pk"),
+                to_attr="prefetched_attendance_days",
+            )
+        )
+        .get(pk=member.pk)
+    )
+
+    assert guardian_from_database.effective_attendance_nights == 2
+    assert guardian_prefetched.effective_attendance_nights == 2
+    assert member_from_database.effective_attendance_nights == 2
+    assert member_prefetched.effective_attendance_nights == 2
+
+
+@pytest.mark.django_db
+def test_attendance_tracking_is_an_internal_model_state_not_an_editable_form_field():
+    request = RequestFactory().get("/admin/")
+    request.user = SuperUserFactory()
+    participant_admin_form = ParticipantAdmin(Participant, admin.site).get_form(request)
+    family_member_admin_form = ParticipantFamilyMemberAdmin(ParticipantFamilyMember, admin.site).get_form(request)
+
+    assert Participant._meta.get_field("attendance_tracking_enabled").editable is False
+    assert ParticipantFamilyMember._meta.get_field("attendance_tracking_enabled").editable is False
+    assert "attendance_tracking_enabled" not in ParticipantForm.base_fields
+    assert "attendance_tracking_enabled" not in ParticipantFamilyMemberForm.base_fields
+    assert "attendance_tracking_enabled" not in participant_admin_form.base_fields
+    assert "attendance_tracking_enabled" not in family_member_admin_form.base_fields
 
 
 @pytest.mark.django_db
@@ -306,7 +432,11 @@ def test_attendance_day_requires_a_participant_account_holder():
 
 @pytest.mark.django_db
 def test_tracked_participant_shift_target_uses_selected_present_nights():
-    camp = CampFactory(shift_ratio_per_night=Decimal("0.5000"))
+    camp = CampFactory(
+        starts_on=date(2026, 7, 1),
+        ends_on=date(2026, 7, 7),
+        shift_ratio_per_night=Decimal("0.5000"),
+    )
     participant = ParticipantFactory(camp=camp, booked_nights=6, actual_nights=6)
 
     replace_attendance_days(
