@@ -5,7 +5,7 @@ import pytest
 from django.urls import reverse
 from django.utils import timezone
 
-from billing.models import Charge, MealSignup
+from billing.models import AttendanceDay, Charge, MealSignup
 from billing.permissions import EDITOR_GROUP
 from billing.services import calculate_position_report
 from tests.factories import (
@@ -247,6 +247,29 @@ def test_family_member_nights_use_their_own_window_then_guardian(camp):
 
     assert report.family_member_nights == 8
     assert report.person_nights == report.participant_nights + report.family_member_nights
+
+
+@pytest.mark.django_db
+def test_tracked_family_member_nights_use_effective_attendance(camp):
+    guardian = ParticipantFactory(camp=camp, arrival_date=CAMP_START, departure_date=CAMP_END)
+    member = ParticipantFamilyMemberFactory(
+        guardian=guardian,
+        arrival_date=CAMP_START,
+        departure_date=CAMP_END,
+        attendance_tracking_enabled=True,
+    )
+    AttendanceDay.objects.create(
+        participant=guardian,
+        family_member=member,
+        date=CAMP_START,
+        is_present=True,
+    )
+
+    report = calculate_position_report(camp)
+
+    assert member.booked_nights == 3
+    assert member.effective_attendance_nights == 1
+    assert report.family_member_nights == 1
 
 
 @pytest.mark.django_db

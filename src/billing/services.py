@@ -1081,7 +1081,10 @@ def calculate_position_report(camp: Camp) -> PositionReport:
     participant_nights = sum(
         participant.actual_nights or participant.booked_nights or 0 for participant in participants
     )
-    family_member_nights = sum(member.booked_nights or 0 for member in family_members)
+    family_member_nights = sum(
+        member.effective_attendance_nights if member.attendance_tracking_enabled else member.booked_nights or 0
+        for member in family_members
+    )
 
     return PositionReport(
         camp=camp,
