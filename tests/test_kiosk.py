@@ -4160,7 +4160,8 @@ def test_kiosk_self_registration_rejects_trivial_pins(kiosk_client):
 
 
 @pytest.mark.django_db
-def test_kiosk_self_registration_allows_dates_within_4_day_buffer(kiosk_client):
+def test_kiosk_self_registration_allows_dates_within_4_day_buffer(kiosk_client, monkeypatch):
+    monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 8, 15))
     camp = CampFactory(
         is_active=True,
         starts_on=date(2026, 8, 10),
@@ -4184,7 +4185,8 @@ def test_kiosk_self_registration_allows_dates_within_4_day_buffer(kiosk_client):
 
 
 @pytest.mark.django_db
-def test_kiosk_self_registration_rejects_dates_outside_4_day_buffer(kiosk_client):
+def test_kiosk_self_registration_rejects_dates_outside_4_day_buffer(kiosk_client, monkeypatch):
+    monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 8, 15))
     CampFactory(
         is_active=True,
         starts_on=date(2026, 8, 10),
@@ -4237,7 +4239,8 @@ def test_kiosk_self_registration_rejects_dates_outside_4_day_buffer(kiosk_client
 
 
 @pytest.mark.django_db
-def test_kiosk_self_registration_renders_wizard_steps_and_min_max(kiosk_client):
+def test_kiosk_self_registration_renders_wizard_steps_and_min_max(kiosk_client, monkeypatch):
+    monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 8, 15))
     CampFactory(
         is_active=True,
         starts_on=date(2026, 8, 10),
