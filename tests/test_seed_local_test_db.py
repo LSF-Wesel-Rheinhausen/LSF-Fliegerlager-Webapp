@@ -276,7 +276,7 @@ def test_concurrent_seed_invocations_are_serialized_without_partial_state(monkey
         try:
             call_command("seed_local_test_db", verbosity=0)
             return None
-        except BaseException as error:  # noqa: BLE001 - assert worker boundary has no leaked failure
+        except Exception as error:  # noqa: BLE001 - propagate ordinary worker failures to the test
             return error
         finally:
             close_old_connections()
