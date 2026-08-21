@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.admin.widgets import AdminDateWidget, AdminSplitDateTime
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import models, transaction
 from django.utils import timezone
 
@@ -34,6 +34,7 @@ from .models import (
     ShiftAssignment,
     UserProfile,
 )
+from .permissions import is_admin
 from .services import (
     charge_audit_snapshot,
     create_booking_delete_audit_log,
@@ -341,6 +342,8 @@ class PaymentAdmin(admin.ModelAdmin):
 
     @admin.action(description="Ausgewählte Zahlungen als gelöscht markieren (Soft-Delete)")
     def soft_delete_selected_payments(self, request, queryset):
+        if not is_admin(request.user):
+            raise PermissionDenied
         active_payments = list(queryset.filter(deleted_at__isnull=True))
         if not active_payments:
             self.message_user(request, "Keine aktiven Zahlungen zum Löschen ausgewählt.", level="warning")
@@ -357,6 +360,8 @@ class PaymentAdmin(admin.ModelAdmin):
 
     @admin.action(description="Ausgewählte gelöschte Zahlungen wiederherstellen")
     def restore_selected_payments(self, request, queryset):
+        if not is_admin(request.user):
+            raise PermissionDenied
         deleted_payments = list(queryset.filter(deleted_at__isnull=False))
         if not deleted_payments:
             self.message_user(request, "Keine gelöschten Zahlungen zur Wiederherstellung ausgewählt.", level="warning")
@@ -395,6 +400,8 @@ class PaymentAuditLogAdmin(admin.ModelAdmin):
 
     @admin.action(description="Ausgewählte Zahlungen aus Audit-Protokoll wiederherstellen")
     def restore_payments_from_audit_log(self, request, queryset):
+        if not is_admin(request.user):
+            raise PermissionDenied
         deletion_logs = list(queryset.filter(action=PaymentAuditLog.Action.DELETED))
         if not deletion_logs:
             self.message_user(request, "Keine Löschungs-Protokolleinträge ausgewählt.", level="warning")

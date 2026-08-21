@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from django.contrib.admin.sites import AdminSite
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import RequestFactory
 from django.urls import reverse
 from django.utils import timezone
@@ -121,6 +121,61 @@ def test_payment_audit_admin_propagates_unexpected_errors_and_rolls_back(monkeyp
         payments[1].deleted_at,
     ]
     assert not PaymentAuditLog.objects.filter(action=PaymentAuditLog.Action.RESTORED).exists()
+
+
+@pytest.mark.django_db
+def test_editor_cannot_execute_payment_admin_actions_or_mutate_payment_audit():
+    editor = UserFactory(username="editor", is_staff=True)
+    editor.groups.add(GroupFactory(name=EDITOR_GROUP))
+    payment = PaymentFactory()
+    deleted_payment = PaymentFactory(participant=payment.participant)
+    deleted_payment.deleted_at = timezone.now()
+    deleted_payment.deleted_by = editor
+    deleted_payment.save(update_fields=["deleted_at", "deleted_by"])
+    audit_log = PaymentAuditLog.objects.create(
+        participant=deleted_payment.participant,
+        payment=deleted_payment,
+        changed_by=editor,
+        action=PaymentAuditLog.Action.DELETED,
+        before={},
+        after={},
+    )
+    request = RequestFactory().post("/admin/billing/payment/")
+    request.user = editor
+    request._messages = MagicMock()
+    payment_admin = PaymentAdmin(Payment, AdminSite())
+    audit_admin = PaymentAuditLogAdmin(PaymentAuditLog, AdminSite())
+
+    with pytest.raises(PermissionDenied):
+        payment_admin.soft_delete_selected_payments(request, Payment.objects.filter(pk=payment.pk))
+    with pytest.raises(PermissionDenied):
+        payment_admin.restore_selected_payments(request, Payment.objects.filter(pk=deleted_payment.pk))
+    with pytest.raises(PermissionDenied):
+        audit_admin.restore_payments_from_audit_log(request, PaymentAuditLog.objects.filter(pk=audit_log.pk))
+
+    payment.refresh_from_db()
+    deleted_payment.refresh_from_db()
+    assert payment.deleted_at is None
+    assert deleted_payment.deleted_at is not None
+    assert PaymentAuditLog.objects.count() == 1
+
+    assert audit_admin.has_add_permission(request) is False
+    assert audit_admin.has_delete_permission(request) is False
+
+
+@pytest.mark.django_db
+def test_superuser_can_execute_payment_admin_action():
+    admin_user = SuperUserFactory(username="admin")
+    payment = PaymentFactory()
+    request = RequestFactory().post("/admin/billing/payment/")
+    request.user = admin_user
+    request._messages = MagicMock()
+
+    PaymentAdmin(Payment, AdminSite()).soft_delete_selected_payments(request, Payment.objects.filter(pk=payment.pk))
+
+    payment.refresh_from_db()
+    assert payment.deleted_at is not None
+    assert PaymentAuditLog.objects.filter(payment=payment, action=PaymentAuditLog.Action.DELETED).exists()
 
 
 @pytest.mark.django_db
