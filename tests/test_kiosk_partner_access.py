@@ -847,7 +847,7 @@ def test_linked_households_are_prefetched_once_and_reused_by_target_builders(dja
         expected_partner_tokens.extend([f"participant-{partner.pk}", f"family-{partner_child.pk}"])
 
     own_family_members = list(participant.family_members.filter(is_active=True))
-    with django_assert_num_queries(2):
+    with django_assert_num_queries(4):
         linked_participants = _linked_booking_participants(participant)
     with django_assert_num_queries(0):
         meal_targets = _kiosk_meal_targets(
@@ -1539,10 +1539,14 @@ def test_linked_household_checkin_records_actual_actor_and_before_after(kiosk_cl
     assert audit_log.before == {
         "arrival_date": None,
         "departure_date": None,
+        "attendance_tracking_enabled": False,
+        "attendance_present_nights": 0,
     }
     assert audit_log.after == {
         "arrival_date": "2026-07-03",
         "departure_date": "2026-07-09",
+        "attendance_tracking_enabled": False,
+        "attendance_present_nights": 0,
     }
     assert partner_child.full_name not in audit_log.description
     assert partner_child.full_name not in str(audit_log.before)
@@ -1744,7 +1748,15 @@ def test_stale_checkin_form_does_not_overwrite_unchanged_partner_row(kiosk_clien
     assert partner.departure_date == date(2026, 7, 9)
     assert partner.booked_nights == 6
     assert partner.updated_at == partner_updated_at
-    assert not KioskActionAuditLog.objects.exists()
+    audit_log = KioskActionAuditLog.objects.get()
+    assert audit_log.target_participant == participant
+    assert audit_log.target_family_member is None
+    assert audit_log.before["attendance_tracking_enabled"] is False
+    assert audit_log.before["attendance_present_nights"] == 0
+    assert audit_log.after["arrival_date"] == "2026-07-02"
+    assert audit_log.after["departure_date"] == "2026-07-10"
+    assert audit_log.after["attendance_tracking_enabled"] is False
+    assert audit_log.after["attendance_present_nights"] == 0
 
 
 @pytest.mark.django_db

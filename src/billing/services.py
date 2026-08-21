@@ -12,6 +12,7 @@ from django.db.models import Max, Prefetch, Q, Sum
 from django.utils import timezone
 
 from .models import (
+    AttendanceDay,
     BookingAuditLog,
     Camp,
     Charge,
@@ -34,6 +35,8 @@ from .models import (
     Shift,
 )
 from .permissions import ADMIN_GROUP, EDITOR_GROUP, HUEBERS_GROUP
+
+_ATTENDANCE_PREFETCH_ATTRIBUTE = "prefetched_attendance_days"
 
 ZERO = Decimal("0.00")
 
@@ -1091,7 +1094,7 @@ def calculate_position_report(camp: Camp) -> PositionReport:
 
 
 def participant_camp_flat_duration(participant):
-    nights = participant.actual_nights or participant.booked_nights or 0
+    nights = participant.effective_attendance_nights
     if nights > 7:
         return PriceRule.CampFlatDuration.TWO_WEEKS
     return PriceRule.CampFlatDuration.ONE_WEEK
@@ -1178,7 +1181,7 @@ def default_charge_lines(
             continue
         quantity = Decimal("1.00")
         if rule.kind == PriceRule.Kind.NIGHT:
-            quantity = Decimal(participant.actual_nights or participant.booked_nights or 0)
+            quantity = Decimal(participant.effective_attendance_nights)
         lines.append(
             build_settlement_line(
                 label=rule.name,
@@ -1194,11 +1197,117 @@ def default_charge_lines(
 
 def family_member_camp_flat_duration(member: ParticipantFamilyMember, guardian: Participant) -> str:
     """Resolve a family member's camp-fee duration from their stay, falling back to the guardian."""
-    if member.arrival_date and member.departure_date and member.departure_date > member.arrival_date:
-        nights = (member.departure_date - member.arrival_date).days
-    else:
-        nights = guardian.actual_nights or guardian.booked_nights or 0
+    nights = member.effective_attendance_nights
     return PriceRule.CampFlatDuration.TWO_WEEKS if nights > 7 else PriceRule.CampFlatDuration.ONE_WEEK
+
+
+@transaction.atomic
+def save_attendance_day(
+    participant: Participant,
+    attendance_date: date,
+    *,
+    is_present: bool,
+    family_member: ParticipantFamilyMember | None = None,
+    comment: str = "",
+) -> AttendanceDay:
+    """Atomically validate, track and upsert one attendance decision for its exact target."""
+    locked_participant = Participant.objects.select_for_update().get(pk=participant.pk)
+    locked_member = None
+    if family_member is not None:
+        locked_member = ParticipantFamilyMember.objects.select_for_update().get(pk=family_member.pk)
+        if locked_member.guardian_id != locked_participant.pk:
+            raise ValidationError("Das Familienmitglied gehört nicht zum Zielkonto.")
+        if not locked_member.attendance_tracking_enabled:
+            locked_member.attendance_tracking_enabled = True
+            locked_member.save(update_fields=["attendance_tracking_enabled", "updated_at"])
+    elif not locked_participant.attendance_tracking_enabled:
+        locked_participant.attendance_tracking_enabled = True
+        locked_participant.save(update_fields=["attendance_tracking_enabled", "updated_at"])
+
+    lookup = {"participant": locked_participant, "family_member": locked_member, "date": attendance_date}
+    attendance = AttendanceDay.objects.select_for_update().filter(**lookup).first()
+    if attendance is None:
+        attendance = AttendanceDay(**lookup)
+    attendance.is_present = is_present
+    attendance.comment = comment
+    attendance.full_clean()
+    attendance.save()
+    return attendance
+
+
+@transaction.atomic
+def replace_attendance_days(
+    participant: Participant,
+    *,
+    start_date: date,
+    end_date: date,
+    days: Iterable[Mapping[str, Any]],
+    family_member: ParticipantFamilyMember | None = None,
+    may_remove_comments: bool = True,
+) -> list[AttendanceDay]:
+    """Atomically replace attendance in [start_date, end_date) for one target."""
+    if start_date >= end_date:
+        raise ValidationError("Der Anwesenheitsbereich muss mindestens eine Nacht enthalten.")
+
+    prepared_days: list[tuple[date, bool, str, bool]] = []
+    seen_dates: set[date] = set()
+    for day in days:
+        attendance_date = day.get("date")
+        is_present = day.get("is_present")
+        comment_was_omitted = "comment" not in day
+        comment = day.get("comment", "")
+        if not isinstance(attendance_date, date) or isinstance(attendance_date, datetime):
+            raise ValidationError("Jeder Anwesenheitstag benötigt ein gültiges Datum.")
+        if attendance_date < start_date or attendance_date >= end_date:
+            raise ValidationError("Der Anwesenheitstag liegt außerhalb des gewählten Bereichs.")
+        if not isinstance(is_present, bool):
+            raise ValidationError("Anwesenheit muss als Wahrheitswert angegeben werden.")
+        if not isinstance(comment, str) or len(comment) > 500:
+            raise ValidationError("Der Kommentar darf höchstens 500 Zeichen enthalten.")
+        if attendance_date in seen_dates:
+            raise ValidationError("Jeder Anwesenheitstag darf nur einmal angegeben werden.")
+        seen_dates.add(attendance_date)
+        validation_candidate = AttendanceDay(
+            participant=participant,
+            family_member=family_member,
+            date=attendance_date,
+            is_present=is_present,
+            comment=comment,
+        )
+        validation_candidate.full_clean(validate_unique=False, validate_constraints=False)
+        prepared_days.append((attendance_date, is_present, comment, comment_was_omitted))
+
+    if family_member is None:
+        scope = Q(participant=participant, family_member__isnull=True)
+        participant.attendance_tracking_enabled = True
+        participant.save(update_fields=["attendance_tracking_enabled", "updated_at"])
+    else:
+        if family_member.guardian_id != participant.pk:
+            raise ValidationError("Das Familienmitglied gehört nicht zum Zielkonto.")
+        scope = Q(participant=participant, family_member=family_member)
+        family_member.attendance_tracking_enabled = True
+        family_member.save(update_fields=["attendance_tracking_enabled", "updated_at"])
+
+    existing_records = AttendanceDay.objects.select_for_update().filter(scope)
+    hidden_comment_dates = list(
+        existing_records.exclude(date__in=seen_dates).exclude(comment="").values_list("date", flat=True)
+    )
+    if hidden_comment_dates and not may_remove_comments:
+        raise ValidationError("Eine Datumsänderung würde einen nicht sichtbaren Kommentar löschen.")
+    existing_comments = dict(existing_records.filter(date__in=seen_dates).values_list("date", "comment"))
+    existing_records.exclude(date__in=seen_dates).delete()
+    saved_days = []
+    for attendance_date, is_present, comment, comment_was_omitted in prepared_days:
+        saved_days.append(
+            save_attendance_day(
+                participant,
+                attendance_date,
+                is_present=is_present,
+                family_member=family_member,
+                comment=existing_comments.get(attendance_date, "") if comment_was_omitted else comment,
+            )
+        )
+    return saved_days
 
 
 def family_member_camp_flat_role(member: ParticipantFamilyMember) -> str:
@@ -1403,7 +1512,11 @@ def calculate_participant_settlement(participant):
         Participant.objects.select_related("camp")
         .prefetch_related(
             Prefetch("charges", queryset=Charge.objects.select_related("family_member")),
-            "family_members",
+            Prefetch(
+                "family_members",
+                queryset=ParticipantFamilyMember.objects.order_by("last_name", "first_name", "pk"),
+                to_attr="settlement_family_members",
+            ),
             "payments",
             "expenses",
             "drink_entries",
@@ -1411,11 +1524,13 @@ def calculate_participant_settlement(participant):
         )
         .get(pk=participant.pk)
     )
+    _prefetch_tracked_settlement_attendance([participant])
+    settlement_family_members = cast(Any, participant).settlement_family_members
     lines = (
         default_charge_lines(participant)
         + family_camp_flat_lines(
             participant,
-            participant.family_members.all(),
+            settlement_family_members,
             participant.camp.price_rules.filter(is_default=True),
         )
         + manual_charge_lines(participant)
@@ -1501,6 +1616,7 @@ def calculate_participant_settlements(
         )
     )
     participants_by_id = {participant.pk: participant for participant in loaded_participants}
+    _prefetch_tracked_settlement_attendance(participants_by_id.values())
     default_rules_by_camp: dict[int, list[PriceRule]] = {}
     for rule in PriceRule.objects.filter(
         camp_id__in={participant.camp_id for participant in participants_by_id.values()},
@@ -1543,6 +1659,46 @@ def calculate_participant_settlements(
             balance=money(total_due - total_paid - total_advanced),
         )
     return results
+
+
+def _prefetch_tracked_settlement_attendance(participants: Iterable[Participant]) -> None:
+    """Attach attendance rows only when settlement targets actually use tracking."""
+    participant_list = list(participants)
+    tracked_participant_ids = {
+        participant.pk for participant in participant_list if participant.attendance_tracking_enabled
+    }
+    tracked_members = [
+        member
+        for participant in participant_list
+        for member in cast(Any, participant).settlement_family_members
+        if member.attendance_tracking_enabled
+    ]
+    tracked_member_ids = {member.pk for member in tracked_members}
+
+    if tracked_participant_ids:
+        records_by_participant_id: dict[int, list[AttendanceDay]] = {
+            participant_id: [] for participant_id in tracked_participant_ids
+        }
+        for record in AttendanceDay.objects.filter(
+            participant_id__in=tracked_participant_ids,
+            family_member__isnull=True,
+        ).order_by("date", "pk"):
+            records_by_participant_id[record.participant_id].append(record)
+        for participant in participant_list:
+            participant_id = participant.pk
+            if participant_id is not None and participant_id in records_by_participant_id:
+                setattr(participant, _ATTENDANCE_PREFETCH_ATTRIBUTE, records_by_participant_id[participant_id])
+
+    if tracked_member_ids:
+        records_by_member_id: dict[int, list[AttendanceDay]] = {member_id: [] for member_id in tracked_member_ids}
+        for record in AttendanceDay.objects.filter(family_member_id__in=tracked_member_ids).order_by("date", "pk"):
+            family_member_id = record.family_member_id
+            if family_member_id is not None:
+                records_by_member_id[family_member_id].append(record)
+        for member in tracked_members:
+            member_id = member.pk
+            if member_id is not None:
+                setattr(member, _ATTENDANCE_PREFETCH_ATTRIBUTE, records_by_member_id[member_id])
 
 
 def calculate_camp_settlements(camp):
@@ -1951,8 +2107,16 @@ def get_cost_center_evaluation(camp):
             status__in=[Participant.Status.REGISTERED, Participant.Status.ACTIVE, Participant.Status.SETTLED],
         )
         .select_related("camp")
-        .prefetch_related("family_members")
+        .prefetch_related(
+            Prefetch(
+                "family_members",
+                queryset=ParticipantFamilyMember.objects.order_by("last_name", "first_name", "pk"),
+                to_attr="settlement_family_members",
+            )
+        )
     )
+    active_participants = list(active_participants)
+    _prefetch_tracked_settlement_attendance(active_participants)
     default_rules = list(PriceRule.objects.filter(camp=camp, is_default=True))
     camp_flat_rules = [rule for rule in default_rules if rule.kind == PriceRule.Kind.CAMP_FLAT]
 
@@ -1984,7 +2148,7 @@ def get_cost_center_evaluation(camp):
                 }
             )
 
-        for line in family_camp_flat_lines(participant, participant.family_members.all(), default_rules):
+        for line in family_camp_flat_lines(participant, participant.settlement_family_members, default_rules):
             evaluation["camp_flat"]["income"] += line.gross_total
             evaluation["camp_flat"]["income_count"] += 1
             evaluation["camp_flat"]["income_details"].append(

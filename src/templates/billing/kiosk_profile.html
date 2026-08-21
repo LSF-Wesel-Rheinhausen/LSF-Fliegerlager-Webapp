@@ -1,0 +1,47 @@
+{% extends "billing/kiosk_base.html" %}
+{% block title %}Stammdaten | Kiosk{% endblock %}
+{% block kiosk_nav %}
+  <a class="button button-secondary" href="{{ kiosk_urls.home }}">Abbrechen</a>
+  <a class="button button-secondary" href="{{ kiosk_urls.logout }}">Abmelden</a>
+{% endblock %}
+{% block content %}
+  <section class="card" aria-labelledby="profile-title">
+    <h1 id="profile-title">Stammdaten</h1>
+    <p>Bitte halte deine Kontaktdaten aktuell.</p>
+    <form method="post">
+      {% csrf_token %}
+      {% if form.non_field_errors %}<div id="profile-form-error" class="helptext error" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+      {% for field in form %}
+        <div class="form-group{% if field.errors %} has-error{% endif %}">
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% if field.errors %}
+            <div id="{{ field.id_for_label }}_error" class="helptext error" role="alert">
+              {% for error in field.errors %}<span>{{ error }}</span>{% endfor %}
+            </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+      <div class="button-row">
+        <button class="button" type="submit">Speichern</button>
+        <a class="button button-secondary" href="{{ kiosk_urls.home }}">Abbrechen</a>
+      </div>
+    </form>
+  </section>
+  {% if managed_family_members %}
+    <section class="card" aria-labelledby="managed-profiles-title">
+      <h2 id="managed-profiles-title">Familienprofile</h2>
+      <ul>
+        {% for member in managed_family_members %}
+          <li>
+            {% if kiosk_mode == "central" %}
+              <a href="{% url 'central-kiosk-family-member-profile' member.pk %}">{{ member.full_name }}</a>
+            {% else %}
+              <a href="{% url 'kiosk-family-member-profile' member.pk %}">{{ member.full_name }}</a>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
+{% endblock %}
