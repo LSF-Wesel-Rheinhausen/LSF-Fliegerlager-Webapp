@@ -853,7 +853,6 @@ class ExpenseForm(forms.ModelForm):
             "receipt": forms.FileInput(
                 attrs={
                     "accept": "application/pdf,image/jpeg,image/png,image/heic,.pdf,.jpg,.jpeg,.png,.heic",
-                    "capture": "environment",
                 }
             ),
         }
@@ -881,7 +880,6 @@ class SharedExpenseRequestForm(forms.ModelForm):
             "receipt": forms.FileInput(
                 attrs={
                     "accept": "application/pdf,image/jpeg,image/png,image/heic,.pdf,.jpg,.jpeg,.png,.heic",
-                    "capture": "environment",
                 }
             ),
         }
