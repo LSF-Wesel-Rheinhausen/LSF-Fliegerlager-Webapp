@@ -153,6 +153,7 @@ from .services import (
     calculate_camp_settlements,
     calculate_meal_overview,
     calculate_participant_settlement,
+    calculate_position_report,
     camp_meal_dates,
     charge_audit_snapshot,
     create_booking_audit_log,
@@ -3856,6 +3857,18 @@ def meal_cutoff_edit(request, camp_id):
         messages.success(request, "Essens-Richtzeit wurde gespeichert.")
         return redirect("camp-meal-overview", camp_id=camp.pk)
     return render(request, "billing/form.html", {"form": form, "title": "Essens-Richtzeit bearbeiten", "camp": camp})
+
+
+@admin_required
+def camp_position_report(request, camp_id):
+    """Render per-article, per-meal and per-day usage figures for one camp."""
+    camp = get_object_or_404(Camp, pk=camp_id)
+    report = calculate_position_report(camp)
+    return render(
+        request,
+        "billing/camp_position_report.html",
+        {"camp": camp, "report": report},
+    )
 
 
 @meal_manager_required

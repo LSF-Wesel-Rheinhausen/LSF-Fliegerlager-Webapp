@@ -139,6 +139,7 @@ urlpatterns = [
         name="camp-kiosk-access-revoke",
     ),
     path("camps/<int:camp_id>/meals/", views.camp_meal_overview, name="camp-meal-overview"),
+    path("camps/<int:camp_id>/auswertung/", views.camp_position_report, name="camp-position-report"),
     path("camps/<int:camp_id>/meals/cutoff/", views.meal_cutoff_edit, name="meal-cutoff-edit"),
     path("camps/<int:camp_id>/meals/order-sent/", views.meal_order_mark_sent, name="meal-order-mark-sent"),
     path(
