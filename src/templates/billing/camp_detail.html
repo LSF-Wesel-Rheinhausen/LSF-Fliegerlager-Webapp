@@ -16,6 +16,7 @@
       {% if user|can_manage_users %}
         <a class="button" href="{% url 'information-email-compose' camp.pk %}">Information versenden</a>
         <a class="button" href="{% url 'camp-kiosk-access-settings' camp.pk %}">Lager-PIN verwalten</a>
+        <a class="button" href="{% url 'camp-attendance-overview' camp.pk %}">Anwesenheit</a>
       {% endif %}
     </div>
   </div>
@@ -34,6 +35,7 @@
     <a href="{% url 'export-workbook' camp.pk %}">Arbeitsmappe herunterladen</a>
     <a href="{% url 'export-drinks-csv' camp.pk %}">Getränke als CSV herunterladen</a>
     <a href="{% url 'camp-meal-overview' camp.pk %}">Essensübersicht öffnen</a>
+    {% if user|can_manage_users %}<a href="{% url 'attendance-workbook' camp.pk %}">Anwesenheit als Arbeitsmappe herunterladen</a>{% endif %}
   </nav>
 
   <section class="panel stack">
