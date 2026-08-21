@@ -4,6 +4,7 @@ from decimal import Decimal
 import pytest
 from django.core.exceptions import ValidationError
 
+from billing.forms import ParticipantFamilyMemberForm, ParticipantForm
 from billing.models import AttendanceDay, KioskActionAuditLog, PriceRule
 from billing.services import (
     calculate_participant_settlement,
@@ -199,6 +200,78 @@ def test_birth_date_cannot_be_in_the_future_at_age_calculation_date():
 
     with pytest.raises(ValidationError, match="Zukunft"):
         participant.age_on(date(2026, 7, 1))
+
+
+@pytest.mark.django_db
+def test_all_administrative_profile_forms_reject_future_birth_dates():
+    participant = ParticipantFactory()
+    member = ParticipantFamilyMemberFactory(guardian=participant)
+    future_birth_date = "2999-01-01"
+    participant_form = ParticipantForm(
+        {
+            "first_name": participant.first_name,
+            "last_name": participant.last_name,
+            "email": participant.email,
+            "phone": participant.phone,
+            "birth_date": future_birth_date,
+            "status": participant.status,
+            "hilfssatz": participant.hilfssatz,
+            "berufssatz": participant.berufssatz,
+            "booked_nights": participant.booked_nights,
+            "actual_nights": participant.actual_nights,
+            "notes": participant.notes,
+        },
+        instance=participant,
+    )
+    family_form = ParticipantFamilyMemberForm(
+        {
+            "first_name": member.first_name,
+            "last_name": member.last_name,
+            "email": member.email,
+            "phone": member.phone,
+            "birth_date": future_birth_date,
+            "role": member.role,
+            "is_active": "on",
+        },
+        instance=member,
+    )
+
+    assert participant_form.is_valid() is False
+    assert family_form.is_valid() is False
+    assert participant_form.errors["birth_date"] == ["Das Geburtsdatum darf nicht in der Zukunft liegen."]
+    assert family_form.errors["birth_date"] == ["Das Geburtsdatum darf nicht in der Zukunft liegen."]
+
+
+@pytest.mark.django_db
+def test_effective_attendance_excludes_records_outside_the_current_stay():
+    guardian = ParticipantFactory(
+        arrival_date=date(2026, 7, 1),
+        departure_date=date(2026, 7, 4),
+        attendance_tracking_enabled=True,
+    )
+    member = ParticipantFamilyMemberFactory(
+        guardian=guardian,
+        role="companion",
+        arrival_date=date(2026, 7, 1),
+        departure_date=date(2026, 7, 4),
+        attendance_tracking_enabled=True,
+    )
+    for attendance_date in (date(2026, 7, 1), date(2026, 7, 2), date(2026, 7, 3)):
+        AttendanceDay.objects.create(participant=guardian, date=attendance_date, is_present=True)
+        AttendanceDay.objects.create(
+            participant=guardian,
+            family_member=member,
+            date=attendance_date,
+            is_present=True,
+        )
+
+    guardian.departure_date = date(2026, 7, 3)
+    guardian.save(update_fields=["departure_date", "updated_at"])
+    member.departure_date = date(2026, 7, 2)
+    member.save(update_fields=["departure_date", "updated_at"])
+
+    assert guardian.effective_attendance_nights == 2
+    assert member.effective_attendance_nights == 1
 
 
 @pytest.mark.django_db

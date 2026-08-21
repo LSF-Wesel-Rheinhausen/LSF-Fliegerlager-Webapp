@@ -1326,7 +1326,11 @@ def calculate_participant_settlement(participant):
         Participant.objects.select_related("camp")
         .prefetch_related(
             Prefetch("charges", queryset=Charge.objects.select_related("family_member")),
-            "family_members",
+            Prefetch(
+                "family_members",
+                queryset=ParticipantFamilyMember.objects.order_by("last_name", "first_name", "pk"),
+                to_attr="settlement_family_members",
+            ),
             "payments",
             "expenses",
             "drink_entries",
@@ -1334,11 +1338,13 @@ def calculate_participant_settlement(participant):
         )
         .get(pk=participant.pk)
     )
+    _prefetch_tracked_settlement_attendance([participant])
+    settlement_family_members = cast(Any, participant).settlement_family_members
     lines = (
         default_charge_lines(participant)
         + family_camp_flat_lines(
             participant,
-            participant.family_members.all(),
+            settlement_family_members,
             participant.camp.price_rules.filter(is_default=True),
         )
         + manual_charge_lines(participant)

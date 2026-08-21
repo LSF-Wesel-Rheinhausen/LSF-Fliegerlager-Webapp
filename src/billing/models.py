@@ -512,6 +512,12 @@ class Participant(TimeStampedModel):
                 self.booked_nights = days
         super().save(*args, **kwargs)
 
+    def clean(self) -> None:
+        """Reject profile dates that cannot represent an already-born person."""
+        super().clean()
+        if self.birth_date is not None and self.birth_date > timezone.localdate():
+            raise ValidationError({"birth_date": "Das Geburtsdatum darf nicht in der Zukunft liegen."})
+
     @property
     def full_name(self):
         return f"{self.first_name} {self.last_name}".strip()
@@ -540,8 +546,19 @@ class Participant(TimeStampedModel):
         if self.attendance_tracking_enabled:
             prefetched_records = getattr(self, "prefetched_attendance_days", None)
             if prefetched_records is not None:
-                return sum(record.is_present and record.family_member_id is None for record in prefetched_records)
-            return self.attendance_days.filter(family_member__isnull=True, is_present=True).count()
+                return sum(
+                    record.is_present
+                    and record.family_member_id is None
+                    and (self.arrival_date is None or record.date >= self.arrival_date)
+                    and (self.departure_date is None or record.date < self.departure_date)
+                    for record in prefetched_records
+                )
+            records = self.attendance_days.filter(family_member__isnull=True, is_present=True)
+            if self.arrival_date is not None:
+                records = records.filter(date__gte=self.arrival_date)
+            if self.departure_date is not None:
+                records = records.filter(date__lt=self.departure_date)
+            return records.count()
         return self.actual_nights or self.booked_nights
 
     @property
@@ -638,6 +655,12 @@ class ParticipantFamilyMember(TimeStampedModel):
         """Return the display name used in kiosk booking dialogs."""
         return f"{self.first_name} {self.last_name}".strip()
 
+    def clean(self) -> None:
+        """Reject profile dates that cannot represent an already-born person."""
+        super().clean()
+        if self.birth_date is not None and self.birth_date > timezone.localdate():
+            raise ValidationError({"birth_date": "Das Geburtsdatum darf nicht in der Zukunft liegen."})
+
     @property
     def is_child(self) -> bool:
         """Return whether this family member should use child meal pricing."""
@@ -682,10 +705,23 @@ class ParticipantFamilyMember(TimeStampedModel):
     def effective_attendance_nights(self) -> int:
         """Return tracked present nights, or the established family stay fallback."""
         if self.attendance_tracking_enabled:
+            arrival_date = self.arrival_date or self.guardian.arrival_date
+            departure_date = self.departure_date or self.guardian.departure_date
             prefetched_records = getattr(self, "prefetched_attendance_days", None)
             if prefetched_records is not None:
-                return sum(record.is_present and record.family_member_id == self.pk for record in prefetched_records)
-            return self.attendance_days.filter(is_present=True).count()
+                return sum(
+                    record.is_present
+                    and record.family_member_id == self.pk
+                    and (arrival_date is None or record.date >= arrival_date)
+                    and (departure_date is None or record.date < departure_date)
+                    for record in prefetched_records
+                )
+            records = self.attendance_days.filter(is_present=True)
+            if arrival_date is not None:
+                records = records.filter(date__gte=arrival_date)
+            if departure_date is not None:
+                records = records.filter(date__lt=departure_date)
+            return records.count()
         if self.arrival_date and self.departure_date and self.departure_date > self.arrival_date:
             return (self.departure_date - self.arrival_date).days
         return self.guardian.actual_nights or self.guardian.booked_nights

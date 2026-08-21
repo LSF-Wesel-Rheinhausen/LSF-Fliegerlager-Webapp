@@ -711,9 +711,15 @@ test("Kiosk login and basic booking", async ({ page }) => {
   );
   expect(nestedVerticalScrollContainers).toEqual([]);
   const departureInput = checkinDialog.getByLabel("Abreise").first();
+  const newlyIncludedAttendance = checkinDialog.getByLabel(
+    `Marie Curie am ${germanDate(addDays(new Date(), 2))} anwesend`,
+  );
+  await expect(newlyIncludedAttendance).toBeDisabled();
   await departureInput.fill(dateInputValue(addDays(new Date(), 5)));
   await checkinDialog.getByLabel("Anreise").fill(checkinArrival);
   await departureInput.fill(checkinDeparture);
+  await expect(newlyIncludedAttendance).toBeEnabled();
+  await expect(newlyIncludedAttendance).toBeChecked();
   await checkinDialog.getByRole("button", { name: "Check-in speichern" }).click();
   await expect(page.getByText("Check-in-Daten wurden gespeichert.")).toBeVisible();
   await page.setViewportSize({ width: 1280, height: 800 });

@@ -19,7 +19,14 @@ from billing.models import (
 )
 from billing.permissions import EDITOR_GROUP
 from billing.views import _kiosk_attendance_fingerprint, _kiosk_checkin_original_state, _sign_kiosk_checkin_state
-from tests.factories import CampFactory, GroupFactory, ParticipantFactory, SuperUserFactory, UserFactory
+from tests.factories import (
+    CampFactory,
+    GroupFactory,
+    ParticipantFactory,
+    ParticipantFamilyMemberFactory,
+    SuperUserFactory,
+    UserFactory,
+)
 
 
 def _set_kiosk_identity(client, *, participant=None, family_member=None):
@@ -431,6 +438,24 @@ def test_prefetched_attendance_state_fingerprint_uses_no_per_target_query():
 
     assert fingerprint
     assert len(queries) == 0
+
+
+@pytest.mark.django_db
+def test_participant_attendance_fingerprint_ignores_family_member_rows_without_prefetch():
+    participant = ParticipantFactory()
+    member = ParticipantFamilyMemberFactory(guardian=participant)
+    family_attendance = AttendanceDay.objects.create(
+        participant=participant,
+        family_member=member,
+        date=date(2026, 7, 3),
+        comment="first family state",
+    )
+
+    original = _kiosk_attendance_fingerprint(participant)
+    family_attendance.comment = "changed family state"
+    family_attendance.save(update_fields=["comment", "updated_at"])
+
+    assert _kiosk_attendance_fingerprint(participant) == original
 
 
 @pytest.mark.django_db

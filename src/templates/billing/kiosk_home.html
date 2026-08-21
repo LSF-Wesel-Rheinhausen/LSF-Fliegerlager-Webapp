@@ -1235,6 +1235,7 @@
                     type="checkbox"
                     name="attendance-present_{{ checkin_target.token }}"
                     value="{{ day.date|date:'Y-m-d' }}"
+                    data-attendance-date="{{ day.date|date:'Y-m-d' }}"
                     aria-label="{{ checkin_target.name }} am {{ day.date|date:'d.m.Y' }} anwesend"
                     {% if day.is_present %}checked{% endif %}
                     {% if day.disabled %}disabled{% endif %}
@@ -1391,6 +1392,27 @@
       const mealSelectedDate = document.getElementById("meal-selected-date");
       const familyDialog = document.getElementById("family-dialog");
       const checkinDialog = document.getElementById("checkin-dialog");
+      checkinDialog?.querySelectorAll(".target-row--checkin").forEach((targetRow) => {
+        const arrivalInput = targetRow.querySelector('input[name^="arrival_date_"]');
+        const departureInput = targetRow.querySelector('input[name^="departure_date_"]');
+        const attendanceInputs = [...targetRow.querySelectorAll("input[data-attendance-date]")];
+        const syncAttendanceRange = () => {
+          const arrivalDate = arrivalInput?.value || "";
+          const departureDate = departureInput?.value || "";
+          const hasValidStay = arrivalDate && departureDate && arrivalDate < departureDate;
+          attendanceInputs.forEach((attendanceInput) => {
+            const wasDisabled = attendanceInput.disabled;
+            const attendanceDate = attendanceInput.dataset.attendanceDate || "";
+            const isInStay = hasValidStay && arrivalDate <= attendanceDate && attendanceDate < departureDate;
+            attendanceInput.disabled = !isInStay;
+            if (isInStay && wasDisabled) {
+              attendanceInput.checked = true;
+            }
+          });
+        };
+        arrivalInput?.addEventListener("input", syncAttendanceRange);
+        departureInput?.addEventListener("input", syncAttendanceRange);
+      });
       checkinDialog?.querySelectorAll('input[placeholder="DD.MM.YYYY"]').forEach((input) => {
         const updateDateValidityMessage = () => {
           input.setCustomValidity("");

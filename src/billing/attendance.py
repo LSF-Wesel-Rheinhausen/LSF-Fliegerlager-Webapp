@@ -64,7 +64,7 @@ def build_target_attendance_calendar(
     if window is None:
         return []
 
-    attendance_by_date = {record.date: record for record in _target_attendance_records(target)}
+    attendance_by_date = {record.date: record for record in target_attendance_records(target)}
     target_stay = target_stay_for(target, camp)
     calendar: list[dict[str, date | bool | str | None]] = []
     for attendance_date in iter_overnight_dates(*window):
@@ -127,11 +127,14 @@ def prepare_attendance_replacement_payload(
     return AttendanceReplacementPayload(start_date=start_date, end_date=end_date, days=days)
 
 
-def _target_attendance_records(target: AttendanceTarget) -> Sequence[AttendanceDay]:
+def target_attendance_records(target: AttendanceTarget) -> Sequence[AttendanceDay]:
+    """Return attendance rows belonging to the exact participant or family target."""
     records = getattr(target, "prefetched_attendance_days", None)
-    if records is not None:
-        return records
-    return list(target.attendance_days.all())
+    if records is None:
+        records = list(target.attendance_days.all())
+    if isinstance(target, ParticipantFamilyMember):
+        return [record for record in records if record.family_member_id == target.pk]
+    return [record for record in records if record.family_member_id is None]
 
 
 def target_stay_for(

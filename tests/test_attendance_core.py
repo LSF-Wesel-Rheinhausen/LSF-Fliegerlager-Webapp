@@ -79,6 +79,40 @@ def test_calendar_treats_missing_tracked_stay_days_as_absent():
 
 
 @pytest.mark.django_db
+def test_participant_calendar_ignores_family_member_attendance_rows():
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 5))
+    participant = ParticipantFactory(
+        camp=camp,
+        arrival_date=date(2026, 7, 2),
+        departure_date=date(2026, 7, 4),
+        attendance_tracking_enabled=True,
+    )
+    member = ParticipantFamilyMemberFactory(guardian=participant)
+    AttendanceDay.objects.create(
+        participant=participant,
+        date=date(2026, 7, 2),
+        is_present=False,
+        comment="Participant note",
+    )
+    AttendanceDay.objects.create(
+        participant=participant,
+        family_member=member,
+        date=date(2026, 7, 2),
+        is_present=True,
+        comment="Family note",
+    )
+
+    entry = next(
+        day
+        for day in build_target_attendance_calendar(participant, camp, include_comments=True)
+        if day["date"] == date(2026, 7, 2)
+    )
+
+    assert entry["is_present"] is False
+    assert entry["comment"] == "Participant note"
+
+
+@pytest.mark.django_db
 def test_prepare_payload_accepts_existing_field_names_and_preserves_hidden_comments():
     camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 5))
     participant = ParticipantFactory(camp=camp, arrival_date=date(2026, 7, 2), departure_date=date(2026, 7, 4))
@@ -142,10 +176,30 @@ def test_admin_overview_is_camp_scoped_and_includes_people_totals_and_comments()
     _request, template_name, context = render.call_args.args
     assert template_name == "billing/camp_attendance_overview.html"
     assert context["attendance_totals"] == [
-        {"date": date(2026, 7, 1), "present": 1, "absent": 1},
-        {"date": date(2026, 7, 2), "present": 2, "absent": 0},
+        {
+            "date": attendance_date,
+            "present": 1 if attendance_date == date(2026, 7, 1) else 2 if attendance_date == date(2026, 7, 2) else 0,
+            "absent": 1 if attendance_date == date(2026, 7, 1) else 0,
+        }
+        for attendance_date in iter_overnight_dates(date(2026, 6, 27), date(2026, 7, 7))
     ]
     assert context["daily_comments"] == [
         {"date": date(2026, 7, 1), "person": participant.full_name, "comment": "Arrived"}
     ]
     assert [person["name"] for person in context["attendance_people"]] == [participant.full_name, member.full_name]
+
+
+@pytest.mark.django_db
+def test_admin_overview_includes_zero_totals_for_every_date_of_an_empty_camp():
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 3))
+    request = RequestFactory().get("/camps/attendance/")
+    request.user = SuperUserFactory()
+
+    with patch("billing.attendance_views.render") as render:
+        camp_attendance_overview(request, camp.pk)
+
+    context = render.call_args.args[2]
+    assert context["attendance_totals"] == [
+        {"date": attendance_date, "present": 0, "absent": 0}
+        for attendance_date in iter_overnight_dates(date(2026, 6, 27), date(2026, 7, 7))
+    ]

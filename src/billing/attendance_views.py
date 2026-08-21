@@ -49,13 +49,15 @@ def camp_attendance_overview(request, camp_id: int):
         people.append(_attendance_person(participant, camp))
         people.extend(_attendance_person(member, camp) for member in participant.family_members.all())
 
-    totals: dict[object, dict[str, object]] = {}
+    totals: dict[object, dict[str, object]] = {
+        attendance_date: {"date": attendance_date, "present": 0, "absent": 0} for attendance_date in _camp_dates(camp)
+    }
     comments = []
     for person in people:
         for entry in person["calendar"]:
             if entry["disabled"]:
                 continue
-            total = totals.setdefault(entry["date"], {"date": entry["date"], "present": 0, "absent": 0})
+            total = totals[entry["date"]]
             count_key = "present" if entry["is_present"] else "absent"
             current_count = total[count_key]
             if not isinstance(current_count, int):
@@ -64,7 +66,7 @@ def camp_attendance_overview(request, camp_id: int):
             if entry["comment"]:
                 comments.append({"date": entry["date"], "person": person["name"], "comment": entry["comment"]})
 
-    attendance_totals = [totals[attendance_date] for attendance_date in _camp_dates(camp) if attendance_date in totals]
+    attendance_totals = list(totals.values())
     return render(
         request,
         "billing/camp_attendance_overview.html",

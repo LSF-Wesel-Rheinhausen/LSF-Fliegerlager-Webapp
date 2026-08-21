@@ -7,7 +7,9 @@ from io import BytesIO, StringIO
 import pytest
 from django.apps import apps
 from django.core.exceptions import ValidationError
+from django.db import connection
 from django.test import Client
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from openpyxl import load_workbook
@@ -528,6 +530,40 @@ def test_tracked_attendance_keeps_batch_settlements_query_bounded(django_assert_
     assert {
         line.quantity for result in results.values() for line in result.lines if line.source.startswith("price_rule:")
     } == {Decimal("1")}
+
+
+@pytest.mark.django_db
+def test_tracked_family_attendance_is_prefetched_for_single_settlement():
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 14))
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.CAMP_FLAT,
+        camp_flat_role=PriceRule.CampFlatRole.COMPANION,
+        camp_flat_duration=PriceRule.CampFlatDuration.ONE_WEEK,
+        is_default=True,
+    )
+    guardian = ParticipantFactory(camp=camp)
+    for index in range(3):
+        companion = ParticipantFamilyMemberFactory(
+            guardian=guardian,
+            role="companion",
+            arrival_date=date(2026, 7, 1),
+            departure_date=date(2026, 7, 6),
+            attendance_tracking_enabled=True,
+        )
+        AttendanceDay.objects.create(
+            participant=guardian,
+            family_member=companion,
+            date=date(2026, 7, index + 1),
+            is_present=True,
+        )
+
+    with CaptureQueriesContext(connection) as queries:
+        settlement = calculate_participant_settlement(guardian)
+
+    attendance_queries = [query for query in queries if "billing_attendanceday" in query["sql"]]
+    assert len(attendance_queries) == 1
+    assert len([line for line in settlement.lines if line.source.startswith("price_rule:family:")]) == 3
 
 
 @pytest.mark.django_db

@@ -3,6 +3,7 @@
 - Added administrator-only attendance overview and workbook routes.
 - Integrated attendance calendars, optimistic locking, safe audit trails and the setup/departure window into kiosk check-in.
 - Added profile navigation, contact and birth-date administration, plus attendance detail and export coverage.
+- Hardened exact attendance target scoping, stay-date reconciliation, profile validation and settlement query bounds.
 
 Changed areas/files:
 
@@ -13,7 +14,7 @@ Changed areas/files:
 - `src/billing/views.py`, `src/billing/forms.py`, `src/billing/pwa_views.py`: kiosk integration, profile form support and PWA cache versioning.
 - `tests/test_attendance_*.py`, `tests/test_kiosk_profile_*.py`, `tests/test_issue_417_ui.py`, relevant billing/kiosk/security/shift/PWA regressions and `tests/e2e/fliegerlager.spec.js`.
 
-Tests: 1,239 Python tests passed with 8 skipped; 242 Playwright tests passed with 1 skipped. Mypy, Django checks, migration checks, Ruff, formatting, diff checks and the complete remote CI passed.
+Tests: 1,245 Python tests passed with 8 skipped; 242 Playwright tests passed with 1 skipped. Mypy, Django checks, migration checks, Ruff, formatting and diff checks passed.
 
 Open points:
 

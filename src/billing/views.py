@@ -27,7 +27,12 @@ from django.utils.crypto import salted_hmac
 from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_GET, require_POST
 
-from .attendance import attendance_window, build_target_attendance_calendar, prepare_attendance_replacement_payload
+from .attendance import (
+    attendance_window,
+    build_target_attendance_calendar,
+    prepare_attendance_replacement_payload,
+    target_attendance_records,
+)
 from .daily_settlement_backups import update_daily_backup_settings
 from .deployment_updates import UpdateAgentError, check_for_update, deployment_status, install_update
 from .exporters import (
@@ -436,11 +441,8 @@ def _kiosk_checkin_state_payload(
 
 def _kiosk_attendance_fingerprint(target: Participant | ParticipantFamilyMember) -> str:
     """HMAC the attendance state for optimistic locking without exposing comments."""
-    records = getattr(target, "prefetched_attendance_days", None)
-    if records is None:
-        records = target.attendance_days.order_by("date", "pk")
     state = [str(target.attendance_tracking_enabled)]
-    for record in records:
+    for record in target_attendance_records(target):
         state.append(f"{record.date.isoformat()}:{record.is_present}:{record.comment}")
     return salted_hmac("billing.kiosk-checkin-attendance-fingerprint", "|".join(state)).hexdigest()
 
