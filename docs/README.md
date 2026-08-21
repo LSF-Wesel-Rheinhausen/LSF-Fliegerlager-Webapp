@@ -90,6 +90,18 @@ python src/manage.py runserver
 
 Danach läuft die Anwendung lokal unter `http://localhost:8000`.
 
+Für die gemeinsame lokale Demo- und Testdatenbank (standardmäßig `src/db.sqlite3`) können anschließend die synthetischen Beispieldaten erzeugt werden:
+
+```bash
+python src/manage.py seed_local_test_db
+```
+
+Der Befehl ist idempotent, verwendet ausschließlich `example.test`-Daten und schreibt keine E-Mails, Push-Nachrichten oder Passkeys. pytest, CI und parallele Playwright-Worker behalten ihre isolierten Datenbanken. Für einen einzelnen E2E- beziehungsweise Review-Server kann `SEED_LOCAL_TEST_DB=1` gesetzt werden.
+
+Die lokalen Demo-Zugangsdaten sind fest definiert: `local-admin` / `LocalAdmin-417-Only!`, `local-editor` / `LocalEditor-417-Only!`, gemeinsamer Lager-PIN `864208`, Teilnehmer-PIN `2468` und Begleitpersonen-PIN `9753`. Sie sind ausschließlich für lokale Tests bestimmt und werden vom Command nie ausgegeben.
+
+Ein fremder Benutzer mit einem deterministischen Seed-Benutzernamen wird aus Sicherheitsgründen nicht überschrieben; der Seed bricht dann vollständig und transaktional ab. Bereits erzeugte Seed-Benutzer werden nur anhand ihrer vollständigen deterministischen Identität und des passenden Passwort-Hashes wiedererkannt.
+
 ## Tests
 
 ```bash

@@ -35,4 +35,6 @@ Standardbefehle:
 npm run test:e2e
 ```
 
+Die gemeinsame lokale Beispieldatenbank wird mit `.venv/bin/python src/manage.py seed_local_test_db` erzeugt. Der zweite Lauf erzeugt keine Duplikate und verändert keine fremden Seed-Datensätze. pytest, CI und parallele Playwright-Worker verwenden weiterhin isolierte Datenbanken; nur ein serieller lokaler E2E-/Review-Lauf darf bewusst gegen dieselbe lokale Seed-Datenbank zeigen.
+
 Der lokale Sammellauf ist `npm run test:local`; die Logs werden unter `.test-local-logs/<timestamp>/` abgelegt.
