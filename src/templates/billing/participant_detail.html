@@ -65,13 +65,14 @@
     <article class="metric"><span>Soll</span><strong>{{ settlement.total_due }} EUR</strong></article>
     <article class="metric"><span>Gezahlt</span><strong>{{ settlement.total_paid }} EUR</strong></article>
     <article class="metric"><span>Vorgestreckt</span><strong>{{ settlement.total_advanced }} EUR</strong></article>
+    <article class="metric"><span>Ausgezahlt</span><strong>{{ settlement.total_payouts }} EUR</strong></article>
     <article class="metric"><span>Offen</span><strong>{{ settlement.balance }} EUR</strong></article>
   </section>
 
   {% if settlement.balance < 0 %}
     <section class="panel info-callout">
       <h3>Guthaben vorhanden</h3>
-      <p>Möchtest du das Guthaben gespendet lassen oder ausgezahlt bekommen? Bitte teile uns ggf. deine IBAN oder PayPal mit.</p>
+      <p>Möchtest du das Guthaben auszahlen lassen? Das aktuelle Guthaben beträgt {{ available_credit|money_eur }}. Auszahlungen werden ausschließlich als separate Audit-Einträge erfasst.</p>
     </section>
   {% endif %}
 
@@ -92,6 +93,43 @@
         {% endfor %}
       </tbody>
     </table>
+  </section>
+
+  <section class="panel stack">
+    <div class="toolbar compact-toolbar">
+      <div>
+        <h2>Auszahlungen</h2>
+        <p>Separate, unveränderliche Auszahlungsprotokolle; Zahlungseingänge bleiben davon getrennt.</p>
+      </div>
+    </div>
+    {% if credit_payouts %}
+      <table class="responsive-record-table">
+        <thead><tr><th>Datum</th><th>Betrag</th><th>Art</th><th>Erfasst von</th><th>Referenz</th><th>Notiz</th></tr></thead>
+        <tbody>
+          {% for payout in credit_payouts %}
+            <tr>
+              <td data-label="Datum">{{ payout.created_at|date:"d.m.Y H:i" }}</td>
+              <td data-label="Betrag">{{ payout.amount|money_eur }}</td>
+              <td data-label="Art">{{ payout.get_method_display }}</td>
+              <td data-label="Erfasst von">{{ payout.created_by.get_username }}</td>
+              <td data-label="Referenz">{{ payout.external_reference|default:"-" }}</td>
+              <td data-label="Notiz">{{ payout.note|default:"-" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p>Noch keine Auszahlungen erfasst.</p>
+    {% endif %}
+    {% if credit_payout_form %}
+      <h3>Guthaben auszahlen</h3>
+      <p>Verfügbares Guthaben: {{ available_credit|money_eur }}. Keine Konto- oder Kartendaten hier eintragen.</p>
+      <form method="post" action="{% url 'credit-payout-create' participant.pk %}">
+        {% csrf_token %}
+        {{ credit_payout_form.as_p }}
+        <button type="submit">Auszahlung protokollieren</button>
+      </form>
+    {% endif %}
   </section>
 
   <section class="panel stack">
@@ -183,7 +221,7 @@
   <section class="panel stack">
     <div class="toolbar compact-toolbar">
       <div>
-        <h2>Zahlungen</h2>
+        <h2>Zahlungseingänge</h2>
         <p>Erfasste Zahlungseingänge dieses Zahlungskontos.</p>
       </div>
     </div>

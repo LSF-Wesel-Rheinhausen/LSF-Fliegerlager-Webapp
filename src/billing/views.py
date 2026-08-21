@@ -49,6 +49,7 @@ from .forms import (
     CampFlatRateSettingsForm,
     CampForm,
     ChargeForm,
+    CreditPayoutForm,
     DailySettlementBackupSettingsForm,
     ExpenseForm,
     FirstAdminSetupForm,
@@ -157,6 +158,7 @@ from .services import (
     charge_audit_snapshot,
     create_booking_audit_log,
     create_booking_delete_audit_log,
+    create_credit_payout,
     create_kiosk_action_audit_log,
     create_manual_charge,
     create_payment_delete_audit_log,
@@ -1219,6 +1221,13 @@ def participant_detail(request, participant_id):
     payment_audit_logs = PaymentAuditLog.objects.filter(
         Q(participant=participant) | Q(payment__participant=participant)
     ).select_related("changed_by", "payment")
+    credit_payouts = participant.credit_payouts.select_related("created_by").order_by("-created_at", "-id")
+    available_credit = max(-settlement.balance, Decimal("0.00"))
+    credit_payout_form = (
+        CreditPayoutForm(initial={"idempotency_key": uuid.uuid4()})
+        if is_admin(request.user) and available_credit > Decimal("0.00")
+        else None
+    )
     settlement_snapshots = participant.settlements.filter(run__isnull=False).select_related("run", "run__camp")
     family_audit_logs = (
         KioskActionAuditLog.objects.filter(target_participant=participant, target_family_member__isnull=False)
@@ -1254,6 +1263,9 @@ def participant_detail(request, participant_id):
             "settlement": settlement,
             "charges": charges,
             "payments": payments,
+            "credit_payouts": credit_payouts,
+            "available_credit": available_credit,
+            "credit_payout_form": credit_payout_form,
             "family_members": family_members,
             "family_meal_signups": family_meal_signups,
             "family_audit_logs": family_audit_logs,
@@ -1266,6 +1278,30 @@ def participant_detail(request, participant_id):
             "manual_charge_form": manual_charge_form,
         },
     )
+
+
+@admin_required
+@require_POST
+def credit_payout_create(request, participant_id):
+    participant = get_object_or_404(Participant, pk=participant_id, archived_at__isnull=True)
+    form = CreditPayoutForm(request.POST)
+    if form.is_valid():
+        try:
+            payout = create_credit_payout(
+                participant=participant,
+                amount=form.cleaned_data["amount"],
+                method=form.cleaned_data["method"],
+                created_by=request.user,
+                idempotency_key=form.cleaned_data["idempotency_key"],
+                external_reference=form.cleaned_data["external_reference"],
+                note=form.cleaned_data["note"],
+            )
+        except ValidationError as error:
+            form.add_error(None, error)
+        else:
+            messages.success(request, f"Auszahlung über {payout.amount} EUR wurde protokolliert.")
+            return redirect("participant-detail", participant_id=participant.pk)
+    return render(request, "billing/form.html", {"form": form, "title": "Guthaben auszahlen"})
 
 
 @admin_required

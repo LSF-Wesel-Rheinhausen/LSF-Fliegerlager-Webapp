@@ -478,7 +478,7 @@ def test_family_charges_and_meal_signups_are_query_bounded_and_visible_in_guardi
             charge=charge,
         )
 
-    with django_assert_num_queries(8):
+    with django_assert_num_queries(9):
         results = calculate_participant_settlements(guardians)
 
     assert {line.target_name for result in results.values() for line in result.lines} == {
@@ -530,7 +530,7 @@ def test_tracked_attendance_keeps_batch_settlements_query_bounded(django_assert_
         )
         guardians.append(guardian)
 
-    with django_assert_num_queries(10):
+    with django_assert_num_queries(11):
         results = calculate_participant_settlements(guardians)
 
     assert {result.participant.pk for result in results.values()} == {guardian.pk for guardian in guardians}

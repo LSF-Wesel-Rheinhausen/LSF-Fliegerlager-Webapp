@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from functools import partial
 from typing import Any, TypedDict, cast
+from uuid import UUID
 
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import transaction
@@ -16,6 +17,7 @@ from .models import (
     BookingAuditLog,
     Camp,
     Charge,
+    CreditPayout,
     DailyShiftException,
     DailyShiftTemplate,
     DrinkEntry,
@@ -233,6 +235,7 @@ class SettlementResult:
     total_due: Decimal
     total_paid: Decimal
     total_advanced: Decimal
+    total_payouts: Decimal
     balance: Decimal
 
     @property
@@ -251,6 +254,72 @@ class SettlementResult:
 
 def money(value):
     return (value or ZERO).quantize(Decimal("0.01"))
+
+
+_SENSITIVE_PAYOUT_COORDINATES = re.compile(r"(?i)\b[A-Z]{2}\d{2}[A-Z0-9 ]{11,30}\b|(?:\d[ -]?){13,19}")
+
+
+def _validate_payout_text(value: str, field_label: str) -> str:
+    if len(value) > 180 or _SENSITIVE_PAYOUT_COORDINATES.search(value):
+        raise ValidationError(f"{field_label} darf keine Bank- oder Kartendaten enthalten.")
+    return value
+
+
+def calculate_available_credit(participant: Participant | int) -> Decimal:
+    """Return positive current credit remaining after existing payouts."""
+    participant_id = participant.pk if isinstance(participant, Participant) else participant
+    result = calculate_participant_settlement(Participant.objects.get(pk=participant_id))
+    return money(max(-result.balance, ZERO))
+
+
+@transaction.atomic
+def create_credit_payout(
+    participant: Participant | int,
+    amount: Decimal,
+    method: str,
+    created_by: Any,
+    idempotency_key: UUID,
+    external_reference: str = "",
+    note: str = "",
+) -> CreditPayout:
+    """Create one atomic, idempotent payout from the participant's current credit."""
+    if not isinstance(idempotency_key, UUID):
+        raise ValidationError("Ein gültiger Idempotenzschlüssel ist erforderlich.")
+    amount = money(amount)
+    if amount <= ZERO:
+        raise ValidationError("Eine Auszahlung muss positiv sein.")
+    if method not in CreditPayout.Method.values:
+        raise ValidationError("Ungültige Auszahlungsart.")
+    _validate_payout_text(external_reference, "Die externe Referenz")
+    _validate_payout_text(note, "Die Notiz")
+
+    existing = CreditPayout.objects.filter(idempotency_key=idempotency_key).first()
+    if existing is not None:
+        if existing.participant_id != (participant.pk if isinstance(participant, Participant) else participant):
+            raise ValidationError("Der Idempotenzschlüssel gehört zu einem anderen Zahlungskonto.")
+        if existing.amount != amount or existing.method != method:
+            raise ValidationError("Der Idempotenzschlüssel wurde mit anderen Auszahlungsdaten verwendet.")
+        return existing
+
+    participant_id = participant.pk if isinstance(participant, Participant) else participant
+    locked_participant = Participant.objects.select_for_update().get(pk=participant_id)
+    existing = CreditPayout.objects.filter(idempotency_key=idempotency_key).first()
+    if existing is not None:
+        if existing.participant_id != participant_id or existing.amount != amount or existing.method != method:
+            raise ValidationError("Der Idempotenzschlüssel wurde mit anderen Auszahlungsdaten verwendet.")
+        return existing
+    available_credit = calculate_available_credit(locked_participant)
+    if amount > available_credit:
+        raise ValidationError("Die Auszahlung übersteigt das verfügbare Guthaben.")
+    return CreditPayout.objects.create(
+        participant=locked_participant,
+        amount=amount,
+        method=method,
+        created_by=created_by,
+        idempotency_key=idempotency_key,
+        external_reference=external_reference,
+        note=note,
+    )
 
 
 def rate(value):
@@ -1416,6 +1485,7 @@ def calculate_participant_settlement(participant):
                 to_attr="settlement_family_members",
             ),
             Prefetch("payments", queryset=Payment.objects.filter(deleted_at__isnull=True)),
+            Prefetch("credit_payouts", queryset=CreditPayout.objects.order_by("created_at", "pk")),
             "expenses",
             "drink_entries",
             "expense_allocations__expense",
@@ -1446,7 +1516,8 @@ def calculate_participant_settlement(participant):
             status=Expense.Status.APPROVED,
         ).aggregate(total=Sum("amount"))["total"]
     )
-    balance = money(total_due - total_paid - total_advanced)
+    total_payouts = money(sum((payout.amount for payout in participant.credit_payouts.all()), ZERO))
+    balance = money(total_due - total_paid - total_advanced + total_payouts)
     return SettlementResult(
         participant=participant,
         lines=lines,
@@ -1455,6 +1526,7 @@ def calculate_participant_settlement(participant):
         total_due=total_due,
         total_paid=total_paid,
         total_advanced=total_advanced,
+        total_payouts=total_payouts,
         balance=balance,
     )
 
@@ -1508,6 +1580,11 @@ def calculate_participant_settlements(
                 to_attr="settlement_payments",
             ),
             Prefetch(
+                "credit_payouts",
+                queryset=CreditPayout.objects.order_by("created_at", "pk"),
+                to_attr="settlement_payouts",
+            ),
+            Prefetch(
                 "expenses",
                 queryset=Expense.objects.filter(
                     reimbursable=True,
@@ -1550,6 +1627,7 @@ def calculate_participant_settlements(
         total_advanced = money(
             sum((expense.amount for expense in prefetched_participant.settlement_advanced_expenses), ZERO)
         )
+        total_payouts = money(sum((payout.amount for payout in prefetched_participant.settlement_payouts), ZERO))
         results[participant_id] = SettlementResult(
             participant=participant,
             lines=lines,
@@ -1558,7 +1636,8 @@ def calculate_participant_settlements(
             total_due=total_due,
             total_paid=total_paid,
             total_advanced=total_advanced,
-            balance=money(total_due - total_paid - total_advanced),
+            total_payouts=total_payouts,
+            balance=money(total_due - total_paid - total_advanced + total_payouts),
         )
     return results
 
@@ -1610,7 +1689,7 @@ def calculate_camp_settlements(camp):
 
 
 def _settlement_snapshot_data(result: SettlementResult) -> dict[str, Any]:
-    return {
+    data = {
         "participant": {
             "name": result.participant.full_name,
             "status": result.participant.status,
@@ -1633,6 +1712,9 @@ def _settlement_snapshot_data(result: SettlementResult) -> dict[str, Any]:
             for line in result.lines
         ],
     }
+    if result.total_payouts:
+        data["total_payouts"] = str(result.total_payouts)
+    return data
 
 
 class _CostCenterExpenseDetail(TypedDict):
@@ -1726,6 +1808,7 @@ def create_settlement_run(
         total_due=money(sum((result.total_due for result in results), ZERO)),
         total_paid=money(sum((result.total_paid for result in results), ZERO)),
         total_advanced=money(sum((result.total_advanced for result in results), ZERO)),
+        total_payouts=money(sum((result.total_payouts for result in results), ZERO)),
         balance=money(sum((result.balance for result in results), ZERO)),
         cost_center_data=_cost_center_snapshot_data(locked_camp),
     )
@@ -1742,6 +1825,7 @@ def create_settlement_run(
                 total_due=result.total_due,
                 total_paid=result.total_paid,
                 total_advanced=result.total_advanced,
+                total_payouts=result.total_payouts,
                 balance=result.balance,
                 data=_settlement_snapshot_data(result),
             )
@@ -1759,6 +1843,7 @@ def _participant_kiosk_summary_from_result(result: SettlementResult) -> dict[str
         "total_due": result.total_due,
         "total_paid": result.total_paid,
         "total_advanced": result.total_advanced,
+        "total_payouts": result.total_payouts,
         "balance": result.balance,
         "lines": [
             {

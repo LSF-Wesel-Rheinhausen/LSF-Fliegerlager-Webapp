@@ -184,6 +184,11 @@ urlpatterns = [
         name="booking-audit-batch-restore",
     ),
     path("participants/<int:participant_id>/payments/new/", views.payment_create, name="payment-create"),
+    path(
+        "participants/<int:participant_id>/credit-payout/",
+        views.credit_payout_create,
+        name="credit-payout-create",
+    ),
     path("payments/<int:payment_id>/delete/", views.payment_delete, name="payment-delete"),
     path(
         "payment-audit-logs/<int:audit_log_id>/restore/",

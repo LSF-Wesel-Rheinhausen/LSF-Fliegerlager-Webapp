@@ -1,3 +1,4 @@
+import re
 from datetime import date, time, timedelta
 from decimal import Decimal
 from typing import Any, cast
@@ -14,6 +15,7 @@ from django.utils.formats import number_format
 from .models import (
     Camp,
     Charge,
+    CreditPayout,
     DailySettlementBackupSettings,
     DailyShiftTemplate,
     Expense,
@@ -792,6 +794,26 @@ class PaymentForm(forms.ModelForm):
             "note": "Notiz",
         }
         widgets = {"paid_on": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"})}
+
+
+class CreditPayoutForm(forms.Form):
+    amount = forms.DecimalField(min_value=Decimal("0.01"), max_digits=10, decimal_places=2, label="Betrag")
+    method = forms.ChoiceField(choices=CreditPayout.Method.choices, label="Auszahlungsart")
+    idempotency_key = forms.UUIDField(widget=forms.HiddenInput)
+    external_reference = forms.CharField(max_length=120, required=False, label="Externe Referenz")
+    note = forms.CharField(max_length=180, required=False, label="Notiz", widget=forms.Textarea)
+
+    @staticmethod
+    def _reject_sensitive_coordinates(value: str) -> str:
+        if re.search(r"(?i)\b[A-Z]{2}\d{2}[A-Z0-9 ]{11,30}\b", value) or re.search(r"(?:\d[ -]?){13,19}", value):
+            raise forms.ValidationError("Bank- oder Kartendaten dürfen nicht erfasst werden.")
+        return value
+
+    def clean_external_reference(self):
+        return self._reject_sensitive_coordinates(self.cleaned_data["external_reference"])
+
+    def clean_note(self):
+        return self._reject_sensitive_coordinates(self.cleaned_data["note"])
 
 
 EXPENSE_CATEGORY_CHOICES = [
