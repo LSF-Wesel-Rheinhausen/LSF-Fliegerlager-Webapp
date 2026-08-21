@@ -7,6 +7,7 @@
 ## Scope And Precedence
 
 - These rules apply to the entire repository. A closer nested `AGENTS.md` may add or override rules for its subtree.
+- Read `TODO.md` before starting. The current user request remains the task; `TODO.md` supplies relevant context, not unrelated work. Update only entries directly completed by the task.
 - Inspect only the files needed for the task. Preserve all pre-existing working-tree changes and never stage, rewrite, or remove unrelated work.
 - Follow `CONTRIBUTING.md` for human-facing setup and pull-request conventions.
 
