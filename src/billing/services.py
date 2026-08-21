@@ -950,10 +950,18 @@ def calculate_position_report(camp: Camp) -> PositionReport:
 
     variant_labels = dict(MealSignup.Variant.choices)
     meal_labels = dict(MealSignup.Meal.choices)
-    signups = MealSignup.objects.filter(
-        participant__camp=camp,
-        status=MealSignup.Status.ACTIVE,
-    ).values_list("meal", "variant")
+    if camp.starts_on and camp.ends_on and camp.starts_on <= camp.ends_on:
+        dates = camp_meal_dates(camp)
+        signups = MealSignup.objects.filter(
+            participant__camp=camp,
+            status=MealSignup.Status.ACTIVE,
+            meal_date__range=(dates[0], dates[-1]),
+        ).values_list("meal", "variant")
+    else:
+        signups = MealSignup.objects.filter(
+            participant__camp=camp,
+            status=MealSignup.Status.ACTIVE,
+        ).values_list("meal", "variant")
     meal_rows: dict[str, dict[str, int]] = {}
     for meal, variant in signups:
         meal_rows.setdefault(meal, {})
