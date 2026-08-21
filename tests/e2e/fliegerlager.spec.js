@@ -620,7 +620,7 @@ async function expectButtonHitTestable(button) {
   })).toBe(true);
 }
 
-async function waitForKioskDialogReady(page, dialog, dialogId) {
+async function waitForKioskDialogReady(page, dialog, dialogId, actionableControl) {
   await expectOnlyModal(page, dialogId);
   // kioskDialogs first waits for the previous native modal to tear down and
   // then moves focus into the replacement on the following animation frame.
@@ -631,6 +631,9 @@ async function waitForKioskDialogReady(page, dialog, dialogId) {
     isModal: element.matches(":modal"),
     containsFocus: element.contains(document.activeElement),
   }))).toEqual({ isModal: true, containsFocus: true });
+  if (actionableControl) {
+    await expectButtonHitTestable(actionableControl);
+  }
 }
 
 async function submitKioskDialogAndExpectRedirect(page, dialog, dialogId, button, action, location) {
@@ -920,10 +923,10 @@ test("Kiosk user can change their own PIN and log in with the new PIN", async ({
   const kioskMenu = page.locator("dialog#kiosk-menu-dialog");
   await waitForKioskDialogReady(page, kioskMenu, "kiosk-menu-dialog");
   const pinChangeButton = kioskMenu.getByRole("button", { name: "Eigene PIN ändern" });
-  await expectButtonHitTestable(pinChangeButton);
   await pinChangeButton.click();
   const pinDialog = page.locator("dialog#pin-change-dialog");
-  await waitForKioskDialogReady(page, pinDialog, "pin-change-dialog");
+  const submitPinChange = pinDialog.getByRole("button", { name: "PIN ändern" });
+  await waitForKioskDialogReady(page, pinDialog, "pin-change-dialog", submitPinChange);
   await pinDialog.getByLabel("Aktuelle PIN").fill("2468");
   await pinDialog.getByLabel("Neue PIN:", { exact: true }).fill("8642");
   await pinDialog.getByLabel("Neue PIN wiederholen").fill("8642");
@@ -931,7 +934,7 @@ test("Kiosk user can change their own PIN and log in with the new PIN", async ({
     page,
     pinDialog,
     "pin-change-dialog",
-    pinDialog.getByRole("button", { name: "PIN ändern" }),
+    submitPinChange,
     "pin_change",
     "/kiosk/login/",
   );
@@ -962,15 +965,14 @@ test("Kiosk user sees validation errors when changing PIN incorrectly", async ({
   const kioskMenu = page.locator("dialog#kiosk-menu-dialog");
   await waitForKioskDialogReady(page, kioskMenu, "kiosk-menu-dialog");
   const pinChangeButton = kioskMenu.getByRole("button", { name: "Eigene PIN ändern" });
-  await expectButtonHitTestable(pinChangeButton);
   await pinChangeButton.click();
   const pinDialog = page.locator("dialog#pin-change-dialog");
-  await waitForKioskDialogReady(page, pinDialog, "pin-change-dialog");
+  const submitPinChange = pinDialog.getByRole("button", { name: "PIN ändern" });
+  await waitForKioskDialogReady(page, pinDialog, "pin-change-dialog", submitPinChange);
 
   await pinDialog.getByLabel("Aktuelle PIN").fill("9999");
   await pinDialog.getByLabel("Neue PIN:", { exact: true }).fill("8642");
   await pinDialog.getByLabel("Neue PIN wiederholen").fill("8642");
-  const submitPinChange = pinDialog.getByRole("button", { name: "PIN ändern" });
   await expectButtonHitTestable(submitPinChange);
   await submitPinChange.click();
   await expect(pinDialog).toBeVisible();
