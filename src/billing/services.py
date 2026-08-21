@@ -930,7 +930,7 @@ class MealUsage:
 
 
 @dataclass(frozen=True)
-class AttendanceDay:
+class PositionReportDay:
     """Count the people present on one camp day."""
 
     day: date
@@ -950,7 +950,7 @@ class PositionReport:
     camp: Camp
     articles: list[ArticleUsage]
     meals: list[MealUsage]
-    attendance_days: list[AttendanceDay]
+    attendance_days: list[PositionReportDay]
     participant_nights: int
     family_member_nights: int
 
@@ -970,7 +970,7 @@ class PositionReport:
         return self.participant_nights + self.family_member_nights
 
     @property
-    def peak_day(self) -> AttendanceDay | None:
+    def peak_day(self) -> PositionReportDay | None:
         """Return the busiest camp day, or None when nobody is recorded."""
         populated = [day for day in self.attendance_days if day.total > 0]
         if not populated:
@@ -1058,7 +1058,7 @@ def calculate_position_report(camp: Camp) -> PositionReport:
         ParticipantFamilyMember.objects.filter(guardian__camp=camp, is_active=True).select_related("guardian")
     )
     attendance_days = [
-        AttendanceDay(
+        PositionReportDay(
             day=day,
             participant_count=sum(
                 1
