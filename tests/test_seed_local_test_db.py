@@ -9,10 +9,11 @@ from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.hashers import check_password
 from django.contrib.auth.models import Group
 from django.core.management import CommandError, call_command
-from django.db import close_old_connections
+from django.db import OperationalError, close_old_connections
 from django.urls import reverse
 from openpyxl import load_workbook
 
+from billing.management.commands import seed_local_test_db as seed_module
 from billing.management.commands.seed_local_test_db import Command
 from billing.models import (
     AttendanceDay,
@@ -45,6 +46,26 @@ User = get_user_model()
 
 def seed() -> None:
     call_command("seed_local_test_db", verbosity=0)
+
+
+def test_seed_retries_slow_sqlite_locks_with_bounded_budget(monkeypatch):
+    attempts = 0
+    sleeps = []
+
+    def lock_then_succeed(_command):
+        nonlocal attempts
+        attempts += 1
+        if attempts <= 7:
+            raise OperationalError("database is locked")
+
+    monkeypatch.setattr(Command, "_seed_once", lock_then_succeed)
+    monkeypatch.setattr(seed_module, "sleep", sleeps.append)
+
+    Command().handle()
+
+    assert attempts == 8
+    assert sleeps == list(seed_module.SEED_LOCK_RETRY_DELAYS[:7])
+    assert sum(seed_module.SEED_LOCK_RETRY_DELAYS) >= 14
 
 
 @pytest.mark.django_db

@@ -46,7 +46,7 @@ EDITOR_PASSWORD = "LocalEditor-417-Only!"
 HUEBERS_PASSWORD = "LocalHuebers-417-Only!"
 INACTIVE_PASSWORD = "LocalInactive-417-Only!"
 SHARED_KIOSK_PIN = "864208"
-SEED_LOCK_RETRY_DELAYS = (0.05, 0.15, 0.35, 0.75, 1.5, 2.5)
+SEED_LOCK_RETRY_DELAYS = (0.05, 0.15, 0.35, 0.75, 1.5, 2.5, 4.0, 5.0)
 
 
 class Command(BaseCommand):
