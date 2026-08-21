@@ -56,4 +56,7 @@ access, _ = CampKioskAccess.objects.get_or_create(camp=camp)
 access.set_pin("864208")
 access.save()
 '
+if [[ "${SEED_LOCAL_TEST_DB:-0}" == "1" ]]; then
+  $PYTHON src/manage.py seed_local_test_db --verbosity 0
+fi
 exec $PYTHON src/manage.py runserver "127.0.0.1:${port}" --noreload > "/tmp/django-e2e-${port}.log" 2>&1

@@ -25,3 +25,10 @@ Tests: 1,258 Python tests passed with 8 skipped; 242 Playwright tests passed wit
 Open points:
 
 - None.
+
+## Shared local test data
+
+- Added the idempotent `seed_local_test_db` management command with synthetic users, camps, participants, kiosk credentials, attendance, meals, expenses, charges, payments and settlement snapshots.
+- Kept pytest, CI and parallel Playwright database isolation; `start-e2e.sh` invokes the command only when `SEED_LOCAL_TEST_DB=1`.
+- Refactored GIF database setup to consume the same command.
+- Foreign collisions with deterministic seed usernames now fail closed without overwriting or partially applying seed data.
