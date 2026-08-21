@@ -390,6 +390,12 @@ class PaymentAuditLogAdmin(admin.ModelAdmin):
     readonly_fields = ("participant", "payment", "action", "changed_by", "before", "after", "created_at")
     actions = ["restore_payments_from_audit_log"]
 
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
     @admin.action(description="Ausgewählte Zahlungen aus Audit-Protokoll wiederherstellen")
     def restore_payments_from_audit_log(self, request, queryset):
         deletion_logs = list(queryset.filter(action=PaymentAuditLog.Action.DELETED))
