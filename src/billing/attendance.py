@@ -148,13 +148,23 @@ def target_stay_for(
     window = attendance_window(camp)
     if window is None:
         return None
+    arrival: date | None
+    departure: date | None
     if isinstance(target, ParticipantFamilyMember):
         if use_submitted_stay:
-            arrival = arrival_date or target.guardian.arrival_date
-            departure = departure_date or target.guardian.departure_date
+            if arrival_date is not None and departure_date is not None:
+                arrival = arrival_date
+                departure = departure_date
+            else:
+                arrival = target.guardian.arrival_date
+                departure = target.guardian.departure_date
         else:
-            arrival = target.arrival_date or target.guardian.arrival_date
-            departure = target.departure_date or target.guardian.departure_date
+            if target.arrival_date is not None and target.departure_date is not None:
+                arrival = target.arrival_date
+                departure = target.departure_date
+            else:
+                arrival = target.guardian.arrival_date
+                departure = target.guardian.departure_date
     else:
         arrival = arrival_date if use_submitted_stay else target.arrival_date
         departure = departure_date if use_submitted_stay else target.departure_date

@@ -718,8 +718,14 @@ class ParticipantFamilyMember(TimeStampedModel):
                 return 0
             window_start = camp.starts_on - timedelta(days=4)
             window_end = camp.ends_on + timedelta(days=4)
-            arrival_date = self.arrival_date or self.guardian.arrival_date
-            departure_date = self.departure_date or self.guardian.departure_date
+            arrival_date: date | None
+            departure_date: date | None
+            if self.arrival_date is not None and self.departure_date is not None:
+                arrival_date = self.arrival_date
+                departure_date = self.departure_date
+            else:
+                arrival_date = self.guardian.arrival_date
+                departure_date = self.guardian.departure_date
             if arrival_date is None or departure_date is None or arrival_date >= departure_date:
                 return 0
             prefetched_records = getattr(self, "prefetched_attendance_days", None)
@@ -799,8 +805,9 @@ class AttendanceDay(TimeStampedModel):
         if self.family_member is not None:
             if self.family_member.guardian_id != self.participant_id:
                 raise ValidationError({"family_member": "Das Familienmitglied gehört nicht zum Zielkonto."})
-            target_arrival = self.family_member.arrival_date or target_arrival
-            target_departure = self.family_member.departure_date or target_departure
+            if self.family_member.arrival_date is not None and self.family_member.departure_date is not None:
+                target_arrival = self.family_member.arrival_date
+                target_departure = self.family_member.departure_date
         if target_arrival and self.date < target_arrival or target_departure and self.date >= target_departure:
             raise ValidationError({"date": "Der Anwesenheitstag liegt außerhalb des Aufenthaltsbereichs."})
         camp = self.participant.camp

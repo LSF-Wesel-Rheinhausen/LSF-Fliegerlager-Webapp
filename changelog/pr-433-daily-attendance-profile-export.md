@@ -5,6 +5,7 @@
 - Added profile navigation, contact and birth-date administration, plus attendance detail and export coverage.
 - Hardened exact attendance target scoping, stay-date reconciliation, profile validation and settlement query bounds.
 - Rejects stale companion profile sessions and excludes incomplete stays from attendance-backed billing and shift targets.
+- Applies family-specific stay dates only as a complete pair, preventing hybrid attendance billing from partial overrides.
 
 Changed areas/files:
 

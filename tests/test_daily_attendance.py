@@ -8,6 +8,7 @@ from django.db.models import Prefetch
 from django.test import RequestFactory
 
 from billing.admin import ParticipantAdmin, ParticipantFamilyMemberAdmin
+from billing.attendance import target_stay_for
 from billing.forms import ParticipantFamilyMemberForm, ParticipantForm
 from billing.models import AttendanceDay, KioskActionAuditLog, Participant, ParticipantFamilyMember, PriceRule
 from billing.services import (
@@ -352,6 +353,67 @@ def test_tracked_attendance_is_zero_when_the_current_stay_is_incomplete(cleared_
     assert member.effective_attendance_nights == 0
     assert guardian.target_shifts == 0
     assert member.target_shifts == 0
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("member_arrival", "member_departure"),
+    [(date(2026, 7, 4), None), (None, date(2026, 7, 4))],
+)
+def test_partial_family_stay_override_uses_the_complete_guardian_stay(member_arrival, member_departure):
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 10))
+    guardian = ParticipantFactory(
+        camp=camp,
+        arrival_date=date(2026, 7, 2),
+        departure_date=date(2026, 7, 6),
+    )
+    member = ParticipantFamilyMemberFactory(
+        guardian=guardian,
+        role="companion",
+        arrival_date=None,
+        departure_date=None,
+        attendance_tracking_enabled=True,
+    )
+    for attendance_date in (date(2026, 7, 2), date(2026, 7, 3), date(2026, 7, 4), date(2026, 7, 5)):
+        AttendanceDay.objects.create(
+            participant=guardian,
+            family_member=member,
+            date=attendance_date,
+            is_present=True,
+        )
+    member.arrival_date = member_arrival
+    member.departure_date = member_departure
+    member.save(update_fields=["arrival_date", "departure_date", "updated_at"])
+
+    member_from_database = ParticipantFamilyMember.objects.select_related("guardian__camp").get(pk=member.pk)
+    member_prefetched = (
+        ParticipantFamilyMember.objects.select_related("guardian__camp")
+        .prefetch_related(
+            Prefetch(
+                "attendance_days",
+                queryset=AttendanceDay.objects.order_by("date", "pk"),
+                to_attr="prefetched_attendance_days",
+            )
+        )
+        .get(pk=member.pk)
+    )
+
+    guardian_stay = (date(2026, 7, 2), date(2026, 7, 6))
+    assert member_from_database.effective_attendance_nights == 4
+    assert member_prefetched.effective_attendance_nights == 4
+    assert target_stay_for(member_from_database, camp) == guardian_stay
+    for record in member_from_database.attendance_days.all():
+        record.full_clean()
+    assert (
+        target_stay_for(
+            member_from_database,
+            camp,
+            arrival_date=member_arrival,
+            departure_date=member_departure,
+            use_submitted_stay=True,
+        )
+        == guardian_stay
+    )
 
 
 @pytest.mark.django_db
