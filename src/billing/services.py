@@ -15,6 +15,8 @@ from .models import (
     BookingAuditLog,
     Camp,
     Charge,
+    DailyShiftException,
+    DailyShiftTemplate,
     DrinkEntry,
     Expense,
     ExpenseAllocation,
@@ -31,6 +33,7 @@ from .models import (
     PriceRule,
     Settlement,
     SettlementRun,
+    Shift,
 )
 from .permissions import ADMIN_GROUP, EDITOR_GROUP, HUEBERS_GROUP
 
@@ -64,6 +67,75 @@ MEAL_VARIANT_ORDER = [
     MealSignup.Variant.NORMAL_CHILD,
     MealSignup.Variant.VEGAN_CHILD,
 ]
+
+
+def generate_shifts_from_templates(templates: Iterable[DailyShiftTemplate]) -> tuple[int, int]:
+    """Generate shifts for templates while preserving individual descriptions.
+
+    Template descriptions are supplied only through ``create_defaults`` so a
+    later generation updates scheduling defaults without overwriting edits on
+    an existing shift. Related camps and exceptions are loaded in bulk.
+
+    Returns:
+        A ``(generated_count, skipped_count)`` tuple.
+    """
+    template_list = list(templates)
+    if not template_list:
+        return 0, 0
+
+    camp_ids = {template.camp_id for template in template_list}
+    camps = Camp.objects.in_bulk(camp_ids)
+    exceptions = DailyShiftException.objects.filter(template_id__in=[template.pk for template in template_list])
+    exceptions_by_template: dict[int, dict[date, DailyShiftException]] = {}
+    for exception_record in exceptions:
+        exceptions_by_template.setdefault(exception_record.template_id, {})[exception_record.date] = exception_record
+
+    generated_count = 0
+    skipped_count = 0
+    with transaction.atomic():
+        for template in template_list:
+            camp = camps[template.camp_id]
+            if not camp.starts_on or not camp.ends_on:
+                continue
+            current_date = camp.starts_on
+            template_exceptions = exceptions_by_template.get(template.pk, {})
+            while current_date <= camp.ends_on:
+                exception: DailyShiftException | None = template_exceptions.get(current_date)
+                if exception and exception.is_skipped:
+                    skipped_count += 1
+                else:
+                    slots = (
+                        exception.custom_required_slots
+                        if exception and exception.custom_required_slots is not None
+                        else template.required_slots
+                    )
+                    start_time = (
+                        exception.custom_start_time
+                        if exception and exception.custom_start_time is not None
+                        else template.start_time
+                    )
+                    end_time = (
+                        exception.custom_end_time
+                        if exception and exception.custom_end_time is not None
+                        else template.end_time
+                    )
+                    Shift.objects.update_or_create(
+                        camp=camp,
+                        date=current_date,
+                        name=template.name,
+                        start_time=start_time,
+                        defaults={"end_time": end_time, "required_slots": slots},
+                        create_defaults={
+                            "end_time": end_time,
+                            "required_slots": slots,
+                            "description": template.description,
+                        },
+                    )
+                    generated_count += 1
+                current_date += timedelta(days=1)
+    return generated_count, skipped_count
+
+
 MANUAL_CHARGE_KIND_BY_PRICE_RULE_KIND = {
     PriceRule.Kind.CAMP_FLAT: Charge.Kind.CAMP_FLAT,
     PriceRule.Kind.NIGHT: Charge.Kind.OTHER,

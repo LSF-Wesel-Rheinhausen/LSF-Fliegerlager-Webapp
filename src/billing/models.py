@@ -1509,6 +1509,7 @@ class Settlement(TimeStampedModel):
 class Shift(TimeStampedModel):
     camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="shifts")
     name = models.CharField(max_length=120)
+    description = models.TextField(blank=True, default="")
     date = models.DateField()
     start_time = models.TimeField(null=True, blank=True)
     end_time = models.TimeField(null=True, blank=True)
@@ -1530,6 +1531,7 @@ class Shift(TimeStampedModel):
 class DailyShiftTemplate(TimeStampedModel):
     camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="daily_shift_templates")
     name = models.CharField(max_length=120)
+    description = models.TextField(blank=True, default="")
     start_time = models.TimeField(null=True, blank=True)
     end_time = models.TimeField(null=True, blank=True)
     required_slots = models.PositiveIntegerField(default=1)
