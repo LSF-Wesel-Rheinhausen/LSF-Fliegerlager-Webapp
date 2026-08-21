@@ -195,7 +195,13 @@
             <td>{{ expense.amount }} €</td>
             <td>
               {% if expense.receipt %}
-                <a href="{% url 'expense-receipt' expense.pk %}" target="_blank" class="button button-small button-secondary">Beleg ansehen</a>
+                <a
+                  href="{% url 'expense-receipt' expense.pk %}"
+                  target="_blank"
+                  rel="noopener"
+                  class="button button-small button-secondary"
+                  {% if expense.receipt_preview_kind == "pdf" %}data-pdf-preview="true"{% elif expense.receipt_preview_kind == "image" %}data-receipt-preview="image" data-receipt-alt="{{ expense.receipt_preview_alt }}" aria-haspopup="dialog"{% endif %}
+                >Beleg ansehen</a>
               {% endif %}
             </td>
             <td>

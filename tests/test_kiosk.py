@@ -1311,9 +1311,23 @@ def test_kiosk_expense_receipt_rejects_other_participants(kiosk_client):
     try:
         response = kiosk_client.get(reverse("expense-receipt", args=[expense.pk]))
 
-        assert response.status_code == 403
+        assert response.status_code == 404
     finally:
         expense.receipt.delete(save=False)
+
+
+@pytest.mark.django_db
+def test_kiosk_owner_gets_not_found_for_expense_without_receipt(kiosk_client):
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp)
+    expense = ExpenseFactory(participant=participant, camp=camp, receipt=None)
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.get(reverse("expense-receipt", args=[expense.pk]))
+
+    assert response.status_code == 404
 
 
 @pytest.mark.django_db
@@ -1405,6 +1419,36 @@ def test_kiosk_home_renders_shared_expense_cards_with_receipt_and_rejection_deta
         assert reverse("expense-receipt", args=[pending.pk]).encode() in content
     finally:
         pending.receipt.delete(save=False)
+
+
+@pytest.mark.django_db
+def test_kiosk_home_marks_image_receipts_for_internal_preview(kiosk_client):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    expense = ExpenseFactory(
+        participant=participant,
+        camp=camp,
+        description="Küche PNG",
+        receipt=SimpleUploadedFile(
+            "kueche.png",
+            b"\x89PNG\r\n\x1a\n" + b"\x00" * 32,
+            content_type="image/png",
+        ),
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    try:
+        response = kiosk_client.get(reverse("kiosk-home"))
+
+        assert response.status_code == 200
+        content = response.content
+        assert b'data-receipt-preview="image"' in content
+        assert 'data-receipt-alt="Küche PNG"'.encode() in content
+        assert reverse("expense-receipt", args=[expense.pk]).encode() in content
+    finally:
+        expense.receipt.delete(save=False)
 
 
 @pytest.mark.django_db

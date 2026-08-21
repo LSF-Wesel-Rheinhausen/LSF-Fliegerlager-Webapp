@@ -3,9 +3,10 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
-from tests.factories import CampFactory, ParticipantFactory, PaymentFactory, SuperUserFactory
+from tests.factories import CampFactory, ExpenseFactory, ParticipantFactory, PaymentFactory, SuperUserFactory
 
 
 def test_template_theme_properties_are_defined_in_the_shared_stylesheet():
@@ -63,3 +64,58 @@ def test_pdf_links_use_a_closable_embedded_preview_with_external_fallback(client
     assert "data-pdf-open-external" in content
     assert 'target="_blank"' in content
     assert 'rel="noopener"' in content
+
+
+@pytest.mark.django_db
+def test_admin_receipt_links_expose_server_derived_preview_types_and_context(client):
+    camp = CampFactory()
+    image_expense = ExpenseFactory(
+        camp=camp,
+        participant__camp=camp,
+        description="Belegbild Küche",
+        receipt=SimpleUploadedFile("kueche.jpg", b"image", content_type="image/jpeg"),
+    )
+    pdf_expense = ExpenseFactory(
+        camp=camp,
+        participant__camp=camp,
+        description="Beleg PDF",
+        receipt=SimpleUploadedFile("rechnung.pdf", b"pdf", content_type="application/pdf"),
+    )
+    unknown_expense = ExpenseFactory(
+        camp=camp,
+        participant__camp=camp,
+        description="Unbekannter Beleg",
+        receipt=SimpleUploadedFile("beleg.bin", b"binary", content_type="application/octet-stream"),
+    )
+    client.force_login(SuperUserFactory())
+
+    response = client.get(reverse("camp-detail", args=[camp.pk]))
+    content = response.content.decode("utf-8")
+
+    assert response.status_code == 200
+    assert 'data-receipt-preview="image"' in content
+    assert 'data-receipt-alt="Belegbild Küche"' in content
+    assert 'data-pdf-preview="true"' in content
+    assert 'data-receipt-preview=""' not in content
+    unknown_link_start = content.index(reverse("expense-receipt", args=[unknown_expense.pk]))
+    unknown_link = content[unknown_link_start : content.index(">", unknown_link_start)]
+    assert 'target="_blank"' in unknown_link
+    assert "data-receipt-preview" not in unknown_link
+    assert image_expense.receipt.name.encode() not in response.content
+    assert pdf_expense.receipt.name.encode() not in response.content
+
+
+def test_receipt_image_dialog_contract_is_accessible_and_preserves_pdf_dialog():
+    project_root = Path(__file__).resolve().parents[1]
+    dialog = (project_root / "src/templates/includes/receipt_preview_dialog.html").read_text(encoding="utf-8")
+    script = (project_root / "src/static/billing/pwa.js").read_text(encoding="utf-8")
+
+    assert 'id="global-receipt-dialog"' in dialog
+    assert 'aria-labelledby="global-receipt-dialog-title"' in dialog
+    assert 'id="global-receipt-image"' in dialog
+    assert 'alt=""' in dialog
+    assert "data-receipt-open-external" in dialog
+    assert 'a[data-receipt-preview="image"]' in script
+    assert "event.button !== 0" in script
+    assert "imageTrigger" in script
+    assert "global-pdf-dialog" in script

@@ -3403,6 +3403,46 @@ dialog::backdrop {
   margin: 0;
 }
 
+.receipt-preview-dialog {
+  width: min(960px, calc(100vw - 2rem));
+  max-width: min(960px, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  padding: 16px;
+  overflow: hidden;
+}
+
+.receipt-preview-dialog[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.receipt-preview-dialog__close {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.receipt-preview-dialog__content {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  place-items: center;
+  overflow: hidden;
+}
+
+.receipt-preview-dialog__image {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100dvh - 10rem);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+.receipt-preview-dialog__fallback {
+  margin: 0;
+}
+
 .booking-records-form .responsive-record-table,
 .booking-audit-form .responsive-record-table {
   table-layout: fixed;
@@ -3427,6 +3467,13 @@ dialog::backdrop {
     width: calc(100vw - 1rem);
     max-width: calc(100vw - 1rem);
     height: calc(100dvh - 1rem);
+    max-height: calc(100dvh - 1rem);
+    padding: 12px;
+  }
+
+  .receipt-preview-dialog {
+    width: calc(100vw - 1rem);
+    max-width: calc(100vw - 1rem);
     max-height: calc(100dvh - 1rem);
     padding: 12px;
   }
