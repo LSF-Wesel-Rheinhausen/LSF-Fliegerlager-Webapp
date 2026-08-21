@@ -8,7 +8,7 @@ from django.db import transaction
 from django.http import HttpRequest, HttpResponse, HttpResponseForbidden
 from django.shortcuts import redirect, render
 
-from .kiosk_access import KIOSK_FAMILY_MEMBER_SESSION_KEY
+from .kiosk_access import KIOSK_FAMILY_MEMBER_SESSION_KEY, clear_kiosk_identity_session
 from .models import KioskActionAuditLog, Participant, ParticipantFamilyMember
 from .profile_forms import ParticipantFamilyMemberProfileForm, ParticipantProfileForm
 from .services import create_kiosk_action_audit_log
@@ -39,8 +39,10 @@ def _active_identity(
     participant = _kiosk_participant(request)
     if participant is None:
         return None
+    family_identity_requested = bool(request.session.get(KIOSK_FAMILY_MEMBER_SESSION_KEY))
     family_member = _kiosk_family_member(request, participant)
-    if request.session.get(KIOSK_FAMILY_MEMBER_SESSION_KEY) and family_member is None:
+    if family_identity_requested and family_member is None:
+        clear_kiosk_identity_session(request)
         return None
     return participant, family_member
 

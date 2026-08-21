@@ -146,6 +146,42 @@ def test_companion_pin_can_update_own_family_member_but_not_guardian(kiosk_clien
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize("target_kind", ["guardian", "child"])
+def test_stale_companion_session_cannot_fall_back_to_guardian_profile_permissions(kiosk_client, target_kind):
+    guardian = ParticipantFactory(first_name="Guardian")
+    companion = ParticipantFamilyMemberFactory(
+        guardian=guardian,
+        role=ParticipantFamilyMember.Role.COMPANION,
+        is_active=True,
+    )
+    child = ParticipantFamilyMemberFactory(
+        guardian=guardian,
+        role=ParticipantFamilyMember.Role.CHILD,
+        first_name="Child",
+        is_active=True,
+    )
+    _set_kiosk_identity(kiosk_client, family_member=companion)
+    companion.is_active = False
+    companion.save(update_fields=["is_active", "updated_at"])
+
+    if target_kind == "guardian":
+        url = _profile_url("kiosk-profile", guardian)
+    else:
+        url = reverse("kiosk-family-member-profile", kwargs={"family_member_id": child.pk})
+
+    response = kiosk_client.post(url, {"first_name": "Forged", "last_name": "Identity"})
+
+    guardian.refresh_from_db()
+    child.refresh_from_db()
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith(reverse("kiosk-login"))
+    assert guardian.first_name == "Guardian"
+    assert child.first_name == "Child"
+    assert KIOSK_PARTICIPANT_SESSION_KEY not in kiosk_client.session
+    assert KIOSK_FAMILY_MEMBER_SESSION_KEY not in kiosk_client.session
+
+
+@pytest.mark.django_db
 def test_guardian_can_edit_owned_child_but_not_partner_linked_participant(kiosk_client):
     guardian = ParticipantFactory()
     child = ParticipantFamilyMember.objects.create(
