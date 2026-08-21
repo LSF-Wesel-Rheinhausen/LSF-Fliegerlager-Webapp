@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from functools import partial
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
@@ -187,6 +188,26 @@ from .services import (
 logger = logging.getLogger(__name__)
 signer = Signer()
 User = get_user_model()
+
+RECEIPT_PREVIEW_EXTENSIONS = {
+    ".pdf": "pdf",
+    ".heic": "image",
+    ".jpeg": "image",
+    ".jpg": "image",
+    ".png": "image",
+}
+
+
+def _annotate_receipt_preview(expenses):
+    """Attach trusted receipt preview metadata for rendered expense links."""
+    annotated_expenses = list(expenses)
+    for expense in annotated_expenses:
+        receipt_name = expense.receipt.name if expense.receipt else ""
+        expense.receipt_preview_kind = RECEIPT_PREVIEW_EXTENSIONS.get(Path(receipt_name).suffix.lower(), "")
+        expense.receipt_preview_alt = expense.description or "Beleg"
+    return annotated_expenses
+
+
 PRE_CAMP_KIOSK_ACTIONS = frozenset(
     {
         "family_member_create",
@@ -996,7 +1017,7 @@ def camp_detail(request, camp_id):
         "balance": sum(result.balance for result in settlements),
     }
     price_rules = camp.price_rules.all()
-    pending_expenses = camp.expenses.filter(status=Expense.Status.PENDING)
+    pending_expenses = _annotate_receipt_preview(camp.expenses.filter(status=Expense.Status.PENDING))
     pending_registrations = list(
         camp.participants.select_related("pin")
         .filter(status=Participant.Status.PENDING_APPROVAL, archived_at__isnull=True)
@@ -4991,15 +5012,17 @@ def kiosk_home(request, kiosk_mode="private"):
         "next_order_locked": bool(next_order_day and next_order_day["locked"]),
         "today": today,
         "tomorrow": tomorrow,
-        "participant_expenses": participant.expenses.annotate(
-            kiosk_status_order=Case(
-                When(status=Expense.Status.PENDING, then=Value(0)),
-                When(status=Expense.Status.REJECTED, then=Value(1)),
-                When(status=Expense.Status.APPROVED, then=Value(2)),
-                default=Value(3),
-                output_field=IntegerField(),
-            )
-        ).order_by("kiosk_status_order", "-created_at"),
+        "participant_expenses": _annotate_receipt_preview(
+            participant.expenses.annotate(
+                kiosk_status_order=Case(
+                    When(status=Expense.Status.PENDING, then=Value(0)),
+                    When(status=Expense.Status.REJECTED, then=Value(1)),
+                    When(status=Expense.Status.APPROVED, then=Value(2)),
+                    default=Value(3),
+                    output_field=IntegerField(),
+                )
+            ).order_by("kiosk_status_order", "-created_at")
+        ),
     }
     return render(request, "billing/kiosk_home.html", context)
 

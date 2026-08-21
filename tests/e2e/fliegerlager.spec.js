@@ -514,6 +514,7 @@ test("PWA PDF preview opens in a closable wrapper without leaving the app", asyn
   await expect(previewDialog).toBeHidden();
   await expect(previewLink).toBeFocused();
   await expect(previewDialog.locator("iframe")).toHaveAttribute("src", "about:blank");
+  await expect(page.locator("#global-receipt-dialog")).toBeHidden();
   expect(browserErrors).toEqual([]);
   expect(
     failedRequests.filter(
@@ -523,6 +524,78 @@ test("PWA PDF preview opens in a closable wrapper without leaving the app", asyn
     ),
     "Nur das absichtliche Abbrechen der entfernten PDF-Vorschau ist zulässig",
   ).toEqual([]);
+});
+
+test("expense image receipts open in an accessible internal preview", async ({ page }) => {
+  const { browserErrors, failedRequests } = trackPageIssues(page);
+  await setupFirstAdmin(page);
+  await createCamp(page, "Bildbeleg Vorschau");
+  const campUrl = page.url();
+  await createParticipant(page, "Ada", "Lovelace");
+
+  await page.goto(campUrl);
+  await page.getByRole("link", { name: "Auslage erfassen" }).click();
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Ada Lovelace" });
+  await page.locator("#id_category").selectOption({ label: "Verbrauchsmaterial" });
+  await page.getByLabel("Beschreibung").fill("Küche PNG");
+  await page.getByLabel("Betrag").fill("12.50");
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "kueche.png",
+    mimeType: "image/png",
+    buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64"),
+  });
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByText("Auslage wurde gespeichert.")).toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const previewLink = page.locator('a[data-receipt-preview="image"]');
+  await expect(previewLink).toHaveAttribute("data-receipt-alt", "Küche PNG");
+  const pageUrl = page.url();
+  await previewLink.click();
+
+  const dialog = page.getByRole("dialog", { name: "Belegvorschau" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator("img")).toHaveAttribute("alt", "Küche PNG");
+  await expect(dialog.locator("img")).toBeVisible();
+  await expect(page).toHaveURL(pageUrl);
+  const bounds = await dialog.boundingBox();
+  expect(bounds).not.toBeNull();
+  expect(bounds.x).toBeGreaterThanOrEqual(0);
+  expect(bounds.y).toBeGreaterThanOrEqual(0);
+  expect(bounds.x + bounds.width).toBeLessThanOrEqual(391);
+  expect(bounds.y + bounds.height).toBeLessThanOrEqual(845);
+  const imageLayout = await dialog.evaluate((element) => {
+    const image = element.querySelector("img");
+    return {
+      dialogClientWidth: element.clientWidth,
+      dialogScrollWidth: element.scrollWidth,
+      imageRight: image.getBoundingClientRect().right,
+      contentRight: element.getBoundingClientRect().right,
+    };
+  });
+  expect(imageLayout.dialogScrollWidth).toBeLessThanOrEqual(imageLayout.dialogClientWidth + 1);
+  expect(imageLayout.imageRight).toBeLessThanOrEqual(imageLayout.contentRight + 1);
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(previewLink).toBeFocused();
+
+  await previewLink.click();
+  await dialog.evaluate((element) => element.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  await expect(dialog).toBeHidden();
+  await expect(previewLink).toBeFocused();
+
+  const modifiedClick = await previewLink.evaluate((link) => {
+    const event = new MouseEvent("click", { bubbles: true, cancelable: true, button: 1 });
+    link.dispatchEvent(event);
+    return { defaultPrevented: event.defaultPrevented, href: link.href, target: link.target };
+  });
+  expect(modifiedClick.defaultPrevented).toBe(false);
+  expect(modifiedClick.target).toBe("_blank");
+  expect(modifiedClick.href).toMatch(/\/expenses\/\d+\/receipt\/$/);
+  await expect(dialog).toBeHidden();
+  expect(browserErrors).toEqual([]);
+  expect(failedRequests).toEqual([]);
 });
 
 test("Admin archives a participant and creates a versioned settlement run", async ({ page }) => {

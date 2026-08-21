@@ -1408,6 +1408,36 @@ def test_kiosk_home_renders_shared_expense_cards_with_receipt_and_rejection_deta
 
 
 @pytest.mark.django_db
+def test_kiosk_home_marks_image_receipts_for_internal_preview(kiosk_client):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+    expense = ExpenseFactory(
+        participant=participant,
+        camp=camp,
+        description="Küche PNG",
+        receipt=SimpleUploadedFile(
+            "kueche.png",
+            b"\x89PNG\r\n\x1a\n" + b"\x00" * 32,
+            content_type="image/png",
+        ),
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    try:
+        response = kiosk_client.get(reverse("kiosk-home"))
+
+        assert response.status_code == 200
+        content = response.content
+        assert b'data-receipt-preview="image"' in content
+        assert 'data-receipt-alt="Küche PNG"'.encode() in content
+        assert reverse("expense-receipt", args=[expense.pk]).encode() in content
+    finally:
+        expense.receipt.delete(save=False)
+
+
+@pytest.mark.django_db
 def test_kiosk_home_renders_only_ordered_core_cards_and_menu_dialogs(kiosk_client, monkeypatch):
     monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 7, 5))
     camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 14))
