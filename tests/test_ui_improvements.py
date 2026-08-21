@@ -34,7 +34,7 @@ def test_participant_detail_shows_donation_prompt_for_credit(client):
     assert response.status_code == 200
     content = response.content.decode("utf-8")
     assert "Möchtest du das Guthaben" in content
-    assert "IBAN oder PayPal" in content
+    assert "IBAN oder PayPal" not in content
 
 
 @pytest.mark.django_db

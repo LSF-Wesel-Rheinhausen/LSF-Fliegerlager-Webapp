@@ -55,7 +55,19 @@ def settlement_run_csv_bytes(run: SettlementRun) -> bytes:
     buffer = StringIO()
     writer = csv.writer(buffer)
     writer.writerow(
-        safe_csv_row(["Teilnehmer", "Familienziele", "Brutto", "Förderung", "Soll", "Gezahlt", "Vorgestreckt", "Offen"])
+        safe_csv_row(
+            [
+                "Teilnehmer",
+                "Familienziele",
+                "Brutto",
+                "Förderung",
+                "Soll",
+                "Gezahlt",
+                "Vorgestreckt",
+                "Ausgezahlt",
+                "Offen",
+            ]
+        )
     )
     for snapshot in run.settlements.all():
         writer.writerow(
@@ -74,6 +86,7 @@ def settlement_run_csv_bytes(run: SettlementRun) -> bytes:
                     snapshot.total_due,
                     snapshot.total_paid,
                     snapshot.total_advanced,
+                    snapshot.total_payouts,
                     snapshot.balance,
                 ]
             )
@@ -338,13 +351,25 @@ def camp_settlement_csv(camp):
                 result.total_due,
                 result.total_paid,
                 result.total_advanced,
+                result.total_payouts,
                 result.balance,
             ]
         )
     return csv_response(
         f"abrechnung-{camp.year}.csv",
         rows,
-        ["Nachname", "Vorname", "Familienziele", "Brutto", "Förderung", "Soll", "Gezahlt", "Vorgestreckt", "Offen"],
+        [
+            "Nachname",
+            "Vorname",
+            "Familienziele",
+            "Brutto",
+            "Förderung",
+            "Soll",
+            "Gezahlt",
+            "Vorgestreckt",
+            "Ausgezahlt",
+            "Offen",
+        ],
     )
 
 
@@ -393,7 +418,18 @@ def camp_workbook_response(camp):
     summary.title = "Abrechnung"
     summary.append(
         safe_csv_row(
-            ["Nachname", "Vorname", "Familienziele", "Brutto", "Förderung", "Soll", "Gezahlt", "Vorgestreckt", "Offen"]
+            [
+                "Nachname",
+                "Vorname",
+                "Familienziele",
+                "Brutto",
+                "Förderung",
+                "Soll",
+                "Gezahlt",
+                "Vorgestreckt",
+                "Ausgezahlt",
+                "Offen",
+            ]
         )
     )
     for result in calculate_camp_settlements(camp):
@@ -408,6 +444,7 @@ def camp_workbook_response(camp):
                     result.total_due,
                     result.total_paid,
                     result.total_advanced,
+                    result.total_payouts,
                     result.balance,
                 ]
             )
@@ -768,6 +805,7 @@ def participant_pdf_response(participant):
         ("Soll", result.total_due),
         ("Gezahlt", result.total_paid),
         ("Vorgestreckt", result.total_advanced),
+        ("Ausgezahlt", result.total_payouts),
         ("Offen", result.balance),
     ]
     closing_height = _sum_block_height(summary_items) + _payment_instructions_height(
@@ -800,7 +838,18 @@ def settlement_run_workbook_bytes(run: SettlementRun) -> bytes:
     summary.title = "Abrechnung"
     summary.append(
         safe_csv_row(
-            ["Teilnehmer", "Status", "Familienziele", "Brutto", "Förderung", "Soll", "Gezahlt", "Vorgestreckt", "Offen"]
+            [
+                "Teilnehmer",
+                "Status",
+                "Familienziele",
+                "Brutto",
+                "Förderung",
+                "Soll",
+                "Gezahlt",
+                "Vorgestreckt",
+                "Ausgezahlt",
+                "Offen",
+            ]
         )
     )
     for snapshot in run.settlements.all():
@@ -821,6 +870,7 @@ def settlement_run_workbook_bytes(run: SettlementRun) -> bytes:
                     snapshot.total_due,
                     snapshot.total_paid,
                     snapshot.total_advanced,
+                    snapshot.total_payouts,
                     snapshot.balance,
                 ]
             )
@@ -893,6 +943,7 @@ def settlement_snapshot_pdf_bytes(snapshot: Settlement) -> bytes:
         ("Soll", snapshot.total_due),
         ("Gezahlt", snapshot.total_paid),
         ("Vorgestreckt", snapshot.total_advanced),
+        ("Ausgezahlt", snapshot.total_payouts),
         ("Offen", snapshot.balance),
     ]
     closing_height = _sum_block_height(summary_items) + _payment_instructions_height(
