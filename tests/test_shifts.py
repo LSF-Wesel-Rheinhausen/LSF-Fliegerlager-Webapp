@@ -155,6 +155,40 @@ def test_admin_can_create_shift(admin_client, active_camp):
 
 
 @pytest.mark.django_db
+def test_admin_can_create_shift_with_description(admin_client, active_camp):
+    response = admin_client.post(
+        reverse("shift-create", args=[active_camp.pk]),
+        {"name": "Küchendienst", "date": "2026-08-01", "description": "Arbeitsflächen reinigen.", "required_slots": 1},
+    )
+    assert response.status_code == 302
+    shift = Shift.objects.get(camp=active_camp, name="Küchendienst")
+    assert shift.description == "Arbeitsflächen reinigen."
+
+
+@pytest.mark.django_db
+def test_admin_can_edit_shift_description(admin_client, active_camp):
+    shift = Shift.objects.create(
+        camp=active_camp,
+        name="Küchendienst",
+        date=active_camp.starts_on,
+        description="Alte Beschreibung",
+        required_slots=1,
+    )
+    response = admin_client.post(
+        reverse("shift-edit", args=[shift.pk]),
+        {
+            "name": "Küchendienst",
+            "date": active_camp.starts_on.isoformat(),
+            "description": "Neue Beschreibung",
+            "required_slots": 2,
+        },
+    )
+    assert response.status_code == 302
+    shift.refresh_from_db()
+    assert shift.description == "Neue Beschreibung"
+
+
+@pytest.mark.django_db
 def test_admin_can_delete_shift(admin_client, shift):
     url = reverse("shift-delete", args=[shift.pk])
     response = admin_client.post(url)
@@ -224,6 +258,7 @@ def test_generate_shifts_from_templates(admin_client, active_camp):
     template = DailyShiftTemplate.objects.create(
         camp=active_camp,
         name="Abendessen kochen",
+        description="Abendessen vorbereiten und ausgeben.",
         required_slots=3,
     )
 
@@ -258,3 +293,29 @@ def test_generate_shifts_from_templates(admin_client, active_camp):
     # Check the exception day slots
     last_day_shift = Shift.objects.get(name="Abendessen kochen", date=active_camp.ends_on)
     assert last_day_shift.required_slots == 1
+
+    assert last_day_shift.description == "Abendessen vorbereiten und ausgeben."
+
+
+@pytest.mark.django_db
+def test_admin_generate_preserves_individual_shift_description(admin_client, active_camp):
+    from billing.models import DailyShiftTemplate
+
+    template = DailyShiftTemplate.objects.create(
+        camp=active_camp, name="Abendessen kochen", description="Vorlagenbeschreibung", required_slots=3
+    )
+    existing_shift = Shift.objects.create(
+        camp=active_camp,
+        name=template.name,
+        date=active_camp.starts_on,
+        description="Individuelle Beschreibung",
+        required_slots=1,
+    )
+    response = admin_client.post(
+        reverse("admin:billing_dailyshifttemplate_changelist"),
+        {"action": "generate_shifts_for_templates", "_selected_action": [template.pk]},
+    )
+    assert response.status_code == 302
+    existing_shift.refresh_from_db()
+    assert existing_shift.description == "Individuelle Beschreibung"
+    assert existing_shift.required_slots == 3

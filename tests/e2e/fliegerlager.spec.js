@@ -1452,6 +1452,7 @@ test("Admin configures SMTP and manually confirms exact information recipients",
 });
 
 test("Daily shift template and kiosk shift flow", async ({ page }) => {
+  test.setTimeout(60_000);
   await setupFirstAdmin(page);
   await createCamp(page, "Sommerlager Dienste", 0, 2);
   await createParticipant(page, "Albert", "Einstein", "", "1234");
@@ -1463,6 +1464,7 @@ test("Daily shift template and kiosk shift flow", async ({ page }) => {
   await page.getByRole("button", { name: "Vorlage anlegen" }).click();
   await expect(page.locator("dialog#template-dialog")).toBeVisible();
   await page.getByLabel("Name / Bezeichnung").fill("Spüldienst");
+  await page.getByLabel("Beschreibung / Aufgaben").fill("Spülmaschine einräumen, ausräumen und den Spülbereich sauber hinterlassen.");
   await page.getByLabel("Benötigte Personen").fill("2");
   await page.getByRole("button", { name: "Speichern", exact: true }).click();
   await expect(page.getByText("Spüldienst").first()).toBeVisible();
@@ -1488,9 +1490,38 @@ test("Daily shift template and kiosk shift flow", async ({ page }) => {
   await expect(page.getByText("Dein Fortschritt")).toBeVisible();
   await expect(page.getByText("Super! Du hast alle Pflichtdienste übernommen.")).toBeVisible();
 
+  // Every shift exposes its own description through the native kiosk help dialog.
+  const shiftInfoButton = page.getByRole("button", { name: "Informationen zu Spüldienst" }).first();
+  await expect(shiftInfoButton).toBeVisible();
+  await shiftInfoButton.click();
+  const shiftInfoDialog = page.locator("dialog#kiosk-help-dialog");
+  await expect(shiftInfoDialog).toBeVisible();
+  await expect(shiftInfoDialog.getByRole("heading", { name: "Informationen zu Spüldienst" })).toBeVisible();
+  await expect(shiftInfoDialog).toContainText("Spülmaschine einräumen, ausräumen und den Spülbereich sauber hinterlassen.");
+  await page.keyboard.press("Escape");
+  await expect(shiftInfoDialog).toBeHidden();
+  await expect(shiftInfoButton).toBeFocused();
+
   // Sign up for a shift
   await page.getByRole("button", { name: "Eintragen" }).first().click();
   await expect(page.getByText("Du hast dich für 'Spüldienst' eingetragen.")).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("switch", { name: "Dunkles Farbschema" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await assertNoUnexpectedOverflow(page);
+  await shiftInfoButton.click();
+  await expect(shiftInfoDialog).toBeVisible();
+  await expect(shiftInfoDialog).toContainText("Spülmaschine einräumen, ausräumen und den Spülbereich sauber hinterlassen.");
+  const dialogBounds = await shiftInfoDialog.boundingBox();
+  expect(dialogBounds).not.toBeNull();
+  expect(dialogBounds.x).toBeGreaterThanOrEqual(0);
+  expect(dialogBounds.y).toBeGreaterThanOrEqual(0);
+  expect(dialogBounds.x + dialogBounds.width).toBeLessThanOrEqual(391);
+  expect(dialogBounds.y + dialogBounds.height).toBeLessThanOrEqual(845);
+  await page.keyboard.press("Escape");
+  await expect(shiftInfoDialog).toBeHidden();
+  await expect(shiftInfoButton).toBeFocused();
+  await page.setViewportSize({ width: 1280, height: 800 });
 
   // "Austragen" should not exist, only "Zum Tausch anbieten"
   await expect(page.getByRole("button", { name: "Austragen" })).toBeHidden();
