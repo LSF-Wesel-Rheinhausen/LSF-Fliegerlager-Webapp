@@ -1059,7 +1059,15 @@ def calculate_position_report(camp: Camp) -> PositionReport:
             guardian__camp=camp,
             guardian__archived_at__isnull=True,
             is_active=True,
-        ).select_related("guardian")
+        )
+        .select_related("guardian__camp")
+        .prefetch_related(
+            Prefetch(
+                "attendance_days",
+                queryset=AttendanceDay.objects.filter(is_present=True),
+                to_attr=_ATTENDANCE_PREFETCH_ATTRIBUTE,
+            )
+        )
     )
     attendance_days = [
         PositionReportDay(

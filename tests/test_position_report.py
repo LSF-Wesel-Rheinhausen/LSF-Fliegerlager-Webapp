@@ -2,6 +2,8 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -358,3 +360,39 @@ def test_empty_camp_renders_without_errors(client, camp):
     assert report.person_nights == 0
     assert len(report.attendance_days) == 4
     assert b"Keine Buchungen in diesem Lager erfasst." in response.content
+
+
+@pytest.mark.django_db
+def test_position_report_query_budget_is_bounded_as_camp_size_grows(camp):
+    def populate(camp, count):
+        for index in range(count):
+            participant = ParticipantFactory(
+                camp=camp,
+                first_name=f"Teilnehmer{index}",
+                arrival_date=CAMP_START,
+                departure_date=CAMP_END,
+            )
+            ChargeFactory(participant=participant, description=f"Artikel{index}")
+            MealSignup.objects.create(
+                participant=participant,
+                meal_date=CAMP_START,
+                meal=MealSignup.Meal.DINNER,
+                variant=MealSignup.Variant.NORMAL,
+            )
+            ParticipantFamilyMemberFactory(
+                guardian=participant,
+                arrival_date=CAMP_START,
+                departure_date=CAMP_END,
+                attendance_tracking_enabled=True,
+            )
+
+    populate(camp, 1)
+    with CaptureQueriesContext(connection) as small_queries:
+        calculate_position_report(camp)
+
+    larger_camp = CampFactory(starts_on=CAMP_START, ends_on=CAMP_END, name="Großes Lager")
+    populate(larger_camp, 4)
+    with CaptureQueriesContext(connection) as large_queries:
+        calculate_position_report(larger_camp)
+
+    assert len(large_queries) == len(small_queries)
