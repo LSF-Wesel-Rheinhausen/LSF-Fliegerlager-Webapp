@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.contrib.admin.widgets import AdminDateWidget, AdminSplitDateTime
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.utils import timezone
 
@@ -356,8 +357,6 @@ class PaymentAdmin(admin.ModelAdmin):
 
     @admin.action(description="Ausgewählte gelöschte Zahlungen wiederherstellen")
     def restore_selected_payments(self, request, queryset):
-        from django.core.exceptions import ValidationError
-
         deleted_payments = list(queryset.filter(deleted_at__isnull=False))
         if not deleted_payments:
             self.message_user(request, "Keine gelöschten Zahlungen zur Wiederherstellung ausgewählt.", level="warning")
@@ -407,7 +406,7 @@ class PaymentAuditLogAdmin(admin.ModelAdmin):
                     continue
                 try:
                     restore_payment_from_audit_log(log, request.user)
-                except Exception:
+                except ValidationError:
                     continue
                 restored_count += 1
         self.message_user(request, f"{restored_count} Zahlung(en) wurden aus dem Audit-Protokoll wiederhergestellt.")

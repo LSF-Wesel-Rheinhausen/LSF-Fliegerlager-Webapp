@@ -1,12 +1,15 @@
 from decimal import Decimal
+from unittest.mock import MagicMock
 
 import pytest
 from django.contrib.admin.sites import AdminSite
 from django.core.exceptions import ValidationError
+from django.test import RequestFactory
 from django.urls import reverse
 from django.utils import timezone
 
-from billing.admin import PaymentAdmin
+import billing.admin as billing_admin
+from billing.admin import PaymentAdmin, PaymentAuditLogAdmin
 from billing.models import Payment, PaymentAuditLog
 from billing.permissions import EDITOR_GROUP
 from billing.services import (
@@ -37,6 +40,87 @@ def test_payment_admin_exposes_soft_delete_actions():
     assert "deleted_at" in admin.readonly_fields
     assert "soft_delete_selected_payments" in admin.actions
     assert "restore_selected_payments" in admin.actions
+
+
+@pytest.mark.django_db
+def test_payment_audit_admin_reports_expected_validation_errors(monkeypatch):
+    admin_user = SuperUserFactory(username="admin")
+    payment = PaymentFactory()
+    payment.deleted_at = timezone.now()
+    payment.deleted_by = admin_user
+    payment.save(update_fields=["deleted_at", "deleted_by"])
+    audit_log = PaymentAuditLog.objects.create(
+        participant=payment.participant,
+        payment=payment,
+        changed_by=admin_user,
+        action=PaymentAuditLog.Action.DELETED,
+        before={},
+        after={},
+    )
+    request = RequestFactory().post("/admin/billing/paymentauditlog/")
+    request.user = admin_user
+    request._messages = MagicMock()
+    admin = PaymentAuditLogAdmin(PaymentAuditLog, AdminSite())
+
+    def raise_validation_error(_audit_log, _changed_by):
+        raise ValidationError("already restored")
+
+    monkeypatch.setattr(
+        billing_admin,
+        "restore_payment_from_audit_log",
+        raise_validation_error,
+    )
+
+    admin.restore_payments_from_audit_log(request, PaymentAuditLog.objects.filter(pk=audit_log.pk))
+
+    request._messages.add.assert_called_once()
+    assert "0 Zahlung(en)" in request._messages.add.call_args.args[1]
+
+
+@pytest.mark.django_db
+def test_payment_audit_admin_propagates_unexpected_errors_and_rolls_back(monkeypatch):
+    admin_user = SuperUserFactory(username="admin")
+    participant = ParticipantFactory()
+    payments = [PaymentFactory(participant=participant), PaymentFactory(participant=participant)]
+    audit_logs = []
+    for payment in payments:
+        payment.deleted_at = timezone.now()
+        payment.deleted_by = admin_user
+        payment.save(update_fields=["deleted_at", "deleted_by"])
+        audit_logs.append(
+            PaymentAuditLog.objects.create(
+                participant=payment.participant,
+                payment=payment,
+                changed_by=admin_user,
+                action=PaymentAuditLog.Action.DELETED,
+                before={},
+                after={},
+            )
+        )
+    request = RequestFactory().post("/admin/billing/paymentauditlog/")
+    request.user = admin_user
+    request._messages = MagicMock()
+    admin = PaymentAuditLogAdmin(PaymentAuditLog, AdminSite())
+
+    def restore_with_unexpected_failure(audit_log, changed_by):
+        if audit_log.pk == audit_logs[0].pk:
+            return restore_payment_from_audit_log(audit_log, changed_by)
+        raise RuntimeError("database connection lost")
+
+    monkeypatch.setattr(billing_admin, "restore_payment_from_audit_log", restore_with_unexpected_failure)
+
+    with pytest.raises(RuntimeError, match="database connection lost"):
+        admin.restore_payments_from_audit_log(
+            request, PaymentAuditLog.objects.filter(pk__in=[log.pk for log in audit_logs]).order_by("pk")
+        )
+
+    assert list(
+        Payment.objects.filter(pk__in=[payment.pk for payment in payments]).values_list("deleted_at", flat=True)
+    ) == [
+        payments[0].deleted_at,
+        payments[1].deleted_at,
+    ]
+    assert not PaymentAuditLog.objects.filter(action=PaymentAuditLog.Action.RESTORED).exists()
 
 
 @pytest.mark.django_db
