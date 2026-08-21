@@ -1317,6 +1317,20 @@ def test_kiosk_expense_receipt_rejects_other_participants(kiosk_client):
 
 
 @pytest.mark.django_db
+def test_kiosk_owner_gets_not_found_for_expense_without_receipt(kiosk_client):
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp)
+    expense = ExpenseFactory(participant=participant, camp=camp, receipt=None)
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.get(reverse("expense-receipt", args=[expense.pk]))
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
 def test_kiosk_home_sorts_shared_expense_cards_by_status_and_recency(kiosk_client):
     camp = CampFactory()
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")

@@ -1931,13 +1931,12 @@ def expense_receipt_download(request: HttpRequest, expense_id: int) -> FileRespo
     requests, keeping uploaded billing files out of unauthenticated public URLs.
     """
     expense = get_object_or_404(Expense.objects.select_related("participant"), pk=expense_id)
-    if not expense.receipt:
-        raise Http404("Kein Rechnungsbeleg vorhanden.")
-
     participant = _kiosk_participant(request)
     can_view_own_receipt = participant is not None and expense.participant_id == participant.pk
     if not can_view_own_receipt and not is_editor(request.user):
         raise PermissionDenied
+    if not expense.receipt:
+        raise Http404("Kein Rechnungsbeleg vorhanden.")
 
     receipt_name = expense.receipt.name
     if not receipt_name:

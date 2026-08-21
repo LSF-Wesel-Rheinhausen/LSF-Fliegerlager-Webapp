@@ -3,10 +3,12 @@ from decimal import Decimal
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.http import HttpResponse
 from django.urls import reverse
 from django.utils import timezone
 
-from billing.models import BookingAuditLog, Camp, Charge, Expense, Participant, Payment, PriceRule
+from billing.kiosk_access import KIOSK_ACCESS_COOKIE_NAME, KIOSK_PARTICIPANT_SESSION_KEY, set_kiosk_access_cookie
+from billing.models import BookingAuditLog, Camp, CampKioskAccess, Charge, Expense, Participant, Payment, PriceRule
 from billing.permissions import EDITOR_GROUP, HUEBERS_GROUP
 from tests.factories import (
     CampFactory,
@@ -180,6 +182,52 @@ def test_expense_receipt_download_rejects_anonymous_without_kiosk_session(client
         assert response.status_code == 403
     finally:
         expense.receipt.delete(save=False)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("caller", ["anonymous", "non_editor", "unauthorized_kiosk"])
+def test_unauthorized_receipt_requests_do_not_reveal_receipt_existence(client, caller):
+    camp = CampFactory(is_active=True, name=f"Oracle-Testlager-{caller}")
+    owner = ParticipantFactory(camp=camp, first_name="Owner")
+    stranger = ParticipantFactory(camp=camp, first_name="Stranger")
+    with_receipt = Expense.objects.create(
+        camp=camp,
+        participant=owner,
+        category="Einkauf",
+        description="Mit Beleg",
+        amount=Decimal("7.50"),
+        receipt=SimpleUploadedFile("oracle.pdf", b"private receipt", content_type="application/pdf"),
+    )
+    without_receipt = Expense.objects.create(
+        camp=camp,
+        participant=owner,
+        category="Einkauf",
+        description="Ohne Beleg",
+        amount=Decimal("7.50"),
+    )
+    if caller == "non_editor":
+        client.force_login(UserFactory(username="non-editor"))
+    elif caller == "unauthorized_kiosk":
+        access = CampKioskAccess.objects.create(camp=camp)
+        access.set_pin("246810")
+        access.save()
+        cookie_response = HttpResponse()
+        set_kiosk_access_cookie(cookie_response, access)
+        client.cookies[KIOSK_ACCESS_COOKIE_NAME] = cookie_response.cookies[KIOSK_ACCESS_COOKIE_NAME].value
+        session = client.session
+        session[KIOSK_PARTICIPANT_SESSION_KEY] = stranger.pk
+        session.save()
+
+    try:
+        responses = [
+            client.get(reverse("expense-receipt", args=[expense.pk])) for expense in (with_receipt, without_receipt)
+        ]
+
+        assert responses[0].status_code == 403
+        assert responses[1].status_code == 403
+        assert responses[0].content == responses[1].content
+    finally:
+        with_receipt.receipt.delete(save=False)
 
 
 @pytest.mark.django_db
