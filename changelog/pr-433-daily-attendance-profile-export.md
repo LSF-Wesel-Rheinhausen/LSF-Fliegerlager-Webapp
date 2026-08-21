@@ -13,8 +13,8 @@ Changed areas/files:
 - `src/billing/views.py`, `src/billing/forms.py`, `src/billing/pwa_views.py`: kiosk integration, profile form support and PWA cache versioning.
 - `tests/test_attendance_*.py`, `tests/test_kiosk_profile_*.py`, `tests/test_issue_417_ui.py`, relevant billing/kiosk/security/shift/PWA regressions and `tests/e2e/fliegerlager.spec.js`.
 
-Tests: focused attendance, profile, kiosk, forms, exporters, permissions, billing, shifts and UI checks reported green. The independent full verification is still running; no final full-suite green status is claimed here.
+Tests: 1,239 Python tests passed with 8 skipped; 242 Playwright tests passed with 1 skipped. Mypy, Django checks, migration checks, Ruff, formatting, diff checks and the complete remote CI passed.
 
 Open points:
 
-- Complete and review the independent full verification, including the end-to-end suite, before declaring release readiness.
+- None.
