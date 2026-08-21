@@ -1,23 +1,53 @@
 ---
 name: cost-aware-subagent-orchestrator
-description: Cost-aware decomposition and delegation of software-engineering work to Codex subagents. Use when the user requests subagents, parallel agents, cheaper agents, token-efficient execution, task delegation, CI or PR monitoring by an agent, or senior-PM-style coordination of multiple implementation and review tasks.
+description: Budget-enforced decomposition and delegation of software-engineering work to Codex subagents. Use when the user requests subagents, parallel agents, cheaper agents, token-efficient execution, task delegation, CI or PR monitoring by an agent, or senior-PM-style coordination of implementation and review tasks.
 ---
 
 # Cost-aware Subagent Orchestrator
 
-Coordinate authorized subagent work with the least expensive model that can reliably complete each bounded task. Optimize total cost without duplicating work, delaying the critical path, or weakening verification.
+Coordinate authorized subagent work within an explicit budget. Use the least expensive model that can reliably complete each bounded task. Treat the limits below as hard defaults, not suggestions.
+
+## Establish and enforce the budget
+
+Before spawning an agent, publish a compact execution budget containing:
+
+- the measurable outcome and task graph;
+- the maximum concurrent and total agent runs;
+- the highest permitted model tier and reasoning effort;
+- the maximum full-context forks, review passes, and full-suite runs;
+- the condition that pauses work for renewed user approval.
+
+Use these defaults unless the user explicitly approves different limits:
+
+| Resource | Hard default |
+| --- | --- |
+| Concurrent agents | 2 |
+| Total agent runs, including replacements | 3 |
+| Model and reasoning | Luna Medium maximum |
+| Escalations above Luna Medium | 0 without explicit user approval; at most 1 after approval and concrete failure evidence |
+| Full-conversation forks | 0 |
+| Independent review passes | 1 |
+| Remediation batches after review | 1 |
+| Full local verification runs | 1 final run; at most 1 rerun after a diagnosed failure |
+
+If a usage meter is available, record its starting value. Pause and ask for approval before consuming 10 additional percentage points of a weekly allowance or when 25% or less remains. When no meter or exact token accounting is available, say so and enforce the numeric defaults above instead. Never imply that this skill itself caps platform usage.
+
+Maintain a budget ledger and update it before every spawn or escalation: `agents used/limit; active; highest tier; forks; reviews; full-suite runs`. Reserve capacity for integration and final verification instead of spending the full budget on exploration.
+
+Do not silently exceed a limit. Preserve current evidence, explain the expected benefit and incremental cost, and obtain explicit user approval first. A user request to “continue until done” does not waive the budget. If approval is unavailable, continue only with in-budget parent work or stop with the collected evidence.
 
 ## Establish the execution graph
 
 1. Confirm that the user or applicable repository instruction authorizes subagents. Do not treat this skill alone as permission for unrelated external actions.
 2. Split the requested outcome into concrete tasks with dependencies, write scopes, validation, and completion criteria.
-3. Identify the immediate blocking task. Keep it local only when delegation would leave the parent idle; otherwise delegate it too.
+3. Identify the immediate blocking task. Keep orchestration, integration, and simple critical-path work in the parent when delegation would duplicate context or leave the parent idle.
 4. Run independent tasks in parallel with disjoint write scopes. Never assign the same unresolved task twice.
 5. Keep irreversible, production, security-sensitive, or externally visible actions within the user's explicit authorization regardless of model choice.
+6. Batch related findings by owner and file scope. Do not create one agent per comment, test, or review thread.
 
 ## Select the cheapest capable model
 
-Start at the lowest suitable tier. Increase model capability only when task evidence requires it.
+Start at the lowest suitable tier. Luna Low is the default for read-only, mechanical, waiting, inventory, and status work. Increase capability only when task evidence requires it and the execution budget permits it.
 
 Before applying the matrix, inspect the actual `spawn_agent` interface and the models it offers in the current environment. If `model` and/or `reasoning_effort` are not selectable, do not invent model names or send unsupported parameters. Use the matrix as a capability and task-tier guide, choose the cheapest available agent type that fits the task, and state transparently that the corresponding cost control could not be enforced.
 
@@ -30,7 +60,7 @@ Before applying the matrix, inspect the actual `spawn_agent` interface and the m
 
 Do not select an expensive model merely because a task is important. Reduce uncertainty first: inspect locally, narrow the task, define invariants and tests, then delegate the bounded implementation to a cheaper tier where possible.
 
-Escalate by one tier only when the current agent reports concrete missing capability, contradictory evidence, or repeated inability to satisfy the acceptance criteria. Missing context requires a better handoff, not automatically a stronger model.
+Escalate by one tier only when the current agent reports concrete missing capability, contradictory evidence, or inability to satisfy a clear acceptance criterion after one corrected handoff. Record the evidence and reuse the same agent when its context remains useful. Missing context requires a better handoff, not automatically a stronger model. High or xhigh reasoning and frontier models require explicit user approval unless the user already authorized that exact tier for the task.
 
 ## Write a complete handoff
 
@@ -44,17 +74,28 @@ Give every subagent:
 - a stop condition for ambiguity, scope expansion, or unsafe state;
 - a compact return contract: result, evidence, changed files, checks, and blockers only.
 
-Prefer a fresh, context-light agent for independent work. Reuse an existing agent when its prior task provides material context. Fork the full conversation only when reconstructing the required context would be less efficient and would not leak an intended validation answer.
+Prefer a fresh, context-light agent for independent work. Pass file paths, invariants, acceptance criteria, and small relevant excerpts instead of conversation history. Reuse an existing agent when its prior task provides material context. A full-conversation fork requires explicit user approval and must explain why a compact handoff is insufficient.
 
 ## Coordinate without wasting tokens
 
 - Continue non-overlapping parent work immediately after delegation.
 - Do not poll agents repeatedly. Wait only when their result blocks the next action; otherwise rely on completion notifications.
-- Assign CI waiting, repeated status checks, and GitHub comment inventory to Luna with low reasoning.
+- Assign CI waiting and GitHub comment inventory to one reused Luna-Low agent. Batch all checks in each status request and honor any user-specified reporting interval.
 - Ask for deltas rather than repeated full summaries.
 - Close completed agents after consuming their results so concurrency slots remain available.
 - Review returned patches and evidence; do not redo delegated work from scratch.
 - If an agent is blocked by permissions or missing user authority, preserve its evidence and escalate to the user instead of spawning replacements.
+- Cap agent responses and command output to the evidence needed for the decision. Request failing sections, summaries, or log tails instead of complete logs.
+- Interrupt an agent that produces no new evidence across two status intervals or expands beyond scope. Count any replacement against the total-run budget.
+
+## Bound verification and review loops
+
+- During implementation, run focused checks for changed behavior. Run the repository-required full verification once after focused checks pass.
+- After a full-suite failure, diagnose from the failing subset and rerun focused checks first. Permit only one further full-suite run without renewed user approval.
+- After two equivalent flaky or environmental failures, stop repeating the suite. Report the evidence and address the root cause or request external action.
+- Inventory all PR comments and review threads in one pass. Prioritize security, data integrity, billing, and P1 findings, then assign one bounded remediation batch per disjoint scope.
+- Perform one independent review after integration. Re-review only changed risk areas; do not commission duplicate broad audits without new evidence.
+- Do not spawn an agent merely to repeat checks already run by CI or another agent unless independent reproduction is an acceptance criterion.
 
 ## Integrate and verify
 
@@ -62,7 +103,8 @@ Prefer a fresh, context-light agent for independent work. Reuse an existing agen
 2. Review diffs before integration and preserve unrelated working-tree changes.
 3. Run focused checks, then repository-required verification.
 4. Delegate passive remote monitoring back to Luna Low after a push.
-5. Report the achieved outcome, remaining blockers, and any justified model escalation. Do not claim completion without verification.
+5. Report budget usage as agent runs, escalations, full forks, review passes, and full-suite runs. If platform token usage is unavailable, state that explicitly.
+6. Report the achieved outcome, remaining blockers, and any justified model escalation. Do not claim completion without verification.
 
 ## Examples
 

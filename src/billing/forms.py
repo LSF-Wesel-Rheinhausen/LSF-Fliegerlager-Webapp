@@ -432,6 +432,7 @@ class ParticipantForm(forms.ModelForm):
             "last_name",
             "email",
             "phone",
+            "birth_date",
             "status",
             "is_child",
             "is_youth_group",
@@ -449,6 +450,7 @@ class ParticipantForm(forms.ModelForm):
             "last_name": "Nachname",
             "email": "E-Mail-Adresse",
             "phone": "Telefon",
+            "birth_date": "Geburtsdatum",
             "status": "Status",
             "is_child": "Kind",
             "is_youth_group": "Jugendgruppe",
@@ -466,6 +468,7 @@ class ParticipantForm(forms.ModelForm):
             "berufssatz": forms.NumberInput(attrs={"step": "0.0001", "min": "0", "max": "1"}),
             "arrival_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "departure_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+            "birth_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
         }
 
     def clean(self) -> dict[str, Any]:
@@ -486,6 +489,9 @@ class ParticipantFamilyMemberForm(forms.ModelForm):
         fields = [
             "first_name",
             "last_name",
+            "email",
+            "phone",
+            "birth_date",
             "role",
             "is_youth_group",
             "arrival_date",
@@ -495,6 +501,9 @@ class ParticipantFamilyMemberForm(forms.ModelForm):
         labels = {
             "first_name": "Vorname",
             "last_name": "Nachname",
+            "email": "E-Mail-Adresse",
+            "phone": "Telefon",
+            "birth_date": "Geburtsdatum",
             "role": "Rolle",
             "is_youth_group": "Jugendgruppe",
             "arrival_date": "Anreise",
@@ -504,6 +513,7 @@ class ParticipantFamilyMemberForm(forms.ModelForm):
         widgets = {
             "arrival_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "departure_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+            "birth_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
         }
 
     def clean(self) -> dict[str, Any]:

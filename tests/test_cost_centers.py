@@ -1,10 +1,13 @@
+from datetime import date
 from decimal import Decimal
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 
-from billing.models import Charge, Expense, Participant, PriceRule
+from billing.models import AttendanceDay, Charge, Expense, Participant, ParticipantFamilyMember, PriceRule
 from billing.services import get_cost_center_evaluation
-from tests.factories import CampFactory, ParticipantFactory
+from tests.factories import CampFactory, ParticipantFactory, ParticipantFamilyMemberFactory
 
 
 @pytest.mark.django_db
@@ -81,3 +84,63 @@ def test_cost_center_evaluation_aggregates_subsidies_and_donations():
     assert subsidies["income"] == Decimal("200.00")
     assert subsidies["expense_total"] == Decimal("75.00")  # 50% of 150.00
     assert subsidies["balance"] == Decimal("125.00")
+
+
+def _cost_center_query_count_and_totals(participant_count: int) -> tuple[int, dict[str, tuple[Decimal, int]]]:
+    camp = CampFactory(
+        name=f"Kostenstellen-{participant_count}",
+        starts_on=date(2026, 7, 1),
+        ends_on=date(2026, 7, 8),
+    )
+    PriceRule.objects.create(
+        camp=camp,
+        kind=PriceRule.Kind.CAMP_FLAT,
+        name="Lagerpauschale",
+        unit_price=Decimal("100.00"),
+        camp_flat_duration=PriceRule.CampFlatDuration.ONE_WEEK,
+        camp_flat_role=PriceRule.CampFlatRole.PARTICIPANT,
+        is_default=True,
+    )
+    for index in range(participant_count):
+        participant = ParticipantFactory(
+            camp=camp,
+            first_name=f"Teilnehmer{index}",
+            status=Participant.Status.ACTIVE,
+            arrival_date=date(2026, 7, 1),
+            departure_date=date(2026, 7, 8),
+            attendance_tracking_enabled=True,
+        )
+        member = ParticipantFamilyMemberFactory(
+            guardian=participant,
+            role=ParticipantFamilyMember.Role.COMPANION,
+            arrival_date=date(2026, 7, 1),
+            departure_date=date(2026, 7, 8),
+            attendance_tracking_enabled=True,
+        )
+        AttendanceDay.objects.create(participant=participant, date=date(2026, 7, 1), is_present=True)
+        AttendanceDay.objects.create(
+            participant=participant,
+            family_member=member,
+            date=date(2026, 7, 1),
+            is_present=True,
+        )
+
+    with CaptureQueriesContext(connection) as queries:
+        evaluation = get_cost_center_evaluation(camp)
+
+    totals = {code: (data["income"], data["income_count"]) for code, data in evaluation.items()}
+    return len(queries), totals
+
+
+@pytest.mark.django_db
+def test_cost_center_evaluation_prefetches_participant_and_family_attendance():
+    one_participant_queries, one_participant_totals = _cost_center_query_count_and_totals(1)
+    four_participant_queries, four_participant_totals = _cost_center_query_count_and_totals(4)
+
+    assert four_participant_queries == one_participant_queries
+    assert four_participant_totals == {
+        "camp_flat": (Decimal("400.00"), 4),
+    }
+    assert one_participant_totals == {
+        "camp_flat": (Decimal("100.00"), 1),
+    }

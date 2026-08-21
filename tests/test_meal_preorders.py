@@ -145,7 +145,9 @@ def test_pre_camp_kiosk_renders_only_released_preorder_ui(kiosk_client, monkeypa
     assert response.context["show_meal_area"] is False
     assert "Getränk buchen" not in content
     assert "Dienste" not in content
-    assert "Check-in" not in content
+    # #417 deliberately keeps the attendance planner available before the
+    # camp starts so arrivals in the permitted setup window can be recorded.
+    assert "Check-in" in content
     if flag == "allow_breakfast_prebooking_before_camp":
         assert "Frühstück vorbestellen" in content
         assert 'id="meal-calendar-dialog"' not in content

@@ -129,7 +129,19 @@ class CampAdmin(admin.ModelAdmin):
 
 @admin.register(Participant)
 class ParticipantAdmin(admin.ModelAdmin):
-    list_display = ("last_name", "first_name", "camp", "status", "hilfssatz", "berufssatz", "actual_nights", "is_child")
+    list_display = (
+        "last_name",
+        "first_name",
+        "camp",
+        "status",
+        "email",
+        "phone",
+        "birth_date",
+        "hilfssatz",
+        "berufssatz",
+        "actual_nights",
+        "is_child",
+    )
     list_filter = ("camp", "status", "is_child", "is_youth_group", "is_companion")
     search_fields = ("first_name", "last_name", "email")
     formfield_overrides = {
@@ -147,7 +159,7 @@ admin.site.register(UserProfile)
 @admin.register(ParticipantFamilyMember)
 class ParticipantFamilyMemberAdmin(admin.ModelAdmin):
     settlement_fields = ("role", "is_youth_group", "arrival_date", "departure_date", "is_active")
-    list_display = ("last_name", "first_name", "guardian", "role", "is_active")
+    list_display = ("last_name", "first_name", "guardian", "role", "email", "phone", "birth_date", "is_active")
     list_filter = ("role", "is_active", "guardian__camp")
     search_fields = ("first_name", "last_name", "guardian__first_name", "guardian__last_name")
 

@@ -42,6 +42,14 @@ def _freeze_meal_lock_time(monkeypatch, fixed_now):
     monkeypatch.setattr("billing.models.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
 
 
+@pytest.fixture
+def kiosk_registration_today(monkeypatch):
+    """Freeze the kiosk registration date at the camp's final day."""
+    fixed_today = date(2026, 8, 20)
+    monkeypatch.setattr("billing.models.timezone.localdate", lambda value=None, timezone=None: fixed_today)
+    return fixed_today
+
+
 def _checkin_state_tokens(kiosk_client):
     response = kiosk_client.get(reverse("kiosk-home"))
     return {target["token"]: target["state_token"] for target in response.context["checkin_participants"]}
@@ -710,11 +718,12 @@ def test_kiosk_login_links_to_admin_interface(kiosk_client):
 
 
 @pytest.mark.django_db
-def test_kiosk_home_hides_normal_admin_header_and_renders_drink_dialog_controls(kiosk_client):
+def test_kiosk_home_hides_normal_admin_header_and_renders_drink_dialog_controls(kiosk_client, monkeypatch):
     user = UserFactory(username="admin", email="admin@example.test")
     kiosk_client.force_login(user)
 
-    camp = CampFactory()
+    monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 7, 5))
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 14))
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     for _ in range(2):
         Charge.objects.create(
@@ -1065,8 +1074,10 @@ def test_kiosk_checkin_updates_companion_and_child_targets(kiosk_client, monkeyp
 
 
 @pytest.mark.django_db
-def test_kiosk_home_checkin_dialog_lists_companion_and_child(kiosk_client):
-    participant = ParticipantFactory(first_name="Ada", last_name="A")
+def test_kiosk_home_checkin_dialog_lists_companion_and_child(kiosk_client, monkeypatch):
+    monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 7, 5))
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 14))
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")
     ParticipantFamilyMember.objects.create(
         guardian=participant,
         first_name="Grace",
@@ -1397,8 +1408,9 @@ def test_kiosk_home_renders_shared_expense_cards_with_receipt_and_rejection_deta
 
 
 @pytest.mark.django_db
-def test_kiosk_home_renders_only_ordered_core_cards_and_menu_dialogs(kiosk_client):
-    camp = CampFactory()
+def test_kiosk_home_renders_only_ordered_core_cards_and_menu_dialogs(kiosk_client, monkeypatch):
+    monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 7, 5))
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 14))
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     inviter = ParticipantFactory(camp=camp, first_name="Grace", last_name="Hopper")
     ParticipantBookingLink.objects.create(inviter=inviter, invitee=participant)
@@ -4160,8 +4172,7 @@ def test_kiosk_self_registration_rejects_trivial_pins(kiosk_client):
 
 
 @pytest.mark.django_db
-def test_kiosk_self_registration_allows_dates_within_4_day_buffer(kiosk_client, monkeypatch):
-    monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 8, 15))
+def test_kiosk_self_registration_allows_dates_within_4_day_buffer(kiosk_client, kiosk_registration_today):
     camp = CampFactory(
         is_active=True,
         starts_on=date(2026, 8, 10),
@@ -4185,8 +4196,7 @@ def test_kiosk_self_registration_allows_dates_within_4_day_buffer(kiosk_client, 
 
 
 @pytest.mark.django_db
-def test_kiosk_self_registration_rejects_dates_outside_4_day_buffer(kiosk_client, monkeypatch):
-    monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 8, 15))
+def test_kiosk_self_registration_rejects_dates_outside_4_day_buffer(kiosk_client, kiosk_registration_today):
     CampFactory(
         is_active=True,
         starts_on=date(2026, 8, 10),
@@ -4239,8 +4249,7 @@ def test_kiosk_self_registration_rejects_dates_outside_4_day_buffer(kiosk_client
 
 
 @pytest.mark.django_db
-def test_kiosk_self_registration_renders_wizard_steps_and_min_max(kiosk_client, monkeypatch):
-    monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 8, 15))
+def test_kiosk_self_registration_renders_wizard_steps_and_min_max(kiosk_client, kiosk_registration_today):
     CampFactory(
         is_active=True,
         starts_on=date(2026, 8, 10),

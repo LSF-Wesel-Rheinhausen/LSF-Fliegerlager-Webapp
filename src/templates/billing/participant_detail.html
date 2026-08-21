@@ -47,6 +47,18 @@
     </section>
   {% endif %}
 
+  {% if can_view_profile_pii %}
+    <section class="panel stack" aria-labelledby="participant-profile-title">
+      <h2 id="participant-profile-title">Stammdaten</h2>
+      <dl>
+        <dt>E-Mail</dt><dd>{{ participant.email|default:"-" }}</dd>
+        <dt>Telefon</dt><dd>{{ participant.phone|default:"-" }}</dd>
+        <dt>Geburtsdatum</dt><dd>{{ participant.birth_date|date:"d.m.Y"|default:"-" }}</dd>
+        <dt>Alter bei Lagerbeginn</dt><dd>{{ participant_age|default_if_none:"-" }}</dd>
+      </dl>
+    </section>
+  {% endif %}
+
   <section class="metrics" aria-label="Teilnehmerkennzahlen">
     <article class="metric"><span>Brutto</span><strong>{{ settlement.total_gross }} EUR</strong></article>
     <article class="metric"><span>Förderung</span><strong>{{ settlement.total_subsidy }} EUR</strong></article>
@@ -279,12 +291,18 @@
       </div>
     </div>
     <table class="responsive-record-table">
-      <thead><tr><th>Name</th><th>Rolle</th><th>Jugendgruppe</th><th>Anreise</th><th>Abreise</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Rolle</th>{% if can_view_profile_pii %}<th>E-Mail</th><th>Telefon</th><th>Geburtsdatum</th><th>Alter bei Lagerbeginn</th>{% endif %}<th>Jugendgruppe</th><th>Anreise</th><th>Abreise</th><th>Status</th><th></th></tr></thead>
       <tbody>
         {% for member in family_members %}
           <tr>
             <td data-label="Name">{{ member.full_name }}</td>
             <td data-label="Rolle">{{ member.get_role_display }}</td>
+            {% if can_view_profile_pii %}
+              <td data-label="E-Mail">{{ member.email|default:"-" }}</td>
+              <td data-label="Telefon">{{ member.phone|default:"-" }}</td>
+              <td data-label="Geburtsdatum">{{ member.birth_date|date:"d.m.Y"|default:"-" }}</td>
+              <td data-label="Alter bei Lagerbeginn">{{ member.age_at_camp_start|default_if_none:"-" }}</td>
+            {% endif %}
             <td data-label="Jugendgruppe">{% if member.is_youth_group %}Ja{% else %}Nein{% endif %}</td>
             <td data-label="Anreise">{{ member.arrival_date|default:"-" }}</td>
             <td data-label="Abreise">{{ member.departure_date|default:"-" }}</td>
@@ -292,7 +310,7 @@
             <td data-label="Aktionen">{% if user|can_manage_users %}<a href="{% url 'participant-family-member-edit' participant.pk member.pk %}">Bearbeiten</a>{% else %}-{% endif %}</td>
           </tr>
         {% empty %}
-          <tr><td colspan="7">Keine Familienmitglieder vorhanden.</td></tr>
+          <tr><td colspan="{% if can_view_profile_pii %}11{% else %}7{% endif %}">Keine Familienmitglieder vorhanden.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -307,6 +325,37 @@
       {% for log in family_audit_logs %}<li>{{ log.created_at }}: {{ log.target_display_name|default:"Unbekanntes Ziel" }} – {{ log.description }}</li>{% empty %}<li>Keine Familien-Audit-Einträge vorhanden.</li>{% endfor %}
     </ul>
   </section>
+
+  {% if attendance_people %}
+    <section class="panel stack" aria-labelledby="attendance-title">
+      <h2 id="attendance-title">Tägliche Anwesenheit</h2>
+      <p id="participant-attendance-help" class="helptext">Auf kleinen Bildschirmen kannst du die Matrix horizontal scrollen. Status werden zusätzlich als Text angezeigt.</p>
+      <div class="kiosk-table__wrapper attendance-matrix-scroll" tabindex="0" role="region" aria-label="Anwesenheitsmatrix" aria-describedby="participant-attendance-help">
+        <table>
+          <thead><tr><th id="participant-attendance-person-heading" scope="col">Person</th>{% for day in attendance_people.0.calendar %}<th id="participant-attendance-day-{{ day.date|date:'Ymd' }}" scope="col">{{ day.date|date:"d.m.Y" }}</th>{% endfor %}</tr></thead>
+          <tbody>
+            {% for person in attendance_people %}
+              <tr>
+                <th id="participant-attendance-person-{{ forloop.counter }}" scope="row">{{ person.name }}</th>
+                {% for day in person.calendar %}
+                  <td headers="participant-attendance-person-{{ forloop.parentloop.counter }} participant-attendance-day-{{ day.date|date:'Ymd' }}" data-label="{{ day.date|date:'d.m.Y' }}">
+                    {% if day.disabled %}Außerhalb des Aufenthalts{% elif day.is_present %}Anwesend{% else %}Abwesend{% endif %}
+                    {% if day.comment %}<br><small>{{ day.comment }}</small>{% endif %}
+                  </td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <h3 id="participant-attendance-legend-title">Legende</h3>
+      <dl class="attendance-legend" aria-labelledby="participant-attendance-legend-title">
+        <div><dt>Anwesend</dt><dd>Person übernachtet an diesem Datum.</dd></div>
+        <div><dt>Abwesend</dt><dd>Person übernachtet, ist aber als abwesend markiert.</dd></div>
+        <div><dt>Außerhalb des Aufenthalts</dt><dd>Datum liegt außerhalb von Anreise und Abreise.</dd></div>
+      </dl>
+    </section>
+  {% endif %}
 
   <section class="panel stack">
     <h2>Gespeicherte Abrechnungen</h2>
