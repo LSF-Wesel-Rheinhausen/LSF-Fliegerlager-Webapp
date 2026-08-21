@@ -32,6 +32,30 @@ else
 fi
 
 $PYTHON src/manage.py migrate --noinput
+$PYTHON src/manage.py shell -c '
+from datetime import timedelta
+from django.utils import timezone
+from billing.models import Camp, CampKioskAccess
+
+today = timezone.localdate()
+camp, _ = Camp.objects.get_or_create(
+    name="E2E-Lagerzugang",
+    defaults={
+        "year": today.year,
+        "starts_on": today - timedelta(days=2),
+        "ends_on": today + timedelta(days=14),
+        "is_active": True,
+    },
+)
+camp.year = today.year
+camp.starts_on = today - timedelta(days=2)
+camp.ends_on = today + timedelta(days=14)
+camp.is_active = True
+camp.save()
+access, _ = CampKioskAccess.objects.get_or_create(camp=camp)
+access.set_pin("864208")
+access.save()
+'
 if [[ "${SEED_LOCAL_TEST_DB:-0}" == "1" ]]; then
   $PYTHON src/manage.py seed_local_test_db --verbosity 0
 fi
