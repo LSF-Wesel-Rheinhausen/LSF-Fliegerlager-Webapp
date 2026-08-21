@@ -184,6 +184,12 @@ urlpatterns = [
         name="booking-audit-batch-restore",
     ),
     path("participants/<int:participant_id>/payments/new/", views.payment_create, name="payment-create"),
+    path("payments/<int:payment_id>/delete/", views.payment_delete, name="payment-delete"),
+    path(
+        "payment-audit-logs/<int:audit_log_id>/restore/",
+        views.payment_audit_restore,
+        name="payment-audit-restore",
+    ),
     path("participants/<int:participant_id>/pin/set/", views.pin_set, name="pin-set"),
     path("participants/<int:participant_id>/pin/reset/", views.pin_reset, name="pin-reset"),
     path("participants/<int:participant_id>/pin/unlock/", views.pin_unlock, name="pin-unlock"),
