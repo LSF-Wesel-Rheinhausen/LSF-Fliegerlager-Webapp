@@ -1921,8 +1921,16 @@ def get_cost_center_evaluation(camp):
             status__in=[Participant.Status.REGISTERED, Participant.Status.ACTIVE, Participant.Status.SETTLED],
         )
         .select_related("camp")
-        .prefetch_related("family_members")
+        .prefetch_related(
+            Prefetch(
+                "family_members",
+                queryset=ParticipantFamilyMember.objects.order_by("last_name", "first_name", "pk"),
+                to_attr="settlement_family_members",
+            )
+        )
     )
+    active_participants = list(active_participants)
+    _prefetch_tracked_settlement_attendance(active_participants)
     default_rules = list(PriceRule.objects.filter(camp=camp, is_default=True))
     camp_flat_rules = [rule for rule in default_rules if rule.kind == PriceRule.Kind.CAMP_FLAT]
 
@@ -1954,7 +1962,7 @@ def get_cost_center_evaluation(camp):
                 }
             )
 
-        for line in family_camp_flat_lines(participant, participant.family_members.all(), default_rules):
+        for line in family_camp_flat_lines(participant, participant.settlement_family_members, default_rules):
             evaluation["camp_flat"]["income"] += line.gross_total
             evaluation["camp_flat"]["income_count"] += 1
             evaluation["camp_flat"]["income_details"].append(

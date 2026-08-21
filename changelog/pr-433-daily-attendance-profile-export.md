@@ -6,6 +6,9 @@
 - Hardened exact attendance target scoping, stay-date reconciliation, profile validation and settlement query bounds.
 - Rejects stale companion profile sessions and excludes incomplete stays from attendance-backed billing and shift targets.
 - Applies family-specific stay dates only as a complete pair, preventing hybrid attendance billing from partial overrides.
+- Prefetches participant and family attendance during cost-center evaluation to keep query counts constant.
+- Renders age zero for participants and family members while reserving `-` for missing ages.
+- Validates profile birth dates against Django's configured local date at timezone boundaries.
 
 Changed areas/files:
 

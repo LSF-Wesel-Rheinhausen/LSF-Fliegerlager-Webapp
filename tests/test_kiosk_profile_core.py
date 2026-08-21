@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+from types import SimpleNamespace
 
 import pytest
 from django.test import RequestFactory
@@ -71,6 +72,20 @@ def test_profile_form_rejects_blank_names_and_future_birth_date(data, field):
 
     assert not form.is_valid()
     assert field in form.errors
+
+
+@pytest.mark.django_db
+def test_profile_form_uses_configured_local_date_at_midnight_boundary(monkeypatch):
+    import billing.profile_forms as profile_forms
+
+    monkeypatch.setattr(profile_forms, "timezone", SimpleNamespace(localdate=lambda: date(2026, 7, 2)), raising=False)
+    monkeypatch.setattr(profile_forms, "date", SimpleNamespace(today=lambda: date(2026, 7, 1)), raising=False)
+    form = profile_forms.ParticipantProfileForm(
+        {"first_name": "Local", "last_name": "Midnight", "birth_date": "2026-07-02"},
+        instance=ParticipantFactory(),
+    )
+
+    assert form.is_valid(), form.errors
 
 
 @pytest.mark.django_db

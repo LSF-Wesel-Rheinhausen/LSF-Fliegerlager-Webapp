@@ -54,7 +54,7 @@
         <dt>E-Mail</dt><dd>{{ participant.email|default:"-" }}</dd>
         <dt>Telefon</dt><dd>{{ participant.phone|default:"-" }}</dd>
         <dt>Geburtsdatum</dt><dd>{{ participant.birth_date|date:"d.m.Y"|default:"-" }}</dd>
-        <dt>Alter bei Lagerbeginn</dt><dd>{{ participant_age|default:"-" }}</dd>
+        <dt>Alter bei Lagerbeginn</dt><dd>{{ participant_age|default_if_none:"-" }}</dd>
       </dl>
     </section>
   {% endif %}
@@ -198,7 +198,7 @@
               <td data-label="E-Mail">{{ member.email|default:"-" }}</td>
               <td data-label="Telefon">{{ member.phone|default:"-" }}</td>
               <td data-label="Geburtsdatum">{{ member.birth_date|date:"d.m.Y"|default:"-" }}</td>
-              <td data-label="Alter bei Lagerbeginn">{{ member.age_at_camp_start|default:"-" }}</td>
+              <td data-label="Alter bei Lagerbeginn">{{ member.age_at_camp_start|default_if_none:"-" }}</td>
             {% endif %}
             <td data-label="Jugendgruppe">{% if member.is_youth_group %}Ja{% else %}Nein{% endif %}</td>
             <td data-label="Anreise">{{ member.arrival_date|default:"-" }}</td>

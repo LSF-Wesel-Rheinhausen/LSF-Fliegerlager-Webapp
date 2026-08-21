@@ -248,6 +248,21 @@ def test_admin_participant_detail_exposes_birth_date_derived_age_and_contact(cli
 
 
 @pytest.mark.django_db
+def test_admin_participant_detail_renders_zero_age_for_participant_and_family_member(client):
+    camp = CampFactory(starts_on=date(2026, 7, 1))
+    participant = ParticipantFactory(camp=camp, birth_date=date(2026, 7, 1))
+    ParticipantFamilyMemberFactory(guardian=participant, birth_date=date(2026, 7, 1))
+    client.force_login(SuperUserFactory())
+
+    response = client.get(reverse("participant-detail", kwargs={"participant_id": participant.pk}))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "Alter bei Lagerbeginn</dt><dd>0</dd>" in content
+    assert 'data-label="Alter bei Lagerbeginn">0</td>' in content
+
+
+@pytest.mark.django_db
 def test_checkin_calendar_uses_permitted_window_and_stay_ranges_exclusive(kiosk_client, monkeypatch):
     monkeypatch.setattr("billing.models.timezone.localdate", lambda: date(2026, 7, 5))
     camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 10))

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import date
 from typing import Any
 
 from django import forms
+from django.utils import timezone
 
 from .models import Participant, ParticipantFamilyMember
 
@@ -43,7 +43,7 @@ class _ProfileForm(forms.ModelForm):
                     self.add_error(field_name, "Dieses Feld darf nicht leer sein.")
 
         birth_date = cleaned_data.get("birth_date")
-        if birth_date is not None and birth_date > date.today():
+        if birth_date is not None and birth_date > timezone.localdate():
             self.add_error("birth_date", "Das Geburtsdatum darf nicht in der Zukunft liegen.")
 
         first_name = cleaned_data.get("first_name")
