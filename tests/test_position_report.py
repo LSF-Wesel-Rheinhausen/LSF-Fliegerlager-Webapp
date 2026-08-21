@@ -224,6 +224,24 @@ def test_archived_participants_and_inactive_members_are_excluded(camp):
 
 
 @pytest.mark.django_db
+def test_active_family_member_of_archived_guardian_is_excluded(camp):
+    guardian = ParticipantFactory(camp=camp, arrival_date=CAMP_START, departure_date=CAMP_END)
+    guardian.archived_at = timezone.now()
+    guardian.save(update_fields=["archived_at"])
+    ParticipantFamilyMemberFactory(
+        guardian=guardian,
+        arrival_date=CAMP_START,
+        departure_date=CAMP_END,
+        is_active=True,
+    )
+
+    report = calculate_position_report(camp)
+
+    assert report.family_member_nights == 0
+    assert all(day.family_member_count == 0 for day in report.attendance_days)
+
+
+@pytest.mark.django_db
 def test_person_nights_prefer_actual_and_fall_back_to_booked(camp):
     ParticipantFactory(camp=camp, booked_nights=5, actual_nights=3)
     ParticipantFactory(camp=camp, booked_nights=4, actual_nights=0)

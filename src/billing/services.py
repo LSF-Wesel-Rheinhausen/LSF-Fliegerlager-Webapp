@@ -1055,7 +1055,11 @@ def calculate_position_report(camp: Camp) -> PositionReport:
 
     participants = list(Participant.objects.filter(camp=camp, archived_at__isnull=True))
     family_members = list(
-        ParticipantFamilyMember.objects.filter(guardian__camp=camp, is_active=True).select_related("guardian")
+        ParticipantFamilyMember.objects.filter(
+            guardian__camp=camp,
+            guardian__archived_at__isnull=True,
+            is_active=True,
+        ).select_related("guardian")
     )
     attendance_days = [
         PositionReportDay(
