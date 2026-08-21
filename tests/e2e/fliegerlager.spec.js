@@ -598,6 +598,51 @@ test("expense image receipts open in an accessible internal preview", async ({ p
   expect(failedRequests).toEqual([]);
 });
 
+test("expense PDF receipts allow only same-origin internal preview framing", async ({ page }) => {
+  const { browserErrors, failedRequests } = trackPageIssues(page);
+  await setupFirstAdmin(page);
+  await createCamp(page, "PDF-Beleg Vorschau");
+  const campUrl = page.url();
+  await createParticipant(page, "Ada", "Lovelace");
+
+  await page.goto(campUrl);
+  await page.getByRole("link", { name: "Auslage erfassen" }).click();
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Ada Lovelace" });
+  await page.locator("#id_category").selectOption({ label: "Verbrauchsmaterial" });
+  await page.getByLabel("Beschreibung").fill("Küche PDF");
+  await page.getByLabel("Betrag").fill("12.50");
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "kueche.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4\nreceipt preview\n"),
+  });
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByText("Auslage wurde gespeichert.")).toBeVisible();
+
+  const previewLink = page.locator('a[data-pdf-preview="true"]').filter({ hasText: "Beleg ansehen" });
+  const pdfResponsePromise = page.waitForResponse((response) => /\/expenses\/\d+\/receipt\/$/.test(response.url()));
+  await previewLink.click();
+
+  const pdfResponse = await pdfResponsePromise;
+  expect(pdfResponse.headers()["x-frame-options"]).toBe("SAMEORIGIN");
+  expect(pdfResponse.headers()["content-security-policy"]).toBe("default-src 'none'; frame-ancestors 'self'");
+  const previewDialog = page.getByRole("dialog", { name: "PDF-Vorschau" });
+  await expect(previewDialog).toBeVisible();
+  await expect(previewDialog.locator("iframe")).toHaveAttribute("src", /\/expenses\/\d+\/receipt\/$/);
+
+  await previewDialog.getByRole("button", { name: "Schließen" }).click();
+  await expect(previewDialog).toBeHidden();
+  await expect(previewLink).toBeFocused();
+  expect(browserErrors).toEqual([]);
+  expect(
+    failedRequests.filter(
+      (failure) =>
+        !failure.includes("/expenses/") ||
+        (!failure.includes("ERR_ABORTED") && !failure.includes("Frame load interrupted")),
+    ),
+  ).toEqual([]);
+});
+
 test("Admin archives a participant and creates a versioned settlement run", async ({ page }) => {
   await setupFirstAdmin(page);
   const campName = await createCamp(page, "Abrechnungslager");

@@ -160,6 +160,9 @@ def test_expense_receipt_download_sets_safe_preview_headers(
         assert response.status_code == 200
         assert response["Content-Disposition"].startswith(f'{expected_disposition}; filename="rechnung')
         assert response["Content-Type"] == content_type
+        if content_type == "application/pdf":
+            assert response["X-Frame-Options"] == "SAMEORIGIN"
+            assert response["Content-Security-Policy"] == "default-src 'none'; frame-ancestors 'self'"
         assert b"".join(response.streaming_content) == receipt_content
     finally:
         expense.receipt.delete(save=False)
@@ -227,6 +230,9 @@ def test_unauthorized_receipt_requests_do_not_reveal_receipt_existence(client, c
         assert responses[0].status_code == expected_status
         assert responses[1].status_code == expected_status
         assert responses[0].content == responses[1].content
+        for response in responses:
+            assert response["X-Frame-Options"] == "DENY"
+            assert "frame-ancestors 'none'" in response["Content-Security-Policy"]
     finally:
         with_receipt.receipt.delete(save=False)
 

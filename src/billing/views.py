@@ -38,6 +38,7 @@ from .attendance import (
 from .daily_settlement_backups import update_daily_backup_settings
 from .deployment_updates import UpdateAgentError, check_for_update, deployment_status, install_update
 from .exporters import (
+    PDF_PREVIEW_CONTENT_SECURITY_POLICY,
     camp_settlement_csv,
     camp_workbook_response,
     drink_entries_csv,
@@ -1963,12 +1964,16 @@ def expense_receipt_download(request: HttpRequest, expense_id: int) -> FileRespo
     )
     as_attachment = content_type == "application/octet-stream"
 
-    return FileResponse(
+    response = FileResponse(
         expense.receipt.open("rb"),
         as_attachment=as_attachment,
         content_type=content_type,
         filename=receipt_filename,
     )
+    if content_type == "application/pdf":
+        response["X-Frame-Options"] = "SAMEORIGIN"
+        response["Content-Security-Policy"] = PDF_PREVIEW_CONTENT_SECURITY_POLICY
+    return response
 
 
 @editor_required
