@@ -356,9 +356,27 @@ class PaymentAdmin(admin.ModelAdmin):
                 )
                 if audit_log is None:
                     continue
+    @admin.action(description="Ausgewählte gelöschte Zahlungen wiederherstellen")
+    def restore_selected_payments(self, request, queryset):
+        from django.core.exceptions import ValidationError
+
+        deleted_payments = list(queryset.filter(deleted_at__isnull=False))
+        if not deleted_payments:
+            self.message_user(request, "Keine gelöschten Zahlungen zur Wiederherstellung ausgewählt.", level="warning")
+            return
+        restored_count = 0
+        with transaction.atomic():
+            for payment in deleted_payments:
+                audit_log = (
+                    PaymentAuditLog.objects.filter(payment=payment, action=PaymentAuditLog.Action.DELETED)
+                    .order_by("-created_at")
+                    .first()
+                )
+                if audit_log is None:
+                    continue
                 try:
                     restore_payment_from_audit_log(audit_log, request.user)
-                except Exception:
+                except ValidationError:
                     continue
                 restored_count += 1
         self.message_user(request, f"{restored_count} Zahlung(en) wurden wiederhergestellt.")
