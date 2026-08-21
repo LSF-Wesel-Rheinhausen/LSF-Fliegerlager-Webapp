@@ -13,7 +13,7 @@
 
   <section class="metrics" aria-label="Lagerkennzahlen">
     <article class="metric"><span>Buchungen</span><strong>{{ report.booking_total }}</strong></article>
-    <article class="metric"><span>Buchungswert</span><strong>{{ report.gross_total }} EUR</strong></article>
+    <article class="metric"><span>Buchungswert</span><strong>{{ report.gross_total|money_eur }}</strong></article>
     <article class="metric"><span>Übernachtungen</span><strong>{{ report.person_nights }}</strong></article>
     {% if report.peak_day %}
       <article class="metric"><span>Stärkster Tag</span><strong>{{ report.peak_day.total }} am {{ report.peak_day.day|date:"d.m." }}</strong></article>
