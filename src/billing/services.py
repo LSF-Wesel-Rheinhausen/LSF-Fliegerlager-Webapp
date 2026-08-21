@@ -978,6 +978,207 @@ def restore_booking_from_audit_log(audit_log: BookingAuditLog, changed_by: Any) 
     return restored_charge
 
 
+@dataclass(frozen=True)
+class ArticleUsage:
+    """Aggregate active bookings for one billable article."""
+
+    kind: str
+    kind_label: str
+    description: str
+    booking_count: int
+    quantity_total: Decimal
+    gross_total: Decimal
+
+
+@dataclass(frozen=True)
+class MealUsage:
+    """Aggregate active meal signups for one meal type."""
+
+    meal: str
+    meal_label: str
+    variant_counts: dict[str, int]
+    total: int
+
+
+@dataclass(frozen=True)
+class PositionReportDay:
+    """Count the people present on one camp day."""
+
+    day: date
+    participant_count: int
+    family_member_count: int
+
+    @property
+    def total(self) -> int:
+        """Return everyone present on this day, guardians and family members alike."""
+        return self.participant_count + self.family_member_count
+
+
+@dataclass(frozen=True)
+class PositionReport:
+    """Summarize article, meal and attendance usage for one camp."""
+
+    camp: Camp
+    articles: list[ArticleUsage]
+    meals: list[MealUsage]
+    attendance_days: list[PositionReportDay]
+    participant_nights: int
+    family_member_nights: int
+
+    @property
+    def booking_total(self) -> int:
+        """Return the number of active bookings across all articles."""
+        return sum(article.booking_count for article in self.articles)
+
+    @property
+    def gross_total(self) -> Decimal:
+        """Return the gross value of all active bookings."""
+        return money(sum((article.gross_total for article in self.articles), ZERO))
+
+    @property
+    def person_nights(self) -> int:
+        """Return total person-nights spent at the camp."""
+        return self.participant_nights + self.family_member_nights
+
+    @property
+    def peak_day(self) -> PositionReportDay | None:
+        """Return the busiest camp day, or None when nobody is recorded."""
+        populated = [day for day in self.attendance_days if day.total > 0]
+        if not populated:
+            return None
+        return max(populated, key=lambda day: day.total)
+
+
+def _covers_day(arrival: date | None, departure: date | None, day: date) -> bool:
+    """Return whether an open-ended arrival/departure window contains a day."""
+    if arrival is not None and day < arrival:
+        return False
+    if departure is not None and day > departure:
+        return False
+    return arrival is not None or departure is not None
+
+
+def calculate_position_report(camp: Camp) -> PositionReport:
+    """Aggregate per-article, per-meal and per-day usage for one camp.
+
+    Soft-deleted bookings and retracted meal signups are excluded, so the
+    figures match what the camp is actually billed and catered for.
+
+    Args:
+        camp: The camp to evaluate.
+
+    Returns:
+        A report covering article usage, meal counts and daily attendance.
+    """
+    kind_labels = dict(Charge.Kind.choices)
+    article_rows: dict[tuple[str, str], dict[str, Any]] = {}
+    charges = Charge.objects.filter(participant__camp=camp, deleted_at__isnull=True)
+    for charge in charges:
+        key = (charge.kind, charge.description)
+        row = article_rows.setdefault(key, {"count": 0, "quantity": ZERO, "gross": ZERO})
+        row["count"] += 1
+        row["quantity"] += Decimal(str(charge.quantity))
+        row["gross"] += Decimal(str(charge.total))
+    articles = [
+        ArticleUsage(
+            kind=kind,
+            kind_label=kind_labels.get(kind, kind),
+            description=description,
+            booking_count=row["count"],
+            quantity_total=money(row["quantity"]),
+            gross_total=money(row["gross"]),
+        )
+        for (kind, description), row in sorted(
+            article_rows.items(),
+            key=lambda item: (-item[1]["count"], item[0][0], item[0][1]),
+        )
+    ]
+
+    variant_labels = dict(MealSignup.Variant.choices)
+    meal_labels = dict(MealSignup.Meal.choices)
+    if camp.starts_on and camp.ends_on and camp.starts_on <= camp.ends_on:
+        dates = camp_meal_dates(camp)
+        signups = MealSignup.objects.filter(
+            participant__camp=camp,
+            status=MealSignup.Status.ACTIVE,
+            meal_date__range=(dates[0], dates[-1]),
+        ).values_list("meal", "variant")
+    else:
+        signups = MealSignup.objects.filter(
+            participant__camp=camp,
+            status=MealSignup.Status.ACTIVE,
+        ).values_list("meal", "variant")
+    meal_rows: dict[str, dict[str, int]] = {}
+    for meal, variant in signups:
+        meal_rows.setdefault(meal, {})
+        meal_rows[meal][variant] = meal_rows[meal].get(variant, 0) + 1
+    meals = [
+        MealUsage(
+            meal=meal,
+            meal_label=meal_labels.get(meal, meal),
+            variant_counts={
+                variant_labels[variant]: meal_rows.get(meal, {}).get(variant, 0) for variant in MEAL_VARIANT_ORDER
+            },
+            total=sum(meal_rows.get(meal, {}).values()),
+        )
+        for meal in (MealSignup.Meal.DINNER, MealSignup.Meal.BREAKFAST)
+    ]
+
+    participants = list(Participant.objects.filter(camp=camp, archived_at__isnull=True))
+    family_members = list(
+        ParticipantFamilyMember.objects.filter(
+            guardian__camp=camp,
+            guardian__archived_at__isnull=True,
+            is_active=True,
+        )
+        .select_related("guardian__camp")
+        .prefetch_related(
+            Prefetch(
+                "attendance_days",
+                queryset=AttendanceDay.objects.filter(is_present=True),
+                to_attr=_ATTENDANCE_PREFETCH_ATTRIBUTE,
+            )
+        )
+    )
+    attendance_days = [
+        PositionReportDay(
+            day=day,
+            participant_count=sum(
+                1
+                for participant in participants
+                if _covers_day(participant.arrival_date, participant.departure_date, day)
+            ),
+            family_member_count=sum(
+                1
+                for member in family_members
+                if _covers_day(
+                    member.arrival_date or member.guardian.arrival_date,
+                    member.departure_date or member.guardian.departure_date,
+                    day,
+                )
+            ),
+        )
+        for day in camp_meal_dates(camp)
+    ]
+
+    participant_nights = sum(
+        participant.actual_nights or participant.booked_nights or 0 for participant in participants
+    )
+    family_member_nights = sum(
+        member.effective_attendance_nights if member.attendance_tracking_enabled else member.booked_nights or 0
+        for member in family_members
+    )
+
+    return PositionReport(
+        camp=camp,
+        articles=articles,
+        meals=meals,
+        attendance_days=attendance_days,
+        participant_nights=participant_nights,
+        family_member_nights=family_member_nights,
+    )
+
+
 def payment_audit_snapshot(payment: Payment) -> dict[str, str | None]:
     """Return the auditable business fields for a recorded payment.
 
