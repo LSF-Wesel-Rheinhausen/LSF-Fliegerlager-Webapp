@@ -1679,7 +1679,10 @@ def calculate_participant_settlement(participant):
     participant = (
         Participant.objects.select_related("camp")
         .prefetch_related(
-            Prefetch("charges", queryset=Charge.objects.select_related("family_member")),
+            Prefetch(
+                "charges",
+                queryset=Charge.objects.filter(deleted_at__isnull=True).select_related("family_member"),
+            ),
             Prefetch(
                 "family_members",
                 queryset=ParticipantFamilyMember.objects.order_by("last_name", "first_name", "pk"),

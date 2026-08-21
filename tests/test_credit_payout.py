@@ -55,6 +55,22 @@ def test_available_credit_uses_current_settlement_and_active_payments_only():
 
 
 @pytest.mark.django_db
+def test_available_credit_excludes_soft_deleted_charges_in_single_settlement():
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp)
+    active_charge = ChargeFactory(participant=participant, kind=Charge.Kind.OTHER, unit_price=Decimal("100.00"))
+    deleted_charge = ChargeFactory(participant=participant, kind=Charge.Kind.OTHER, unit_price=Decimal("60.00"))
+    deleted_charge.deleted_at = deleted_charge.created_at
+    deleted_charge.save(update_fields=["deleted_at"])
+    PaymentFactory(participant=participant, amount=Decimal("150.00"), paid_on=date(2026, 1, 1))
+
+    assert calculate_available_credit(participant) == Decimal("50.00")
+    settlement = calculate_participant_settlement(participant)
+    prefetched_charges = settlement.participant._prefetched_objects_cache["charges"]
+    assert [charge.pk for charge in prefetched_charges] == [active_charge.pk]
+
+
+@pytest.mark.django_db
 def test_full_and_partial_payouts_update_balance_without_negative_payment_records():
     participant, _camp = _participant_with_credit()
     admin_user = SuperUserFactory()
