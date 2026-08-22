@@ -1,4 +1,4 @@
-# Zahlungsaudit nach Soft-Delete unveränderlich halten
+# Zahlungsaudit nach Soft-Delete absichern
 
 - Gelöschte Zahlungen sind im Django-Admin für Teilnehmer, Betrag, Datum, Zahlungsart und Notiz schreibgeschützt.
 - Wiederherstellungen validieren den vollständigen Audit-Snapshot und setzen die geprüften Originalwerte transaktional zurück.
