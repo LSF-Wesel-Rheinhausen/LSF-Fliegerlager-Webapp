@@ -1,0 +1,2 @@
+- Restore the unconditional minimal camp and kiosk-PIN setup for isolated Playwright databases.
+- Keep the comprehensive local demo seed opt-in through `SEED_LOCAL_TEST_DB=1`.

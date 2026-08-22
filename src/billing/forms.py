@@ -1,3 +1,4 @@
+import re
 from datetime import date, time, timedelta
 from decimal import Decimal
 from typing import Any, cast
@@ -14,6 +15,7 @@ from django.utils.formats import number_format
 from .models import (
     Camp,
     Charge,
+    CreditPayout,
     DailySettlementBackupSettings,
     DailyShiftTemplate,
     Expense,
@@ -350,7 +352,7 @@ class UserPasswordResetForm(SetPasswordForm):
 
 class CampForm(forms.ModelForm):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        """Initialize optional cutoff input with the project default."""
+        """Initialize the optional meal reminder time with the project default."""
         super().__init__(*args, **kwargs)
         self.fields["meal_booking_cutoff_time"].required = False
         self.fields["meal_booking_cutoff_time"].initial = time(12, 0)
@@ -376,7 +378,7 @@ class CampForm(forms.ModelForm):
             "starts_on": "Beginn",
             "ends_on": "Ende",
             "is_active": "Aktiv",
-            "meal_booking_cutoff_time": "Essens-Stichzeitpunkt",
+            "meal_booking_cutoff_time": "Richtzeit",
             "shift_ratio_per_night": "Dienste pro gebuchter Nacht",
             "iban": "IBAN",
             "paypal_link": "PayPal.me Link",
@@ -390,7 +392,7 @@ class CampForm(forms.ModelForm):
         }
 
     def clean_meal_booking_cutoff_time(self):
-        """Return the default noon cutoff when the form field is omitted."""
+        """Return the default noon reminder time when the field is omitted."""
         return self.cleaned_data["meal_booking_cutoff_time"] or time(12, 0)
 
     def clean_is_active(self):
@@ -411,16 +413,16 @@ class MealPreorderSettingsForm(forms.ModelForm):
 
 
 class MealCutoffForm(forms.ModelForm):
-    """Edit the camp meal booking cutoff without exposing other camp settings."""
+    """Edit the camp's non-binding meal reminder time."""
 
     class Meta:
         model = Camp
         fields = ["meal_booking_cutoff_time"]
-        labels = {"meal_booking_cutoff_time": "Essens-Stichzeitpunkt"}
+        labels = {"meal_booking_cutoff_time": "Richtzeit"}
         widgets = {"meal_booking_cutoff_time": forms.TimeInput(attrs={"type": "time"})}
 
     def clean_meal_booking_cutoff_time(self):
-        """Return the default noon cutoff when the form field is omitted."""
+        """Return the default noon reminder time when the field is omitted."""
         return self.cleaned_data["meal_booking_cutoff_time"] or time(12, 0)
 
 
@@ -432,6 +434,7 @@ class ParticipantForm(forms.ModelForm):
             "last_name",
             "email",
             "phone",
+            "birth_date",
             "status",
             "is_child",
             "is_youth_group",
@@ -449,6 +452,7 @@ class ParticipantForm(forms.ModelForm):
             "last_name": "Nachname",
             "email": "E-Mail-Adresse",
             "phone": "Telefon",
+            "birth_date": "Geburtsdatum",
             "status": "Status",
             "is_child": "Kind",
             "is_youth_group": "Jugendgruppe",
@@ -466,6 +470,7 @@ class ParticipantForm(forms.ModelForm):
             "berufssatz": forms.NumberInput(attrs={"step": "0.0001", "min": "0", "max": "1"}),
             "arrival_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "departure_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+            "birth_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
         }
 
     def clean(self) -> dict[str, Any]:
@@ -486,6 +491,9 @@ class ParticipantFamilyMemberForm(forms.ModelForm):
         fields = [
             "first_name",
             "last_name",
+            "email",
+            "phone",
+            "birth_date",
             "role",
             "is_youth_group",
             "arrival_date",
@@ -495,6 +503,9 @@ class ParticipantFamilyMemberForm(forms.ModelForm):
         labels = {
             "first_name": "Vorname",
             "last_name": "Nachname",
+            "email": "E-Mail-Adresse",
+            "phone": "Telefon",
+            "birth_date": "Geburtsdatum",
             "role": "Rolle",
             "is_youth_group": "Jugendgruppe",
             "arrival_date": "Anreise",
@@ -504,6 +515,7 @@ class ParticipantFamilyMemberForm(forms.ModelForm):
         widgets = {
             "arrival_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "departure_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+            "birth_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
         }
 
     def clean(self) -> dict[str, Any]:
@@ -784,6 +796,26 @@ class PaymentForm(forms.ModelForm):
         widgets = {"paid_on": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"})}
 
 
+class CreditPayoutForm(forms.Form):
+    amount = forms.DecimalField(min_value=Decimal("0.01"), max_digits=10, decimal_places=2, label="Betrag")
+    method = forms.ChoiceField(choices=CreditPayout.Method.choices, label="Auszahlungsart")
+    idempotency_key = forms.UUIDField(widget=forms.HiddenInput)
+    external_reference = forms.CharField(max_length=120, required=False, label="Externe Referenz")
+    note = forms.CharField(max_length=180, required=False, label="Notiz", widget=forms.Textarea)
+
+    @staticmethod
+    def _reject_sensitive_coordinates(value: str) -> str:
+        if re.search(r"(?i)\b[A-Z]{2}\d{2}[A-Z0-9 ]{11,30}\b", value) or re.search(r"(?:\d[ -]?){13,19}", value):
+            raise forms.ValidationError("Bank- oder Kartendaten dürfen nicht erfasst werden.")
+        return value
+
+    def clean_external_reference(self):
+        return self._reject_sensitive_coordinates(self.cleaned_data["external_reference"])
+
+    def clean_note(self):
+        return self._reject_sensitive_coordinates(self.cleaned_data["note"])
+
+
 EXPENSE_CATEGORY_CHOICES = [
     ("Unterkunft/Verpflegung", "Unterkunft/Verpflegung"),
     ("Fahrtkosten", "Fahrtkosten"),
@@ -843,7 +875,6 @@ class ExpenseForm(forms.ModelForm):
             "receipt": forms.FileInput(
                 attrs={
                     "accept": "application/pdf,image/jpeg,image/png,image/heic,.pdf,.jpg,.jpeg,.png,.heic",
-                    "capture": "environment",
                 }
             ),
         }
@@ -871,7 +902,6 @@ class SharedExpenseRequestForm(forms.ModelForm):
             "receipt": forms.FileInput(
                 attrs={
                     "accept": "application/pdf,image/jpeg,image/png,image/heic,.pdf,.jpg,.jpeg,.png,.heic",
-                    "capture": "environment",
                 }
             ),
         }
@@ -1697,15 +1727,17 @@ class MealStandardPricesForm(forms.Form):
 class ShiftForm(forms.ModelForm):
     class Meta:
         model = Shift
-        fields = ["name", "date", "start_time", "end_time", "required_slots"]
+        fields = ["name", "description", "date", "start_time", "end_time", "required_slots"]
         labels = {
             "name": "Name des Dienstes",
+            "description": "Beschreibung / Aufgaben",
             "date": "Datum",
             "start_time": "Startzeit",
             "end_time": "Endzeit",
             "required_slots": "Benötigte Helfer",
         }
         widgets = {
+            "description": forms.Textarea(attrs={"rows": 4}),
             "date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "start_time": forms.TimeInput(attrs={"type": "time"}),
             "end_time": forms.TimeInput(attrs={"type": "time"}),
@@ -1715,14 +1747,16 @@ class ShiftForm(forms.ModelForm):
 class DailyShiftTemplateForm(forms.ModelForm):
     class Meta:
         model = DailyShiftTemplate
-        fields = ["name", "required_slots", "start_time", "end_time"]
+        fields = ["name", "description", "required_slots", "start_time", "end_time"]
         labels = {
             "name": "Bezeichnung",
+            "description": "Beschreibung / Aufgaben",
             "required_slots": "Benötigte Personen",
             "start_time": "Startzeit",
             "end_time": "Endzeit",
         }
         widgets = {
+            "description": forms.Textarea(attrs={"rows": 4}),
             "start_time": forms.TimeInput(attrs={"type": "time"}),
             "end_time": forms.TimeInput(attrs={"type": "time"}),
         }

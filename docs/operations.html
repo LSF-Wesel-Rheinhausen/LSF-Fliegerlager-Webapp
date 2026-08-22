@@ -101,7 +101,7 @@ curl http://localhost:8000/healthz/</code></pre>
           <li>Getränkepreise, Standardpreise für Frühstück/Abendessen und bei Bedarf abweichende Tagespreise anlegen.</li>
           <li>Teilnehmer importieren oder manuell anlegen.</li>
           <li>Für manuell angelegte Teilnehmer PINs setzen; bei der Kiosk-Selbstregistrierung vergeben Teilnehmer ihre PIN bereits im Registrierungsformular.</li>
-          <li>Tägliche Dienstvorlagen pflegen, Dienste für den Lagerzeitraum erzeugen und die Besetzungsauswertung kontrollieren.</li>
+          <li>Tägliche Dienstvorlagen pflegen, bei Bedarf Beschreibung / Aufgaben ergänzen, Dienste für den Lagerzeitraum erzeugen und die Besetzungsauswertung kontrollieren. Einzelne Dienst-Slots können danach mit einem eigenen Text angepasst werden.</li>
           <li>Während des Lagers Kiosk für Buchungen nutzen: Getränke per großer Ein-Tap-Taste buchen, Essen anmelden, Countdown zur automatischen Abmeldung im Blick behalten.</li>
           <li>Teilnehmer Dienste übernehmen, zurückgeben oder zum Tausch anbieten lassen.</li>
           <li>Falsche Buchungen als Admin korrigieren und Audit-Protokoll prüfen.</li>
@@ -160,7 +160,8 @@ npm run test:local</code></pre>
       <section>
         <h2>Dienstplanung</h2>
         <p>Der Lager-Faktor <code>shift_ratio_per_night</code> bestimmt die Soll-Dienste pro gebuchter Nacht. Tägliche Vorlagen können über den Lagerzeitraum generiert werden; erneutes Generieren aktualisiert vorhandene Dienste statt Duplikate anzulegen.</p>
-        <p>Im Kiosk sehen Teilnehmer Fortschritt, eigene Dienste, offene Plätze und Tauschangebote. Admins sehen die vollständige Belegung sowie eine Soll-/Ist-Auswertung pro Teilnehmer.</p>
+        <p>Vorlagenbeschreibungen werden nur beim Anlegen eines Dienstes kopiert. Individuelle Beschreibungen bereits vorhandener Dienste bleiben bei späteren Generierungen erhalten. Im Kiosk sehen Teilnehmer auf jeder Dienstkarte über den Info-Button die Aufgabenbeschreibung; leere Texte erhalten einen Fallback-Hinweis.</p>
+        <p>Beschreibungstexte sind reiner Text. HTML und Markdown werden nicht ausgewertet. Admins und Bearbeiter können Vorlagen und einzelne Dienste bearbeiten; Teilnehmer sehen die Informationen nur lesend.</p>
       </section>
 
       <section>

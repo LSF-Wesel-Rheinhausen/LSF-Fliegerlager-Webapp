@@ -129,7 +129,16 @@ def test_family_member_admin_change_ignores_crafted_settlement_fields(client):
 def test_family_member_admin_preserves_list_usability():
     model_admin = admin.site._registry[ParticipantFamilyMember]
 
-    assert model_admin.list_display == ("last_name", "first_name", "guardian", "role", "is_active")
+    assert model_admin.list_display == (
+        "last_name",
+        "first_name",
+        "guardian",
+        "role",
+        "email",
+        "phone",
+        "birth_date",
+        "is_active",
+    )
     assert model_admin.list_filter == ("role", "is_active", "guardian__camp")
     assert model_admin.search_fields == (
         "first_name",

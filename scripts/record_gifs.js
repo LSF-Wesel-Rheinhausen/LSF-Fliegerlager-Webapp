@@ -83,13 +83,13 @@ const fs = require('fs');
     await page.waitForTimeout(500);
     const select = page.locator('select[name="participant"]');
     await smoothMove(select);
-    await select.selectOption({ label: 'Lara Neu' });
+    await select.selectOption({ label: 'AdultComplete Synthetic' });
     await page.waitForTimeout(500);
 
     const pinInput = page.locator('#id_pin');
     await smoothMove(pinInput);
     await pinInput.click();
-    await pinInput.type('4321', { delay: 200 });
+    await pinInput.type('2468', { delay: 200 });
     await page.waitForTimeout(500);
 
     const submitBtn = page.locator('button[type="submit"]:has-text("Anmelden")');
@@ -165,7 +165,7 @@ const fs = require('fs');
         const lName = page.locator('#family-dialog input[name="family-last_name"]');
         await smoothMove(lName);
         await lName.click();
-        await lName.type('Neu', { delay: 150 });
+        await lName.type('Synthetic', { delay: 150 });
         await page.waitForTimeout(500);
 
         const roleSel = page.locator('#family-dialog select[name="family-role"]');

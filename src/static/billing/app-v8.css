@@ -1555,6 +1555,14 @@ textarea {
   margin: 0;
 }
 
+.attendance-matrix-scroll > table {
+  display: table;
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+  overflow: visible;
+}
+
 .kiosk-table__wrapper td,
 .kiosk-table__wrapper th {
   white-space: nowrap;
@@ -3395,6 +3403,46 @@ dialog::backdrop {
   margin: 0;
 }
 
+.receipt-preview-dialog {
+  width: min(960px, calc(100vw - 2rem));
+  max-width: min(960px, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  padding: 16px;
+  overflow: hidden;
+}
+
+.receipt-preview-dialog[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.receipt-preview-dialog__close {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.receipt-preview-dialog__content {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  place-items: center;
+  overflow: hidden;
+}
+
+.receipt-preview-dialog__image {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100dvh - 10rem);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+.receipt-preview-dialog__fallback {
+  margin: 0;
+}
+
 .booking-records-form .responsive-record-table,
 .booking-audit-form .responsive-record-table {
   table-layout: fixed;
@@ -3419,6 +3467,13 @@ dialog::backdrop {
     width: calc(100vw - 1rem);
     max-width: calc(100vw - 1rem);
     height: calc(100dvh - 1rem);
+    max-height: calc(100dvh - 1rem);
+    padding: 12px;
+  }
+
+  .receipt-preview-dialog {
+    width: calc(100vw - 1rem);
+    max-width: calc(100vw - 1rem);
     max-height: calc(100dvh - 1rem);
     padding: 12px;
   }
@@ -3686,4 +3741,36 @@ code {
   background-color: #222a32;
   color: #f1f4f6;
   border-color: #455260;
+}
+
+
+/* Admin dinner booking calendar: status remains textual for color-independent use. */
+.meal-day-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.meal-day-card {
+  display: grid;
+  gap: 8px;
+  min-height: 150px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text);
+}
+
+.meal-day-card--past { opacity: 0.7; }
+.meal-day-card--closed { border-inline-start: 5px solid var(--muted); }
+.meal-day-card--open { border-inline-start: 5px solid var(--accent); }
+.meal-day-card__heading { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.meal-day-card__heading h3 { margin: 0; font-size: 1rem; }
+.meal-day-card__heading time { font-weight: 800; font-variant-numeric: tabular-nums; }
+.meal-day-card__state { margin: 0; font-weight: 800; }
+.meal-day-card__action { margin-top: auto; }
+
+@media (max-width: 560px) {
+  .meal-day-card-grid { grid-template-columns: 1fr; }
 }

@@ -240,7 +240,7 @@ test("Admin completes setup, login, camp workflow and logout", async ({ page }) 
   await expect(page.getByRole("link", { name: "Auslage erfassen" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Teilnehmer importieren" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Abrechnung als CSV herunterladen" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Arbeitsmappe herunterladen" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Arbeitsmappe herunterladen", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Getränke als CSV herunterladen" })).toBeVisible();
   await expect(page.locator(".participant-settlements").getByRole("table")).toBeVisible();
   await expect(page.getByRole("link", { name: "Dienste verwalten" })).toHaveCount(0);
@@ -514,6 +514,7 @@ test("PWA PDF preview opens in a closable wrapper without leaving the app", asyn
   await expect(previewDialog).toBeHidden();
   await expect(previewLink).toBeFocused();
   await expect(previewDialog.locator("iframe")).toHaveAttribute("src", "about:blank");
+  await expect(page.locator("#global-receipt-dialog")).toBeHidden();
   expect(browserErrors).toEqual([]);
   expect(
     failedRequests.filter(
@@ -522,6 +523,123 @@ test("PWA PDF preview opens in a closable wrapper without leaving the app", asyn
         (!failure.includes("ERR_ABORTED") && !failure.includes("Frame load interrupted")),
     ),
     "Nur das absichtliche Abbrechen der entfernten PDF-Vorschau ist zulässig",
+  ).toEqual([]);
+});
+
+test("expense image receipts open in an accessible internal preview", async ({ page }) => {
+  const { browserErrors, failedRequests } = trackPageIssues(page);
+  await setupFirstAdmin(page);
+  await createCamp(page, "Bildbeleg Vorschau");
+  const campUrl = page.url();
+  await createParticipant(page, "Ada", "Lovelace");
+
+  await page.goto(campUrl);
+  await page.getByRole("link", { name: "Auslage erfassen" }).click();
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Ada Lovelace" });
+  await page.locator("#id_category").selectOption({ label: "Verbrauchsmaterial" });
+  await page.getByLabel("Beschreibung").fill("Küche PNG");
+  await page.getByLabel("Betrag").fill("12.50");
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "kueche.png",
+    mimeType: "image/png",
+    buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64"),
+  });
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByText("Auslage wurde gespeichert.")).toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const previewLink = page.locator('a[data-receipt-preview="image"]');
+  await expect(previewLink).toHaveAttribute("data-receipt-alt", "Küche PNG");
+  const pageUrl = page.url();
+  await previewLink.click();
+
+  const dialog = page.getByRole("dialog", { name: "Belegvorschau" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator("img")).toHaveAttribute("alt", "Küche PNG");
+  await expect(dialog.locator("img")).toBeVisible();
+  await expect(page).toHaveURL(pageUrl);
+  const bounds = await dialog.boundingBox();
+  expect(bounds).not.toBeNull();
+  expect(bounds.x).toBeGreaterThanOrEqual(0);
+  expect(bounds.y).toBeGreaterThanOrEqual(0);
+  expect(bounds.x + bounds.width).toBeLessThanOrEqual(391);
+  expect(bounds.y + bounds.height).toBeLessThanOrEqual(845);
+  const imageLayout = await dialog.evaluate((element) => {
+    const image = element.querySelector("img");
+    return {
+      dialogClientWidth: element.clientWidth,
+      dialogScrollWidth: element.scrollWidth,
+      imageRight: image.getBoundingClientRect().right,
+      contentRight: element.getBoundingClientRect().right,
+    };
+  });
+  expect(imageLayout.dialogScrollWidth).toBeLessThanOrEqual(imageLayout.dialogClientWidth + 1);
+  expect(imageLayout.imageRight).toBeLessThanOrEqual(imageLayout.contentRight + 1);
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(previewLink).toBeFocused();
+
+  await previewLink.click();
+  await dialog.evaluate((element) => element.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  await expect(dialog).toBeHidden();
+  await expect(previewLink).toBeFocused();
+
+  const modifiedClick = await previewLink.evaluate((link) => {
+    const event = new MouseEvent("click", { bubbles: true, cancelable: true, button: 1 });
+    link.dispatchEvent(event);
+    return { defaultPrevented: event.defaultPrevented, href: link.href, target: link.target };
+  });
+  expect(modifiedClick.defaultPrevented).toBe(false);
+  expect(modifiedClick.target).toBe("_blank");
+  expect(modifiedClick.href).toMatch(/\/expenses\/\d+\/receipt\/$/);
+  await expect(dialog).toBeHidden();
+  expect(browserErrors).toEqual([]);
+  expect(failedRequests).toEqual([]);
+});
+
+test("expense PDF receipts allow only same-origin internal preview framing", async ({ page }) => {
+  const { browserErrors, failedRequests } = trackPageIssues(page);
+  await setupFirstAdmin(page);
+  await createCamp(page, "PDF-Beleg Vorschau");
+  const campUrl = page.url();
+  await createParticipant(page, "Ada", "Lovelace");
+
+  await page.goto(campUrl);
+  await page.getByRole("link", { name: "Auslage erfassen" }).click();
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Ada Lovelace" });
+  await page.locator("#id_category").selectOption({ label: "Verbrauchsmaterial" });
+  await page.getByLabel("Beschreibung").fill("Küche PDF");
+  await page.getByLabel("Betrag").fill("12.50");
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "kueche.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4\nreceipt preview\n"),
+  });
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByText("Auslage wurde gespeichert.")).toBeVisible();
+
+  const previewLink = page.locator('a[data-pdf-preview="true"]').filter({ hasText: "Beleg ansehen" });
+  const pdfResponsePromise = page.waitForResponse((response) => /\/expenses\/\d+\/receipt\/$/.test(response.url()));
+  await previewLink.click();
+
+  const pdfResponse = await pdfResponsePromise;
+  expect(pdfResponse.headers()["x-frame-options"]).toBe("SAMEORIGIN");
+  expect(pdfResponse.headers()["content-security-policy"]).toBe("default-src 'none'; frame-ancestors 'self'");
+  const previewDialog = page.getByRole("dialog", { name: "PDF-Vorschau" });
+  await expect(previewDialog).toBeVisible();
+  await expect(previewDialog.locator("iframe")).toHaveAttribute("src", /\/expenses\/\d+\/receipt\/$/);
+
+  await previewDialog.getByRole("button", { name: "Schließen" }).click();
+  await expect(previewDialog).toBeHidden();
+  await expect(previewLink).toBeFocused();
+  expect(browserErrors).toEqual([]);
+  expect(
+    failedRequests.filter(
+      (failure) =>
+        !failure.includes("/expenses/") ||
+        (!failure.includes("ERR_ABORTED") && !failure.includes("Frame load interrupted")),
+    ),
   ).toEqual([]);
 });
 
@@ -620,6 +738,74 @@ async function expectButtonHitTestable(button) {
   })).toBe(true);
 }
 
+async function waitForKioskDialogReady(page, dialog, dialogId, actionableControl) {
+  await expectOnlyModal(page, dialogId);
+  // kioskDialogs first waits for the previous native modal to tear down and
+  // then moves focus into the replacement on the following animation frame.
+  await dialog.evaluate((element) => new Promise((resolve) => {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(resolve));
+  }));
+  await expect.poll(() => dialog.evaluate((element) => ({
+    isModal: element.matches(":modal"),
+    containsFocus: element.contains(document.activeElement),
+  }))).toEqual({ isModal: true, containsFocus: true });
+  if (actionableControl) {
+    await expectButtonHitTestable(actionableControl);
+  }
+}
+
+async function submitKioskDialogAndExpectRedirect(page, dialog, dialogId, button, action, location) {
+  await waitForKioskDialogReady(page, dialog, dialogId);
+  const responsePromise = page.waitForResponse((response) => {
+    const request = response.request();
+    return (
+      request.method() === "POST" &&
+      new URL(response.url()).pathname === "/kiosk/" &&
+      request.postData()?.includes(`action=${action}`)
+    );
+  });
+  await expectButtonHitTestable(button);
+  const [response] = await Promise.all([responsePromise, button.click()]);
+  expect(response.status()).toBe(302);
+  expect(response.headers().location).toBe(location);
+}
+
+async function createKioskFamilyMember(page, firstName = "Irène", lastName = "Curie") {
+  const openKioskMenu = page
+    .getByRole("button", { name: /Weitere Bereiche öffnen/ })
+    .or(page.locator(".kiosk-mobile-bottom-nav").getByRole("link", { name: "Mehr" }));
+  await expectButtonHitTestable(openKioskMenu);
+  await openKioskMenu.click();
+
+  const kioskMenu = page.locator("dialog#kiosk-menu-dialog");
+  await waitForKioskDialogReady(page, kioskMenu, "kiosk-menu-dialog");
+  const familyMenuButton = kioskMenu.getByRole("button", { name: /Familie/ });
+  await expectButtonHitTestable(familyMenuButton);
+  await familyMenuButton.click();
+
+  const familyManagementDialog = page.locator("dialog#family-management-dialog");
+  await waitForKioskDialogReady(page, familyManagementDialog, "family-management-dialog");
+  const openFamilyDialogButton = familyManagementDialog.getByRole("button", { name: "Anlegen" });
+  await expectButtonHitTestable(openFamilyDialogButton);
+  await openFamilyDialogButton.click();
+
+  const familyDialog = page.locator("dialog#family-dialog");
+  await waitForKioskDialogReady(page, familyDialog, "family-dialog");
+  await familyDialog.getByLabel("Vorname").fill(firstName);
+  await familyDialog.getByLabel("Nachname").fill(lastName);
+  await familyDialog.getByLabel("Rolle").selectOption({ label: "Kind" });
+
+  await submitKioskDialogAndExpectRedirect(
+    page,
+    familyDialog,
+    "family-dialog",
+    familyDialog.getByRole("button", { name: "Speichern" }),
+    "family_member_create",
+    "/kiosk/",
+  );
+  await expect(page.getByText("Familienmitglied wurde angelegt.")).toBeVisible();
+}
+
 test("Kiosk login and basic booking", async ({ page }) => {
   await setupKioskScenario(page, "Kiosk Login Grundbuchung");
 
@@ -643,9 +829,15 @@ test("Kiosk login and basic booking", async ({ page }) => {
   );
   expect(nestedVerticalScrollContainers).toEqual([]);
   const departureInput = checkinDialog.getByLabel("Abreise").first();
+  const newlyIncludedAttendance = checkinDialog.getByLabel(
+    `Marie Curie am ${germanDate(addDays(new Date(), 2))} anwesend`,
+  );
+  await expect(newlyIncludedAttendance).toBeDisabled();
   await departureInput.fill(dateInputValue(addDays(new Date(), 5)));
   await checkinDialog.getByLabel("Anreise").fill(checkinArrival);
   await departureInput.fill(checkinDeparture);
+  await expect(newlyIncludedAttendance).toBeEnabled();
+  await expect(newlyIncludedAttendance).toBeChecked();
   await checkinDialog.getByRole("button", { name: "Check-in speichern" }).click();
   await expect(page.getByText("Check-in-Daten wurden gespeichert.")).toBeVisible();
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -667,17 +859,7 @@ test("Kiosk login and basic booking", async ({ page }) => {
 
 test("Kiosk quick booking validates targets and supports cancellation", async ({ page }) => {
   await setupKioskScenario(page, "Kiosk Schnellbuchung");
-  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).or(page.locator(".kiosk-mobile-bottom-nav").getByRole("link", { name: "Mehr" })).click();
-  const kioskMenu = page.locator("dialog#kiosk-menu-dialog");
-  await kioskMenu.getByRole("button", { name: /Familie/ }).click();
-  const familyManagementDialog = page.locator("dialog#family-management-dialog");
-  await familyManagementDialog.getByRole("button", { name: "Anlegen" }).click();
-  const familyDialog = page.locator("dialog#family-dialog");
-  await familyDialog.getByLabel("Vorname").fill("Irène");
-  await familyDialog.getByLabel("Nachname").fill("Curie");
-  await familyDialog.getByLabel("Rolle").selectOption({ label: "Kind" });
-  await familyDialog.getByRole("button", { name: "Speichern" }).click();
-  await expect(page.getByText("Familienmitglied wurde angelegt.")).toBeVisible();
+  await createKioskFamilyMember(page);
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ colorScheme: "dark" });
@@ -817,17 +999,7 @@ test("Breakfast prebooking saves a selected date", async ({ page }) => {
 
 test("Kiosk can book a drink after breakfast prebooking", async ({ page }) => {
   const campName = await setupKioskScenario(page, "Kiosk Nachgelagerte Getränke");
-  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).or(page.locator(".kiosk-mobile-bottom-nav").getByRole("link", { name: "Mehr" })).click();
-  const kioskMenu = page.locator("dialog#kiosk-menu-dialog");
-  await kioskMenu.getByRole("button", { name: /Familie/ }).click();
-  const familyManagementDialog = page.locator("dialog#family-management-dialog");
-  await familyManagementDialog.getByRole("button", { name: "Anlegen" }).click();
-  const familyDialog = page.locator("dialog#family-dialog");
-  await familyDialog.getByLabel("Vorname").fill("Irène");
-  await familyDialog.getByLabel("Nachname").fill("Curie");
-  await familyDialog.getByLabel("Rolle").selectOption({ label: "Kind" });
-  await familyDialog.getByRole("button", { name: "Speichern" }).click();
-  await expect(page.getByText("Familienmitglied wurde angelegt.")).toBeVisible();
+  await createKioskFamilyMember(page);
   await page.locator('[data-kiosk-card="food"] [data-food-button][data-meal-type="breakfast"]').click();
   await page.locator("dialog#food-dialog").getByRole("button", { name: "Für später vorbestellen" }).click();
   const breakfastCalendar = page.locator("dialog#breakfast-meal-dialog");
@@ -848,7 +1020,10 @@ test("Kiosk can book a drink after breakfast prebooking", async ({ page }) => {
   await page.getByRole("link", { name: "Marie Curie", exact: true }).last().click();
   await expect(page.getByRole("heading", { name: "Marie Curie" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Familienmitglieder", exact: true })).toBeVisible();
-  await expect(page.getByText("Irène Curie", { exact: true })).toBeVisible();
+  const familyMembersSection = page
+    .getByRole("heading", { name: "Familienmitglieder", exact: true })
+    .locator("xpath=ancestor::section[1]");
+  await expect(familyMembersSection.getByRole("cell", { name: "Irène Curie", exact: true })).toBeVisible();
   await page.setViewportSize({ width: 1280, height: 800 });
   await assertNoUnexpectedOverflow(page);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -866,14 +1041,27 @@ test("Kiosk user can change their own PIN and log in with the new PIN", async ({
   await page.getByLabel("PIN:", { exact: true }).fill("2468");
   await page.getByRole("button", { name: "Anmelden", exact: true }).click();
 
-  await page.getByRole("button", { name: "Weitere Bereiche öffnen" }).click();
-  await page.getByRole("button", { name: "Eigene PIN ändern" }).click();
+  const kioskMenuButton = page.getByRole("button", { name: "Weitere Bereiche öffnen" });
+  await expectButtonHitTestable(kioskMenuButton);
+  await kioskMenuButton.click();
+  const kioskMenu = page.locator("dialog#kiosk-menu-dialog");
+  await waitForKioskDialogReady(page, kioskMenu, "kiosk-menu-dialog");
+  const pinChangeButton = kioskMenu.getByRole("button", { name: "Eigene PIN ändern" });
+  await pinChangeButton.click();
   const pinDialog = page.locator("dialog#pin-change-dialog");
-  await expect(pinDialog).toBeVisible();
+  const submitPinChange = pinDialog.getByRole("button", { name: "PIN ändern" });
+  await waitForKioskDialogReady(page, pinDialog, "pin-change-dialog", submitPinChange);
   await pinDialog.getByLabel("Aktuelle PIN").fill("2468");
   await pinDialog.getByLabel("Neue PIN:", { exact: true }).fill("8642");
   await pinDialog.getByLabel("Neue PIN wiederholen").fill("8642");
-  await pinDialog.getByRole("button", { name: "PIN ändern" }).click();
+  await submitKioskDialogAndExpectRedirect(
+    page,
+    pinDialog,
+    "pin-change-dialog",
+    submitPinChange,
+    "pin_change",
+    "/kiosk/login/",
+  );
 
   await expect(page).toHaveURL(/\/kiosk\/login\/$/);
   await expect(page.getByText("Deine PIN wurde geändert. Bitte melde dich erneut an.")).toBeVisible();
@@ -895,23 +1083,33 @@ test("Kiosk user sees validation errors when changing PIN incorrectly", async ({
   await page.getByLabel("PIN:", { exact: true }).fill("2468");
   await page.getByRole("button", { name: "Anmelden", exact: true }).click();
 
-  await page.getByRole("button", { name: "Weitere Bereiche öffnen" }).click();
-  await page.getByRole("button", { name: "Eigene PIN ändern" }).click();
+  const kioskMenuButton = page.getByRole("button", { name: "Weitere Bereiche öffnen" });
+  await expectButtonHitTestable(kioskMenuButton);
+  await kioskMenuButton.click();
+  const kioskMenu = page.locator("dialog#kiosk-menu-dialog");
+  await waitForKioskDialogReady(page, kioskMenu, "kiosk-menu-dialog");
+  const pinChangeButton = kioskMenu.getByRole("button", { name: "Eigene PIN ändern" });
+  await pinChangeButton.click();
   const pinDialog = page.locator("dialog#pin-change-dialog");
-  await expect(pinDialog).toBeVisible();
+  const submitPinChange = pinDialog.getByRole("button", { name: "PIN ändern" });
+  await waitForKioskDialogReady(page, pinDialog, "pin-change-dialog", submitPinChange);
 
   await pinDialog.getByLabel("Aktuelle PIN").fill("9999");
   await pinDialog.getByLabel("Neue PIN:", { exact: true }).fill("8642");
   await pinDialog.getByLabel("Neue PIN wiederholen").fill("8642");
-  await pinDialog.getByRole("button", { name: "PIN ändern" }).click();
+  await expectButtonHitTestable(submitPinChange);
+  await submitPinChange.click();
   await expect(pinDialog).toBeVisible();
+  await expect(page).toHaveURL(/\/kiosk\/$/);
   await expect(pinDialog.getByText("Die aktuelle PIN ist nicht korrekt.")).toBeVisible();
 
   await pinDialog.getByLabel("Aktuelle PIN").fill("2468");
   await pinDialog.getByLabel("Neue PIN:", { exact: true }).fill("8642");
   await pinDialog.getByLabel("Neue PIN wiederholen").fill("9753");
-  await pinDialog.getByRole("button", { name: "PIN ändern" }).click();
+  await expectButtonHitTestable(submitPinChange);
+  await submitPinChange.click();
   await expect(pinDialog).toBeVisible();
+  await expect(page).toHaveURL(/\/kiosk\/$/);
   await expect(pinDialog.getByText("Die PINs stimmen nicht überein.")).toBeVisible();
 
   await pinDialog.getByRole("button", { name: "Schließen" }).click();
@@ -979,6 +1177,7 @@ test("Meal booking shows one contextual back action", async ({ page }) => {
 });
 
 test("Partner meal retraction requires explicit confirmation", async ({ page }) => {
+  test.slow();
   await setupFirstAdmin(page);
   const campName = await createCamp(page, "Partner-Essen", 0, 4);
   await createParticipant(page, "Ada", "Lovelace", "", "1234");
@@ -1031,7 +1230,11 @@ test("Partner meal retraction requires explicit confirmation", async ({ page }) 
   await page.goto("/kiosk/#meal-calendar");
   const adaMealCalendar = page.locator("dialog#meal-calendar-dialog");
   await expect(adaMealCalendar).toBeVisible();
-  await adaMealCalendar.locator(".meal-status-day--booked").first().click();
+  const openPartnerMealDay = adaMealCalendar.locator(".meal-status-day--empty").first();
+  await expect(openPartnerMealDay).toBeVisible();
+  const { browserErrors, failedRequests } = trackPageIssues(page);
+  await expect(adaMealCalendar.locator(".meal-status-day--booked")).toHaveCount(0);
+  await openPartnerMealDay.click();
   const mealDayDetail = page.locator('dialog[id^="meal-day-detail-"]:visible');
   const partnerMealRow = mealDayDetail.locator(".meal-detail-row").filter({ hasText: "Grace Hopper" });
   await expect(partnerMealRow).toContainText("Gebucht");
@@ -1042,6 +1245,8 @@ test("Partner meal retraction requires explicit confirmation", async ({ page }) 
   await expect(retractionDialog).toContainText("Grace Hopper");
   await expect(retractionDialog).toContainText("Betrag: 7,00 €");
   await assertNoUnexpectedOverflow(page);
+  expect(browserErrors, `Unexpected browser errors: ${browserErrors.join(" | ")}`).toHaveLength(0);
+  expect(failedRequests, `Unexpected failed requests: ${failedRequests.join(" | ")}`).toHaveLength(0);
   await retractionDialog.getByRole("button", { name: "Jetzt zurücknehmen" }).click();
   await expect(page.getByText("Essensanmeldung wurde zurückgenommen.")).toBeVisible();
   await page.emulateMedia({ colorScheme: "light" });
@@ -1357,7 +1562,7 @@ test("Export flow: downloading CSV and XLSX returns 200 without deep parsing", a
   expect(csvResponse.ok()).toBeTruthy();
   expect(csvResponse.headers()['content-disposition']).toContain('.csv');
 
-  const xlsxLink = page.getByRole("link", { name: "Arbeitsmappe herunterladen" });
+  const xlsxLink = page.getByRole("link", { name: "Arbeitsmappe herunterladen", exact: true });
   const xlsxHref = await xlsxLink.getAttribute("href");
   const xlsxResponse = await page.request.get(xlsxHref);
   expect(xlsxResponse.ok()).toBeTruthy();
@@ -1445,6 +1650,7 @@ test("Admin configures SMTP and manually confirms exact information recipients",
 });
 
 test("Daily shift template and kiosk shift flow", async ({ page }) => {
+  test.setTimeout(60_000);
   await setupFirstAdmin(page);
   await createCamp(page, "Sommerlager Dienste", 0, 2);
   await createParticipant(page, "Albert", "Einstein", "", "1234");
@@ -1456,6 +1662,7 @@ test("Daily shift template and kiosk shift flow", async ({ page }) => {
   await page.getByRole("button", { name: "Vorlage anlegen" }).click();
   await expect(page.locator("dialog#template-dialog")).toBeVisible();
   await page.getByLabel("Name / Bezeichnung").fill("Spüldienst");
+  await page.getByLabel("Beschreibung / Aufgaben").fill("Spülmaschine einräumen, ausräumen und den Spülbereich sauber hinterlassen.");
   await page.getByLabel("Benötigte Personen").fill("2");
   await page.getByRole("button", { name: "Speichern", exact: true }).click();
   await expect(page.getByText("Spüldienst").first()).toBeVisible();
@@ -1481,9 +1688,38 @@ test("Daily shift template and kiosk shift flow", async ({ page }) => {
   await expect(page.getByText("Dein Fortschritt")).toBeVisible();
   await expect(page.getByText("Super! Du hast alle Pflichtdienste übernommen.")).toBeVisible();
 
+  // Every shift exposes its own description through the native kiosk help dialog.
+  const shiftInfoButton = page.getByRole("button", { name: "Informationen zu Spüldienst" }).first();
+  await expect(shiftInfoButton).toBeVisible();
+  await shiftInfoButton.click();
+  const shiftInfoDialog = page.locator("dialog#kiosk-help-dialog");
+  await expect(shiftInfoDialog).toBeVisible();
+  await expect(shiftInfoDialog.getByRole("heading", { name: "Informationen zu Spüldienst" })).toBeVisible();
+  await expect(shiftInfoDialog).toContainText("Spülmaschine einräumen, ausräumen und den Spülbereich sauber hinterlassen.");
+  await page.keyboard.press("Escape");
+  await expect(shiftInfoDialog).toBeHidden();
+  await expect(shiftInfoButton).toBeFocused();
+
   // Sign up for a shift
   await page.getByRole("button", { name: "Eintragen" }).first().click();
   await expect(page.getByText("Du hast dich für 'Spüldienst' eingetragen.")).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("switch", { name: "Dunkles Farbschema" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await assertNoUnexpectedOverflow(page);
+  await shiftInfoButton.click();
+  await expect(shiftInfoDialog).toBeVisible();
+  await expect(shiftInfoDialog).toContainText("Spülmaschine einräumen, ausräumen und den Spülbereich sauber hinterlassen.");
+  const dialogBounds = await shiftInfoDialog.boundingBox();
+  expect(dialogBounds).not.toBeNull();
+  expect(dialogBounds.x).toBeGreaterThanOrEqual(0);
+  expect(dialogBounds.y).toBeGreaterThanOrEqual(0);
+  expect(dialogBounds.x + dialogBounds.width).toBeLessThanOrEqual(391);
+  expect(dialogBounds.y + dialogBounds.height).toBeLessThanOrEqual(845);
+  await page.keyboard.press("Escape");
+  await expect(shiftInfoDialog).toBeHidden();
+  await expect(shiftInfoButton).toBeFocused();
+  await page.setViewportSize({ width: 1280, height: 800 });
 
   // "Austragen" should not exist, only "Zum Tausch anbieten"
   await expect(page.getByRole("button", { name: "Austragen" })).toBeHidden();
@@ -1900,6 +2136,115 @@ test("Mobile Kiosk: fixed bottom navigation bar is present and functional on mob
   // Clean up by closing meal dialog
   await essenButton.click({ force: true });
   await expect(mealDialog).not.toBeVisible();
+});
+
+test("Issue #417: Admin attendance matrix/export and kiosk profile flow", async ({ page }) => {
+  await setupFirstAdmin(page);
+  const campName = await createCamp(page, "Anwesenheit Profile", 0, 4);
+  await createParticipant(page, "Marie", "Curie", "marie@example.test", "8642");
+
+  const arrivalDate = dateInputValue(new Date());
+  const departureDate = dateInputValue(addDays(new Date(), 3));
+  await page.getByRole("link", { name: "Teilnehmer bearbeiten" }).click();
+  await page.getByLabel("Anreise").fill(arrivalDate);
+  await page.getByLabel("Abreise").fill(departureDate);
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByRole("heading", { name: "Marie Curie" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
+  await page.getByRole("link", { name: campName, exact: true }).click();
+
+  const xlsxLink = page.getByRole("link", { name: "Anwesenheit als Arbeitsmappe herunterladen" });
+  await expect(xlsxLink).toBeVisible();
+  const xlsxResponsePromise = page.waitForResponse(
+    (response) => response.url().includes("/attendance/export.xlsx") && response.status() === 200,
+  );
+  await xlsxLink.click();
+  const xlsxResponse = await xlsxResponsePromise;
+  expect(xlsxResponse.headers()["content-type"]).toContain("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  expect(xlsxResponse.headers()["content-disposition"]).toContain(".xlsx");
+
+  await page.getByRole("link", { name: "Anwesenheit", exact: true }).click();
+  await expect(page.getByRole("heading", { name: `Anwesenheit: ${campName}` })).toBeVisible();
+
+  const matrix = page.getByRole("region", { name: "Anwesenheitsmatrix" });
+  await expect(matrix).toBeVisible();
+  await expect(matrix.getByRole("table")).toBeVisible();
+  await expect(page.getByText("Legende", { exact: true })).toBeVisible();
+  const legend = page.locator(".attendance-legend");
+  await expect(legend.locator("dt", { hasText: "Anwesend" })).toBeVisible();
+  await expect(legend.locator("dt", { hasText: "Abwesend" })).toBeVisible();
+  await expect(legend.locator("dt", { hasText: "Außerhalb des Aufenthalts" })).toBeVisible();
+
+  const participantRow = matrix.getByRole("row", { name: /Marie Curie/ });
+  await expect(participantRow).toBeVisible();
+  expect(await participantRow.locator('[data-status="present"]').count()).toBeGreaterThan(0);
+  expect(await participantRow.locator('[data-status="disabled"]').count()).toBeGreaterThan(0);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const matrixLayout = await matrix.evaluate((region) => ({
+    clientWidth: region.clientWidth,
+    scrollWidth: region.scrollWidth,
+    tabIndex: region.tabIndex,
+    pageScrollWidth: document.documentElement.scrollWidth,
+    viewportWidth: document.documentElement.clientWidth,
+  }));
+  expect(matrixLayout.pageScrollWidth).toBeLessThanOrEqual(matrixLayout.viewportWidth + 1);
+  expect(matrixLayout.scrollWidth).toBeGreaterThan(matrixLayout.clientWidth);
+  expect(matrixLayout.tabIndex).toBeGreaterThanOrEqual(0);
+  await matrix.focus();
+  await expect.poll(() => matrix.evaluate((region) => document.activeElement === region)).toBe(true);
+
+  await logout(page);
+  await openKiosk(page, "/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Marie Curie" });
+  await page.getByLabel("PIN:", { exact: true }).fill("8642");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await expect(page).toHaveURL(/\/kiosk\/$/);
+
+  const openKioskMenu = page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).or(
+    page.locator(".kiosk-mobile-bottom-nav").getByRole("link", { name: "Mehr" }),
+  );
+  await openKioskMenu.click();
+  const kioskMenu = page.locator("dialog#kiosk-menu-dialog");
+  const privateProfileLink = kioskMenu.getByRole("link", { name: "Mein Profil" });
+  await expect(privateProfileLink).toHaveAttribute("href", /\/kiosk\/profile\/\d+\/$/);
+  await privateProfileLink.click();
+  await expect(page).toHaveURL(/\/kiosk\/profile\/\d+\/$/);
+
+  await page.locator('input[name="phone"]').fill("+49 201 417");
+  await page.locator('input[name="birth_date"]').fill("1990-01-02");
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await expect(page).toHaveURL(/\/kiosk\/$/);
+
+  await openKioskMenu.click();
+  await kioskMenu.getByRole("link", { name: "Mein Profil" }).click();
+  const birthDate = page.locator('input[name="birth_date"]');
+  await birthDate.fill("2999-01-01");
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await expect(birthDate).toHaveAttribute("aria-invalid", "true");
+  const describedBy = await birthDate.getAttribute("aria-describedby");
+  expect(describedBy).toBeTruthy();
+  for (const id of describedBy.split(/\s+/)) {
+    await expect(page.locator(`#${id}`)).toBeVisible();
+  }
+  await expect(page.getByText("Das Geburtsdatum darf nicht in der Zukunft liegen.", { exact: true })).toBeVisible();
+
+  await page.getByRole("link", { name: "Abmelden", exact: true }).first().click();
+  await expect(page).toHaveURL(/\/kiosk\/login\/$/);
+  // The central kiosk intentionally has no private mobile bottom navigation.
+  // Use its desktop top navigation for the central-surface profile check.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openKiosk(page, "/central/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Marie Curie" });
+  await page.getByLabel("PIN:", { exact: true }).fill("8642");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await expect(page).toHaveURL(/\/central\/kiosk\/$/);
+  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).click();
+  await expect(page.locator("dialog#kiosk-menu-dialog").getByRole("link", { name: "Mein Profil" })).toHaveAttribute(
+    "href",
+    /\/central\/kiosk\/profile\/\d+\/$/,
+  );
 });
 
 test("Desktop Kiosk: top navigation is present and bottom navigation is hidden", async ({ page }) => {

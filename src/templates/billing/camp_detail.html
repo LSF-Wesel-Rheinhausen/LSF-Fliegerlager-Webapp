@@ -14,8 +14,10 @@
       <a class="button" href="{% url 'expense-create' camp.pk %}">Auslage erfassen</a>
       <a class="button" href="{% url 'participant-import' camp.pk %}">Teilnehmer importieren</a>
       {% if user|can_manage_users %}
+        <a class="button" href="{% url 'camp-position-report' camp.pk %}">Positionsauswertung</a>
         <a class="button" href="{% url 'information-email-compose' camp.pk %}">Information versenden</a>
         <a class="button" href="{% url 'camp-kiosk-access-settings' camp.pk %}">Lager-PIN verwalten</a>
+        <a class="button" href="{% url 'camp-attendance-overview' camp.pk %}">Anwesenheit</a>
       {% endif %}
     </div>
   </div>
@@ -34,6 +36,7 @@
     <a href="{% url 'export-workbook' camp.pk %}">Arbeitsmappe herunterladen</a>
     <a href="{% url 'export-drinks-csv' camp.pk %}">Getränke als CSV herunterladen</a>
     <a href="{% url 'camp-meal-overview' camp.pk %}">Essensübersicht öffnen</a>
+    {% if user|can_manage_users %}<a href="{% url 'attendance-workbook' camp.pk %}">Anwesenheit als Arbeitsmappe herunterladen</a>{% endif %}
   </nav>
 
   <section class="panel stack">
@@ -192,7 +195,13 @@
             <td>{{ expense.amount }} €</td>
             <td>
               {% if expense.receipt %}
-                <a href="{% url 'expense-receipt' expense.pk %}" target="_blank" class="button button-small button-secondary">Beleg ansehen</a>
+                <a
+                  href="{% url 'expense-receipt' expense.pk %}"
+                  target="_blank"
+                  rel="noopener"
+                  class="button button-small button-secondary"
+                  {% if expense.receipt_preview_kind == "pdf" %}data-pdf-preview="true"{% elif expense.receipt_preview_kind == "image" %}data-receipt-preview="image" data-receipt-alt="{{ expense.receipt_preview_alt }}" aria-haspopup="dialog"{% endif %}
+                >Beleg ansehen</a>
               {% endif %}
             </td>
             <td>
