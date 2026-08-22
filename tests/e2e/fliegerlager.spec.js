@@ -84,6 +84,66 @@ async function assertNoUnexpectedOverflow(page) {
   expect(result.failures, "Elemente laufen aus der Anzeige oder aus ihrem Container").toEqual([]);
 }
 
+async function assertKioskProfileLayout(page, expectedViewportWidth) {
+  const form = page.locator(".kiosk-profile-form");
+  const editableControls = form.locator(
+    "input:not([type=hidden]):not([disabled]):not([readonly]), select:not([disabled]), textarea:not([disabled]):not([readonly])",
+  );
+  const actions = form.locator(".kiosk-profile-form__actions .button");
+  const layout = await form.evaluate((profileForm) => {
+    const visibleEditableControls = [
+      ...profileForm.querySelectorAll(
+        "input:not([type=hidden]):not([disabled]):not([readonly]), select:not([disabled]), textarea:not([disabled]):not([readonly])",
+      ),
+    ].filter((control) => control.getClientRects().length > 0);
+    const fieldGroups = [...profileForm.querySelectorAll(".kiosk-profile-form__field")];
+    const actionElements = [...profileForm.querySelectorAll(".kiosk-profile-form__actions .button")];
+    const rect = profileForm.getBoundingClientRect();
+    return {
+      form: { left: rect.left, right: rect.right, width: rect.width },
+      controls: visibleEditableControls.map((control) => {
+        const controlRect = control.getBoundingClientRect();
+        return {
+          boxSizing: getComputedStyle(control).boxSizing,
+          height: controlRect.height,
+          id: control.id,
+          left: controlRect.left,
+          right: controlRect.right,
+          width: controlRect.width,
+        };
+      }),
+      groupGaps: fieldGroups.slice(1).map((group, index) => {
+        const previousRect = fieldGroups[index].getBoundingClientRect();
+        return group.getBoundingClientRect().top - previousRect.bottom;
+      }),
+      actions: actionElements.map((action) => {
+        const actionRect = action.getBoundingClientRect();
+        return { height: actionRect.height, width: actionRect.width };
+      }),
+    };
+  });
+
+  expect(layout.form.width).toBeLessThanOrEqual(640);
+  if (expectedViewportWidth <= 520) expect(layout.form.width).toBeGreaterThanOrEqual(expectedViewportWidth - 40);
+  expect(layout.controls).toHaveLength(5);
+  for (const control of layout.controls) {
+    expect(control.left).toBeGreaterThanOrEqual(layout.form.left - 1);
+    expect(control.right).toBeLessThanOrEqual(layout.form.right + 1);
+    expect(control.width).toBeGreaterThan(0);
+    expect(control.height, `${control.id} ist niedriger als 44px`).toBeGreaterThanOrEqual(44);
+    expect(control.boxSizing).toBe("border-box");
+  }
+  expect(layout.groupGaps.every((gap) => gap >= 12)).toBe(true);
+  expect(layout.actions).toHaveLength(2);
+  expect(Math.abs(layout.actions[0].width - layout.actions[1].width)).toBeLessThanOrEqual(1);
+  for (const action of layout.actions) {
+    expect(action.height).toBeGreaterThanOrEqual(44);
+    expect(action.width).toBeLessThanOrEqual(160);
+  }
+  await expect(editableControls).toHaveCount(5);
+  await assertNoUnexpectedOverflow(page);
+}
+
 async function assertKioskCardsDoNotOverlap(page) {
   const overlaps = await page.locator("[data-kiosk-card]").evaluateAll((cards) => {
     const rectangles = cards.map((card) => ({
@@ -2138,7 +2198,9 @@ test("Mobile Kiosk: fixed bottom navigation bar is present and functional on mob
   await expect(mealDialog).not.toBeVisible();
 });
 
-test("Issue #417: Admin attendance matrix/export and kiosk profile flow", async ({ page }) => {
+test("Issues #417/#461/#505/#506: Admin attendance matrix/export and accessible kiosk profile layout", async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ baseURL, locale: "de-DE", serviceWorkers: "block" });
+  const page = await context.newPage();
   await setupFirstAdmin(page);
   const campName = await createCamp(page, "Anwesenheit Profile", 0, 4);
   await createParticipant(page, "Marie", "Curie", "marie@example.test", "8642");
@@ -2148,6 +2210,7 @@ test("Issue #417: Admin attendance matrix/export and kiosk profile flow", async 
   await page.getByRole("link", { name: "Teilnehmer bearbeiten" }).click();
   await page.getByLabel("Anreise").fill(arrivalDate);
   await page.getByLabel("Abreise").fill(departureDate);
+  await page.locator('input[name="birth_date"]').fill("1990-01-02");
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(page.getByRole("heading", { name: "Marie Curie" })).toBeVisible();
 
@@ -2212,14 +2275,56 @@ test("Issue #417: Admin attendance matrix/export and kiosk profile flow", async 
   await privateProfileLink.click();
   await expect(page).toHaveURL(/\/kiosk\/profile\/\d+\/$/);
 
+  const themeToggle = page.getByRole("switch", { name: "Dunkles Farbschema" });
+  if (await themeToggle.isChecked()) await themeToggle.click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await assertKioskProfileLayout(page, 390);
+  await themeToggle.click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await assertKioskProfileLayout(page, 390);
+  const profileFields = ["first_name", "last_name", "email", "phone", "birth_date"];
+  for (const fieldName of profileFields) {
+    await expect(page.locator(`#id_${fieldName}`)).not.toHaveAttribute("aria-invalid", "true");
+    await expect(page.locator(`label[for=id_${fieldName}]`)).toBeVisible();
+  }
+  await expect(page.locator("#id_birth_date")).toHaveAttribute("type", "date");
+  await expect(page.locator("#id_birth_date")).toHaveAttribute("value", "1990-01-02");
+  await expect(page.locator("#id_birth_date")).toHaveValue("1990-01-02");
+  expect(await page.evaluate(() => navigator.language)).toBe("de-DE");
+  expect(await page.locator("html").getAttribute("lang")).toBe("de");
+  await page.locator("#id_first_name").focus();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  const tabOrder = [];
+  for (let index = 0; index < profileFields.length + 4 && tabOrder.length < profileFields.length + 1; index += 1) {
+    const focusState = await page.evaluate(() => {
+      const element = document.activeElement;
+      return {
+        isControl: element.matches("input, button, a[href]"),
+        key: element.id || element.textContent.trim(),
+        outlineStyle: getComputedStyle(element).outlineStyle,
+      };
+    });
+    if (focusState.isControl && tabOrder.at(-1) !== focusState.key) {
+      tabOrder.push(focusState.key);
+      expect(focusState.outlineStyle).not.toBe("none");
+    }
+    await page.keyboard.press("Tab");
+  }
+  expect(tabOrder).toEqual(["id_first_name", "id_last_name", "id_email", "id_phone", "id_birth_date", "Speichern"]);
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await assertKioskProfileLayout(page, 1280);
+  await page.setViewportSize({ width: 390, height: 844 });
+
   await page.locator('input[name="phone"]').fill("+49 201 417");
-  await page.locator('input[name="birth_date"]').fill("1990-01-02");
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(page).toHaveURL(/\/kiosk\/$/);
 
   await openKioskMenu.click();
   await kioskMenu.getByRole("link", { name: "Mein Profil" }).click();
   const birthDate = page.locator('input[name="birth_date"]');
+  await expect(birthDate).toHaveValue("1990-01-02");
   await birthDate.fill("2999-01-01");
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(birthDate).toHaveAttribute("aria-invalid", "true");
@@ -2229,6 +2334,13 @@ test("Issue #417: Admin attendance matrix/export and kiosk profile flow", async 
     await expect(page.locator(`#${id}`)).toBeVisible();
   }
   await expect(page.getByText("Das Geburtsdatum darf nicht in der Zukunft liegen.", { exact: true })).toBeVisible();
+  const errorLayout = await page.locator("#id_birth_date_error").evaluate((error) => {
+    const errorRect = error.getBoundingClientRect();
+    const actionsRect = document.querySelector(".kiosk-profile-form__actions").getBoundingClientRect();
+    return { errorBottom: errorRect.bottom, actionsTop: actionsRect.top };
+  });
+  expect(errorLayout.actionsTop - errorLayout.errorBottom).toBeGreaterThanOrEqual(12);
+  await assertKioskProfileLayout(page, 390);
 
   await page.getByRole("link", { name: "Abmelden", exact: true }).first().click();
   await expect(page).toHaveURL(/\/kiosk\/login\/$/);
@@ -2245,6 +2357,7 @@ test("Issue #417: Admin attendance matrix/export and kiosk profile flow", async 
     "href",
     /\/central\/kiosk\/profile\/\d+\/$/,
   );
+  await context.close();
 });
 
 test("Desktop Kiosk: top navigation is present and bottom navigation is hidden", async ({ page }) => {

@@ -9,6 +9,7 @@ from django.db import connection
 from django.db.models import Prefetch
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+from django.utils.translation import override
 
 from billing.kiosk_access import KIOSK_FAMILY_MEMBER_SESSION_KEY, KIOSK_PARTICIPANT_SESSION_KEY
 from billing.models import (
@@ -19,6 +20,7 @@ from billing.models import (
     ParticipantFamilyMember,
 )
 from billing.permissions import EDITOR_GROUP
+from billing.profile_forms import ParticipantFamilyMemberProfileForm, ParticipantProfileForm
 from billing.views import _kiosk_attendance_fingerprint, _kiosk_checkin_original_state, _sign_kiosk_checkin_state
 from tests.factories import (
     CampFactory,
@@ -43,6 +45,29 @@ def _set_kiosk_identity(client, *, participant=None, family_member=None):
 
 def _profile_url(route_name, participant):
     return reverse(route_name, kwargs={"participant_id": participant.pk})
+
+
+def _profile_target(target_kind):
+    participant = ParticipantFactory(birth_date=date(1990, 1, 2))
+    if target_kind == "participant":
+        return participant, ParticipantProfileForm
+    return (
+        ParticipantFamilyMemberFactory(
+            guardian=participant,
+            birth_date=date(1990, 1, 2),
+            role=ParticipantFamilyMember.Role.CHILD,
+        ),
+        ParticipantFamilyMemberProfileForm,
+    )
+
+
+def _profile_post_target(kiosk_client, target_kind):
+    target, _form_class = _profile_target(target_kind)
+    if target_kind == "participant":
+        _set_kiosk_identity(kiosk_client, participant=target)
+        return target, _profile_url("kiosk-profile", target)
+    _set_kiosk_identity(kiosk_client, participant=target.guardian)
+    return target, reverse("kiosk-family-member-profile", kwargs={"family_member_id": target.pk})
 
 
 def _checkin_targets(kiosk_client):
@@ -90,6 +115,80 @@ def test_profile_routes_require_a_valid_kiosk_identity(kiosk_client, route_name)
 
     assert response.status_code in {302, 401, 403}
     assert KIOSK_PARTICIPANT_SESSION_KEY not in kiosk_client.session
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("target_kind", ["participant", "family_member"])
+def test_profile_native_birth_date_renders_iso_value_under_german_locale(target_kind):
+    target, form_class = _profile_target(target_kind)
+
+    with override("de-de"):
+        form = form_class(instance=target)
+        html = str(form["birth_date"])
+
+    assert form.fields["birth_date"].widget.input_type == "date"
+    assert form.fields["birth_date"].widget.format == "%Y-%m-%d"
+    assert 'value="1990-01-02"' in html
+    assert 'value="02.01.1990"' not in html
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("target_kind", ["participant", "family_member"])
+@pytest.mark.parametrize(
+    ("submitted_birth_date", "expected_birth_date"), [("1990-01-02", date(1990, 1, 2)), ("", None)]
+)
+def test_profile_bound_form_accepts_iso_birth_date_and_explicit_empty_value(
+    target_kind,
+    submitted_birth_date,
+    expected_birth_date,
+):
+    target, form_class = _profile_target(target_kind)
+    form = form_class(
+        {
+            "first_name": target.first_name,
+            "last_name": target.last_name,
+            "email": target.email,
+            "phone": target.phone,
+            "birth_date": submitted_birth_date,
+        },
+        instance=target,
+    )
+
+    assert form.is_valid(), form.errors
+    assert form.cleaned_data["birth_date"] == expected_birth_date
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("target_kind", ["participant", "family_member"])
+@pytest.mark.parametrize(
+    ("change", "expected_birth_date"),
+    [
+        ("unchanged", date(1990, 1, 2)),
+        ("phone", date(1990, 1, 2)),
+        ("clear_birth_date", None),
+    ],
+)
+def test_profile_save_preserves_or_explicitly_clears_birth_date(kiosk_client, target_kind, change, expected_birth_date):
+    target, url = _profile_post_target(kiosk_client, target_kind)
+    payload = {
+        "first_name": target.first_name,
+        "last_name": target.last_name,
+        "email": target.email,
+        "phone": target.phone,
+        "birth_date": target.birth_date.isoformat(),
+    }
+    if change == "phone":
+        payload["phone"] = "+49 505"
+    elif change == "clear_birth_date":
+        payload["birth_date"] = ""
+
+    response = kiosk_client.post(url, payload)
+
+    assert response.status_code == 302
+    target.refresh_from_db()
+    assert target.birth_date == expected_birth_date
+    if change == "phone":
+        assert target.phone == "+49 505"
 
 
 @pytest.mark.django_db

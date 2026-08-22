@@ -4,7 +4,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.templatetags.static import static
 
-PWA_CACHE_VERSION = 38
+PWA_CACHE_VERSION = 39
 PWA_SURFACE_CACHE_VERSIONS = {
     "admin": PWA_CACHE_VERSION,
     "kiosk": PWA_CACHE_VERSION + 1,

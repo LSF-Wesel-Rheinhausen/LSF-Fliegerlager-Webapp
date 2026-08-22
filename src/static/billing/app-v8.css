@@ -840,6 +840,49 @@ textarea {
   color: var(--danger);
 }
 
+.kiosk-profile-form {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  max-width: 640px;
+  margin-top: 20px;
+}
+
+.kiosk-profile-form__field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.kiosk-profile-form__field .helptext {
+  margin-top: 0;
+}
+
+.kiosk-profile-form input:not([type="hidden"]):not([disabled]):not([readonly]),
+.kiosk-profile-form select:not([disabled]),
+.kiosk-profile-form textarea:not([disabled]):not([readonly]) {
+  min-height: 44px;
+  box-sizing: border-box;
+}
+
+.kiosk-profile-form input:focus,
+.kiosk-profile-form .button:focus {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.kiosk-profile-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.kiosk-profile-form__actions .button {
+  flex: 0 0 120px;
+  width: 120px;
+  min-height: 44px;
+}
+
 .kiosk-check {
   display: flex;
   align-items: center;
