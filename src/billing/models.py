@@ -1,4 +1,5 @@
 import datetime
+import re
 import uuid
 from collections.abc import Collection
 from datetime import date, time, timedelta
@@ -1311,6 +1312,50 @@ class PaymentAuditLog(models.Model):
         return f"{self.payment}: {self.get_action_display()} am {self.created_at:%Y-%m-%d %H:%M}"
 
 
+class CreditPayout(models.Model):
+    """Immutable append-only record of credit paid back to a participant."""
+
+    class Method(models.TextChoices):
+        BANK_TRANSFER = "bank_transfer", "Überweisung"
+        CASH = "cash", "Bar"
+        PAYPAL = "paypal", "PayPal"
+
+    participant = models.ForeignKey(Participant, on_delete=models.RESTRICT, related_name="credit_payouts")
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    method = models.CharField(max_length=20, choices=Method.choices)
+    created_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.PROTECT,
+        related_name="credit_payouts_created",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    idempotency_key = models.UUIDField(unique=True, editable=False)
+    external_reference = models.CharField(max_length=120, blank=True)
+    note = models.CharField(max_length=180, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def clean(self):
+        super().clean()
+        sensitive = re.compile(r"(?i)\b[A-Z]{2}\d{2}[A-Z0-9 ]{11,30}\b|(?:\d[ -]?){13,19}")
+        for value in (self.external_reference, self.note):
+            if sensitive.search(value or ""):
+                raise ValidationError("Bank-, Karten- oder PayPal-Kontodaten sind nicht zulässig.")
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None:
+            raise ValidationError("CreditPayout-Einträge sind unveränderlich.")
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("CreditPayout-Einträge können nicht gelöscht werden.")
+
+    def __str__(self):
+        return f"{self.participant}: {self.amount} ({self.created_at:%Y-%m-%d})"
+
+
 class Expense(TimeStampedModel):
     class Status(models.TextChoices):
         PENDING = "pending", "Ausstehend"
@@ -1580,6 +1625,7 @@ class SettlementRun(TimeStampedModel):
     total_due = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
     total_paid = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
     total_advanced = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
+    total_payouts = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
     balance = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
     cost_center_data = models.JSONField(default=dict, blank=True)
 
@@ -1676,6 +1722,7 @@ class Settlement(TimeStampedModel):
     total_due = models.DecimalField(max_digits=10, decimal_places=2)
     total_paid = models.DecimalField(max_digits=10, decimal_places=2)
     total_advanced = models.DecimalField(max_digits=10, decimal_places=2)
+    total_payouts = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0"))
     balance = models.DecimalField(max_digits=10, decimal_places=2)
     data = models.JSONField(default=dict)
 

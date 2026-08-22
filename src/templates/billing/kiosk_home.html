@@ -586,7 +586,12 @@
                     <dt>Beleg</dt>
                     <dd>
                       {% if expense.receipt %}
-                        <a href="{% url 'expense-receipt' expense.pk %}" target="_blank" rel="noopener">Beleg ansehen</a>
+                        <a
+                          href="{% url 'expense-receipt' expense.pk %}"
+                          target="_blank"
+                          rel="noopener"
+                          {% if expense.receipt_preview_kind == "pdf" %}data-pdf-preview="true"{% elif expense.receipt_preview_kind == "image" %}data-receipt-preview="image" data-receipt-alt="{{ expense.receipt_preview_alt }}" aria-haspopup="dialog"{% endif %}
+                        >Beleg ansehen</a>
                       {% else %}
                         <span class="muted">Kein Beleg</span>
                       {% endif %}

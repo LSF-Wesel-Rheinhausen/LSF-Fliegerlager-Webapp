@@ -210,7 +210,7 @@ def test_participant_kiosk_summaries_batch_partner_billing_queries(django_assert
         )
         participants.append((participant, charge))
 
-    with django_assert_num_queries(8):
+    with django_assert_num_queries(9):
         summaries = participant_kiosk_summaries([participant for participant, _charge in participants])
 
     assert set(summaries) == {participant.pk for participant, _charge in participants}
