@@ -104,7 +104,7 @@
     </div>
     {% if credit_payouts %}
       <table class="responsive-record-table">
-        <thead><tr><th>Datum</th><th>Betrag</th><th>Art</th><th>Erfasst von</th><th>Referenz</th><th>Notiz</th></tr></thead>
+        <thead><tr><th>Datum</th><th>Betrag</th><th>Art</th><th>Erfasst von</th>{% if can_view_payout_metadata %}<th>Referenz</th><th>Notiz</th>{% endif %}</tr></thead>
         <tbody>
           {% for payout in credit_payouts %}
             <tr>
@@ -112,8 +112,10 @@
               <td data-label="Betrag">{{ payout.amount|money_eur }}</td>
               <td data-label="Art">{{ payout.get_method_display }}</td>
               <td data-label="Erfasst von">{{ payout.created_by.get_username }}</td>
-              <td data-label="Referenz">{{ payout.external_reference|default:"-" }}</td>
-              <td data-label="Notiz">{{ payout.note|default:"-" }}</td>
+              {% if can_view_payout_metadata %}
+                <td data-label="Referenz">{{ payout.external_reference|default:"-" }}</td>
+                <td data-label="Notiz">{{ payout.note|default:"-" }}</td>
+              {% endif %}
             </tr>
           {% endfor %}
         </tbody>
