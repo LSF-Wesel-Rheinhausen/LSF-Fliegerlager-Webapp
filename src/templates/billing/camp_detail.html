@@ -218,6 +218,54 @@
   {% endif %}
 
   <section class="panel stack">
+    <h2>Genehmigte Gemeinschaftsausgaben</h2>
+    <table class="responsive-record-table">
+      <thead>
+        <tr>
+          <th>Genehmigt am</th>
+          <th>Person</th>
+          <th>Beschreibung</th>
+          <th>Kategorie</th>
+          <th>Betrag</th>
+          <th>Umlage</th>
+          <th>Genehmiger</th>
+          <th>Beleg</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for expense in approved_expenses %}
+          <tr>
+            <td data-label="Genehmigt am">{% if expense.approved_at %}{{ expense.approved_at|date:"d.m.Y H:i" }}{% else %}Nicht angegeben{% endif %}</td>
+            <td data-label="Person">{% if expense.participant %}{{ expense.participant.first_name }} {{ expense.participant.last_name }}{% else %}Keine Person angegeben{% endif %}</td>
+            <td data-label="Beschreibung">{{ expense.description|default:"Keine Beschreibung angegeben" }}</td>
+            <td data-label="Kategorie">{{ expense.category|default:"Keine Kategorie angegeben" }}</td>
+            <td data-label="Betrag">{{ expense.amount }} €</td>
+            <td data-label="Umlage">{{ expense.get_allocation_method_display }}</td>
+            <td data-label="Genehmiger">{% if expense.approved_by %}{{ expense.approved_by.get_full_name|default:expense.approved_by.username }}{% else %}Kein Genehmiger angegeben{% endif %}</td>
+            <td data-label="Beleg">
+              {% if expense.receipt and expense.receipt_storage_available %}
+                <a
+                  href="{% url 'expense-receipt' expense.pk %}"
+                  target="_blank"
+                  rel="noopener"
+                  class="button button-small button-secondary"
+                  {% if expense.receipt_preview_kind == "pdf" %}data-pdf-preview="true"{% elif expense.receipt_preview_kind == "image" %}data-receipt-preview="image" data-receipt-alt="{{ expense.receipt_preview_alt }}" aria-haspopup="dialog"{% endif %}
+                >Beleg ansehen</a>
+              {% elif expense.receipt %}
+                Beleg nicht verfügbar
+              {% else %}
+                Kein Beleg vorhanden
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="8">Keine genehmigten Gemeinschaftsausgaben vorhanden.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel stack">
     <h2>Kostenstellenauswertung</h2>
     {% if cost_centers %}
       <table>

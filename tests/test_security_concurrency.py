@@ -1,11 +1,12 @@
 from concurrent.futures import ThreadPoolExecutor
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 from threading import Barrier, Event, Lock, local
 from uuid import uuid4
 
 import pytest
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.db import DataError, IntegrityError, close_old_connections, connection, connections, transaction
 from django.db.models import QuerySet
 from django.test import Client
@@ -23,9 +24,10 @@ from billing.models import (
     ParticipantFamilyMember,
     ParticipantFamilyMemberPin,
     ParticipantPin,
+    PaymentAuditLog,
     PriceRule,
 )
-from billing.services import calculate_participant_settlement
+from billing.services import calculate_participant_settlement, payment_audit_snapshot, restore_payment_from_audit_log
 from tests.factories import (
     CampFactory,
     ChargeFactory,
@@ -89,6 +91,52 @@ def test_credit_payout_postgresql_rejects_numeric_overflow():
         CreditPayout.objects.bulk_create([payout])
 
     assert not CreditPayout.objects.filter(idempotency_key=payout.idempotency_key).exists()
+
+
+def test_payment_restore_has_one_winner_across_postgresql_connections():
+    _require_postgresql()
+    admin = SuperUserFactory(username="payment-restore-race-admin")
+    payment = PaymentFactory(amount=Decimal("42.50"), paid_on=date(2026, 7, 3), method="Überweisung", note="Original")
+    payment.deleted_at = timezone.now()
+    payment.deleted_by = admin
+    payment.save(update_fields=["deleted_at", "deleted_by"])
+    deletion_log = PaymentAuditLog.objects.create(
+        participant=payment.participant,
+        payment=payment,
+        changed_by=admin,
+        action=PaymentAuditLog.Action.DELETED,
+        before=payment_audit_snapshot(payment),
+        after={},
+    )
+    original_participant = payment.participant
+    start_calls = Barrier(2)
+
+    def restore_once() -> str:
+        close_old_connections()
+        try:
+            stale_log = PaymentAuditLog.objects.select_related("payment").get(pk=deletion_log.pk)
+            start_calls.wait(timeout=10)
+            try:
+                restore_payment_from_audit_log(stale_log, admin)
+            except ValidationError:
+                return "validation_error"
+            return "restored"
+        finally:
+            connections.close_all()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = sorted(executor.map(lambda _worker: restore_once(), (1, 2)))
+
+    payment.refresh_from_db()
+    assert results == ["restored", "validation_error"]
+    assert payment.deleted_at is None
+    assert payment.participant == original_participant
+    assert payment.amount == Decimal("42.50")
+    assert payment.paid_on.isoformat() == "2026-07-03"
+    assert payment.method == "Überweisung"
+    assert payment.note == "Original"
+    assert PaymentAuditLog.objects.filter(action=PaymentAuditLog.Action.RESTORED).count() == 1
+    assert calculate_participant_settlement(original_participant).total_paid == Decimal("42.50")
 
 
 def test_first_admin_bootstrap_allows_only_one_winner_across_postgresql_connections(monkeypatch):
