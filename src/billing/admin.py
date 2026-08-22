@@ -332,6 +332,13 @@ class PaymentAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("participant")
 
+    def get_readonly_fields(self, request, obj=None):
+        """Keep the audited ledger values immutable after soft deletion."""
+        fields = list(super().get_readonly_fields(request, obj))
+        if obj is not None and obj.deleted_at is not None:
+            fields.extend(["participant", "amount", "paid_on", "method", "note"])
+        return tuple(fields)
+
     def has_delete_permission(self, request, obj=None):
         """Disable hard deletes so payments remain auditable via soft-delete."""
         return False

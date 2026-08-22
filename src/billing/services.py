@@ -1223,6 +1223,66 @@ def create_payment_delete_audit_log(
     )
 
 
+def _payment_values_from_audit_snapshot(payment: Payment, snapshot: Any) -> dict[str, Any]:
+    """Validate and decode the immutable payment values from an audit snapshot."""
+    expected_keys = {"payment_reference", "amount", "paid_on", "method", "note"}
+    if not isinstance(snapshot, dict) or set(snapshot) != expected_keys:
+        raise ValidationError(
+            "Der Zahlungs-Audit-Snapshot ist unvollständig oder enthält unbekannte Felder.",
+            code="invalid_payment_snapshot",
+        )
+
+    if snapshot["payment_reference"] != payment.payment_reference:
+        raise ValidationError(
+            "Der Zahlungs-Audit-Snapshot gehört nicht zu dieser Zahlung.",
+            code="invalid_payment_snapshot",
+        )
+    if not isinstance(snapshot["amount"], str):
+        raise ValidationError("Der Betrag im Zahlungs-Audit-Snapshot ist ungültig.", code="invalid_payment_snapshot")
+    try:
+        amount = Decimal(snapshot["amount"])
+    except (ArithmeticError, ValueError):
+        raise ValidationError(
+            "Der Betrag im Zahlungs-Audit-Snapshot ist ungültig.", code="invalid_payment_snapshot"
+        ) from None
+    if not amount.is_finite():
+        raise ValidationError("Der Betrag im Zahlungs-Audit-Snapshot ist ungültig.", code="invalid_payment_snapshot")
+    if snapshot["amount"] != str(money(amount)):
+        raise ValidationError(
+            "Der Betrag im Zahlungs-Audit-Snapshot ist nicht kanonisch.", code="invalid_payment_snapshot"
+        )
+
+    if not isinstance(snapshot["paid_on"], str):
+        raise ValidationError("Das Zahlungsdatum im Audit-Snapshot ist ungültig.", code="invalid_payment_snapshot")
+    try:
+        paid_on = date.fromisoformat(snapshot["paid_on"])
+    except ValueError:
+        raise ValidationError(
+            "Das Zahlungsdatum im Audit-Snapshot ist ungültig.", code="invalid_payment_snapshot"
+        ) from None
+
+    method = snapshot["method"]
+    note = snapshot["note"]
+    if not isinstance(method, str) or len(method) > 80 or not isinstance(note, str) or len(note) > 180:
+        raise ValidationError("Zahlungsart oder Notiz im Audit-Snapshot ist ungültig.", code="invalid_payment_snapshot")
+
+    candidate = Payment(
+        participant=payment.participant,
+        amount=amount,
+        paid_on=paid_on,
+        method=method,
+        note=note,
+    )
+    try:
+        candidate.full_clean()
+    except ValidationError:
+        raise ValidationError(
+            "Die Werte im Zahlungs-Audit-Snapshot sind ungültig.", code="invalid_payment_snapshot"
+        ) from None
+    return {"amount": amount, "paid_on": paid_on, "method": method, "note": note}
+
+
+@transaction.atomic
 def restore_payment_from_audit_log(audit_log: PaymentAuditLog, changed_by: Any) -> Payment:
     """Restore a soft-deleted payment referenced by its deletion audit entry.
 
@@ -1236,27 +1296,47 @@ def restore_payment_from_audit_log(audit_log: PaymentAuditLog, changed_by: Any) 
     Raises:
         ValidationError: If the audit row is not a restorable deletion snapshot.
     """
-    if audit_log.action != PaymentAuditLog.Action.DELETED:
+    try:
+        locked_audit_log = (
+            PaymentAuditLog.objects.select_for_update(of=("self",)).select_related("participant").get(pk=audit_log.pk)
+        )
+    except PaymentAuditLog.DoesNotExist:
+        raise ValidationError("Dieses Zahlungs-Audit ist nicht mehr verfügbar.") from None
+
+    if locked_audit_log.action != PaymentAuditLog.Action.DELETED:
         raise ValidationError("Nur gelöschte Zahlungen können wiederhergestellt werden.")
-    restored_payment = audit_log.payment
-    if audit_log.payment_id is None or restored_payment is None:
+    if locked_audit_log.payment_id is None:
         raise ValidationError("Diese Zahlung kann ohne ursprüngliche Zahlung nicht wiederhergestellt werden.")
+    try:
+        restored_payment = Payment.objects.select_for_update(of=("self",)).get(pk=locked_audit_log.payment_id)
+    except Payment.DoesNotExist:
+        raise ValidationError("Diese Zahlung kann ohne ursprüngliche Zahlung nicht wiederhergestellt werden.") from None
     if restored_payment.deleted_at is None:
         raise ValidationError("Diese Zahlung wurde bereits wiederhergestellt.")
-    if audit_log.participant_id is None:
+    if locked_audit_log.participant_id is None:
         raise ValidationError("Diese Zahlung kann keinem Teilnehmer mehr zugeordnet werden.")
 
-    before = payment_audit_snapshot(restored_payment)
+    restored_payment.participant_id = locked_audit_log.participant_id
+    current_snapshot = payment_audit_snapshot(restored_payment)
+    values = _payment_values_from_audit_snapshot(restored_payment, locked_audit_log.before)
+    before = current_snapshot
+    after = locked_audit_log.before
+    restored_payment.amount = values["amount"]
+    restored_payment.paid_on = values["paid_on"]
+    restored_payment.method = values["method"]
+    restored_payment.note = values["note"]
     restored_payment.deleted_at = None
     restored_payment.deleted_by = None
-    restored_payment.save(update_fields=["deleted_at", "deleted_by"])
+    restored_payment.save(
+        update_fields=["participant", "amount", "paid_on", "method", "note", "deleted_at", "deleted_by"]
+    )
     PaymentAuditLog.objects.create(
-        participant=audit_log.participant,
+        participant=locked_audit_log.participant,
         payment=restored_payment,
         changed_by=changed_by,
         action=PaymentAuditLog.Action.RESTORED,
         before=before,
-        after=payment_audit_snapshot(restored_payment),
+        after=after,
     )
     return restored_payment
 
