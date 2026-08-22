@@ -13,6 +13,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
+from django.db.models.functions import Round
 from django.utils import timezone
 
 from .push_endpoints import PUSH_ENDPOINT_ERROR, is_allowed_push_endpoint
@@ -1321,7 +1322,11 @@ class CreditPayout(models.Model):
         PAYPAL = "paypal", "PayPal"
 
     participant = models.ForeignKey(Participant, on_delete=models.RESTRICT, related_name="credit_payouts")
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+    )
     method = models.CharField(max_length=20, choices=Method.choices)
     created_by = models.ForeignKey(
         get_user_model(),
@@ -1335,6 +1340,16 @@ class CreditPayout(models.Model):
 
     class Meta:
         ordering = ["-created_at", "-id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(
+                    amount=Round("amount", precision=2),
+                    amount__gte=Decimal("0.01"),
+                    amount__lte=Decimal("99999999.99"),
+                ),
+                name="credit_payout_amount_valid",
+            )
+        ]
 
     def clean(self):
         super().clean()

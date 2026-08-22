@@ -8,7 +8,7 @@ from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
-from django.db import close_old_connections, connection, models
+from django.db import IntegrityError, close_old_connections, connection, models, transaction
 from django.urls import reverse
 
 from billing.admin import CreditPayoutAdmin
@@ -45,6 +45,11 @@ def _participant_with_credit():
         status=Expense.Status.APPROVED,
     )
     return participant, camp
+
+
+def _require_sqlite():
+    if connection.vendor != "sqlite":
+        pytest.skip("SQLite preserves values beyond DecimalField precision for constraint testing")
 
 
 @pytest.mark.django_db
@@ -167,6 +172,119 @@ def test_credit_payout_rejects_invalid_amount_and_sensitive_coordinates():
     )
     assert form.is_valid() is False
     assert "note" in form.errors
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "invalid_amount",
+    [
+        Decimal("-0.01"),
+        Decimal("0.00"),
+        Decimal("0.001"),
+        Decimal("0.011"),
+        Decimal("100000000.00"),
+    ],
+)
+def test_credit_payout_full_clean_rejects_amounts_outside_decimal_field_contract(invalid_amount):
+    payout = CreditPayout(
+        participant=ParticipantFactory(),
+        amount=invalid_amount,
+        method=CreditPayout.Method.CASH,
+        created_by=SuperUserFactory(),
+        idempotency_key=uuid4(),
+    )
+
+    with pytest.raises(ValidationError) as exc_info:
+        payout.full_clean()
+
+    assert "amount" in exc_info.value.message_dict
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("valid_amount", [Decimal("0.01"), Decimal("99999999.99")])
+def test_credit_payout_full_clean_accepts_boundary_amounts(valid_amount):
+    payout = CreditPayout(
+        participant=ParticipantFactory(),
+        amount=valid_amount,
+        method=CreditPayout.Method.CASH,
+        created_by=SuperUserFactory(),
+        idempotency_key=uuid4(),
+    )
+
+    payout.full_clean()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "invalid_amount",
+    [
+        Decimal("-0.01"),
+        Decimal("0.00"),
+        Decimal("0.001"),
+        Decimal("0.011"),
+        Decimal("100000000.00"),
+    ],
+)
+def test_credit_payout_sqlite_database_rejects_amounts_outside_decimal_field_contract_on_bulk_create(invalid_amount):
+    _require_sqlite()
+    payout = CreditPayout(
+        participant=ParticipantFactory(),
+        amount=invalid_amount,
+        method=CreditPayout.Method.CASH,
+        created_by=SuperUserFactory(),
+        idempotency_key=uuid4(),
+    )
+
+    with pytest.raises(IntegrityError), transaction.atomic():
+        CreditPayout.objects.bulk_create([payout])
+
+    assert CreditPayout.objects.count() == 0
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "invalid_amount",
+    [
+        Decimal("-0.01"),
+        Decimal("0.00"),
+        Decimal("0.001"),
+        Decimal("0.011"),
+        Decimal("100000000.00"),
+    ],
+)
+def test_credit_payout_sqlite_database_rejects_amounts_outside_decimal_field_contract_on_queryset_update(
+    invalid_amount,
+):
+    _require_sqlite()
+    payout = CreditPayout.objects.create(
+        participant=ParticipantFactory(),
+        amount=Decimal("1.00"),
+        method=CreditPayout.Method.CASH,
+        created_by=SuperUserFactory(),
+        idempotency_key=uuid4(),
+    )
+
+    with pytest.raises(IntegrityError), transaction.atomic():
+        CreditPayout.objects.filter(pk=payout.pk).update(amount=invalid_amount)
+
+    payout.refresh_from_db()
+    assert payout.amount == Decimal("1.00")
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("valid_amount", [Decimal("0.01"), Decimal("99999999.99")])
+def test_credit_payout_database_accepts_boundary_amounts(valid_amount):
+    payout = CreditPayout(
+        participant=ParticipantFactory(),
+        amount=valid_amount,
+        method=CreditPayout.Method.CASH,
+        created_by=SuperUserFactory(),
+        idempotency_key=uuid4(),
+    )
+
+    CreditPayout.objects.bulk_create([payout])
+
+    assert CreditPayout.objects.get().amount == valid_amount
 
 
 @pytest.mark.django_db
