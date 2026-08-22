@@ -1,5 +1,6 @@
 import importlib
 from decimal import Decimal
+from uuid import uuid4
 
 import pytest
 from django.apps import apps
@@ -14,6 +15,34 @@ partner_authorization_migration = importlib.import_module("billing.migrations.00
 booking_link_permissions_migration = importlib.import_module(
     "billing.migrations.0051_remove_booking_link_mutation_permissions"
 )
+
+CREDIT_PAYOUT_OLD_TARGET = [("billing", "0066_credit_payout")]
+CREDIT_PAYOUT_NEW_TARGET = [("billing", "0067_positive_credit_payout_amount")]
+
+
+def _create_historical_credit_payouts(historical_apps, amounts: list[Decimal]):
+    User = historical_apps.get_model("auth", "User")
+    Camp = historical_apps.get_model("billing", "Camp")
+    Participant = historical_apps.get_model("billing", "Participant")
+    CreditPayout = historical_apps.get_model("billing", "CreditPayout")
+    user = User.objects.create(username="private-migration-operator")
+    camp = Camp.objects.create(name="Private Migration Camp", year=2040)
+    participant = Participant.objects.create(camp=camp, first_name="Private", last_name="Participant")
+    return [
+        CreditPayout.objects.create(
+            participant=participant,
+            amount=amount,
+            method="cash",
+            created_by=user,
+            idempotency_key=uuid4(),
+        )
+        for amount in amounts
+    ]
+
+
+def _restore_current_migration_state() -> None:
+    executor = MigrationExecutor(connection)
+    executor.migrate(executor.loader.graph.leaf_nodes())
 
 
 def charge_columns() -> set[str]:
@@ -293,3 +322,82 @@ def test_shift_assignment_migration_preserves_legacy_null_identity() -> None:
     assert new_assignment.family_member_id is None
     executor = MigrationExecutor(connection)
     executor.migrate(executor.loader.graph.leaf_nodes())
+
+
+@pytest.mark.django_db(transaction=True)
+def test_credit_payout_amount_migration_accepts_valid_historical_boundaries() -> None:
+    try:
+        executor = MigrationExecutor(connection)
+        executor.migrate(CREDIT_PAYOUT_OLD_TARGET)
+        old_apps = executor.loader.project_state(CREDIT_PAYOUT_OLD_TARGET).apps
+        payouts = _create_historical_credit_payouts(old_apps, [Decimal("0.01"), Decimal("99999999.99")])
+
+        executor = MigrationExecutor(connection)
+        executor.migrate(CREDIT_PAYOUT_NEW_TARGET)
+        new_apps = executor.loader.project_state(CREDIT_PAYOUT_NEW_TARGET).apps
+        migrated_amounts = list(
+            new_apps.get_model("billing", "CreditPayout")
+            .objects.filter(pk__in=[payout.pk for payout in payouts])
+            .order_by("amount")
+            .values_list("amount", flat=True)
+        )
+
+        assert migrated_amounts == [Decimal("0.01"), Decimal("99999999.99")]
+    finally:
+        _restore_current_migration_state()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_credit_payout_amount_migration_preflight_rejects_invalid_historical_rows_without_mutation() -> None:
+    old_credit_payout = None
+    try:
+        executor = MigrationExecutor(connection)
+        executor.migrate(CREDIT_PAYOUT_OLD_TARGET)
+        old_apps = executor.loader.project_state(CREDIT_PAYOUT_OLD_TARGET).apps
+        payouts = _create_historical_credit_payouts(old_apps, [Decimal("0.00"), Decimal("-0.01")])
+        old_credit_payout = old_apps.get_model("billing", "CreditPayout")
+
+        executor = MigrationExecutor(connection)
+        with pytest.raises(RuntimeError) as exc_info:
+            executor.migrate(CREDIT_PAYOUT_NEW_TARGET)
+
+        assert str(exc_info.value) == (
+            "CreditPayout migration preflight failed: 2 rows violate the amount contract "
+            "(0.01 to 99999999.99 with at most 2 decimal places). Clean billing_creditpayout.amount "
+            "manually before retrying; no rows were changed."
+        )
+        assert old_credit_payout.objects.filter(pk__in=[payout.pk for payout in payouts]).count() == 2
+        assert set(
+            old_credit_payout.objects.filter(pk__in=[payout.pk for payout in payouts]).values_list("amount", flat=True)
+        ) == {Decimal("-0.01"), Decimal("0.00")}
+        with connection.cursor() as cursor:
+            constraints = connection.introspection.get_constraints(cursor, "billing_creditpayout")
+        assert "credit_payout_amount_valid" not in constraints
+        assert "Private" not in str(exc_info.value)
+    finally:
+        if old_credit_payout is not None:
+            old_credit_payout.objects.all().delete()
+        _restore_current_migration_state()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_credit_payout_amount_migration_preflight_counts_sqlite_subcent_and_oversize_without_mutation() -> None:
+    if connection.vendor != "sqlite":
+        pytest.skip("SQLite stores subcent values despite DecimalField scale metadata")
+    old_credit_payout = None
+    try:
+        executor = MigrationExecutor(connection)
+        executor.migrate(CREDIT_PAYOUT_OLD_TARGET)
+        old_apps = executor.loader.project_state(CREDIT_PAYOUT_OLD_TARGET).apps
+        payouts = _create_historical_credit_payouts(old_apps, [Decimal("0.011"), Decimal("100000000.00")])
+        old_credit_payout = old_apps.get_model("billing", "CreditPayout")
+
+        executor = MigrationExecutor(connection)
+        with pytest.raises(RuntimeError, match="preflight failed: 2 rows"):
+            executor.migrate(CREDIT_PAYOUT_NEW_TARGET)
+
+        assert old_credit_payout.objects.filter(pk__in=[payout.pk for payout in payouts]).count() == 2
+    finally:
+        if old_credit_payout is not None:
+            old_credit_payout.objects.all().delete()
+        _restore_current_migration_state()

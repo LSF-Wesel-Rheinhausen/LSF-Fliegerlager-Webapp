@@ -2,10 +2,11 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from decimal import Decimal
 from threading import Barrier, Event, Lock, local
+from uuid import uuid4
 
 import pytest
 from django.contrib.auth.models import User
-from django.db import close_old_connections, connection, connections
+from django.db import DataError, IntegrityError, close_old_connections, connection, connections, transaction
 from django.db.models import QuerySet
 from django.test import Client
 from django.urls import reverse
@@ -14,6 +15,7 @@ from django.utils import timezone
 from billing.kiosk_access import KIOSK_PARTICIPANT_SESSION_KEY
 from billing.models import (
     Charge,
+    CreditPayout,
     FirstAdminBootstrapLock,
     MealBookingOverride,
     MealOrder,
@@ -23,14 +25,70 @@ from billing.models import (
     ParticipantPin,
     PriceRule,
 )
-from tests.factories import CampFactory, ParticipantFactory, PriceRuleFactory
+from billing.services import calculate_participant_settlement
+from tests.factories import (
+    CampFactory,
+    ChargeFactory,
+    ParticipantFactory,
+    PaymentFactory,
+    PriceRuleFactory,
+    SuperUserFactory,
+)
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
 
 def _require_postgresql() -> None:
     if connection.vendor != "postgresql":
-        pytest.skip("Concurrency regression requires PostgreSQL with separate database connections")
+        pytest.skip("Regression requires PostgreSQL database semantics")
+
+
+def _postgresql_credit_payout(amount: Decimal):
+    participant = ParticipantFactory()
+    ChargeFactory(participant=participant, kind=Charge.Kind.OTHER, unit_price=Decimal("100.00"))
+    PaymentFactory(participant=participant, amount=Decimal("150.00"))
+    payout = CreditPayout(
+        participant=participant,
+        amount=amount,
+        method=CreditPayout.Method.CASH,
+        created_by=SuperUserFactory(),
+        idempotency_key=uuid4(),
+    )
+    return participant, payout
+
+
+def test_credit_payout_postgresql_normalizes_three_decimal_cents_and_keeps_settlement_consistent():
+    _require_postgresql()
+    participant, payout = _postgresql_credit_payout(Decimal("0.011"))
+
+    CreditPayout.objects.bulk_create([payout])
+
+    stored_payout = CreditPayout.objects.get(idempotency_key=payout.idempotency_key)
+    settlement = calculate_participant_settlement(participant)
+    assert stored_payout.amount == Decimal("0.01")
+    assert settlement.total_payouts == Decimal("0.01")
+    assert settlement.balance == Decimal("-49.99")
+
+
+@pytest.mark.parametrize("invalid_amount", [Decimal("0.001"), Decimal("0.00"), Decimal("-0.01")])
+def test_credit_payout_postgresql_rejects_values_invalid_after_numeric_coercion(invalid_amount):
+    _require_postgresql()
+    _participant, payout = _postgresql_credit_payout(invalid_amount)
+
+    with pytest.raises(IntegrityError), transaction.atomic():
+        CreditPayout.objects.bulk_create([payout])
+
+    assert not CreditPayout.objects.filter(idempotency_key=payout.idempotency_key).exists()
+
+
+def test_credit_payout_postgresql_rejects_numeric_overflow():
+    _require_postgresql()
+    _participant, payout = _postgresql_credit_payout(Decimal("100000000.00"))
+
+    with pytest.raises(DataError), transaction.atomic():
+        CreditPayout.objects.bulk_create([payout])
+
+    assert not CreditPayout.objects.filter(idempotency_key=payout.idempotency_key).exists()
 
 
 def test_first_admin_bootstrap_allows_only_one_winner_across_postgresql_connections(monkeypatch):
