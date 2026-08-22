@@ -14,6 +14,7 @@ from billing.permissions import EDITOR_GROUP
 from billing.services import (
     calculate_camp_settlements,
     calculate_participant_settlement,
+    payment_audit_snapshot,
     restore_payment_from_audit_log,
 )
 from tests.factories import (
@@ -366,3 +367,187 @@ def test_restore_rejects_non_deletion_audit_entries():
 
     with pytest.raises(ValidationError):
         restore_payment_from_audit_log(audit_log, admin)
+
+
+@pytest.mark.django_db
+def test_deleted_payment_admin_change_is_read_only_for_ledger_fields(client):
+    admin = SuperUserFactory(username="admin")
+    payment = PaymentFactory(amount=Decimal("42.50"), paid_on="2026-07-03", method="Überweisung", note="Original")
+    payment.deleted_at = timezone.now()
+    payment.deleted_by = admin
+    payment.save(update_fields=["deleted_at", "deleted_by"])
+    client.force_login(admin)
+
+    response = client.get(reverse("admin:billing_payment_change", args=[payment.pk]))
+
+    assert response.status_code == 200
+    for field_name in ("amount", "paid_on", "method", "note"):
+        assert f'name="{field_name}"' not in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_crafted_admin_change_cannot_mutate_deleted_payment(client):
+    admin = SuperUserFactory(username="admin")
+    payment = PaymentFactory(amount=Decimal("42.50"), paid_on="2026-07-03", method="Überweisung", note="Original")
+    other_participant = ParticipantFactory(camp=payment.participant.camp)
+    original_participant = payment.participant
+    payment.deleted_at = timezone.now()
+    payment.deleted_by = admin
+    payment.save(update_fields=["deleted_at", "deleted_by"])
+    client.force_login(admin)
+
+    response = client.post(
+        reverse("admin:billing_payment_change", args=[payment.pk]),
+        {
+            "participant": other_participant.pk,
+            "amount": "99.99",
+            "paid_on": "2030-01-02",
+            "method": "Manipuliert",
+            "note": "Manipuliert",
+            "_save": "Speichern",
+        },
+    )
+
+    payment.refresh_from_db()
+    assert response.status_code == 302
+    assert payment.participant == original_participant
+    assert payment.amount == Decimal("42.50")
+    assert payment.paid_on.isoformat() == "2026-07-03"
+    assert payment.method == "Überweisung"
+    assert payment.note == "Original"
+    assert PaymentAuditLog.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_active_payment_remains_editable_in_admin(client):
+    admin = SuperUserFactory(username="admin")
+    payment = PaymentFactory(amount=Decimal("42.50"), method="Überweisung", note="Original")
+    client.force_login(admin)
+
+    response = client.post(
+        reverse("admin:billing_payment_change", args=[payment.pk]),
+        {
+            "participant": payment.participant_id,
+            "amount": "99.99",
+            "paid_on": payment.paid_on.isoformat(),
+            "method": "Bar",
+            "note": "Korrigiert",
+            "_save": "Speichern",
+        },
+    )
+
+    payment.refresh_from_db()
+    assert response.status_code == 302
+    assert payment.amount == Decimal("99.99")
+    assert payment.method == "Bar"
+    assert payment.note == "Korrigiert"
+
+
+@pytest.mark.django_db
+def test_restore_replaces_bulk_tampered_ledger_values_with_deletion_snapshot(client):
+    admin = SuperUserFactory(username="admin")
+    payment = PaymentFactory(amount=Decimal("42.50"), paid_on="2026-07-03", method="Überweisung", note="Original")
+    original_participant = payment.participant
+    other_participant = ParticipantFactory(camp=original_participant.camp)
+    client.force_login(admin)
+    client.post(reverse("payment-delete", args=[payment.pk]))
+    deletion_log = PaymentAuditLog.objects.get(action=PaymentAuditLog.Action.DELETED)
+
+    Payment.objects.filter(pk=payment.pk).update(
+        participant=other_participant,
+        amount=Decimal("99.99"),
+        paid_on="2030-01-02",
+        method="Manipuliert",
+        note="Manipuliert",
+    )
+    payment.refresh_from_db()
+    tampered_snapshot = payment_audit_snapshot(payment)
+
+    response = client.post(reverse("payment-audit-restore", args=[deletion_log.pk]))
+
+    payment.refresh_from_db()
+    restore_log = PaymentAuditLog.objects.get(action=PaymentAuditLog.Action.RESTORED)
+    assert response.status_code == 302
+    assert payment.participant == original_participant
+    assert payment.amount == Decimal("42.50")
+    assert payment.paid_on.isoformat() == "2026-07-03"
+    assert payment.method == "Überweisung"
+    assert payment.note == "Original"
+    assert restore_log.before == tampered_snapshot
+    assert restore_log.after == deletion_log.before
+    assert calculate_participant_settlement(original_participant).total_paid == Decimal("42.50")
+    assert calculate_participant_settlement(other_participant).total_paid == Decimal("0.00")
+
+
+@pytest.mark.django_db
+def test_restore_reloads_locked_rows_before_second_restore():
+    admin = SuperUserFactory(username="admin")
+    payment = PaymentFactory(amount=Decimal("42.50"))
+    payment.deleted_at = timezone.now()
+    payment.deleted_by = admin
+    payment.save(update_fields=["deleted_at", "deleted_by"])
+    deletion_log = PaymentAuditLog.objects.create(
+        participant=payment.participant,
+        payment=payment,
+        changed_by=admin,
+        action=PaymentAuditLog.Action.DELETED,
+        before=payment_audit_snapshot(payment),
+        after={},
+    )
+    stale_log = PaymentAuditLog.objects.select_related("payment").get(pk=deletion_log.pk)
+    fresh_log = PaymentAuditLog.objects.select_related("payment").get(pk=deletion_log.pk)
+
+    restore_payment_from_audit_log(fresh_log, admin)
+
+    with pytest.raises(ValidationError):
+        restore_payment_from_audit_log(stale_log, admin)
+
+    assert PaymentAuditLog.objects.filter(action=PaymentAuditLog.Action.RESTORED).count() == 1
+
+
+@pytest.mark.django_db
+def test_restore_rejects_noncanonical_amount_snapshot():
+    admin = SuperUserFactory(username="admin")
+    payment = PaymentFactory(amount=Decimal("42.50"))
+    payment.deleted_at = timezone.now()
+    payment.deleted_by = admin
+    payment.save(update_fields=["deleted_at", "deleted_by"])
+    deletion_log = PaymentAuditLog.objects.create(
+        participant=payment.participant,
+        payment=payment,
+        changed_by=admin,
+        action=PaymentAuditLog.Action.DELETED,
+        before={**payment_audit_snapshot(payment), "amount": "42.5"},
+        after={},
+    )
+
+    with pytest.raises(ValidationError, match="Audit-Snapshot"):
+        restore_payment_from_audit_log(deletion_log, admin)
+
+    assert PaymentAuditLog.objects.filter(action=PaymentAuditLog.Action.RESTORED).count() == 0
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("before", [{}, {"amount": "not-a-number"}, {"amount": "42.50", "paid_on": "bad-date"}])
+def test_restore_rejects_invalid_snapshot_without_partial_write(before):
+    admin = SuperUserFactory(username="admin")
+    payment = PaymentFactory(amount=Decimal("42.50"), method="Original", note="Original")
+    payment.deleted_at = timezone.now()
+    payment.deleted_by = admin
+    payment.save(update_fields=["deleted_at", "deleted_by"])
+    audit_log = PaymentAuditLog.objects.create(
+        participant=payment.participant,
+        payment=payment,
+        changed_by=admin,
+        action=PaymentAuditLog.Action.DELETED,
+        before=before,
+        after={},
+    )
+
+    with pytest.raises(ValidationError):
+        restore_payment_from_audit_log(audit_log, admin)
+
+    payment.refresh_from_db()
+    assert payment.deleted_at is not None
+    assert payment.amount == Decimal("42.50")
+    assert PaymentAuditLog.objects.filter(action=PaymentAuditLog.Action.RESTORED).count() == 0
