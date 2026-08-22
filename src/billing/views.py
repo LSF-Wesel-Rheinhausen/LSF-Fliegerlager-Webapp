@@ -202,12 +202,31 @@ RECEIPT_PREVIEW_EXTENSIONS = {
 
 
 def _annotate_receipt_preview(expenses):
-    """Attach trusted receipt preview metadata for rendered expense links."""
+    """Attach trusted preview metadata and fail closed for missing receipt files."""
     annotated_expenses = list(expenses)
+    receipt_locations = {}
+    for expense in annotated_expenses:
+        receipt_name = expense.receipt.name if expense.receipt else ""
+        if receipt_name:
+            receipt_location = Path(receipt_name).parent.as_posix()
+            receipt_locations.setdefault(receipt_location, set()).add(receipt_name)
+
+    available_receipts = set()
+    if receipt_locations:
+        storage = next(expense.receipt.storage for expense in annotated_expenses if expense.receipt)
+        for receipt_location in receipt_locations:
+            try:
+                _, filenames = storage.listdir(receipt_location)
+            except (NotImplementedError, OSError):
+                continue
+            prefix = "" if receipt_location == "." else f"{receipt_location}/"
+            available_receipts.update(f"{prefix}{filename}" for filename in filenames)
+
     for expense in annotated_expenses:
         receipt_name = expense.receipt.name if expense.receipt else ""
         expense.receipt_preview_kind = RECEIPT_PREVIEW_EXTENSIONS.get(Path(receipt_name).suffix.lower(), "")
         expense.receipt_preview_alt = expense.description or "Beleg"
+        expense.receipt_storage_available = receipt_name in available_receipts
     return annotated_expenses
 
 

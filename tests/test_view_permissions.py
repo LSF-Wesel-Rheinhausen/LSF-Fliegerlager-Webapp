@@ -445,6 +445,36 @@ def test_camp_detail_lists_approved_expenses_with_receipt_and_safe_placeholders(
 
 
 @pytest.mark.django_db
+def test_camp_detail_hides_link_for_missing_approved_receipt_storage(client, editor_user, permission_dataset):
+    expense = Expense.objects.create(
+        camp=permission_dataset["camp"],
+        category="Material",
+        description="Fehlender genehmigter Beleg",
+        amount=Decimal("12.00"),
+        receipt=SimpleUploadedFile("missing-approved.pdf", b"receipt", content_type="application/pdf"),
+        status=Expense.Status.APPROVED,
+        approved_at=timezone.now(),
+        approved_by=editor_user,
+    )
+    receipt_name = expense.receipt.name
+    expense.receipt.delete(save=False)
+    Expense.objects.filter(pk=expense.pk).update(receipt=receipt_name)
+    client.force_login(editor_user)
+
+    response = client.get(reverse("camp-detail", args=[expense.camp_id]))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    approved_section_start = content.index("Genehmigte Gemeinschaftsausgaben")
+    approved_section = content[
+        approved_section_start : content.index("Kostenstellenauswertung", approved_section_start)
+    ]
+    assert "Fehlender genehmigter Beleg" in approved_section
+    assert f'href="{reverse("expense-receipt", args=[expense.pk])}"' not in approved_section
+    assert "Beleg nicht verfügbar" in approved_section
+
+
+@pytest.mark.django_db
 def test_camp_detail_approved_expenses_do_not_add_per_row_queries(client, editor_user, permission_dataset):
     single_expense_camp = permission_dataset["camp"]
     many_expenses_camp = CampFactory(name="Mehrere Auslagen")

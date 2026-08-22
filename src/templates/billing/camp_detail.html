@@ -243,7 +243,7 @@
             <td data-label="Umlage">{{ expense.get_allocation_method_display }}</td>
             <td data-label="Genehmiger">{% if expense.approved_by %}{{ expense.approved_by.get_full_name|default:expense.approved_by.username }}{% else %}Kein Genehmiger angegeben{% endif %}</td>
             <td data-label="Beleg">
-              {% if expense.receipt %}
+              {% if expense.receipt and expense.receipt_storage_available %}
                 <a
                   href="{% url 'expense-receipt' expense.pk %}"
                   target="_blank"
@@ -251,6 +251,8 @@
                   class="button button-small button-secondary"
                   {% if expense.receipt_preview_kind == "pdf" %}data-pdf-preview="true"{% elif expense.receipt_preview_kind == "image" %}data-receipt-preview="image" data-receipt-alt="{{ expense.receipt_preview_alt }}" aria-haspopup="dialog"{% endif %}
                 >Beleg ansehen</a>
+              {% elif expense.receipt %}
+                Beleg nicht verfügbar
               {% else %}
                 Kein Beleg vorhanden
               {% endif %}
