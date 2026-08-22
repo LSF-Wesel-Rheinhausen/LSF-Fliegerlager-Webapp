@@ -1270,6 +1270,7 @@ def participant_detail(request, participant_id):
         Q(participant=participant) | Q(payment__participant=participant)
     ).select_related("changed_by", "payment")
     credit_payouts = participant.credit_payouts.select_related("created_by").order_by("-created_at", "-id")
+    can_view_payout_metadata = is_admin(request.user)
     available_credit = max(-settlement.balance, Decimal("0.00"))
     credit_payout_form = (
         CreditPayoutForm(initial={"idempotency_key": uuid.uuid4()})
@@ -1312,6 +1313,7 @@ def participant_detail(request, participant_id):
             "charges": charges,
             "payments": payments,
             "credit_payouts": credit_payouts,
+            "can_view_payout_metadata": can_view_payout_metadata,
             "available_credit": available_credit,
             "credit_payout_form": credit_payout_form,
             "family_members": family_members,

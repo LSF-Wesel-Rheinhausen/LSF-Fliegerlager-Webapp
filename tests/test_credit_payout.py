@@ -176,6 +176,378 @@ def test_credit_payout_rejects_invalid_amount_and_sensitive_coordinates():
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(
+    "value",
+    [
+        "DE89 3704 0044 0532 0130 00",
+        "4111-1111-1111-1111",
+        "PayPal: payer@example.test",
+        "paypal.me/payer",
+        "+49 170 1234567",
+        "0170 / 123 45 67",
+    ],
+)
+def test_credit_payout_rejects_representative_payment_coordinates_at_model_boundary(value):
+    payout = CreditPayout(
+        participant=ParticipantFactory(),
+        amount=Decimal("1.00"),
+        method=CreditPayout.Method.CASH,
+        created_by=SuperUserFactory(),
+        idempotency_key=uuid4(),
+        note=value,
+    )
+
+    with pytest.raises(ValidationError):
+        payout.full_clean()
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "DE89370400440532013000",
+        "4111 1111 1111 1111",
+        "PayPal-Konto: payer@example.test",
+        "+49 (170) 123-45-67",
+    ],
+)
+def test_credit_payout_form_rejects_representative_payment_coordinates(value):
+    form = CreditPayoutForm(
+        data={
+            "amount": "10.00",
+            "method": CreditPayout.Method.CASH,
+            "idempotency_key": str(uuid4()),
+            "external_reference": value,
+        }
+    )
+
+    assert form.is_valid() is False
+    assert "external_reference" in form.errors
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("value", ["paypal.me/payer", "+49 (170) 123-45-67"])
+def test_credit_payout_service_rejects_payment_coordinates(value):
+    participant, _camp = _participant_with_credit()
+
+    with pytest.raises(ValidationError):
+        create_credit_payout(
+            participant,
+            Decimal("10.00"),
+            CreditPayout.Method.CASH,
+            SuperUserFactory(),
+            uuid4(),
+            note=value,
+        )
+
+
+@pytest.mark.django_db
+def test_credit_payout_model_rejects_standalone_email_address():
+    payout = CreditPayout(
+        participant=ParticipantFactory(),
+        amount=Decimal("1.00"),
+        method=CreditPayout.Method.CASH,
+        created_by=SuperUserFactory(),
+        idempotency_key=uuid4(),
+        external_reference="payer@example.test",
+    )
+
+    with pytest.raises(ValidationError):
+        payout.full_clean()
+
+
+def test_credit_payout_form_rejects_standalone_email_but_keeps_non_email_reference():
+    form = CreditPayoutForm(
+        data={
+            "amount": "10.00",
+            "method": CreditPayout.Method.CASH,
+            "idempotency_key": str(uuid4()),
+            "external_reference": "payer@example.test",
+        }
+    )
+    safe_form = CreditPayoutForm(
+        data={
+            "amount": "10.00",
+            "method": CreditPayout.Method.CASH,
+            "idempotency_key": str(uuid4()),
+            "external_reference": "Ticket ABC-123",
+        }
+    )
+
+    assert form.is_valid() is False
+    assert "external_reference" in form.errors
+    assert safe_form.is_valid() is True
+
+
+@pytest.mark.django_db
+def test_credit_payout_service_rejects_standalone_email_address():
+    participant, _camp = _participant_with_credit()
+
+    with pytest.raises(ValidationError):
+        create_credit_payout(
+            participant,
+            Decimal("10.00"),
+            CreditPayout.Method.CASH,
+            SuperUserFactory(),
+            uuid4(),
+            note="payer@example.test",
+        )
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "iban",
+    ["DE89\u00a03704\u00a00044\u00a00532\u00a00130\u00a000", "DE89\u202f3704\u202f0044\u202f0532\u202f0130\u202f00"],
+)
+def test_credit_payout_model_rejects_unicode_whitespace_iban(iban):
+    payout = CreditPayout(
+        participant=ParticipantFactory(),
+        amount=Decimal("1.00"),
+        method=CreditPayout.Method.CASH,
+        created_by=SuperUserFactory(),
+        idempotency_key=uuid4(),
+        note=iban,
+    )
+
+    with pytest.raises(ValidationError):
+        payout.full_clean()
+
+
+@pytest.mark.parametrize(
+    "iban",
+    ["DE89\u00a03704\u00a00044\u00a00532\u00a00130\u00a000", "DE89\u202f3704\u202f0044\u202f0532\u202f0130\u202f00"],
+)
+def test_credit_payout_form_rejects_unicode_whitespace_iban(iban):
+    form = CreditPayoutForm(
+        data={
+            "amount": "10.00",
+            "method": CreditPayout.Method.CASH,
+            "idempotency_key": str(uuid4()),
+            "external_reference": iban,
+        }
+    )
+
+    assert form.is_valid() is False
+    assert "external_reference" in form.errors
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "iban",
+    ["DE89\u00a03704\u00a00044\u00a00532\u00a00130\u00a000", "DE89\u202f3704\u202f0044\u202f0532\u202f0130\u202f00"],
+)
+def test_credit_payout_service_rejects_unicode_whitespace_iban(iban):
+    participant, _camp = _participant_with_credit()
+
+    with pytest.raises(ValidationError):
+        create_credit_payout(
+            participant,
+            Decimal("10.00"),
+            CreditPayout.Method.CASH,
+            SuperUserFactory(),
+            uuid4(),
+            note=iban,
+        )
+
+
+def test_credit_payout_keeps_harmless_unicode_whitespace_text():
+    form = CreditPayoutForm(
+        data={
+            "amount": "10.00",
+            "method": CreditPayout.Method.CASH,
+            "idempotency_key": str(uuid4()),
+            "note": "Übergabe\u00a0vor\u202fOrt",
+        }
+    )
+
+    assert form.is_valid() is True
+
+
+@pytest.mark.django_db
+def test_credit_payout_model_accepts_context_free_business_id():
+    payout = CreditPayout(
+        participant=ParticipantFactory(),
+        amount=Decimal("1.00"),
+        method=CreditPayout.Method.CASH,
+        created_by=SuperUserFactory(),
+        idempotency_key=uuid4(),
+        external_reference="Ticket 1234567890128",
+    )
+
+    payout.full_clean()
+
+
+def test_credit_payout_form_accepts_context_free_business_id():
+    form = CreditPayoutForm(
+        data={
+            "amount": "10.00",
+            "method": CreditPayout.Method.CASH,
+            "idempotency_key": str(uuid4()),
+            "external_reference": "Ticket 1234567890128",
+        }
+    )
+
+    assert form.is_valid() is True
+
+
+@pytest.mark.django_db
+def test_credit_payout_service_accepts_context_free_business_id():
+    participant, _camp = _participant_with_credit()
+
+    payout = create_credit_payout(
+        participant,
+        Decimal("10.00"),
+        CreditPayout.Method.CASH,
+        SuperUserFactory(),
+        uuid4(),
+        external_reference="Ticket 1234567890128",
+    )
+
+    assert payout.external_reference == "Ticket 1234567890128"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("card_number", ["4111 1111 1111 1111", "5555 5555 5555 4444"])
+def test_credit_payout_model_rejects_visa_and_mastercard_test_numbers(card_number):
+    payout = CreditPayout(
+        participant=ParticipantFactory(),
+        amount=Decimal("1.00"),
+        method=CreditPayout.Method.CASH,
+        created_by=SuperUserFactory(),
+        idempotency_key=uuid4(),
+        note=card_number,
+    )
+
+    with pytest.raises(ValidationError):
+        payout.full_clean()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("card_number", ["4111 1111 1111 1111", "5555 5555 5555 4444"])
+def test_credit_payout_service_rejects_visa_and_mastercard_test_numbers(card_number):
+    participant, _camp = _participant_with_credit()
+
+    with pytest.raises(ValidationError):
+        create_credit_payout(
+            participant,
+            Decimal("10.00"),
+            CreditPayout.Method.CASH,
+            SuperUserFactory(),
+            uuid4(),
+            note=card_number,
+        )
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("text", ["Karte: 4111 1111 1111 1111", "Mastercard 5555 5555 5555 4444"])
+def test_credit_payout_model_rejects_embedded_known_card_numbers(text):
+    payout = CreditPayout(
+        participant=ParticipantFactory(),
+        amount=Decimal("1.00"),
+        method=CreditPayout.Method.CASH,
+        created_by=SuperUserFactory(),
+        idempotency_key=uuid4(),
+        note=text,
+    )
+
+    with pytest.raises(ValidationError):
+        payout.full_clean()
+
+
+@pytest.mark.parametrize("text", ["Karte: 4111 1111 1111 1111", "Mastercard 5555 5555 5555 4444"])
+def test_credit_payout_form_rejects_embedded_known_card_numbers(text):
+    form = CreditPayoutForm(
+        data={
+            "amount": "10.00",
+            "method": CreditPayout.Method.CASH,
+            "idempotency_key": str(uuid4()),
+            "note": text,
+        }
+    )
+
+    assert form.is_valid() is False
+    assert "note" in form.errors
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("text", ["Karte: 4111 1111 1111 1111", "Mastercard 5555 5555 5555 4444"])
+def test_credit_payout_service_rejects_embedded_known_card_numbers(text):
+    participant, _camp = _participant_with_credit()
+
+    with pytest.raises(ValidationError):
+        create_credit_payout(
+            participant,
+            Decimal("10.00"),
+            CreditPayout.Method.CASH,
+            SuperUserFactory(),
+            uuid4(),
+            note=text,
+        )
+
+
+@pytest.mark.parametrize("value", ["REF-2026-001", "Ticket 123456", "Barzahlung vor Ort", ""])
+def test_credit_payout_metadata_validation_keeps_harmless_values(value):
+    form = CreditPayoutForm(
+        data={
+            "amount": "10.00",
+            "method": CreditPayout.Method.CASH,
+            "idempotency_key": str(uuid4()),
+            "external_reference": value,
+            "note": value,
+        }
+    )
+
+    assert form.is_valid() is True
+
+
+@pytest.mark.django_db
+def test_editor_sees_payout_amount_and_method_but_not_historical_metadata(client):
+    participant, _camp = _participant_with_credit()
+    admin_user = SuperUserFactory()
+    editor = get_user_model().objects.create_user(username="payout-editor", password="test")
+    editor.groups.add(Group.objects.create(name="Bearbeiter"))
+    payout = CreditPayout(
+        participant=participant,
+        amount=Decimal("10.00"),
+        method=CreditPayout.Method.CASH,
+        created_by=admin_user,
+        idempotency_key=uuid4(),
+        external_reference="DE89370400440532013000",
+        note="PayPal: payer@example.test",
+    )
+    CreditPayout.objects.bulk_create([payout])
+
+    client.force_login(editor)
+    content = client.get(reverse("participant-detail", args=[participant.pk])).content.decode()
+
+    assert "10,00 EUR" in content
+    assert "Bar" in content
+    assert payout.external_reference not in content
+    assert payout.note not in content
+
+
+@pytest.mark.django_db
+def test_admin_sees_historical_payout_metadata_for_audit(client):
+    participant, _camp = _participant_with_credit()
+    admin_user = SuperUserFactory()
+    payout = CreditPayout(
+        participant=participant,
+        amount=Decimal("10.00"),
+        method=CreditPayout.Method.CASH,
+        created_by=admin_user,
+        idempotency_key=uuid4(),
+        external_reference="DE89370400440532013000",
+        note="PayPal: payer@example.test",
+    )
+    CreditPayout.objects.bulk_create([payout])
+
+    client.force_login(admin_user)
+    content = client.get(reverse("participant-detail", args=[participant.pk])).content.decode()
+
+    assert payout.external_reference in content
+    assert payout.note in content
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
     "invalid_amount",
     [
         Decimal("-0.01"),
