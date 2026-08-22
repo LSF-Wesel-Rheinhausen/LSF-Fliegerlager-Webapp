@@ -6,6 +6,7 @@ import pytest
 from django.apps import apps
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
+from django.test.utils import CaptureQueriesContext
 
 from billing.models import BookingAuditLog, Charge, ParticipantBookingLink
 from tests.factories import ChargeFactory, ParticipantFactory, UserFactory
@@ -18,6 +19,8 @@ booking_link_permissions_migration = importlib.import_module(
 
 CREDIT_PAYOUT_OLD_TARGET = [("billing", "0066_credit_payout")]
 CREDIT_PAYOUT_NEW_TARGET = [("billing", "0067_positive_credit_payout_amount")]
+POSITION_REPORT_OLD_TARGET = CREDIT_PAYOUT_NEW_TARGET
+POSITION_REPORT_NEW_TARGET = [("billing", "0068_charge_position_report_description")]
 
 
 def _create_historical_credit_payouts(historical_apps, amounts: list[Decimal]):
@@ -400,4 +403,265 @@ def test_credit_payout_amount_migration_preflight_counts_sqlite_subcent_and_over
     finally:
         if old_credit_payout is not None:
             old_credit_payout.objects.all().delete()
+        _restore_current_migration_state()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_position_report_description_migration_backfills_only_proven_kiosk_descriptions(monkeypatch) -> None:
+    try:
+        executor = MigrationExecutor(connection)
+        executor.migrate(POSITION_REPORT_OLD_TARGET)
+        old_apps = executor.loader.project_state(POSITION_REPORT_OLD_TARGET).apps
+        Camp = old_apps.get_model("billing", "Camp")
+        Participant = old_apps.get_model("billing", "Participant")
+        FamilyMember = old_apps.get_model("billing", "ParticipantFamilyMember")
+        OldCharge = old_apps.get_model("billing", "Charge")
+        MealSignup = old_apps.get_model("billing", "MealSignup")
+        AuditLog = old_apps.get_model("billing", "KioskActionAuditLog")
+        db_alias = connection.alias
+
+        camp = Camp.objects.using(db_alias).create(name="Positionsbericht Migration", year=2041)
+        actor = Participant.objects.using(db_alias).create(camp=camp, first_name="Ada", last_name="Actor")
+        partner = Participant.objects.using(db_alias).create(
+            camp=camp,
+            first_name="Peter",
+            last_name="Partner",
+        )
+        family_member = FamilyMember.objects.using(db_alias).create(
+            guardian=actor,
+            first_name="Fiona",
+            last_name="Familie",
+            role="child",
+        )
+        renamed_family_member = FamilyMember.objects.using(db_alias).create(
+            guardian=actor,
+            first_name="Neu",
+            last_name="Name",
+            role="child",
+        )
+        conflicting_family_member = FamilyMember.objects.using(db_alias).create(
+            guardian=actor,
+            first_name="Konflikt",
+            last_name="Familie",
+            role="child",
+        )
+        separator_name_member = FamilyMember.objects.using(db_alias).create(
+            guardian=actor,
+            first_name="Anna",
+            last_name="Müller",
+            role="child",
+        )
+
+        family_charge = OldCharge.objects.using(db_alias).create(
+            participant=actor,
+            family_member=family_member,
+            kiosk_booked_by=actor,
+            kind="food",
+            description="Abendessen für Fiona Familie",
+            unit_price=Decimal("8.00"),
+        )
+        MealSignup.objects.using(db_alias).create(
+            participant=actor,
+            family_member=family_member,
+            meal_date="2041-07-01",
+            meal="dinner",
+            variant="normal_child",
+            charge=family_charge,
+        )
+        assert AuditLog.objects.using(db_alias).filter(charge=family_charge).exists() is False
+        missing_signup_charge = OldCharge.objects.using(db_alias).create(
+            participant=actor,
+            family_member=family_member,
+            kiosk_booked_by=actor,
+            kind="food",
+            description="Frühstück für Fiona Familie",
+            unit_price=Decimal("6.00"),
+        )
+        renamed_target_charge = OldCharge.objects.using(db_alias).create(
+            participant=actor,
+            family_member=renamed_family_member,
+            kiosk_booked_by=actor,
+            kind="food",
+            description="Abendessen für Alt Name",
+            unit_price=Decimal("8.00"),
+        )
+        MealSignup.objects.using(db_alias).create(
+            participant=actor,
+            family_member=renamed_family_member,
+            meal_date="2041-07-02",
+            meal="dinner",
+            variant="normal_child",
+            charge=renamed_target_charge,
+        )
+        conflicting_signup_charge = OldCharge.objects.using(db_alias).create(
+            participant=actor,
+            family_member=family_member,
+            kiosk_booked_by=actor,
+            kind="food",
+            description="Abendessen für Fiona Familie",
+            unit_price=Decimal("8.00"),
+        )
+        MealSignup.objects.using(db_alias).create(
+            participant=actor,
+            family_member=conflicting_family_member,
+            meal_date="2041-07-03",
+            meal="dinner",
+            variant="normal_child",
+            charge=conflicting_signup_charge,
+        )
+        ambiguous_signup_charge = OldCharge.objects.using(db_alias).create(
+            participant=actor,
+            family_member=family_member,
+            kiosk_booked_by=actor,
+            kind="food",
+            description="Abendessen für Fiona Familie",
+            unit_price=Decimal("8.00"),
+        )
+        for meal_date in ("2041-07-04", "2041-07-05"):
+            MealSignup.objects.using(db_alias).create(
+                participant=actor,
+                family_member=family_member,
+                meal_date=meal_date,
+                meal="dinner",
+                variant="normal_child",
+                charge=ambiguous_signup_charge,
+            )
+        separator_name_charge = OldCharge.objects.using(db_alias).create(
+            participant=actor,
+            family_member=separator_name_member,
+            kiosk_booked_by=actor,
+            kind="drink",
+            description="Wasser (Kiosk) für Hans für Anna Müller",
+            unit_price=Decimal("2.50"),
+        )
+        AuditLog.objects.using(db_alias).create(
+            camp=camp,
+            actor_participant=actor,
+            target_participant=actor,
+            target_family_member=separator_name_member,
+            target_display_name_snapshot="Hans für Anna Müller",
+            charge=separator_name_charge,
+            action="quick_booked",
+            description="Schnellbuchung erstellt.",
+        )
+        partner_quick_charge = OldCharge.objects.using(db_alias).create(
+            participant=partner,
+            kiosk_booked_by=actor,
+            kind="drink",
+            description="Wasser (Kiosk) für Peter Partner",
+            unit_price=Decimal("2.50"),
+        )
+        AuditLog.objects.using(db_alias).create(
+            camp=camp,
+            actor_participant=actor,
+            target_participant=partner,
+            target_display_name_snapshot="Peter Partner",
+            charge=partner_quick_charge,
+            action="quick_booked",
+            description="Schnellbuchung erstellt.",
+        )
+        partner_meal_charge = OldCharge.objects.using(db_alias).create(
+            participant=partner,
+            kiosk_booked_by=actor,
+            kind="food",
+            description="Menü für Helfer Abendessen",
+            unit_price=Decimal("8.00"),
+        )
+        AuditLog.objects.using(db_alias).create(
+            camp=camp,
+            actor_participant=actor,
+            target_participant=partner,
+            target_display_name_snapshot="Peter Partner",
+            charge=partner_meal_charge,
+            action="meal_booked",
+            description="Essensanmeldung gespeichert.",
+        )
+        manual_charge = OldCharge.objects.using(db_alias).create(
+            participant=actor,
+            family_member=family_member,
+            kind="donation",
+            description="Spende für Neu Familie",
+            unit_price=Decimal("25.00"),
+        )
+        unproven_kiosk_charge = OldCharge.objects.using(db_alias).create(
+            participant=partner,
+            kiosk_booked_by=actor,
+            kind="drink",
+            description="Unbelegt für Peter Partner",
+            unit_price=Decimal("2.50"),
+        )
+        ambiguous_charge = OldCharge.objects.using(db_alias).create(
+            participant=partner,
+            kiosk_booked_by=actor,
+            kind="drink",
+            description="Artikel für Alt für Name",
+            unit_price=Decimal("2.50"),
+        )
+        for snapshot in ("Alt für Name", "Name"):
+            AuditLog.objects.using(db_alias).create(
+                camp=camp,
+                actor_participant=actor,
+                target_participant=partner,
+                target_display_name_snapshot=snapshot,
+                charge=ambiguous_charge,
+                action="quick_booked",
+                description="Schnellbuchung erstellt.",
+            )
+
+        position_report_migration = importlib.import_module(
+            "billing.migrations.0068_charge_position_report_description"
+        )
+        monkeypatch.setattr(position_report_migration, "BATCH_SIZE", 3, raising=False)
+        executor = MigrationExecutor(connection)
+        with CaptureQueriesContext(connection) as migration_queries:
+            executor.migrate(POSITION_REPORT_NEW_TARGET)
+        new_apps = executor.loader.project_state(POSITION_REPORT_NEW_TARGET).apps
+        NewCharge = new_apps.get_model("billing", "Charge")
+        expected = {
+            family_charge.pk: "Abendessen",
+            missing_signup_charge.pk: None,
+            renamed_target_charge.pk: None,
+            conflicting_signup_charge.pk: None,
+            ambiguous_signup_charge.pk: None,
+            separator_name_charge.pk: "Wasser (Kiosk)",
+            partner_quick_charge.pk: "Wasser (Kiosk)",
+            partner_meal_charge.pk: "Menü für Helfer Abendessen",
+            manual_charge.pk: None,
+            unproven_kiosk_charge.pk: None,
+            ambiguous_charge.pk: None,
+        }
+        assert (
+            dict(
+                NewCharge.objects.using(db_alias)
+                .filter(pk__in=expected)
+                .values_list("pk", "position_report_description")
+            )
+            == expected
+        )
+        audit_table = AuditLog._meta.db_table
+        meal_signup_table = MealSignup._meta.db_table
+        audit_queries = [
+            query["sql"] for query in migration_queries.captured_queries if f'FROM "{audit_table}"' in query["sql"]
+        ]
+        meal_signup_queries = [
+            query["sql"]
+            for query in migration_queries.captured_queries
+            if f'FROM "{meal_signup_table}"' in query["sql"]
+        ]
+        assert len(audit_queries) == 4
+        assert len(meal_signup_queries) == 4
+        assert all(" IN (" in query for query in audit_queries)
+        assert all(" IN (" in query for query in meal_signup_queries)
+
+        with connection.schema_editor() as schema_editor:
+            position_report_migration.backfill_position_report_descriptions(new_apps, schema_editor)
+        assert (
+            dict(
+                NewCharge.objects.using(db_alias)
+                .filter(pk__in=expected)
+                .values_list("pk", "position_report_description")
+            )
+            == expected
+        )
+    finally:
         _restore_current_migration_state()

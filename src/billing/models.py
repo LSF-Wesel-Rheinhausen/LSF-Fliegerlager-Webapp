@@ -996,6 +996,13 @@ class Charge(TimeStampedModel):
     )
     kind = models.CharField(max_length=20, choices=Kind.choices)
     description = models.CharField(max_length=180)
+    position_report_description = models.CharField(
+        max_length=180,
+        null=True,
+        blank=True,
+        editable=False,
+        help_text="Kanonische Artikelbezeichnung für den Positionsbericht bei maschinell erzeugten Buchungen.",
+    )
     quantity = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("1.00"))
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
     foerdersatz = models.DecimalField(
