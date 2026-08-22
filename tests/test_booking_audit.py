@@ -2,6 +2,7 @@ import re
 from decimal import Decimal
 
 import pytest
+from django.contrib.admin.models import LogEntry
 from django.contrib.admin.sites import AdminSite
 from django.contrib.messages import get_messages
 from django.core.exceptions import ValidationError
@@ -11,7 +12,7 @@ from django.utils import timezone
 from billing.admin import ChargeAdmin
 from billing.models import BookingAuditLog, Charge, Participant, PriceRule
 from billing.permissions import EDITOR_GROUP
-from billing.services import calculate_participant_settlement, create_manual_charge
+from billing.services import calculate_participant_settlement, calculate_position_report, create_manual_charge
 from tests.factories import (
     CampFactory,
     ChargeFactory,
@@ -46,6 +47,71 @@ def test_charge_admin_displays_booking_reference():
 
     assert "booking_reference" in admin.list_display
     assert "id" in admin.search_fields
+
+
+def _charge_admin_change_payload(charge: Charge, **overrides):
+    payload = {
+        "participant": str(charge.participant_id),
+        "family_member": str(charge.family_member_id or ""),
+        "kind": charge.kind,
+        "description": charge.description,
+        "quantity": str(charge.quantity),
+        "unit_price": str(charge.unit_price),
+        "foerdersatz": str(charge.foerdersatz),
+        "occurred_on": charge.occurred_on.isoformat() if charge.occurred_on else "",
+        "kiosk_booked_by": str(charge.kiosk_booked_by_id or ""),
+        "_save": "Speichern",
+    }
+    payload.update(overrides)
+    return payload
+
+
+@pytest.mark.django_db
+def test_django_admin_description_edit_clears_position_report_description(client):
+    admin = SuperUserFactory(username="admin")
+    charge = ChargeFactory(
+        description="Wasser (Kiosk) für Historisches Ziel",
+        position_report_description="Wasser (Kiosk)",
+    )
+    client.force_login(admin)
+
+    response = client.post(
+        reverse("admin:billing_charge_change", args=[charge.pk]),
+        _charge_admin_change_payload(charge, description="Manuell korrigierter Ledgertext"),
+    )
+
+    charge.refresh_from_db()
+    assert response.status_code == 302
+    assert charge.description == "Manuell korrigierter Ledgertext"
+    assert charge.position_report_description is None
+    report = calculate_position_report(charge.participant.camp)
+    assert [article.description for article in report.articles] == ["Manuell korrigierter Ledgertext"]
+    assert LogEntry.objects.filter(object_id=str(charge.pk), user=admin).exists()
+
+
+@pytest.mark.django_db
+def test_django_admin_non_description_edit_preserves_position_report_description(client):
+    admin = SuperUserFactory(username="admin")
+    charge = ChargeFactory(
+        description="Wasser (Kiosk) für Historisches Ziel",
+        position_report_description="Wasser (Kiosk)",
+        quantity=Decimal("1.00"),
+    )
+    client.force_login(admin)
+
+    response = client.post(
+        reverse("admin:billing_charge_change", args=[charge.pk]),
+        _charge_admin_change_payload(charge, quantity="3.00"),
+    )
+
+    charge.refresh_from_db()
+    assert response.status_code == 302
+    assert charge.description == "Wasser (Kiosk) für Historisches Ziel"
+    assert charge.quantity == Decimal("3.00")
+    assert charge.position_report_description == "Wasser (Kiosk)"
+    report = calculate_position_report(charge.participant.camp)
+    assert [article.description for article in report.articles] == ["Wasser (Kiosk)"]
+    assert LogEntry.objects.filter(object_id=str(charge.pk), user=admin).exists()
 
 
 @pytest.mark.django_db
@@ -291,6 +357,7 @@ def test_admin_can_edit_booking_and_creates_audit_log(client):
     charge = ChargeFactory(
         kind=Charge.Kind.DRINK,
         description="Cola",
+        position_report_description="Cola (Kiosk)",
         quantity=Decimal("2.00"),
         unit_price=Decimal("2.50"),
         foerdersatz=Decimal("0.5000"),
@@ -314,6 +381,7 @@ def test_admin_can_edit_booking_and_creates_audit_log(client):
     assert response.status_code == 302
     assert response["Location"] == reverse("participant-detail", args=[charge.participant.pk])
     assert charge.description == "Cola korrigiert"
+    assert charge.position_report_description is None
     assert charge.quantity == Decimal("3.00")
     assert charge.occurred_on.isoformat() == "2026-07-01"
     assert audit_log.changed_by == admin
@@ -335,6 +403,8 @@ def test_admin_can_edit_booking_and_creates_audit_log(client):
         "foerdersatz": "0.5000",
         "occurred_on": "2026-07-01",
     }
+    report = calculate_position_report(charge.participant.camp)
+    assert [article.description for article in report.articles] == ["Cola korrigiert"]
 
 
 @pytest.mark.django_db

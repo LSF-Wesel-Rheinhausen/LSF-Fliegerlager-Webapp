@@ -1447,7 +1447,10 @@ def charge_edit(request, charge_id):
     form = ChargeForm(request.POST or None, instance=charge, guardian=charge.participant)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
-            updated_charge = form.save()
+            updated_charge = form.save(commit=False)
+            if "description" in form.changed_data:
+                updated_charge.position_report_description = None
+            updated_charge.save()
             audit_log = create_booking_audit_log(updated_charge, before, request.user)
         if audit_log is None:
             messages.success(request, "Buchung wurde gespeichert.")
@@ -3596,7 +3599,8 @@ def _book_meal_for_target(
         "foerdersatz": price_rule.foerdersatz,
         "retracted_at": None,
     }
-    charge_description = f"{price_rule.name} {meal_display}"
+    position_report_description = f"{price_rule.name} {meal_display}"
+    charge_description = position_report_description
     if family_member is not None:
         charge_description = f"{charge_description} für {family_member.full_name}"
     if existing_signup is None:
@@ -3628,6 +3632,7 @@ def _book_meal_for_target(
     charge.kind = Charge.Kind.FOOD
     charge.occurred_on = meal_date
     charge.description = charge_description
+    charge.position_report_description = position_report_description
     charge.quantity = 1
     charge.unit_price = price_rule.unit_price
     charge.foerdersatz = price_rule.foerdersatz
@@ -4433,9 +4438,10 @@ def kiosk_home(request, kiosk_mode="private"):
                                     booking_link = locked_booking_links.get(charge_participant.pk)
                                     if booking_link is None:
                                         raise PermissionDenied("Die Partner-Vollmacht ist nicht mehr aktiv.")
-                                charge_desc = f"{effective_rule.name} (Kiosk)"
+                                position_report_description = f"{effective_rule.name} (Kiosk)"
+                                charge_desc = position_report_description
                                 if target != locked_actor:
-                                    charge_desc = f"{effective_rule.name} (Kiosk) für {target.full_name}"
+                                    charge_desc = f"{position_report_description} für {target.full_name}"
 
                                 charge = Charge(
                                     participant=charge_participant,
@@ -4445,6 +4451,7 @@ def kiosk_home(request, kiosk_mode="private"):
                                         else Charge.Kind.FOOD
                                     ),
                                     description=charge_desc,
+                                    position_report_description=position_report_description,
                                     quantity=quick_form.cleaned_data["quantity"],
                                     unit_price=effective_rule.unit_price,
                                     foerdersatz=effective_rule.foerdersatz,

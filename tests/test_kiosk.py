@@ -2092,6 +2092,7 @@ def test_kiosk_books_drink_with_camp_drink_price_and_subsidy_flag(kiosk_client):
     assert response.status_code == 302
     entry = Charge.objects.get(participant=participant, kind=Charge.Kind.DRINK)
     assert entry.description == "Getränk (Kiosk)"
+    assert entry.position_report_description == "Getränk (Kiosk)"
     assert entry.quantity == Decimal("2.00")
     assert entry.unit_price == Decimal("2.50")
     assert entry.foerdersatz == Decimal("1.0000")
