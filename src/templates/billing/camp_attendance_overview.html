@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="panel" aria-labelledby="attendance-title">
+    <h1 id="attendance-title">Anwesenheit: {{ camp.name }}</h1>
+    <p>Diese Übersicht ist nur für Administratoren sichtbar.</p>
+
+    {% if not camp.starts_on or not camp.ends_on or camp.starts_on >= camp.ends_on %}
+      <section class="notice notice-warning" role="status" aria-labelledby="attendance-data-warning-title">
+        <h2 id="attendance-data-warning-title">Lagerzeitraum fehlt oder ist ungültig</h2>
+        <p>Für die Anwesenheitsübersicht müssen ein gültiger Beginn und ein gültiges Ende des Lagers hinterlegt sein.</p>
+      </section>
+    {% else %}
+      <h2 id="attendance-totals-title">Tägliche Summen</h2>
+      <table aria-labelledby="attendance-totals-title">
+        <caption>Anwesenheit pro Übernachtung</caption>
+        <thead><tr><th scope="col">Datum</th><th scope="col">Anwesend</th><th scope="col">Abwesend</th></tr></thead>
+        <tbody>
+          {% for total in attendance_totals %}
+            <tr><th scope="row">{{ total.date|date:"d.m.Y" }}</th><td>{{ total.present }}</td><td>{{ total.absent }}</td></tr>
+          {% empty %}
+            <tr><td colspan="3">Keine Anwesenheitsdaten verfügbar.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <h2 id="attendance-matrix-title">Kalender</h2>
+      <p id="attendance-matrix-help" class="helptext">Auf kleinen Bildschirmen kannst du die Matrix horizontal scrollen. Jede Zelle enthält zusätzlich den Status als Text.</p>
+      <div class="kiosk-table__wrapper attendance-matrix-scroll" tabindex="0" role="region" aria-label="Anwesenheitsmatrix" aria-describedby="attendance-matrix-help">
+        <table>
+          <caption>Anwesenheit je Person und Übernachtung</caption>
+          <thead>
+            <tr>
+              <th id="attendance-person-heading" scope="col">Person</th>
+              {% for day in attendance_people.0.calendar %}<th id="attendance-day-{{ day.date|date:'Ymd' }}" scope="col">{{ day.date|date:"d.m.Y" }}</th>{% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for person in attendance_people %}
+              <tr>
+                <th id="attendance-person-{{ forloop.counter }}" scope="row">{{ person.name }}</th>
+                {% for day in person.calendar %}
+                  <td headers="attendance-person-{{ forloop.parentloop.counter }} attendance-day-{{ day.date|date:'Ymd' }}" data-status="{{ day.status }}">
+                    {% if day.disabled %}<span>Außerhalb des Aufenthalts</span>{% elif day.is_present %}<span>✓ <span class="attendance-status-text">Anwesend</span></span>{% else %}<span>✕ <span class="attendance-status-text">Abwesend</span></span>{% endif %}
+                  </td>
+                {% endfor %}
+              </tr>
+            {% empty %}
+              <tr><td colspan="2">Keine Personen verfügbar.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <h3 id="attendance-legend-title">Legende</h3>
+      <dl class="attendance-legend" aria-labelledby="attendance-legend-title">
+        <div><dt>Anwesend</dt><dd>Person übernachtet an diesem Datum.</dd></div>
+        <div><dt>Abwesend</dt><dd>Person übernachtet, ist aber als abwesend markiert.</dd></div>
+        <div><dt>Außerhalb des Aufenthalts</dt><dd>Datum liegt außerhalb von Anreise und Abreise.</dd></div>
+      </dl>
+
+      <h2>Kommentare</h2>
+      <ul>
+        {% for entry in daily_comments %}<li><time datetime="{{ entry.date|date:"Y-m-d" }}">{{ entry.date|date:"d.m.Y" }}</time> · {{ entry.person }}: {{ entry.comment }}</li>{% empty %}<li>Keine Kommentare verfügbar.</li>{% endfor %}
+      </ul>
+    {% endif %}
+  </section>
+{% endblock %}

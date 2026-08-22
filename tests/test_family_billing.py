@@ -7,13 +7,15 @@ from io import BytesIO, StringIO
 import pytest
 from django.apps import apps
 from django.core.exceptions import ValidationError
+from django.db import connection
 from django.test import Client
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from openpyxl import load_workbook
 
 from billing.forms import ParticipantFamilyMemberForm
-from billing.models import Charge, KioskActionAuditLog, MealSignup, PriceRule
+from billing.models import AttendanceDay, Charge, KioskActionAuditLog, MealSignup, PriceRule
 from billing.permissions import EDITOR_GROUP
 from billing.services import (
     calculate_camp_settlements,
@@ -476,12 +478,99 @@ def test_family_charges_and_meal_signups_are_query_bounded_and_visible_in_guardi
             charge=charge,
         )
 
-    with django_assert_num_queries(8):
+    with django_assert_num_queries(9):
         results = calculate_participant_settlements(guardians)
 
     assert {line.target_name for result in results.values() for line in result.lines} == {
         member.full_name for member in members
     }
+
+
+@pytest.mark.django_db
+def test_tracked_attendance_keeps_batch_settlements_query_bounded(django_assert_num_queries):
+    """Attendance rows are loaded once per target type, not once per person or price rule."""
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 14))
+    PriceRuleFactory(camp=camp, kind=PriceRule.Kind.NIGHT, is_default=True)
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.CAMP_FLAT,
+        camp_flat_role=PriceRule.CampFlatRole.PARTICIPANT,
+        camp_flat_duration=PriceRule.CampFlatDuration.ONE_WEEK,
+        is_default=True,
+    )
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.CAMP_FLAT,
+        camp_flat_role=PriceRule.CampFlatRole.COMPANION,
+        camp_flat_duration=PriceRule.CampFlatDuration.ONE_WEEK,
+        applies_to_adults=False,
+        is_default=True,
+    )
+    guardians = []
+    for _index in range(3):
+        guardian = ParticipantFactory(
+            camp=camp,
+            arrival_date=date(2026, 7, 1),
+            departure_date=date(2026, 7, 3),
+            attendance_tracking_enabled=True,
+        )
+        companion = ParticipantFamilyMemberFactory(
+            guardian=guardian,
+            role=ParticipantFamilyMemberFactory._meta.model.Role.COMPANION,
+            arrival_date=date(2026, 7, 1),
+            departure_date=date(2026, 7, 3),
+            attendance_tracking_enabled=True,
+        )
+        AttendanceDay.objects.create(participant=guardian, date=date(2026, 7, 2), is_present=True)
+        AttendanceDay.objects.create(
+            participant=guardian,
+            family_member=companion,
+            date=date(2026, 7, 2),
+            is_present=True,
+        )
+        guardians.append(guardian)
+
+    with django_assert_num_queries(11):
+        results = calculate_participant_settlements(guardians)
+
+    assert {result.participant.pk for result in results.values()} == {guardian.pk for guardian in guardians}
+    assert {
+        line.quantity for result in results.values() for line in result.lines if line.source.startswith("price_rule:")
+    } == {Decimal("1")}
+
+
+@pytest.mark.django_db
+def test_tracked_family_attendance_is_prefetched_for_single_settlement():
+    camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 14))
+    PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.CAMP_FLAT,
+        camp_flat_role=PriceRule.CampFlatRole.COMPANION,
+        camp_flat_duration=PriceRule.CampFlatDuration.ONE_WEEK,
+        is_default=True,
+    )
+    guardian = ParticipantFactory(camp=camp)
+    for index in range(3):
+        companion = ParticipantFamilyMemberFactory(
+            guardian=guardian,
+            role="companion",
+            arrival_date=date(2026, 7, 1),
+            departure_date=date(2026, 7, 6),
+            attendance_tracking_enabled=True,
+        )
+        AttendanceDay.objects.create(
+            participant=guardian,
+            family_member=companion,
+            date=date(2026, 7, index + 1),
+            is_present=True,
+        )
+
+    with CaptureQueriesContext(connection) as queries:
+        settlement = calculate_participant_settlement(guardian)
+
+    attendance_queries = [query for query in queries if "billing_attendanceday" in query["sql"]]
+    assert len(attendance_queries) == 1
+    assert len([line for line in settlement.lines if line.source.startswith("price_rule:family:")]) == 3
 
 
 @pytest.mark.django_db

@@ -3,10 +3,12 @@ from decimal import Decimal
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.http import HttpResponse
 from django.urls import reverse
 from django.utils import timezone
 
-from billing.models import BookingAuditLog, Camp, Charge, Expense, Participant, Payment, PriceRule
+from billing.kiosk_access import KIOSK_ACCESS_COOKIE_NAME, KIOSK_PARTICIPANT_SESSION_KEY, set_kiosk_access_cookie
+from billing.models import BookingAuditLog, Camp, CampKioskAccess, Charge, Expense, Participant, Payment, PriceRule
 from billing.permissions import EDITOR_GROUP, HUEBERS_GROUP
 from tests.factories import (
     CampFactory,
@@ -123,14 +125,32 @@ def test_admin_only_get_views_allow_admin(client, admin_user, permission_dataset
 
 
 @pytest.mark.django_db
-def test_expense_receipt_download_allows_editor(client, editor_user, permission_dataset):
+@pytest.mark.parametrize(
+    ("filename", "content_type", "expected_disposition"),
+    [
+        ("rechnung.pdf", "application/pdf", "inline"),
+        ("rechnung.png", "image/png", "inline"),
+        ("rechnung.jpg", "image/jpeg", "inline"),
+        ("rechnung.heic", "image/heic", "inline"),
+        ("rechnung.legacy", "application/octet-stream", "attachment"),
+    ],
+)
+def test_expense_receipt_download_sets_safe_preview_headers(
+    client,
+    editor_user,
+    permission_dataset,
+    filename,
+    content_type,
+    expected_disposition,
+):
+    receipt_content = b"editor receipt"
     expense = Expense.objects.create(
         camp=permission_dataset["camp"],
         participant=permission_dataset["participant"],
         category="Einkauf",
         description="Belegtest",
         amount=Decimal("7.50"),
-        receipt=SimpleUploadedFile("rechnung.pdf", b"editor receipt", content_type="application/pdf"),
+        receipt=SimpleUploadedFile(filename, receipt_content, content_type=content_type),
     )
     client.force_login(editor_user)
 
@@ -138,8 +158,12 @@ def test_expense_receipt_download_allows_editor(client, editor_user, permission_
         response = client.get(reverse("expense-receipt", args=[expense.pk]))
 
         assert response.status_code == 200
-        assert response["Content-Disposition"].startswith('attachment; filename="rechnung')
-        assert b"".join(response.streaming_content) == b"editor receipt"
+        assert response["Content-Disposition"].startswith(f'{expected_disposition}; filename="rechnung')
+        assert response["Content-Type"] == content_type
+        if content_type == "application/pdf":
+            assert response["X-Frame-Options"] == "SAMEORIGIN"
+            assert response["Content-Security-Policy"] == "default-src 'none'; frame-ancestors 'self'"
+        assert b"".join(response.streaming_content) == receipt_content
     finally:
         expense.receipt.delete(save=False)
 
@@ -159,6 +183,90 @@ def test_expense_receipt_download_rejects_anonymous_without_kiosk_session(client
         response = client.get(reverse("expense-receipt", args=[expense.pk]))
 
         assert response.status_code == 403
+    finally:
+        expense.receipt.delete(save=False)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("caller", ["anonymous", "non_editor", "unauthorized_kiosk"])
+def test_unauthorized_receipt_requests_do_not_reveal_receipt_existence(client, caller):
+    camp = CampFactory(is_active=True, name=f"Oracle-Testlager-{caller}")
+    owner = ParticipantFactory(camp=camp, first_name="Owner")
+    stranger = ParticipantFactory(camp=camp, first_name="Stranger")
+    with_receipt = Expense.objects.create(
+        camp=camp,
+        participant=owner,
+        category="Einkauf",
+        description="Mit Beleg",
+        amount=Decimal("7.50"),
+        receipt=SimpleUploadedFile("oracle.pdf", b"private receipt", content_type="application/pdf"),
+    )
+    without_receipt = Expense.objects.create(
+        camp=camp,
+        participant=owner,
+        category="Einkauf",
+        description="Ohne Beleg",
+        amount=Decimal("7.50"),
+    )
+    if caller == "non_editor":
+        client.force_login(UserFactory(username="non-editor"))
+    elif caller == "unauthorized_kiosk":
+        access = CampKioskAccess.objects.create(camp=camp)
+        access.set_pin("246810")
+        access.save()
+        cookie_response = HttpResponse()
+        set_kiosk_access_cookie(cookie_response, access)
+        client.cookies[KIOSK_ACCESS_COOKIE_NAME] = cookie_response.cookies[KIOSK_ACCESS_COOKIE_NAME].value
+        session = client.session
+        session[KIOSK_PARTICIPANT_SESSION_KEY] = stranger.pk
+        session.save()
+
+    try:
+        responses = [
+            client.get(reverse("expense-receipt", args=[expense.pk])) for expense in (with_receipt, without_receipt)
+        ]
+
+        expected_status = 404 if caller == "unauthorized_kiosk" else 403
+        assert responses[0].status_code == expected_status
+        assert responses[1].status_code == expected_status
+        assert responses[0].content == responses[1].content
+        for response in responses:
+            assert response["X-Frame-Options"] == "DENY"
+            assert "frame-ancestors 'none'" in response["Content-Security-Policy"]
+    finally:
+        with_receipt.receipt.delete(save=False)
+
+
+@pytest.mark.django_db
+def test_unauthorized_kiosk_receipt_requests_do_not_reveal_expense_row_existence(client):
+    camp = CampFactory(is_active=True, name="Expense-ID-Oracle-Testlager")
+    owner = ParticipantFactory(camp=camp, first_name="Owner")
+    stranger = ParticipantFactory(camp=camp, first_name="Stranger")
+    expense = Expense.objects.create(
+        camp=camp,
+        participant=owner,
+        category="Einkauf",
+        description="Privater Beleg",
+        amount=Decimal("7.50"),
+        receipt=SimpleUploadedFile("existing.pdf", b"private receipt", content_type="application/pdf"),
+    )
+    access = CampKioskAccess.objects.create(camp=camp)
+    access.set_pin("246810")
+    access.save()
+    cookie_response = HttpResponse()
+    set_kiosk_access_cookie(cookie_response, access)
+    client.cookies[KIOSK_ACCESS_COOKIE_NAME] = cookie_response.cookies[KIOSK_ACCESS_COOKIE_NAME].value
+    session = client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = stranger.pk
+    session.save()
+
+    try:
+        existing_response = client.get(reverse("expense-receipt", args=[expense.pk]))
+        unknown_response = client.get(reverse("expense-receipt", args=[expense.pk + 1]))
+
+        assert existing_response.status_code == 404
+        assert unknown_response.status_code == 404
+        assert existing_response.content == unknown_response.content
     finally:
         expense.receipt.delete(save=False)
 
@@ -416,6 +524,35 @@ def test_editor_post_views_allow_editor_and_admin(
 
     assert response.status_code == 302
     assert count_model.objects.count() == before_count + 1
+
+
+@pytest.mark.django_db
+def test_expense_create_storage_failure_is_a_form_error(client, editor_user, permission_dataset, monkeypatch):
+    client.force_login(editor_user)
+
+    def fail_storage_save(*args, **kwargs):
+        raise OSError("media storage unavailable")
+
+    monkeypatch.setattr("django.core.files.storage.FileSystemStorage.save", fail_storage_save)
+    response = client.post(
+        reverse("expense-create", args=[permission_dataset["camp"].pk]),
+        {
+            "participant": permission_dataset["participant"].pk,
+            "category": "Verbrauchsmaterial",
+            "description": "Nicht gespeicherter Beleg",
+            "amount": "12.50",
+            "receipt": SimpleUploadedFile(
+                "rechnung.pdf",
+                b"%PDF-1.7\ntest receipt",
+                content_type="application/pdf",
+            ),
+            "reimbursable": "on",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Rechnungsbeleg konnte nicht gespeichert werden" in response.content.decode()
+    assert not Expense.objects.filter(description="Nicht gespeicherter Beleg").exists()
 
 
 @pytest.mark.django_db

@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.contrib.admin.widgets import AdminDateWidget, AdminSplitDateTime
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import models, transaction
 from django.utils import timezone
 
@@ -10,6 +11,7 @@ from .models import (
     BookingAuditLog,
     Camp,
     Charge,
+    CreditPayout,
     DailySettlementBackupLog,
     DailySettlementBackupSettings,
     DailyShiftException,
@@ -17,6 +19,7 @@ from .models import (
     DrinkEntry,
     Expense,
     KioskActionAuditLog,
+    MealBookingOverride,
     MealOrder,
     MealPlanEntry,
     MealSignup,
@@ -24,6 +27,7 @@ from .models import (
     ParticipantBookingLink,
     ParticipantFamilyMember,
     Payment,
+    PaymentAuditLog,
     PriceRule,
     Settlement,
     SettlementRun,
@@ -31,10 +35,15 @@ from .models import (
     ShiftAssignment,
     UserProfile,
 )
+from .permissions import is_admin
 from .services import (
     charge_audit_snapshot,
     create_booking_delete_audit_log,
+    create_payment_delete_audit_log,
+    generate_shifts_from_templates,
+    payment_audit_snapshot,
     restore_booking_from_audit_log,
+    restore_payment_from_audit_log,
 )
 
 admin.site.unregister(User)
@@ -123,7 +132,19 @@ class CampAdmin(admin.ModelAdmin):
 
 @admin.register(Participant)
 class ParticipantAdmin(admin.ModelAdmin):
-    list_display = ("last_name", "first_name", "camp", "status", "hilfssatz", "berufssatz", "actual_nights", "is_child")
+    list_display = (
+        "last_name",
+        "first_name",
+        "camp",
+        "status",
+        "email",
+        "phone",
+        "birth_date",
+        "hilfssatz",
+        "berufssatz",
+        "actual_nights",
+        "is_child",
+    )
     list_filter = ("camp", "status", "is_child", "is_youth_group", "is_companion")
     search_fields = ("first_name", "last_name", "email")
     formfield_overrides = {
@@ -141,7 +162,7 @@ admin.site.register(UserProfile)
 @admin.register(ParticipantFamilyMember)
 class ParticipantFamilyMemberAdmin(admin.ModelAdmin):
     settlement_fields = ("role", "is_youth_group", "arrival_date", "departure_date", "is_active")
-    list_display = ("last_name", "first_name", "guardian", "role", "is_active")
+    list_display = ("last_name", "first_name", "guardian", "role", "email", "phone", "birth_date", "is_active")
     list_filter = ("role", "is_active", "guardian__camp")
     search_fields = ("first_name", "last_name", "guardian__first_name", "guardian__last_name")
 
@@ -300,7 +321,129 @@ class BookingAuditLogAdmin(admin.ModelAdmin):
         self.message_user(request, f"{restored_count} Buchung(en) wurden aus dem Audit-Protokoll wiederhergestellt.")
 
 
-admin.site.register(Payment)
+@admin.register(Payment)
+class PaymentAdmin(admin.ModelAdmin):
+    list_display = ("payment_reference", "participant", "amount", "paid_on", "method", "deleted_at")
+    list_filter = ("deleted_at", "method")
+    search_fields = ("id", "note", "participant__first_name", "participant__last_name")
+    readonly_fields = ("deleted_at", "deleted_by")
+    actions = ["soft_delete_selected_payments", "restore_selected_payments"]
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("participant")
+
+    def has_delete_permission(self, request, obj=None):
+        """Disable hard deletes so payments remain auditable via soft-delete."""
+        return False
+
+    @admin.display(description="Zahlungsnr.", ordering="id")
+    def payment_reference(self, payment: Payment) -> str:
+        """Return the formatted payment reference for the admin changelist."""
+        return payment.payment_reference
+
+    @admin.action(description="Ausgewählte Zahlungen als gelöscht markieren (Soft-Delete)")
+    def soft_delete_selected_payments(self, request, queryset):
+        if not is_admin(request.user):
+            raise PermissionDenied
+        active_payments = list(queryset.filter(deleted_at__isnull=True))
+        if not active_payments:
+            self.message_user(request, "Keine aktiven Zahlungen zum Löschen ausgewählt.", level="warning")
+            return
+        now = timezone.now()
+        with transaction.atomic():
+            for payment in active_payments:
+                before = payment_audit_snapshot(payment)
+                create_payment_delete_audit_log(payment, before, request.user)
+                payment.deleted_at = now
+                payment.deleted_by = request.user
+                payment.save(update_fields=["deleted_at", "deleted_by"])
+        self.message_user(request, f"{len(active_payments)} Zahlung(en) wurden als gelöscht markiert.")
+
+    @admin.action(description="Ausgewählte gelöschte Zahlungen wiederherstellen")
+    def restore_selected_payments(self, request, queryset):
+        if not is_admin(request.user):
+            raise PermissionDenied
+        deleted_payments = list(queryset.filter(deleted_at__isnull=False))
+        if not deleted_payments:
+            self.message_user(request, "Keine gelöschten Zahlungen zur Wiederherstellung ausgewählt.", level="warning")
+            return
+        restored_count = 0
+        with transaction.atomic():
+            for payment in deleted_payments:
+                audit_log = (
+                    PaymentAuditLog.objects.filter(payment=payment, action=PaymentAuditLog.Action.DELETED)
+                    .order_by("-created_at")
+                    .first()
+                )
+                if audit_log is None:
+                    continue
+                try:
+                    restore_payment_from_audit_log(audit_log, request.user)
+                except ValidationError:
+                    continue
+                restored_count += 1
+        self.message_user(request, f"{restored_count} Zahlung(en) wurden wiederhergestellt.")
+
+
+@admin.register(PaymentAuditLog)
+class PaymentAuditLogAdmin(admin.ModelAdmin):
+    list_display = ("participant", "payment", "action", "changed_by", "created_at")
+    list_filter = ("action", "created_at")
+    search_fields = ("participant__first_name", "participant__last_name")
+    readonly_fields = ("participant", "payment", "action", "changed_by", "before", "after", "created_at")
+    actions = ["restore_payments_from_audit_log"]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @admin.action(description="Ausgewählte Zahlungen aus Audit-Protokoll wiederherstellen")
+    def restore_payments_from_audit_log(self, request, queryset):
+        if not is_admin(request.user):
+            raise PermissionDenied
+        deletion_logs = list(queryset.filter(action=PaymentAuditLog.Action.DELETED))
+        if not deletion_logs:
+            self.message_user(request, "Keine Löschungs-Protokolleinträge ausgewählt.", level="warning")
+            return
+        restored_count = 0
+        with transaction.atomic():
+            for log in deletion_logs:
+                if log.payment is None or log.payment.deleted_at is None:
+                    continue
+                try:
+                    restore_payment_from_audit_log(log, request.user)
+                except ValidationError:
+                    continue
+                restored_count += 1
+        self.message_user(request, f"{restored_count} Zahlung(en) wurden aus dem Audit-Protokoll wiederhergestellt.")
+
+
+@admin.register(CreditPayout)
+class CreditPayoutAdmin(admin.ModelAdmin):
+    list_display = ("participant", "amount", "method", "created_by", "created_at", "external_reference")
+    list_filter = ("method", "created_at")
+    readonly_fields = (
+        "participant",
+        "amount",
+        "method",
+        "created_by",
+        "created_at",
+        "idempotency_key",
+        "external_reference",
+        "note",
+    )
+    actions = []
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Expense)
@@ -342,9 +485,44 @@ class MealSignupAdmin(admin.ModelAdmin):
 
 @admin.register(MealOrder)
 class MealOrderAdmin(admin.ModelAdmin):
-    list_display = ("camp", "meal_date", "ordered_at", "ordered_by")
+    """Expose catering-order markers without bypassing the serialized application workflow."""
+
+    list_display = ("camp", "meal_date", "is_sent", "ordered_at", "ordered_by", "unmarked_at", "unmarked_by")
     list_filter = ("camp", "meal_date", "ordered_at")
     search_fields = ("camp__name", "ordered_by__username", "ordered_by__email")
+
+    def has_add_permission(self, request):
+        """Require the meal overview for creating sent markers."""
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        """Keep the raw Django admin as a read-only audit view."""
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        """Require the meal overview for reversing sent markers."""
+        return False
+
+
+@admin.register(MealBookingOverride)
+class MealBookingOverrideAdmin(admin.ModelAdmin):
+    """Expose current meal booking overrides as read-only records."""
+
+    list_display = ("camp", "meal_date", "meal", "state", "changed_at", "changed_by")
+    list_filter = ("camp", "meal", "state", "meal_date")
+    search_fields = ("camp__name", "changed_by__username", "changed_by__email")
+
+    def has_add_permission(self, request):
+        """Require the application calendar for creating overrides."""
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        """Keep the raw Django admin as a read-only audit view."""
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        """Require the application calendar for changing the current state."""
+        return False
 
 
 @admin.register(MealPlanEntry)
@@ -433,54 +611,7 @@ class DailyShiftTemplateAdmin(admin.ModelAdmin):
 
     @admin.action(description="Dienste für ausgewählte Vorlagen generieren")
     def generate_shifts_for_templates(self, request, queryset):
-        import datetime
-
-        from .models import Shift
-
-        generated_count = 0
-        skipped_count = 0
-        for template in queryset:
-            camp = template.camp
-            if not camp.starts_on or not camp.ends_on:
-                continue
-            current_date = camp.starts_on
-            exceptions_by_date = {ex.date: ex for ex in template.exceptions.all()}
-
-            while current_date <= camp.ends_on:
-                exception = exceptions_by_date.get(current_date)
-
-                if exception and exception.is_skipped:
-                    skipped_count += 1
-                else:
-                    slots = (
-                        exception.custom_required_slots
-                        if exception and exception.custom_required_slots is not None
-                        else template.required_slots
-                    )
-                    start_t = (
-                        exception.custom_start_time
-                        if exception and exception.custom_start_time is not None
-                        else template.start_time
-                    )
-                    end_t = (
-                        exception.custom_end_time
-                        if exception and exception.custom_end_time is not None
-                        else template.end_time
-                    )
-
-                    Shift.objects.update_or_create(
-                        camp=camp,
-                        date=current_date,
-                        name=template.name,
-                        start_time=start_t,
-                        defaults={
-                            "end_time": end_t,
-                            "required_slots": slots,
-                        },
-                    )
-                    generated_count += 1
-                current_date += datetime.timedelta(days=1)
-
+        generated_count, skipped_count = generate_shifts_from_templates(queryset)
         self.message_user(
             request, f"{generated_count} Dienste generiert, {skipped_count} wegen Ausnahmen übersprungen."
         )

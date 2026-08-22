@@ -178,7 +178,6 @@ def test_kiosk_post_camp_hides_invoice_actions_when_admin_disabled_them(kiosk_cl
         "booking_link_accept",
         "booking_link_decline",
         "booking_link_revoke",
-        "checkin",
         "update_attendance_dates",
     ],
 )
@@ -197,6 +196,24 @@ def test_kiosk_post_camp_rejects_every_home_write_action(kiosk_client, kiosk_mod
     assert response.status_code == 200
     assert "Das Lager ist beendet. Änderungen sind nicht mehr möglich." in response.content.decode("utf-8")
     assert Charge.objects.filter(participant=participant).count() == 0
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("kiosk_mode,route_name", [("private", "kiosk-home"), ("central", "central-kiosk-home")])
+def test_kiosk_post_camp_keeps_checkin_available_during_attendance_buffer(kiosk_client, kiosk_mode, route_name):
+    """#417 permits attendance updates through the four-day post-camp buffer."""
+    today = timezone.localdate()
+    camp = CampFactory(is_active=True, starts_on=today - timedelta(days=20), ends_on=today - timedelta(days=1))
+    participant = ParticipantFactory(camp=camp)
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_MODE_SESSION_KEY] = kiosk_mode
+    session.save()
+
+    response = kiosk_client.post(reverse(route_name), {"action": "checkin"}, follow=True)
+
+    assert response.status_code == 200
+    assert "Das Lager ist beendet. Änderungen sind nicht mehr möglich." not in response.content.decode("utf-8")
 
 
 @pytest.mark.django_db

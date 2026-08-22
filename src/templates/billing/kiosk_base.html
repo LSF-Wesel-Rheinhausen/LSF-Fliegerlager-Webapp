@@ -12,7 +12,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <script src="{% static 'billing/theme.js' %}?v=1"></script>
     <script src="{% static 'billing/dialog-scroll-lock.js' %}?v=1"></script>
-    <script src="{% static 'billing/pwa.js' %}?v=2" defer></script>
+    <script src="{% static 'billing/pwa.js' %}?v=3" defer></script>
     <link rel="stylesheet" href="{% static 'billing/app-v8.css' %}">
   </head>
   <body class="kiosk-shell">
@@ -97,6 +97,7 @@
       {% include "includes/pwa_install_dialog.html" %}
     {% endif %}
     {% include "includes/pdf_preview_dialog.html" %}
+    {% include "includes/receipt_preview_dialog.html" %}
     {% if kiosk_autologout %}
       <script nonce="{{ request.csp_nonce }}">
         (() => {
@@ -321,6 +322,8 @@
         if (btn) {
           const dialog = document.getElementById("kiosk-help-dialog");
           const content = document.getElementById("kiosk-help-content");
+          const title = document.getElementById("kiosk-help-title");
+          title.textContent = btn.dataset.helpTitle || "Kurzhilfe";
           content.textContent = btn.dataset.helpText;
           window.kioskDialogs.open(dialog, btn);
         }

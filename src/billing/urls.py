@@ -1,6 +1,15 @@
 from django.urls import path
 
-from . import email_views, kiosk_access_views, notification_views, passkey_views, pwa_views, views
+from . import (
+    attendance_views,
+    email_views,
+    kiosk_access_views,
+    notification_views,
+    passkey_views,
+    profile_views,
+    pwa_views,
+    views,
+)
 
 urlpatterns = [
     path("settings/email/", email_views.email_settings, name="email-settings"),
@@ -108,6 +117,16 @@ urlpatterns = [
     path("camps/", views.camp_list, name="camp-list"),
     path("camps/new/", views.camp_create, name="camp-create"),
     path("camps/<int:camp_id>/", views.camp_detail, name="camp-detail"),
+    path(
+        "camps/<int:camp_id>/attendance/",
+        attendance_views.camp_attendance_overview,
+        name="camp-attendance-overview",
+    ),
+    path(
+        "camps/<int:camp_id>/attendance/export.xlsx",
+        attendance_views.attendance_workbook,
+        name="attendance-workbook",
+    ),
     path("camps/<int:camp_id>/edit/", views.camp_edit, name="camp-edit"),
     path(
         "camps/<int:camp_id>/kiosk-access/",
@@ -120,8 +139,14 @@ urlpatterns = [
         name="camp-kiosk-access-revoke",
     ),
     path("camps/<int:camp_id>/meals/", views.camp_meal_overview, name="camp-meal-overview"),
+    path("camps/<int:camp_id>/auswertung/", views.camp_position_report, name="camp-position-report"),
     path("camps/<int:camp_id>/meals/cutoff/", views.meal_cutoff_edit, name="meal-cutoff-edit"),
     path("camps/<int:camp_id>/meals/order-sent/", views.meal_order_mark_sent, name="meal-order-mark-sent"),
+    path(
+        "camps/<int:camp_id>/meals/booking-state/",
+        views.meal_booking_override,
+        name="meal-booking-override",
+    ),
     path("camps/<int:camp_id>/participants/new/", views.participant_create, name="participant-create"),
     path("participants/<int:participant_id>/", views.participant_detail, name="participant-detail"),
     path("participants/<int:participant_id>/edit/", views.participant_edit, name="participant-edit"),
@@ -160,6 +185,17 @@ urlpatterns = [
         name="booking-audit-batch-restore",
     ),
     path("participants/<int:participant_id>/payments/new/", views.payment_create, name="payment-create"),
+    path(
+        "participants/<int:participant_id>/credit-payout/",
+        views.credit_payout_create,
+        name="credit-payout-create",
+    ),
+    path("payments/<int:payment_id>/delete/", views.payment_delete, name="payment-delete"),
+    path(
+        "payment-audit-logs/<int:audit_log_id>/restore/",
+        views.payment_audit_restore,
+        name="payment-audit-restore",
+    ),
     path("participants/<int:participant_id>/pin/set/", views.pin_set, name="pin-set"),
     path("participants/<int:participant_id>/pin/reset/", views.pin_reset, name="pin-reset"),
     path("participants/<int:participant_id>/pin/unlock/", views.pin_unlock, name="pin-unlock"),
@@ -261,6 +297,18 @@ urlpatterns = [
     ),
     path("kiosk/", views.kiosk_home, {"kiosk_mode": "private"}, name="kiosk-home"),
     path(
+        "kiosk/profile/<int:participant_id>/",
+        profile_views.kiosk_profile,
+        {"kiosk_mode": "private"},
+        name="kiosk-profile",
+    ),
+    path(
+        "kiosk/family-members/<int:family_member_id>/profile/",
+        profile_views.kiosk_family_member_profile,
+        {"kiosk_mode": "private"},
+        name="kiosk-family-member-profile",
+    ),
+    path(
         "kiosk/partners/",
         views.kiosk_partner_activity,
         {"kiosk_mode": "private"},
@@ -305,6 +353,18 @@ urlpatterns = [
         name="central-kiosk-participant-current-settlement-pdf",
     ),
     path("central/kiosk/", views.kiosk_home, {"kiosk_mode": "central"}, name="central-kiosk-home"),
+    path(
+        "central/kiosk/profile/<int:participant_id>/",
+        profile_views.kiosk_profile,
+        {"kiosk_mode": "central"},
+        name="central-kiosk-profile",
+    ),
+    path(
+        "central/kiosk/family-members/<int:family_member_id>/profile/",
+        profile_views.kiosk_family_member_profile,
+        {"kiosk_mode": "central"},
+        name="central-kiosk-family-member-profile",
+    ),
     path(
         "central/kiosk/partners/",
         views.kiosk_partner_activity,

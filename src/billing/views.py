@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from functools import partial
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
@@ -23,12 +24,21 @@ from django.http import FileResponse, Http404, HttpRequest, HttpResponse, HttpRe
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.crypto import salted_hmac
 from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_GET, require_POST
 
+from .attendance import (
+    attendance_window,
+    build_target_attendance_calendar,
+    prepare_attendance_replacement_payload,
+    target_attendance_records,
+    target_stay_for,
+)
 from .daily_settlement_backups import update_daily_backup_settings
 from .deployment_updates import UpdateAgentError, check_for_update, deployment_status, install_update
 from .exporters import (
+    PDF_PREVIEW_CONTENT_SECURITY_POLICY,
     camp_settlement_csv,
     camp_workbook_response,
     drink_entries_csv,
@@ -41,6 +51,7 @@ from .forms import (
     CampFlatRateSettingsForm,
     CampForm,
     ChargeForm,
+    CreditPayoutForm,
     DailySettlementBackupSettingsForm,
     ExpenseForm,
     FirstAdminSetupForm,
@@ -84,6 +95,7 @@ from .kiosk_security import (
     is_login_locked_out,
 )
 from .models import (
+    AttendanceDay,
     BookingAuditLog,
     Camp,
     Charge,
@@ -92,6 +104,7 @@ from .models import (
     Expense,
     FirstAdminBootstrapLock,
     KioskActionAuditLog,
+    MealBookingOverride,
     MealOrder,
     MealPlanEntry,
     MealSignup,
@@ -100,6 +113,8 @@ from .models import (
     ParticipantFamilyMember,
     ParticipantFamilyMemberPin,
     ParticipantPin,
+    Payment,
+    PaymentAuditLog,
     PriceRule,
     Settlement,
     SettlementRun,
@@ -120,6 +135,7 @@ from .permissions import (
     HUEBERS_GROUP,
     admin_required,
     editor_required,
+    is_admin,
     is_editor,
     meal_manager_required,
     superuser_required,
@@ -135,35 +151,66 @@ from .roles import (
     user_role,
 )
 from .services import (
+    ExpenseReceiptStorageError,
     admin_interface_contacts,
     calculate_camp_settlements,
     calculate_meal_overview,
     calculate_participant_settlement,
+    calculate_position_report,
     camp_meal_dates,
     charge_audit_snapshot,
     create_booking_audit_log,
     create_booking_delete_audit_log,
+    create_credit_payout,
     create_kiosk_action_audit_log,
     create_manual_charge,
+    create_payment_delete_audit_log,
     create_settlement_run,
+    generate_shifts_from_templates,
     is_meal_change_locked,
     kiosk_charge_audit_snapshot,
     kiosk_meal_signup_audit_snapshot,
     lock_camp_price_rules_for_update,
+    meal_booking_state,
     meal_change_lock_message,
     meal_order_for_date,
     next_catering_order_date,
     participant_kiosk_summaries,
     participant_kiosk_summary,
+    payment_audit_snapshot,
+    preload_meal_booking_state_inputs,
+    replace_attendance_days,
     resolve_meal_price_rule,
     resolve_quick_booking_price_rule,
     restore_booking_from_audit_log,
+    restore_payment_from_audit_log,
+    save_expense,
     sync_meal_signup_charges_for_camp,
 )
 
 logger = logging.getLogger(__name__)
 signer = Signer()
 User = get_user_model()
+
+RECEIPT_PREVIEW_EXTENSIONS = {
+    ".pdf": "pdf",
+    ".heic": "image",
+    ".jpeg": "image",
+    ".jpg": "image",
+    ".png": "image",
+}
+
+
+def _annotate_receipt_preview(expenses):
+    """Attach trusted receipt preview metadata for rendered expense links."""
+    annotated_expenses = list(expenses)
+    for expense in annotated_expenses:
+        receipt_name = expense.receipt.name if expense.receipt else ""
+        expense.receipt_preview_kind = RECEIPT_PREVIEW_EXTENSIONS.get(Path(receipt_name).suffix.lower(), "")
+        expense.receipt_preview_alt = expense.description or "Beleg"
+    return annotated_expenses
+
+
 PRE_CAMP_KIOSK_ACTIONS = frozenset(
     {
         "family_member_create",
@@ -181,16 +228,6 @@ def _pre_camp_meal_booking_allowed(camp: Camp, meal: str) -> bool:
     if meal == MealSignup.Meal.DINNER:
         return camp.allow_dinner_prebooking_before_camp
     return False
-
-
-def _pre_camp_meal_booking_unlocked(
-    camp: Camp,
-    meal: str,
-    meal_date: date,
-    sent_order_dates: set[date],
-) -> bool:
-    """Return whether a released pre-camp meal date is not already sent to catering."""
-    return camp.is_pre_camp() and _pre_camp_meal_booking_allowed(camp, meal) and meal_date not in sent_order_dates
 
 
 @admin_required
@@ -219,6 +256,9 @@ KIOSK_QUICK_CONFIRMATION_MAX_AGE_SECONDS = 10 * 60
 KIOSK_MEAL_RETRACTION_SIGNING_SALT = "billing.kiosk-meal-retraction.v1"
 KIOSK_MEAL_RETRACTION_MAX_AGE_SECONDS = 10 * 60
 KIOSK_CHECKIN_STATE_SIGNING_SALT = "billing.kiosk-checkin-state.v1"
+KIOSK_CHECKIN_STATE_MAX_AGE_SECONDS = 10 * 60
+_ATTENDANCE_PREFETCH_ATTRIBUTE = "prefetched_attendance_days"
+_KIOSK_FAMILY_ATTENDANCE_PREFETCH_ATTRIBUTE = "prefetched_kiosk_family_attendance_days"
 
 
 def _positive_int_or_none(value: Any) -> int | None:
@@ -426,7 +466,16 @@ def _kiosk_checkin_state_payload(
         "target_token": target_token,
         "arrival_date": target.arrival_date.isoformat() if target.arrival_date else None,
         "departure_date": target.departure_date.isoformat() if target.departure_date else None,
+        "attendance_fingerprint": _kiosk_attendance_fingerprint(target),
     }
+
+
+def _kiosk_attendance_fingerprint(target: Participant | ParticipantFamilyMember) -> str:
+    """HMAC the attendance state for optimistic locking without exposing comments."""
+    state = [str(target.attendance_tracking_enabled)]
+    for record in target_attendance_records(target):
+        state.append(f"{record.date.isoformat()}:{record.is_present}:{record.comment}")
+    return salted_hmac("billing.kiosk-checkin-attendance-fingerprint", "|".join(state)).hexdigest()
 
 
 def _sign_kiosk_checkin_state(
@@ -446,10 +495,14 @@ def _kiosk_checkin_original_state(
     token: str,
     participant: Participant,
     target_token: str,
-) -> tuple[date | None, date | None] | None:
+) -> tuple[date | None, date | None, str] | None:
     """Return signed original dates when token identity and values are valid."""
     try:
-        payload = signing.loads(token, salt=KIOSK_CHECKIN_STATE_SIGNING_SALT)
+        payload = signing.loads(
+            token,
+            salt=KIOSK_CHECKIN_STATE_SIGNING_SALT,
+            max_age=KIOSK_CHECKIN_STATE_MAX_AGE_SECONDS,
+        )
     except signing.BadSignature:
         return None
     if not isinstance(payload, dict) or set(payload) != {
@@ -458,6 +511,7 @@ def _kiosk_checkin_original_state(
         "target_token",
         "arrival_date",
         "departure_date",
+        "attendance_fingerprint",
     }:
         return None
     if (
@@ -467,6 +521,8 @@ def _kiosk_checkin_original_state(
     ):
         return None
 
+    if not isinstance(payload["attendance_fingerprint"], str):
+        return None
     parsed_dates: list[date | None] = []
     for field_name in ("arrival_date", "departure_date"):
         raw_value = payload[field_name]
@@ -479,7 +535,7 @@ def _kiosk_checkin_original_state(
         if parsed_value is None:
             return None
         parsed_dates.append(parsed_value)
-    return parsed_dates[0], parsed_dates[1]
+    return parsed_dates[0], parsed_dates[1], payload["attendance_fingerprint"]
 
 
 def kiosk_root(_request: HttpRequest) -> HttpResponse:
@@ -964,7 +1020,7 @@ def camp_detail(request, camp_id):
         "balance": sum(result.balance for result in settlements),
     }
     price_rules = camp.price_rules.all()
-    pending_expenses = camp.expenses.filter(status=Expense.Status.PENDING)
+    pending_expenses = _annotate_receipt_preview(camp.expenses.filter(status=Expense.Status.PENDING))
     pending_registrations = list(
         camp.participants.select_related("pin")
         .filter(status=Participant.Status.PENDING_APPROVAL, archived_at__isnull=True)
@@ -1120,7 +1176,20 @@ def participant_restore(request, participant_id):
 
 @editor_required
 def participant_detail(request, participant_id):
-    participant = get_object_or_404(Participant.objects.select_related("camp"), pk=participant_id)
+    can_view_profile_pii = is_admin(request.user)
+    participant_queryset = Participant.objects.select_related("camp")
+    if can_view_profile_pii:
+        participant_queryset = participant_queryset.prefetch_related(
+            Prefetch(
+                "attendance_days",
+                queryset=AttendanceDay.objects.filter(family_member__isnull=True).order_by("date", "pk"),
+                to_attr=_ATTENDANCE_PREFETCH_ATTRIBUTE,
+            )
+        )
+    participant = get_object_or_404(
+        participant_queryset,
+        pk=participant_id,
+    )
     manual_charge_form = ManualChargeForm(camp=participant.camp)
 
     if request.method == "POST" and request.POST.get("action") == "add_manual_charge":
@@ -1153,21 +1222,61 @@ def participant_detail(request, participant_id):
         .select_related("family_member")
         .order_by("-created_at", "-id")
     )
-    family_members = participant.family_members.all().order_by("-is_active", "last_name", "first_name", "pk")
+    family_members_queryset = participant.family_members
+    if can_view_profile_pii:
+        family_members_queryset = family_members_queryset.prefetch_related(
+            Prefetch(
+                "attendance_days",
+                queryset=AttendanceDay.objects.order_by("date", "pk"),
+                to_attr=_ATTENDANCE_PREFETCH_ATTRIBUTE,
+            )
+        )
+    family_members = list(family_members_queryset.order_by("-is_active", "last_name", "first_name", "pk"))
     family_meal_signups = (
         MealSignup.objects.filter(participant=participant, family_member__isnull=False)
         .select_related("family_member", "charge")
         .order_by("-meal_date", "meal")
     )
+    payments = participant.payments.filter(deleted_at__isnull=True).order_by("-paid_on", "-id")
     audit_logs = BookingAuditLog.objects.filter(
         Q(participant=participant) | Q(charge__participant=participant)
     ).select_related("changed_by", "charge")
+    payment_audit_logs = PaymentAuditLog.objects.filter(
+        Q(participant=participant) | Q(payment__participant=participant)
+    ).select_related("changed_by", "payment")
+    credit_payouts = participant.credit_payouts.select_related("created_by").order_by("-created_at", "-id")
+    available_credit = max(-settlement.balance, Decimal("0.00"))
+    credit_payout_form = (
+        CreditPayoutForm(initial={"idempotency_key": uuid.uuid4()})
+        if is_admin(request.user) and available_credit > Decimal("0.00")
+        else None
+    )
     settlement_snapshots = participant.settlements.filter(run__isnull=False).select_related("run", "run__camp")
     family_audit_logs = (
         KioskActionAuditLog.objects.filter(target_participant=participant, target_family_member__isnull=False)
         .select_related("target_family_member", "charge", "actor_participant", "actor_family_member")
         .order_by("-created_at", "-id")
     )
+
+    def age_at_camp_start(person):
+        if participant.camp.starts_on is None:
+            return None
+        try:
+            return person.age_on(participant.camp.starts_on)
+        except ValidationError:
+            return None
+
+    for member in family_members:
+        member.age_at_camp_start = age_at_camp_start(member)
+    attendance_people = []
+    if can_view_profile_pii:
+        attendance_people = [
+            {
+                "name": person.full_name,
+                "calendar": build_target_attendance_calendar(person, participant.camp, include_comments=True),
+            }
+            for person in [participant, *family_members]
+        ]
 
     return render(
         request,
@@ -1176,14 +1285,46 @@ def participant_detail(request, participant_id):
             "participant": participant,
             "settlement": settlement,
             "charges": charges,
+            "payments": payments,
+            "credit_payouts": credit_payouts,
+            "available_credit": available_credit,
+            "credit_payout_form": credit_payout_form,
             "family_members": family_members,
             "family_meal_signups": family_meal_signups,
             "family_audit_logs": family_audit_logs,
+            "participant_age": age_at_camp_start(participant),
+            "can_view_profile_pii": can_view_profile_pii,
+            "attendance_people": attendance_people,
             "audit_logs": audit_logs,
+            "payment_audit_logs": payment_audit_logs,
             "settlement_snapshots": settlement_snapshots,
             "manual_charge_form": manual_charge_form,
         },
     )
+
+
+@admin_required
+@require_POST
+def credit_payout_create(request, participant_id):
+    participant = get_object_or_404(Participant, pk=participant_id, archived_at__isnull=True)
+    form = CreditPayoutForm(request.POST)
+    if form.is_valid():
+        try:
+            payout = create_credit_payout(
+                participant=participant,
+                amount=form.cleaned_data["amount"],
+                method=form.cleaned_data["method"],
+                created_by=request.user,
+                idempotency_key=form.cleaned_data["idempotency_key"],
+                external_reference=form.cleaned_data["external_reference"],
+                note=form.cleaned_data["note"],
+            )
+        except ValidationError as error:
+            form.add_error(None, error)
+        else:
+            messages.success(request, f"Auszahlung über {payout.amount} EUR wurde protokolliert.")
+            return redirect("participant-detail", participant_id=participant.pk)
+    return render(request, "billing/form.html", {"form": form, "title": "Guthaben auszahlen"})
 
 
 @admin_required
@@ -1426,6 +1567,46 @@ def payment_create(request, participant_id):
 
 
 @admin_required
+@require_POST
+def payment_delete(request: HttpRequest, payment_id: int) -> HttpResponse:
+    """Mark a recorded payment as deleted and keep an audit snapshot for later review."""
+    payment = get_object_or_404(
+        Payment.objects.select_related("participant").filter(deleted_at__isnull=True), pk=payment_id
+    )
+    participant_id = payment.participant_id
+    before = payment_audit_snapshot(payment)
+    with transaction.atomic():
+        create_payment_delete_audit_log(payment, before, request.user)
+        payment.deleted_at = timezone.now()
+        payment.deleted_by_id = request.user.pk
+        payment.save(update_fields=["deleted_at", "deleted_by"])
+    messages.success(request, "Zahlung wurde gelöscht und protokolliert.")
+    return redirect("participant-detail", participant_id=participant_id)
+
+
+@admin_required
+@require_POST
+def payment_audit_restore(request: HttpRequest, audit_log_id: int) -> HttpResponse:
+    """Restore a deleted payment from a deletion audit entry."""
+    audit_log = get_object_or_404(
+        PaymentAuditLog.objects.select_related("participant", "payment"),
+        pk=audit_log_id,
+    )
+    participant_id = audit_log.participant_id
+    try:
+        with transaction.atomic():
+            restored_payment = restore_payment_from_audit_log(audit_log, request.user)
+    except ValidationError as error:
+        messages.error(request, error.message)
+        if participant_id is None:
+            return redirect("camp-list")
+        return redirect("participant-detail", participant_id=participant_id)
+
+    messages.success(request, f"Zahlung „{restored_payment.payment_reference}“ wurde wiederhergestellt.")
+    return redirect("participant-detail", participant_id=restored_payment.participant_id)
+
+
+@admin_required
 def pin_reset(request, participant_id):
     participant = get_object_or_404(Participant, pk=participant_id, archived_at__isnull=True)
     if request.method == "POST":
@@ -1591,6 +1772,13 @@ def shift_report(request, camp_id):
         camp.participants.filter(archived_at__isnull=True, is_child=False)
         .select_related("camp")
         .annotate(_completed_shifts_count=participant_assignments)
+        .prefetch_related(
+            Prefetch(
+                "attendance_days",
+                queryset=AttendanceDay.objects.filter(family_member__isnull=True).order_by("date", "pk"),
+                to_attr="prefetched_attendance_days",
+            )
+        )
     )
     participants.extend(
         ParticipantFamilyMember.objects.filter(
@@ -1601,6 +1789,13 @@ def shift_report(request, camp_id):
         )
         .select_related("guardian", "guardian__camp")
         .annotate(_completed_shifts_count=Count("shift_assignments"))
+        .prefetch_related(
+            Prefetch(
+                "attendance_days",
+                queryset=AttendanceDay.objects.order_by("date", "pk"),
+                to_attr="prefetched_attendance_days",
+            )
+        )
     )
     # Sort by completed / target ratio
     participants.sort(
@@ -1665,10 +1860,6 @@ def shift_template_edit(request, template_id):
 @editor_required
 @require_POST
 def shift_templates_generate(request, camp_id):
-    import datetime
-
-    from .models import Shift
-
     camp = get_object_or_404(Camp, pk=camp_id)
 
     if not camp.starts_on or not camp.ends_on:
@@ -1679,47 +1870,7 @@ def shift_templates_generate(request, camp_id):
         )
         return redirect("shift-templates-manage", camp_id=camp.pk)
 
-    templates = camp.daily_shift_templates.all()
-
-    generated_count = 0
-    skipped_count = 0
-    with transaction.atomic():
-        for template in templates:
-            current_date = camp.starts_on
-            exceptions_by_date = {ex.date: ex for ex in template.exceptions.all()}
-            while current_date <= camp.ends_on:
-                exception = exceptions_by_date.get(current_date)
-                if exception and exception.is_skipped:
-                    skipped_count += 1
-                else:
-                    slots = (
-                        exception.custom_required_slots
-                        if exception and exception.custom_required_slots is not None
-                        else template.required_slots
-                    )
-                    start_t = (
-                        exception.custom_start_time
-                        if exception and exception.custom_start_time is not None
-                        else template.start_time
-                    )
-                    end_t = (
-                        exception.custom_end_time
-                        if exception and exception.custom_end_time is not None
-                        else template.end_time
-                    )
-                    Shift.objects.update_or_create(
-                        camp=camp,
-                        date=current_date,
-                        name=template.name,
-                        start_time=start_t,
-                        defaults={
-                            "end_time": end_t,
-                            "required_slots": slots,
-                        },
-                    )
-                    generated_count += 1
-                current_date += datetime.timedelta(days=1)
-
+    generated_count, skipped_count = generate_shifts_from_templates(camp.daily_shift_templates.all())
     messages.success(request, f"{generated_count} Dienste generiert, {skipped_count} übersprungen.")
     return redirect("shift-templates-manage", camp_id=camp.pk)
 
@@ -1792,12 +1943,16 @@ def expense_create(request, camp_id):
     form = ExpenseForm(request.POST or None, request.FILES or None)
     form.fields["participant"].queryset = Participant.objects.filter(camp=camp, archived_at__isnull=True)
     if request.method == "POST" and form.is_valid():
-        with transaction.atomic():
-            expense = form.save(commit=False)
-            expense.camp = camp
-            expense.save()
-        messages.success(request, "Auslage wurde gespeichert.")
-        return redirect("camp-detail", camp_id=camp.pk)
+        try:
+            with transaction.atomic():
+                expense = form.save(commit=False)
+                expense.camp = camp
+                save_expense(expense)
+        except ExpenseReceiptStorageError:
+            form.add_error("receipt", "Der Rechnungsbeleg konnte nicht gespeichert werden.")
+        else:
+            messages.success(request, "Auslage wurde gespeichert.")
+            return redirect("camp-detail", camp_id=camp.pk)
     return render(
         request,
         "billing/form.html",
@@ -1813,13 +1968,12 @@ def expense_receipt_download(request: HttpRequest, expense_id: int) -> FileRespo
     requests, keeping uploaded billing files out of unauthenticated public URLs.
     """
     expense = get_object_or_404(Expense.objects.select_related("participant"), pk=expense_id)
-    if not expense.receipt:
-        raise Http404("Kein Rechnungsbeleg vorhanden.")
-
     participant = _kiosk_participant(request)
     can_view_own_receipt = participant is not None and expense.participant_id == participant.pk
     if not can_view_own_receipt and not is_editor(request.user):
-        raise PermissionDenied
+        raise Http404("Rechnungsbeleg wurde nicht gefunden.")
+    if not expense.receipt:
+        raise Http404("Kein Rechnungsbeleg vorhanden.")
 
     receipt_name = expense.receipt.name
     if not receipt_name:
@@ -1832,11 +1986,30 @@ def expense_receipt_download(request: HttpRequest, expense_id: int) -> FileRespo
         )
         raise Http404("Rechnungsbeleg wurde nicht gefunden.")
 
-    return FileResponse(
-        expense.receipt.open("rb"),
-        as_attachment=True,
-        filename=receipt_name.rsplit("/", 1)[-1],
+    receipt_filename = receipt_name.rsplit("/", 1)[-1]
+    preview_content_types = {
+        ".pdf": "application/pdf",
+        ".jpeg": "image/jpeg",
+        ".jpg": "image/jpeg",
+        ".png": "image/png",
+        ".heic": "image/heic",
+    }
+    content_type = preview_content_types.get(
+        "." + receipt_filename.rsplit(".", 1)[-1].lower() if "." in receipt_filename else "",
+        "application/octet-stream",
     )
+    as_attachment = content_type == "application/octet-stream"
+
+    response = FileResponse(
+        expense.receipt.open("rb"),
+        as_attachment=as_attachment,
+        content_type=content_type,
+        filename=receipt_filename,
+    )
+    if content_type == "application/pdf":
+        response["X-Frame-Options"] = "SAMEORIGIN"
+        response["Content-Security-Policy"] = PDF_PREVIEW_CONTENT_SECURITY_POLICY
+    return response
 
 
 @editor_required
@@ -1968,6 +2141,13 @@ def _kiosk_participant_from_session(request, session_key):
         return None
     return (
         Participant.objects.select_related("camp")
+        .prefetch_related(
+            Prefetch(
+                "attendance_days",
+                queryset=AttendanceDay.objects.order_by("date", "pk"),
+                to_attr="prefetched_attendance_days",
+            )
+        )
         .filter(pk=participant_id, camp__is_active=True, archived_at__isnull=True)
         .first()
     )
@@ -2379,11 +2559,17 @@ def _lock_accepted_booking_links(
 
 
 def _linked_booking_participants(participant):
-    active_family_members = ParticipantFamilyMember.objects.filter(is_active=True).order_by(
-        "last_name",
-        "first_name",
+    attendance_prefetch = Prefetch(
+        "attendance_days",
+        queryset=AttendanceDay.objects.order_by("date", "pk"),
+        to_attr="prefetched_attendance_days",
     )
-    return list(
+    active_family_members = (
+        ParticipantFamilyMember.objects.select_related("guardian")
+        .filter(is_active=True)
+        .order_by("last_name", "first_name")
+    )
+    linked_participants = list(
         Participant.objects.filter(
             Q(
                 received_booking_links__inviter=participant,
@@ -2401,14 +2587,55 @@ def _linked_booking_participants(participant):
         .select_related("camp")
         .distinct()
         .prefetch_related(
+            attendance_prefetch,
             Prefetch(
                 "family_members",
                 queryset=active_family_members,
                 to_attr="active_kiosk_family_members",
-            )
+            ),
         )
         .order_by("last_name", "first_name", "pk")
     )
+    _split_kiosk_attendance_records(participant)
+    for linked_participant in linked_participants:
+        _split_kiosk_attendance_records(
+            linked_participant,
+            getattr(linked_participant, "active_kiosk_family_members", ()),
+        )
+    return linked_participants
+
+
+def _split_kiosk_attendance_records(
+    participant: Participant,
+    family_members: Iterable[ParticipantFamilyMember] = (),
+) -> None:
+    """Assign preloaded attendance records to their exact kiosk target objects."""
+    records = getattr(participant, "prefetched_attendance_days", None)
+    if records is None:
+        records = list(AttendanceDay.objects.filter(participant=participant).order_by("date", "pk"))
+    setattr(
+        participant,
+        _ATTENDANCE_PREFETCH_ATTRIBUTE,
+        [record for record in records if record.family_member_id is None],
+    )
+    records_by_family_member_id: dict[int, list[AttendanceDay]] = {}
+    for record in records:
+        if record.family_member_id is not None:
+            records_by_family_member_id.setdefault(record.family_member_id, []).append(record)
+    setattr(participant, _KIOSK_FAMILY_ATTENDANCE_PREFETCH_ATTRIBUTE, records_by_family_member_id)
+    for member in family_members:
+        setattr(member, _ATTENDANCE_PREFETCH_ATTRIBUTE, records_by_family_member_id.get(member.pk, []))
+
+
+def _attach_kiosk_family_attendance(
+    participant: Participant,
+    family_members: Iterable[ParticipantFamilyMember],
+) -> None:
+    """Reuse the account-level attendance prefetch for independently loaded family rows."""
+    _split_kiosk_attendance_records(participant)
+    records_by_family_member_id = getattr(participant, _KIOSK_FAMILY_ATTENDANCE_PREFETCH_ATTRIBUTE)
+    for member in family_members:
+        setattr(member, _ATTENDANCE_PREFETCH_ATTRIBUTE, records_by_family_member_id.get(member.pk, []))
 
 
 def _deduplicate_kiosk_targets(targets):
@@ -2761,6 +2988,7 @@ def _kiosk_checkin_participants(
         family_members = participant.family_members.filter(is_active=True).order_by("last_name", "first_name")
     if linked_participants is None:
         linked_participants = _linked_booking_participants(participant)
+    _attach_kiosk_family_attendance(participant, family_members)
     targets = [
         {
             "token": f"participant-{participant.pk}",
@@ -2802,6 +3030,13 @@ def _kiosk_checkin_participants(
             )
     targets = _deduplicate_kiosk_targets(targets)
     for target in targets:
+        target["can_manage_comments"] = False
+        target["attendance_window"] = attendance_window(target["camp"])
+        target["calendar"] = build_target_attendance_calendar(
+            target["object"],
+            target["camp"],
+            include_comments=target["can_manage_comments"],
+        )
         target["state_token"] = _sign_kiosk_checkin_state(
             participant,
             target["token"],
@@ -2858,6 +3093,14 @@ def _validate_kiosk_checkin_dates(target, camp, arrival_date, departure_date, er
             )
 
 
+def _kiosk_attendance_audit_snapshot(target: Participant | ParticipantFamilyMember) -> dict[str, object]:
+    """Return a safe attendance audit projection without free-text comments."""
+    return {
+        "attendance_tracking_enabled": target.attendance_tracking_enabled,
+        "attendance_present_nights": sum(record.is_present for record in target_attendance_records(target)),
+    }
+
+
 def _update_kiosk_checkin_dates(request, participant, checkin_participants):
     targets_by_token = {target["token"]: target for target in checkin_participants}
     submitted_tokens = list(dict.fromkeys(request.POST.getlist("checkin_target")))
@@ -2869,41 +3112,63 @@ def _update_kiosk_checkin_dates(request, participant, checkin_participants):
         if target is None:
             errors.append("Ein Teilnehmer darf über diesen Kiosk nicht bearbeitet werden.")
             continue
-        target_object = target["object"]
         original_state = _kiosk_checkin_original_state(
-            request.POST.get(f"checkin_state_{token}", ""),
-            participant,
-            token,
+            request.POST.get(f"checkin_state_{token}", ""), participant, token
         )
         if original_state is None:
             errors.append("Die Check-in-Daten konnten nicht bestätigt werden. Bitte lade die Seite neu.")
             continue
         arrival_date = _parse_kiosk_checkin_date(
-            request.POST.get(f"arrival_date_{token}"),
-            "Anreise",
-            target["name"],
-            errors,
+            request.POST.get(f"arrival_date_{token}"), "Anreise", target["name"], errors
         )
         departure_date = _parse_kiosk_checkin_date(
-            request.POST.get(f"departure_date_{token}"),
-            "Abreise",
-            target["name"],
-            errors,
+            request.POST.get(f"departure_date_{token}"), "Abreise", target["name"], errors
         )
-        _validate_kiosk_checkin_dates(target_object, target["camp"], arrival_date, departure_date, errors)
-        if (arrival_date, departure_date) != original_state:
+        _validate_kiosk_checkin_dates(target["object"], target["camp"], arrival_date, departure_date, errors)
+        attendance_submitted = request.POST.get(f"attendance-submitted_{token}") == "1"
+        attendance_payload = None
+        submitted_stay = target_stay_for(
+            target["object"],
+            target["camp"],
+            arrival_date=arrival_date,
+            departure_date=departure_date,
+            use_submitted_stay=True,
+        )
+        target_has_own_stay = target["object"].arrival_date is not None or target["object"].departure_date is not None
+        submitted_stay_is_complete = arrival_date is not None and departure_date is not None
+        attendance_replacement_allowed = submitted_stay is not None and (
+            submitted_stay_is_complete
+            or isinstance(target["object"], ParticipantFamilyMember)
+            and not target_has_own_stay
+        )
+        if attendance_submitted and attendance_replacement_allowed:
+            try:
+                attendance_payload = prepare_attendance_replacement_payload(
+                    request.POST,
+                    target=target["object"],
+                    camp=target["camp"],
+                    token=token,
+                    include_comments=target["can_manage_comments"],
+                    arrival_date=arrival_date,
+                    departure_date=departure_date,
+                    use_submitted_stay=True,
+                )
+            except ValidationError as validation_error:
+                errors.extend(validation_error.messages)
+        if (arrival_date, departure_date) != original_state[:2] or attendance_payload is not None:
             updates.append(
                 {
-                    "target": target_object,
+                    "target": target["object"],
                     "arrival_date": arrival_date,
                     "departure_date": departure_date,
                     "original_state": original_state,
+                    "attendance_payload": attendance_payload,
                 }
             )
 
     if errors:
-        for error in errors:
-            messages.error(request, error)
+        for error_message in errors:
+            messages.error(request, error_message)
         return False
     if not updates:
         return True
@@ -2935,18 +3200,18 @@ def _update_kiosk_checkin_dates(request, participant, checkin_participants):
         partner_participants = {}
         for update in updates:
             submitted_target = update["target"]
-            if isinstance(submitted_target, Participant):
-                target = locked_participants.get(submitted_target.pk)
-            else:
-                target = locked_family_members.get(submitted_target.pk)
+            target = (
+                locked_participants.get(submitted_target.pk)
+                if isinstance(submitted_target, Participant)
+                else locked_family_members.get(submitted_target.pk)
+            )
             if target is None:
                 raise PermissionDenied("Der Check-in-Eintrag ist nicht mehr verfügbar.")
             update["locked_target"] = target
-            current_state = (target.arrival_date, target.departure_date)
+            current_state = (target.arrival_date, target.departure_date, _kiosk_attendance_fingerprint(target))
             if current_state != update["original_state"]:
                 messages.error(
-                    request,
-                    "Die Check-in-Daten wurden zwischenzeitlich geändert. Bitte lade die Seite neu.",
+                    request, "Die Check-in-Daten wurden zwischenzeitlich geändert. Bitte lade die Seite neu."
                 )
                 return False
             target_participant = target if isinstance(target, Participant) else target.guardian
@@ -2962,32 +3227,51 @@ def _update_kiosk_checkin_dates(request, participant, checkin_participants):
 
         for update in updates:
             target = update["locked_target"]
-            arrival_date = update["arrival_date"]
-            departure_date = update["departure_date"]
             target_participant = target if isinstance(target, Participant) else target.guardian
             target_family_member = target if isinstance(target, ParticipantFamilyMember) else None
-            booking_link = booking_links.get(target_participant.pk)
             before = {
                 "arrival_date": target.arrival_date.isoformat() if target.arrival_date else None,
                 "departure_date": target.departure_date.isoformat() if target.departure_date else None,
+                **_kiosk_attendance_audit_snapshot(target),
             }
-            target.arrival_date = arrival_date
-            target.departure_date = departure_date
+            target.arrival_date = update["arrival_date"]
+            target.departure_date = update["departure_date"]
             update_fields = ["arrival_date", "departure_date", "updated_at"]
             if isinstance(target, Participant):
                 before["booked_nights"] = target.booked_nights
                 target.booked_nights = (
-                    max((departure_date - arrival_date).days, 0) if arrival_date and departure_date else 0
+                    max((target.departure_date - target.arrival_date).days, 0)
+                    if target.arrival_date and target.departure_date
+                    else 0
                 )
                 update_fields.append("booked_nights")
             target.save(update_fields=update_fields)
+            attendance_payload = update["attendance_payload"]
+            if attendance_payload is not None:
+                try:
+                    replace_attendance_days(
+                        target_participant,
+                        start_date=attendance_payload.start_date,
+                        end_date=attendance_payload.end_date,
+                        days=attendance_payload.days,
+                        family_member=target_family_member,
+                        may_remove_comments=False,
+                    )
+                except ValidationError as error:
+                    transaction.set_rollback(True)
+                    for message in error.messages:
+                        messages.error(request, message)
+                    return False
+                target.refresh_from_db()
             after = {
                 "arrival_date": target.arrival_date.isoformat() if target.arrival_date else None,
                 "departure_date": target.departure_date.isoformat() if target.departure_date else None,
+                **_kiosk_attendance_audit_snapshot(target),
             }
             if isinstance(target, Participant):
                 after["booked_nights"] = target.booked_nights
-            if booking_link is not None and before != after:
+            if before != after:
+                booking_link = booking_links.get(target_participant.pk)
                 audit_log = create_kiosk_action_audit_log(
                     camp=locked_camp,
                     actor_participant=participant,
@@ -3000,7 +3284,8 @@ def _update_kiosk_checkin_dates(request, participant, checkin_participants):
                     before=before,
                     after=after,
                 )
-                transaction.on_commit(partial(_notify_kiosk_partner_action_by_id, audit_log.pk))
+                if booking_link is not None:
+                    transaction.on_commit(partial(_notify_kiosk_partner_action_by_id, audit_log.pk))
     messages.success(request, "Check-in-Daten wurden gespeichert.")
     return True
 
@@ -3393,6 +3678,12 @@ def _retract_meal_signup(
         or locked_signup.family_member_id != (affected_family_member.pk if affected_family_member is not None else None)
     ):
         return False
+    if meal_booking_state(
+        locked_camp,
+        locked_signup.meal_date,
+        meal=locked_signup.meal,
+    )["locked"]:
+        return False
     locked_charge = None
     if locked_signup.charge_id is not None:
         locked_charge = Charge.objects.select_for_update(of=("self",)).filter(pk=locked_signup.charge_id).first()
@@ -3535,21 +3826,24 @@ def _kiosk_meal_calendar(camp, participant, meal_signups, meal_targets, meal=Mea
         entry.meal_date: entry.description
         for entry in MealPlanEntry.objects.filter(camp=camp, meal=meal, meal_date__in=meal_dates)
     }
-    sent_order_dates = set(
-        MealOrder.objects.filter(camp=camp, meal_date__in=meal_dates).values_list("meal_date", flat=True)
-    )
+    override_states, sent_order_dates = preload_meal_booking_state_inputs(camp, meal_dates, meal=meal)
     meal_labels = dict(MealSignup.Meal.choices)
     days = []
     for meal_date in meal_dates:
         meals = []
         scoped = signups_by_date_meal.get((meal_date, meal), [])
-        active_signups = [signup for signup in scoped if signup.status == MealSignup.Status.ACTIVE]
-        retracted_signups = [signup for signup in scoped if signup.status == MealSignup.Status.RETRACTED]
-        pre_camp_booking_unlocked = _pre_camp_meal_booking_unlocked(camp, meal, meal_date, sent_order_dates)
-        locked = not pre_camp_booking_unlocked and is_meal_change_locked(
-            camp, meal_date, sent_order_dates=sent_order_dates
+        account_scoped = [signup for signup in scoped if signup.participant_id == participant.pk]
+        active_signups = [signup for signup in account_scoped if signup.status == MealSignup.Status.ACTIVE]
+        retracted_signups = [signup for signup in account_scoped if signup.status == MealSignup.Status.RETRACTED]
+        state = meal_booking_state(
+            camp,
+            meal_date,
+            meal=meal,
+            override_states=override_states,
+            sent_order_dates=sent_order_dates,
         )
-        lock_message = meal_change_lock_message(camp, meal_date, sent_order_dates=sent_order_dates) if locked else ""
+        locked = bool(state["locked"])
+        lock_message = str(state["message"]) if locked else ""
         if active_signups and retracted_signups:
             status = "mixed"
             status_label = "Teilweise zurückgenommen"
@@ -3580,6 +3874,7 @@ def _kiosk_meal_calendar(camp, participant, meal_signups, meal_targets, meal=Mea
             "retracted_signups": retracted_signups,
             "locked": locked,
             "lock_message": lock_message,
+            "booking_state": state["state"],
             "description": menu_descriptions.get(meal_date, ""),
             "price_rule": price_rule,
             "unit_price": price_rule.unit_price if price_rule else None,
@@ -3593,6 +3888,7 @@ def _kiosk_meal_calendar(camp, participant, meal_signups, meal_targets, meal=Mea
                 "status_label": slot["status_label"],
                 "locked": slot["locked"],
                 "lock_message": slot["lock_message"],
+                "booking_state": slot["booking_state"],
                 "price_rule": slot["price_rule"],
                 "unit_price": slot["unit_price"],
                 "description": slot["description"],
@@ -3614,15 +3910,25 @@ def _group_kiosk_meal_calendar(days):
 
 @meal_manager_required
 def meal_cutoff_edit(request, camp_id):
-    """Edit only the meal booking cutoff for a camp."""
+    """Edit only the non-binding meal reminder time for a camp."""
     camp = get_object_or_404(Camp, pk=camp_id)
     form = MealCutoffForm(request.POST or None, instance=camp)
     if request.method == "POST" and form.is_valid():
         form.save()
-        messages.success(request, "Essens-Stichzeitpunkt wurde gespeichert.")
+        messages.success(request, "Essens-Richtzeit wurde gespeichert.")
         return redirect("camp-meal-overview", camp_id=camp.pk)
+    return render(request, "billing/form.html", {"form": form, "title": "Essens-Richtzeit bearbeiten", "camp": camp})
+
+
+@admin_required
+def camp_position_report(request, camp_id):
+    """Render per-article, per-meal and per-day usage figures for one camp."""
+    camp = get_object_or_404(Camp, pk=camp_id)
+    report = calculate_position_report(camp)
     return render(
-        request, "billing/form.html", {"form": form, "title": "Essens-Stichzeitpunkt bearbeiten", "camp": camp}
+        request,
+        "billing/camp_position_report.html",
+        {"camp": camp, "report": report},
     )
 
 
@@ -3642,10 +3948,23 @@ def camp_meal_overview(request, camp_id):
             meal_plan_form.save()
             messages.success(request, "Speiseplan wurde gespeichert.")
             return redirect("camp-meal-overview", camp_id=camp.pk)
+    dinner_override_states, sent_order_dates = preload_meal_booking_state_inputs(
+        camp,
+        meal_dates,
+        meal=MealSignup.Meal.DINNER,
+    )
     meal_plan_rows = [
         {
             "day": day,
             "description_field": meal_plan_form[MealPlanForm.field_name(day.meal_date)],
+            "dinner_state": meal_booking_state(
+                camp,
+                day.meal_date,
+                meal=MealSignup.Meal.DINNER,
+                override_states=dinner_override_states,
+                sent_order_dates=sent_order_dates,
+            ),
+            "breakfast_state": meal_booking_state(camp, day.meal_date, meal=MealSignup.Meal.BREAKFAST),
         }
         for day in meal_overview_days
     ]
@@ -3660,6 +3979,7 @@ def camp_meal_overview(request, camp_id):
             "next_order_day": next((day for day in meal_overview_days if day.meal_date == next_order_date), None),
             "next_order_date": next_order_date,
             "next_meal_order": meal_order_for_date(camp, next_order_date),
+            "today": timezone.localdate(),
         },
     )
 
@@ -3667,15 +3987,111 @@ def camp_meal_overview(request, camp_id):
 @meal_manager_required
 @require_POST
 def meal_order_mark_sent(request, camp_id):
-    """Mark tomorrow's catering meal order as sent."""
+    """Set tomorrow's sent marker or reverse one for a current/future camp day."""
     camp = get_object_or_404(Camp, pk=camp_id)
     meal_date = next_catering_order_date()
-    MealOrder.objects.update_or_create(
-        camp=camp,
-        meal_date=meal_date,
-        defaults={"ordered_at": timezone.now(), "ordered_by": request.user},
-    )
-    messages.success(request, f"Essensbestellung für {meal_date:%d.%m.%Y} wurde als abgeschickt markiert.")
+    requested_state = request.POST.get("state")
+    if requested_state not in {None, "not_sent"}:
+        messages.error(request, "Ungültiger Bestellstatus.")
+        return redirect("camp-meal-overview", camp_id=camp.pk)
+    requested_meal_date = request.POST.get("meal_date")
+    if requested_meal_date is not None:
+        try:
+            parsed_meal_date = date.fromisoformat(requested_meal_date)
+        except ValueError:
+            messages.error(request, "Ungültiges Bestelldatum.")
+            return redirect("camp-meal-overview", camp_id=camp.pk)
+        if (
+            requested_state != "not_sent"
+            or parsed_meal_date < timezone.localdate()
+            or parsed_meal_date not in set(camp_meal_dates(camp))
+        ):
+            messages.error(
+                request,
+                "Nur versandte Bestellungen aktueller oder zukünftiger Lagertage können geöffnet werden.",
+            )
+            return redirect("camp-meal-overview", camp_id=camp.pk)
+        meal_date = parsed_meal_date
+    now = timezone.now()
+    with transaction.atomic():
+        locked_camp = Camp.objects.select_for_update().get(pk=camp.pk)
+        if requested_state == "not_sent":
+            order = (
+                MealOrder.objects.select_for_update()
+                .filter(camp=locked_camp, meal_date=meal_date, is_sent=True)
+                .first()
+            )
+            if order is None:
+                messages.error(request, "Für diesen Tag ist keine versandte Bestellung gespeichert.")
+                return redirect("camp-meal-overview", camp_id=camp.pk)
+            order.is_sent = False
+            order.unmarked_at = now
+            order.unmarked_by = request.user
+            order.save(update_fields=["is_sent", "unmarked_at", "unmarked_by", "updated_at"])
+            messages.success(request, f"Essensbestellung für {meal_date:%d.%m.%Y} ist als nicht bestellt markiert.")
+        else:
+            order, _created = MealOrder.objects.select_for_update().get_or_create(
+                camp=locked_camp,
+                meal_date=meal_date,
+                defaults={"ordered_at": now, "ordered_by": request.user, "is_sent": True},
+            )
+            order.is_sent = True
+            order.ordered_at = now
+            order.ordered_by = request.user
+            order.save(update_fields=["is_sent", "ordered_at", "ordered_by", "updated_at"])
+            messages.success(request, f"Essensbestellung für {meal_date:%d.%m.%Y} wurde als abgeschickt markiert.")
+    return redirect("camp-meal-overview", camp_id=camp.pk)
+
+
+@meal_manager_required
+@require_POST
+def meal_booking_override(request, camp_id):
+    """Persist an explicit current or future dinner state for a meal manager."""
+    camp = get_object_or_404(Camp, pk=camp_id)
+    try:
+        meal_date = date.fromisoformat(request.POST.get("meal_date", ""))
+        meal = MealSignup.Meal(request.POST.get("meal", ""))
+        state = MealBookingOverride.State(request.POST.get("state", ""))
+    except (TypeError, ValueError):
+        messages.error(request, "Ungültiger Essensstatus.")
+        return redirect("camp-meal-overview", camp_id=camp.pk)
+    if (
+        meal != MealSignup.Meal.DINNER
+        or meal_date not in set(camp_meal_dates(camp))
+        or meal_date < timezone.localdate()
+    ):
+        messages.error(request, "Nur heutige und zukünftige Abendessen-Lagertage können geändert werden.")
+        return redirect("camp-meal-overview", camp_id=camp.pk)
+    with transaction.atomic():
+        locked_camp = Camp.objects.select_for_update().get(pk=camp.pk)
+        override, _created = MealBookingOverride.objects.select_for_update().get_or_create(
+            camp=locked_camp,
+            meal_date=meal_date,
+            meal=meal,
+            defaults={"state": state, "changed_by": request.user, "changed_at": timezone.now()},
+        )
+        if override.state != state or override.changed_by_id != request.user.pk:
+            override.state = state
+            override.changed_by = request.user
+            override.changed_at = timezone.now()
+            override.save(update_fields=["state", "changed_by", "changed_at", "updated_at"])
+        sent_order_still_locks = (
+            state == MealBookingOverride.State.OPEN
+            and MealOrder.objects.filter(
+                camp=locked_camp,
+                meal_date=meal_date,
+                is_sent=True,
+            ).exists()
+        )
+    if sent_order_still_locks:
+        messages.success(
+            request,
+            f"{meal_date:%d.%m.%Y}: Die manuelle Öffnung wurde gespeichert; wegen der versandten Bestellung "
+            "bleibt das Abendessen bis zur Markierung als nicht bestellt gesperrt.",
+        )
+        return redirect("camp-meal-overview", camp_id=camp.pk)
+    label = "geöffnet" if state == MealBookingOverride.State.OPEN else "geschlossen"
+    messages.success(request, f"{meal_date:%d.%m.%Y}: {meal.label} wurde manuell {label}.")
     return redirect("camp-meal-overview", camp_id=camp.pk)
 
 
@@ -3706,7 +4122,9 @@ def kiosk_home(request, kiosk_mode="private"):
     next_order_date = next_catering_order_date()
     next_meal_order = meal_order_for_date(participant.camp, next_order_date)
     family_members = list(
-        participant.family_members.select_related("pin").filter(is_active=True).order_by("last_name", "first_name")
+        participant.family_members.select_related("pin", "guardian")
+        .filter(is_active=True)
+        .order_by("last_name", "first_name")
     )
     linked_participants = _linked_booking_participants(participant)
     linked_participant_ids = [linked_participant.pk for linked_participant in linked_participants]
@@ -3740,6 +4158,8 @@ def kiosk_home(request, kiosk_mode="private"):
         checkin_participants = [
             target for target in checkin_participants if target["token"] in companion_allowed_tokens
         ]
+    checkin_window = attendance_window(participant.camp)
+    checkin_available = checkin_window is not None and checkin_window[0] <= timezone.localdate() < checkin_window[1]
     quick_form = QuickBookingForm(
         participant=participant,
         target_groups=quick_booking_target_groups,
@@ -3754,13 +4174,18 @@ def kiosk_home(request, kiosk_mode="private"):
     quick_confirmation = None
     if request.method == "POST":
         action = request.POST.get("action")
-        if is_post_camp and action not in POST_CAMP_KIOSK_ACTIONS:
+        if is_post_camp and action not in POST_CAMP_KIOSK_ACTIONS and not (action == "checkin" and checkin_available):
             messages.error(request, "Das Lager ist beendet. Änderungen sind nicht mehr möglich.")
             return redirect(_kiosk_route(kiosk_mode, "home"))
         pre_camp_meal_action = action == "meal" and _pre_camp_meal_booking_allowed(
             participant.camp, request.POST.get("meal-meal", "")
         )
-        if is_pre_camp and action not in PRE_CAMP_KIOSK_ACTIONS and not pre_camp_meal_action:
+        if (
+            is_pre_camp
+            and action not in PRE_CAMP_KIOSK_ACTIONS
+            and not pre_camp_meal_action
+            and not (action == "checkin" and checkin_available)
+        ):
             messages.error(request, "Diese Funktion ist erst ab Lagerbeginn verfügbar.")
             return redirect(_kiosk_route(kiosk_mode, "home"))
         if active_family_member is not None and action in GUARDIAN_ONLY_KIOSK_ACTIONS:
@@ -4187,30 +4612,21 @@ def kiosk_home(request, kiosk_mode="private"):
             if meal_form.is_valid():
                 meal_dates = meal_form.cleaned_data["meal_dates"]
                 meal = meal_form.cleaned_data["meal"]
-                sent_order_dates = set(
-                    MealOrder.objects.filter(camp=participant.camp, meal_date__in=meal_dates).values_list(
-                        "meal_date", flat=True
-                    )
+                override_states, sent_order_dates = preload_meal_booking_state_inputs(
+                    participant.camp,
+                    meal_dates,
+                    meal=meal,
                 )
                 for meal_date in meal_dates:
-                    if not _pre_camp_meal_booking_unlocked(
-                        participant.camp,
-                        meal,
-                        meal_date,
-                        sent_order_dates,
-                    ) and is_meal_change_locked(
+                    booking_state = meal_booking_state(
                         participant.camp,
                         meal_date,
+                        meal=meal,
+                        override_states=override_states,
                         sent_order_dates=sent_order_dates,
-                    ):
-                        meal_form.add_error(
-                            None,
-                            meal_change_lock_message(
-                                participant.camp,
-                                meal_date,
-                                sent_order_dates=sent_order_dates,
-                            ),
-                        )
+                    )
+                    if booking_state["locked"]:
+                        meal_form.add_error(None, booking_state["message"])
                 selected_tokens = list(dict.fromkeys(request.POST.getlist("meal-target")))
                 targets_by_token = _target_lookup(meal_targets)
                 if not selected_tokens and request.POST.get("meal-targets-submitted") != "1":
@@ -4271,6 +4687,22 @@ def kiosk_home(request, kiosk_mode="private"):
                                 camp=participant.camp,
                             )
                         )
+                        locked_override_states, locked_sent_order_dates = preload_meal_booking_state_inputs(
+                            _locked_camp,
+                            meal_dates,
+                            meal=meal,
+                        )
+                        for meal_date in meal_dates:
+                            locked_booking_state = meal_booking_state(
+                                _locked_camp,
+                                meal_date,
+                                meal=meal,
+                                override_states=locked_override_states,
+                                sent_order_dates=locked_sent_order_dates,
+                            )
+                            if locked_booking_state["locked"]:
+                                messages.error(request, locked_booking_state["message"])
+                                return redirect(f"{reverse(_kiosk_route(kiosk_mode, 'home'))}?dialog=meal-calendar")
                         if (
                             set(locked_participants) != expected_participant_ids
                             or set(locked_family_members) != expected_family_member_ids
@@ -4360,8 +4792,8 @@ def kiosk_home(request, kiosk_mode="private"):
                 )
             if signup is None or _target_token_for_signup(signup) not in targets_by_token:
                 messages.error(request, "Essensanmeldung wurde nicht gefunden.")
-            elif is_meal_change_locked(participant.camp, signup.meal_date):
-                messages.error(request, meal_change_lock_message(participant.camp, signup.meal_date))
+            elif is_meal_change_locked(participant.camp, signup.meal_date, meal=signup.meal):
+                messages.error(request, meal_change_lock_message(participant.camp, signup.meal_date, meal=signup.meal))
             elif signup.participant_id != participant.pk and not _matches_kiosk_meal_retraction(
                 request.POST.get("meal_retraction_token", ""),
                 participant,
@@ -4568,6 +5000,7 @@ def kiosk_home(request, kiosk_mode="private"):
     days_until_start = participant.camp.days_until_start()
     show_party_animation = request.session.pop("show_party_animation", False)
 
+    next_order_day = next((day for day in dinner_calendar_days if day["date"] == next_order_date), None)
     context = {
         "participant": participant,
         "kiosk_actor": default_booking_target,
@@ -4605,24 +5038,31 @@ def kiosk_home(request, kiosk_mode="private"):
         "quick_confirmation": quick_confirmation,
         "meal_targets": meal_targets,
         "checkin_participants": checkin_participants,
+        "checkin_available": checkin_available,
+        "kiosk_profile_url": reverse(
+            _kiosk_route(kiosk_mode, "family-member-profile" if active_family_member is not None else "profile"),
+            args=[default_booking_target.pk],
+        ),
         "family_members": family_members,
         "pending_invites": pending_invites,
         **_kiosk_context(kiosk_mode),
         "kiosk_contacts": admin_interface_contacts(User),
         "next_order_date": next_order_date,
         "next_meal_order": next_meal_order,
-        "next_order_locked": bool(next_meal_order) or is_meal_change_locked(participant.camp, next_order_date),
+        "next_order_locked": bool(next_order_day and next_order_day["locked"]),
         "today": today,
         "tomorrow": tomorrow,
-        "participant_expenses": participant.expenses.annotate(
-            kiosk_status_order=Case(
-                When(status=Expense.Status.PENDING, then=Value(0)),
-                When(status=Expense.Status.REJECTED, then=Value(1)),
-                When(status=Expense.Status.APPROVED, then=Value(2)),
-                default=Value(3),
-                output_field=IntegerField(),
-            )
-        ).order_by("kiosk_status_order", "-created_at"),
+        "participant_expenses": _annotate_receipt_preview(
+            participant.expenses.annotate(
+                kiosk_status_order=Case(
+                    When(status=Expense.Status.PENDING, then=Value(0)),
+                    When(status=Expense.Status.REJECTED, then=Value(1)),
+                    When(status=Expense.Status.APPROVED, then=Value(2)),
+                    default=Value(3),
+                    output_field=IntegerField(),
+                )
+            ).order_by("kiosk_status_order", "-created_at")
+        ),
     }
     return render(request, "billing/kiosk_home.html", context)
 
@@ -4638,19 +5078,23 @@ def kiosk_shared_expense_request(request, kiosk_mode="private"):
 
     form = SharedExpenseRequestForm(request.POST or None, request.FILES or None)
     if request.method == "POST" and form.is_valid():
-        with transaction.atomic():
-            expense = form.save(commit=False)
-            expense.camp = participant.camp
-            expense.participant = participant
-            expense.reimbursable = True
-            expense.save()
-            transaction.on_commit(
-                lambda expense_id=expense.pk: notify_expense_submitted(
-                    Expense.objects.select_related("participant").get(pk=expense_id)
+        try:
+            with transaction.atomic():
+                expense = form.save(commit=False)
+                expense.camp = participant.camp
+                expense.participant = participant
+                expense.reimbursable = True
+                save_expense(expense)
+                transaction.on_commit(
+                    lambda expense_id=expense.pk: notify_expense_submitted(
+                        Expense.objects.select_related("participant").get(pk=expense_id)
+                    )
                 )
-            )
-        messages.success(request, "Antrag auf Gemeinschaftsausgabe eingereicht.")
-        return redirect(_kiosk_route(kiosk_mode, "home"))
+        except ExpenseReceiptStorageError:
+            form.add_error("receipt", "Der Rechnungsbeleg konnte nicht gespeichert werden.")
+        else:
+            messages.success(request, "Antrag auf Gemeinschaftsausgabe eingereicht.")
+            return redirect(_kiosk_route(kiosk_mode, "home"))
 
     return render(
         request,

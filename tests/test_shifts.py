@@ -2,9 +2,11 @@ import datetime
 from decimal import Decimal
 
 import pytest
+from django.test import RequestFactory
 from django.urls import reverse
 
-from billing.models import Camp, Participant, ParticipantFamilyMember, Shift, ShiftAssignment
+from billing.models import AttendanceDay, Camp, Participant, ParticipantFamilyMember, Shift, ShiftAssignment
+from billing.views import shift_report
 
 
 @pytest.fixture
@@ -120,6 +122,42 @@ def test_shift_report_excludes_regular_and_guardian_family_children_without_targ
 
 
 @pytest.mark.django_db
+def test_shift_report_prefetches_tracked_attendance_with_a_fixed_query_budget(
+    active_camp,
+    django_assert_num_queries,
+):
+    active_camp.shift_ratio_per_night = Decimal("0.2")
+    active_camp.save(update_fields=["shift_ratio_per_night", "updated_at"])
+    for index in range(3):
+        participant = Participant.objects.create(
+            camp=active_camp,
+            first_name=f"Teilnehmer{index}",
+            last_name="Muster",
+            attendance_tracking_enabled=True,
+        )
+        companion = ParticipantFamilyMember.objects.create(
+            guardian=participant,
+            first_name=f"Begleitung{index}",
+            last_name="Muster",
+            role=ParticipantFamilyMember.Role.COMPANION,
+            attendance_tracking_enabled=True,
+        )
+        AttendanceDay.objects.create(participant=participant, date=datetime.date.today(), is_present=True)
+        AttendanceDay.objects.create(
+            participant=participant,
+            family_member=companion,
+            date=datetime.date.today(),
+            is_present=True,
+        )
+
+    request = RequestFactory().get(reverse("shift-report", args=[active_camp.pk]))
+    with django_assert_num_queries(5):
+        response = shift_report.__wrapped__(request, active_camp.pk)
+
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
 def test_shift_manage_renders_companion_identity_for_assignment(admin_client, active_camp):
     guardian = Participant.objects.create(camp=active_camp, first_name="Guardian", last_name="Account")
     companion = ParticipantFamilyMember.objects.create(
@@ -152,6 +190,40 @@ def test_admin_can_create_shift(admin_client, active_camp):
     )
     assert response.status_code == 302
     assert Shift.objects.filter(name="Klodienst").exists()
+
+
+@pytest.mark.django_db
+def test_admin_can_create_shift_with_description(admin_client, active_camp):
+    response = admin_client.post(
+        reverse("shift-create", args=[active_camp.pk]),
+        {"name": "Küchendienst", "date": "2026-08-01", "description": "Arbeitsflächen reinigen.", "required_slots": 1},
+    )
+    assert response.status_code == 302
+    shift = Shift.objects.get(camp=active_camp, name="Küchendienst")
+    assert shift.description == "Arbeitsflächen reinigen."
+
+
+@pytest.mark.django_db
+def test_admin_can_edit_shift_description(admin_client, active_camp):
+    shift = Shift.objects.create(
+        camp=active_camp,
+        name="Küchendienst",
+        date=active_camp.starts_on,
+        description="Alte Beschreibung",
+        required_slots=1,
+    )
+    response = admin_client.post(
+        reverse("shift-edit", args=[shift.pk]),
+        {
+            "name": "Küchendienst",
+            "date": active_camp.starts_on.isoformat(),
+            "description": "Neue Beschreibung",
+            "required_slots": 2,
+        },
+    )
+    assert response.status_code == 302
+    shift.refresh_from_db()
+    assert shift.description == "Neue Beschreibung"
 
 
 @pytest.mark.django_db
@@ -224,6 +296,7 @@ def test_generate_shifts_from_templates(admin_client, active_camp):
     template = DailyShiftTemplate.objects.create(
         camp=active_camp,
         name="Abendessen kochen",
+        description="Abendessen vorbereiten und ausgeben.",
         required_slots=3,
     )
 
@@ -258,3 +331,29 @@ def test_generate_shifts_from_templates(admin_client, active_camp):
     # Check the exception day slots
     last_day_shift = Shift.objects.get(name="Abendessen kochen", date=active_camp.ends_on)
     assert last_day_shift.required_slots == 1
+
+    assert last_day_shift.description == "Abendessen vorbereiten und ausgeben."
+
+
+@pytest.mark.django_db
+def test_admin_generate_preserves_individual_shift_description(admin_client, active_camp):
+    from billing.models import DailyShiftTemplate
+
+    template = DailyShiftTemplate.objects.create(
+        camp=active_camp, name="Abendessen kochen", description="Vorlagenbeschreibung", required_slots=3
+    )
+    existing_shift = Shift.objects.create(
+        camp=active_camp,
+        name=template.name,
+        date=active_camp.starts_on,
+        description="Individuelle Beschreibung",
+        required_slots=1,
+    )
+    response = admin_client.post(
+        reverse("admin:billing_dailyshifttemplate_changelist"),
+        {"action": "generate_shifts_for_templates", "_selected_action": [template.pk]},
+    )
+    assert response.status_code == 302
+    existing_shift.refresh_from_db()
+    assert existing_shift.description == "Individuelle Beschreibung"
+    assert existing_shift.required_slots == 3

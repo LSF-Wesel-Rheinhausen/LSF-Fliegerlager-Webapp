@@ -1,3 +1,5 @@
+import datetime
+import re
 import uuid
 from collections.abc import Collection
 from datetime import date, time, timedelta
@@ -481,6 +483,8 @@ class Participant(TimeStampedModel):
     )
     arrival_date = models.DateField(null=True, blank=True)
     departure_date = models.DateField(null=True, blank=True)
+    birth_date = models.DateField(null=True, blank=True)
+    attendance_tracking_enabled = models.BooleanField(default=False, editable=False)
     booked_nights = models.PositiveIntegerField(default=0)
     actual_nights = models.PositiveIntegerField(default=0)
     notes = models.TextField(blank=True)
@@ -509,6 +513,12 @@ class Participant(TimeStampedModel):
                 self.booked_nights = days
         super().save(*args, **kwargs)
 
+    def clean(self) -> None:
+        """Reject profile dates that cannot represent an already-born person."""
+        super().clean()
+        if self.birth_date is not None and self.birth_date > timezone.localdate():
+            raise ValidationError({"birth_date": "Das Geburtsdatum darf nicht in der Zukunft liegen."})
+
     @property
     def full_name(self):
         return f"{self.first_name} {self.last_name}".strip()
@@ -517,7 +527,48 @@ class Participant(TimeStampedModel):
     def target_shifts(self) -> int:
         if self.is_child:
             return 0
-        return int(round(Decimal(self.booked_nights) * self.camp.shift_ratio_per_night))
+        return int(round(Decimal(self.effective_attendance_nights) * self.camp.shift_ratio_per_night))
+
+    def age_on(self, reference_date: date) -> int | None:
+        """Return the completed age on reference_date, rejecting future birth dates."""
+        if self.birth_date is None:
+            return None
+        if self.birth_date > reference_date:
+            raise ValidationError("Das Geburtsdatum darf nicht in der Zukunft liegen.")
+        return (
+            reference_date.year
+            - self.birth_date.year
+            - ((reference_date.month, reference_date.day) < (self.birth_date.month, self.birth_date.day))
+        )
+
+    @property
+    def effective_attendance_nights(self) -> int:
+        """Return tracked present nights, or the legacy actual/booked fallback."""
+        if self.attendance_tracking_enabled:
+            if self.camp.starts_on is None or self.camp.ends_on is None or self.camp.starts_on >= self.camp.ends_on:
+                return 0
+            if self.arrival_date is None or self.departure_date is None or self.arrival_date >= self.departure_date:
+                return 0
+            window_start = self.camp.starts_on - timedelta(days=4)
+            window_end = self.camp.ends_on + timedelta(days=4)
+            prefetched_records = getattr(self, "prefetched_attendance_days", None)
+            if prefetched_records is not None:
+                return sum(
+                    record.is_present
+                    and record.family_member_id is None
+                    and window_start <= record.date < window_end
+                    and (self.arrival_date is None or record.date >= self.arrival_date)
+                    and (self.departure_date is None or record.date < self.departure_date)
+                    for record in prefetched_records
+                )
+            records = self.attendance_days.filter(family_member__isnull=True, is_present=True)
+            records = records.filter(date__gte=window_start, date__lt=window_end)
+            if self.arrival_date is not None:
+                records = records.filter(date__gte=self.arrival_date)
+            if self.departure_date is not None:
+                records = records.filter(date__lt=self.departure_date)
+            return records.count()
+        return self.actual_nights or self.booked_nights
 
     @property
     def completed_shifts(self) -> int:
@@ -592,6 +643,8 @@ class ParticipantFamilyMember(TimeStampedModel):
     guardian = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="family_members")
     first_name = models.CharField(max_length=120)
     last_name = models.CharField(max_length=120)
+    email = models.EmailField(blank=True)
+    phone = models.CharField(max_length=80, blank=True)
     role = models.CharField(max_length=20, choices=Role.choices)
     is_youth_group = models.BooleanField(
         default=False,
@@ -599,6 +652,8 @@ class ParticipantFamilyMember(TimeStampedModel):
     )
     arrival_date = models.DateField(null=True, blank=True)
     departure_date = models.DateField(null=True, blank=True)
+    birth_date = models.DateField(null=True, blank=True)
+    attendance_tracking_enabled = models.BooleanField(default=False, editable=False)
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -608,6 +663,12 @@ class ParticipantFamilyMember(TimeStampedModel):
     def full_name(self) -> str:
         """Return the display name used in kiosk booking dialogs."""
         return f"{self.first_name} {self.last_name}".strip()
+
+    def clean(self) -> None:
+        """Reject profile dates that cannot represent an already-born person."""
+        super().clean()
+        if self.birth_date is not None and self.birth_date > timezone.localdate():
+            raise ValidationError({"birth_date": "Das Geburtsdatum darf nicht in der Zukunft liegen."})
 
     @property
     def is_child(self) -> bool:
@@ -635,10 +696,136 @@ class ParticipantFamilyMember(TimeStampedModel):
         """Return required shifts using the same camp ratio as regular participants."""
         if self.is_child:
             return 0
-        return int(round(Decimal(self.booked_nights) * self.guardian.camp.shift_ratio_per_night))
+        return int(round(Decimal(self.effective_attendance_nights) * self.guardian.camp.shift_ratio_per_night))
+
+    def age_on(self, reference_date: date) -> int | None:
+        """Return the completed age on reference_date, rejecting future birth dates."""
+        if self.birth_date is None:
+            return None
+        if self.birth_date > reference_date:
+            raise ValidationError("Das Geburtsdatum darf nicht in der Zukunft liegen.")
+        return (
+            reference_date.year
+            - self.birth_date.year
+            - ((reference_date.month, reference_date.day) < (self.birth_date.month, self.birth_date.day))
+        )
+
+    @property
+    def effective_attendance_nights(self) -> int:
+        """Return tracked present nights, or the established family stay fallback."""
+        if self.attendance_tracking_enabled:
+            camp = self.guardian.camp
+            if camp.starts_on is None or camp.ends_on is None or camp.starts_on >= camp.ends_on:
+                return 0
+            window_start = camp.starts_on - timedelta(days=4)
+            window_end = camp.ends_on + timedelta(days=4)
+            arrival_date: date | None
+            departure_date: date | None
+            if self.arrival_date is not None and self.departure_date is not None:
+                arrival_date = self.arrival_date
+                departure_date = self.departure_date
+            else:
+                arrival_date = self.guardian.arrival_date
+                departure_date = self.guardian.departure_date
+            if arrival_date is None or departure_date is None or arrival_date >= departure_date:
+                return 0
+            prefetched_records = getattr(self, "prefetched_attendance_days", None)
+            if prefetched_records is not None:
+                return sum(
+                    record.is_present
+                    and record.family_member_id == self.pk
+                    and window_start <= record.date < window_end
+                    and (arrival_date is None or record.date >= arrival_date)
+                    and (departure_date is None or record.date < departure_date)
+                    for record in prefetched_records
+                )
+            records = self.attendance_days.filter(is_present=True)
+            records = records.filter(date__gte=window_start, date__lt=window_end)
+            if arrival_date is not None:
+                records = records.filter(date__gte=arrival_date)
+            if departure_date is not None:
+                records = records.filter(date__lt=departure_date)
+            return records.count()
+        if self.arrival_date and self.departure_date and self.departure_date > self.arrival_date:
+            return (self.departure_date - self.arrival_date).days
+        return self.guardian.actual_nights or self.guardian.booked_nights
+
+    @property
+    def effective_target_shifts(self) -> int:
+        """Return required shifts calculated from tracked attendance when enabled."""
+        if self.is_child:
+            return 0
+        return int(round(Decimal(self.effective_attendance_nights) * self.guardian.camp.shift_ratio_per_night))
 
     def __str__(self):
         return f"{self.full_name} ({self.guardian})"
+
+
+class AttendanceDay(TimeStampedModel):
+    """Store one presence decision for a participant or one of their family members."""
+
+    participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="attendance_days")
+    family_member = models.ForeignKey(
+        ParticipantFamilyMember,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="attendance_days",
+    )
+    date = models.DateField()
+    is_present = models.BooleanField(default=False)
+    comment = models.CharField(max_length=500, blank=True)
+
+    class Meta:
+        ordering = ["date", "pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["participant", "date"],
+                condition=models.Q(family_member__isnull=True),
+                name="unique_participant_attendance_day",
+            ),
+            models.UniqueConstraint(
+                fields=["family_member", "date"],
+                condition=models.Q(family_member__isnull=False),
+                name="unique_family_attendance_day",
+            ),
+        ]
+
+    @property
+    def overnight(self) -> tuple[datetime.date, datetime.date]:
+        """Return the arrival-inclusive, following-day-exclusive overnight range."""
+        return self.date, self.date + timedelta(days=1)
+
+    def clean(self) -> None:
+        """Validate that the attendance target belongs to the account and stays within its visit."""
+        super().clean()
+        if self.participant_id is None:
+            raise ValidationError({"participant": "Ein Zielkonto ist erforderlich."})
+        target_arrival = self.participant.arrival_date
+        target_departure = self.participant.departure_date
+        if self.family_member is not None:
+            if self.family_member.guardian_id != self.participant_id:
+                raise ValidationError({"family_member": "Das Familienmitglied gehört nicht zum Zielkonto."})
+            if self.family_member.arrival_date is not None and self.family_member.departure_date is not None:
+                target_arrival = self.family_member.arrival_date
+                target_departure = self.family_member.departure_date
+        if target_arrival and self.date < target_arrival or target_departure and self.date >= target_departure:
+            raise ValidationError({"date": "Der Anwesenheitstag liegt außerhalb des Aufenthaltsbereichs."})
+        camp = self.participant.camp
+        earliest = camp.starts_on - timedelta(days=4) if camp.starts_on else None
+        latest = camp.ends_on + timedelta(days=4) if camp.ends_on else None
+        if earliest and self.date < earliest or latest and self.date >= latest:
+            raise ValidationError({"date": "Der Anwesenheitstag liegt außerhalb des Lagerfensters."})
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Validate attendance records even when callers bypass service helpers."""
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        family_member = self.family_member
+        target = family_member.full_name if family_member is not None else self.participant.full_name
+        return f"{target}: {self.date}"
 
 
 class ParticipantFamilyMemberPin(TimeStampedModel):
@@ -923,6 +1110,7 @@ class KioskActionAuditLog(models.Model):
         MEAL_BOOKED = "meal_booked", "Essensanmeldung gespeichert"
         MEAL_RETRACTED = "meal_retracted", "Essensanmeldung zurückgenommen"
         CHECKIN_UPDATED = "checkin_updated", "Anwesenheit geändert"
+        PROFILE_UPDATED = "profile_updated", "Stammdaten geändert"
 
     camp = models.ForeignKey(Camp, on_delete=models.PROTECT, related_name="kiosk_action_audit_logs")
     actor_participant = models.ForeignKey(
@@ -1066,12 +1254,106 @@ class Payment(TimeStampedModel):
     paid_on = models.DateField()
     method = models.CharField(max_length=80, blank=True)
     note = models.CharField(max_length=180, blank=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    deleted_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="deleted_payments",
+    )
 
     class Meta:
         ordering = ["-paid_on", "participant"]
+        indexes = [models.Index(fields=["participant", "deleted_at"], name="payment_participant_active")]
+
+    @property
+    def payment_reference(self) -> str:
+        """Return the human-readable payment identifier."""
+        if self._state.adding:
+            return ""
+        return f"Z#{self.pk:05d}"
 
     def __str__(self):
         return f"{self.participant}: {self.amount}"
+
+
+class PaymentAuditLog(models.Model):
+    """Record administrative deletions and restorations of recorded payments."""
+
+    class Action(models.TextChoices):
+        DELETED = "deleted", "Gelöscht"
+        RESTORED = "restored", "Wiederhergestellt"
+
+    participant = models.ForeignKey(
+        Participant,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payment_audit_logs",
+    )
+    payment = models.ForeignKey(Payment, on_delete=models.SET_NULL, null=True, blank=True, related_name="audit_logs")
+    changed_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payment_audit_logs",
+    )
+    action = models.CharField(max_length=20, choices=Action.choices, default=Action.DELETED)
+    before = models.JSONField(default=dict)
+    after = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"{self.payment}: {self.get_action_display()} am {self.created_at:%Y-%m-%d %H:%M}"
+
+
+class CreditPayout(models.Model):
+    """Immutable append-only record of credit paid back to a participant."""
+
+    class Method(models.TextChoices):
+        BANK_TRANSFER = "bank_transfer", "Überweisung"
+        CASH = "cash", "Bar"
+        PAYPAL = "paypal", "PayPal"
+
+    participant = models.ForeignKey(Participant, on_delete=models.RESTRICT, related_name="credit_payouts")
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    method = models.CharField(max_length=20, choices=Method.choices)
+    created_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.PROTECT,
+        related_name="credit_payouts_created",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    idempotency_key = models.UUIDField(unique=True, editable=False)
+    external_reference = models.CharField(max_length=120, blank=True)
+    note = models.CharField(max_length=180, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def clean(self):
+        super().clean()
+        sensitive = re.compile(r"(?i)\b[A-Z]{2}\d{2}[A-Z0-9 ]{11,30}\b|(?:\d[ -]?){13,19}")
+        for value in (self.external_reference, self.note):
+            if sensitive.search(value or ""):
+                raise ValidationError("Bank-, Karten- oder PayPal-Kontodaten sind nicht zulässig.")
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None:
+            raise ValidationError("CreditPayout-Einträge sind unveränderlich.")
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("CreditPayout-Einträge können nicht gelöscht werden.")
+
+    def __str__(self):
+        return f"{self.participant}: {self.amount} ({self.created_at:%Y-%m-%d})"
 
 
 class Expense(TimeStampedModel):
@@ -1221,6 +1503,15 @@ class MealOrder(TimeStampedModel):
         blank=True,
         related_name="sent_meal_orders",
     )
+    is_sent = models.BooleanField(default=True)
+    unmarked_at = models.DateTimeField(null=True, blank=True)
+    unmarked_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="unmarked_meal_orders",
+    )
 
     class Meta:
         ordering = ["-meal_date"]
@@ -1230,6 +1521,39 @@ class MealOrder(TimeStampedModel):
 
     def __str__(self):
         return f"{self.camp}: Bestellung {self.meal_date}"
+
+
+class MealBookingOverride(TimeStampedModel):
+    """Persist the explicit booking state for one camp day and meal type."""
+
+    class State(models.TextChoices):
+        OPEN = "open", "Offen"
+        CLOSED = "closed", "Geschlossen"
+
+    camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="meal_booking_overrides")
+    meal_date = models.DateField()
+    meal = models.CharField(max_length=20, choices=MealSignup.Meal.choices)
+    state = models.CharField(max_length=10, choices=State.choices)
+    changed_at = models.DateTimeField(default=timezone.now)
+    changed_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="meal_booking_overrides",
+    )
+
+    class Meta:
+        ordering = ["meal_date", "meal"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["camp", "meal_date", "meal"],
+                name="unique_meal_booking_override",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.camp}: {self.meal_date} {self.get_meal_display()} ({self.get_state_display()})"
 
 
 class MealPlanEntry(TimeStampedModel):
@@ -1301,6 +1625,7 @@ class SettlementRun(TimeStampedModel):
     total_due = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
     total_paid = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
     total_advanced = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
+    total_payouts = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
     balance = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
     cost_center_data = models.JSONField(default=dict, blank=True)
 
@@ -1397,6 +1722,7 @@ class Settlement(TimeStampedModel):
     total_due = models.DecimalField(max_digits=10, decimal_places=2)
     total_paid = models.DecimalField(max_digits=10, decimal_places=2)
     total_advanced = models.DecimalField(max_digits=10, decimal_places=2)
+    total_payouts = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0"))
     balance = models.DecimalField(max_digits=10, decimal_places=2)
     data = models.JSONField(default=dict)
 
@@ -1417,6 +1743,7 @@ class Settlement(TimeStampedModel):
 class Shift(TimeStampedModel):
     camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="shifts")
     name = models.CharField(max_length=120)
+    description = models.TextField(blank=True, default="")
     date = models.DateField()
     start_time = models.TimeField(null=True, blank=True)
     end_time = models.TimeField(null=True, blank=True)
@@ -1438,6 +1765,7 @@ class Shift(TimeStampedModel):
 class DailyShiftTemplate(TimeStampedModel):
     camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="daily_shift_templates")
     name = models.CharField(max_length=120)
+    description = models.TextField(blank=True, default="")
     start_time = models.TimeField(null=True, blank=True)
     end_time = models.TimeField(null=True, blank=True)
     required_slots = models.PositiveIntegerField(default=1)

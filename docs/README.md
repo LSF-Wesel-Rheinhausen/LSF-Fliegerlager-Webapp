@@ -90,6 +90,18 @@ python src/manage.py runserver
 
 Danach läuft die Anwendung lokal unter `http://localhost:8000`.
 
+Für die gemeinsame lokale Demo- und Testdatenbank (standardmäßig `src/db.sqlite3`) können anschließend die synthetischen Beispieldaten erzeugt werden:
+
+```bash
+python src/manage.py seed_local_test_db
+```
+
+Der Befehl ist idempotent, verwendet ausschließlich `example.test`-Daten und schreibt keine E-Mails, Push-Nachrichten oder Passkeys. pytest, CI und parallele Playwright-Worker behalten ihre isolierten Datenbanken. Für einen einzelnen E2E- beziehungsweise Review-Server kann `SEED_LOCAL_TEST_DB=1` gesetzt werden.
+
+Die lokalen Demo-Zugangsdaten sind fest definiert: `local-admin` / `LocalAdmin-417-Only!`, `local-editor` / `LocalEditor-417-Only!`, gemeinsamer Lager-PIN `864208`, Teilnehmer-PIN `2468` und Begleitpersonen-PIN `9753`. Sie sind ausschließlich für lokale Tests bestimmt und werden vom Command nie ausgegeben.
+
+Ein fremder Benutzer mit einem deterministischen Seed-Benutzernamen wird aus Sicherheitsgründen nicht überschrieben; der Seed bricht dann vollständig und transaktional ab. Bereits erzeugte Seed-Benutzer werden nur anhand ihrer vollständigen deterministischen Identität und des passenden Passwort-Hashes wiedererkannt.
+
 ## Tests
 
 ```bash
@@ -141,3 +153,11 @@ Die wichtigsten Übersichten liegen zusätzlich als HTML vor:
 - [`architecture.html`](architecture.html): Architektur, Datenfluss und Abrechnungslogik.
 - [`operations.html`](operations.html): Setup, Betrieb, Tests und typische Admin-Abläufe.
 - [`development.html`](development.html): Beitragsregeln, Tooling, Security, ORM, Tests und UI-Konventionen.
+
+## Essenskalender
+
+Die Essensübersicht zeigt Abendessen als responsive Tageskarten. Heute und zukünftige Tage können manuell gesperrt oder entsperrt werden; Frühstück bleibt ohne diese Steuerung. Die angezeigte Richtzeit löst keine automatische Sperre aus. Eine als versandt markierte Caterer-Bestellung sperrt den Abendessen-Tag jedoch unabhängig vom manuellen Override, bis sie als nicht bestellt markiert wird.
+
+![Abendessen-Tageskalender auf dem Desktop](images/manual-dinner-booking-calendar-desktop-light.png)
+
+![Abendessen-Tageskalender mobil im Dark Mode](images/manual-dinner-booking-calendar-mobile-dark.png)

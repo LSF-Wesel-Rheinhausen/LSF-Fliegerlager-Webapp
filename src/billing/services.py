@@ -4,7 +4,8 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from functools import partial
-from typing import Any, cast
+from typing import Any, TypedDict, cast
+from uuid import UUID
 
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import transaction
@@ -12,32 +13,134 @@ from django.db.models import Max, Prefetch, Q, Sum
 from django.utils import timezone
 
 from .models import (
+    AttendanceDay,
     BookingAuditLog,
     Camp,
     Charge,
+    CreditPayout,
+    DailyShiftException,
+    DailyShiftTemplate,
     DrinkEntry,
     Expense,
     ExpenseAllocation,
     KioskActionAuditLog,
+    MealBookingOverride,
     MealOrder,
     MealPlanEntry,
     MealSignup,
     Participant,
     ParticipantBookingLink,
     ParticipantFamilyMember,
+    Payment,
+    PaymentAuditLog,
     PriceRule,
     Settlement,
     SettlementRun,
+    Shift,
 )
 from .permissions import ADMIN_GROUP, EDITOR_GROUP, HUEBERS_GROUP
 
+_ATTENDANCE_PREFETCH_ATTRIBUTE = "prefetched_attendance_days"
+
 ZERO = Decimal("0.00")
+
+
+class ExpenseReceiptStorageError(RuntimeError):
+    """Report a receipt storage failure without exposing backend details to users."""
+
+
+def save_expense(expense: Expense) -> None:
+    """Save an expense and normalize failures while persisting a new receipt.
+
+    Raises:
+        ExpenseReceiptStorageError: If the attached, uncommitted receipt cannot
+            be written to the configured storage.
+        OSError: If an unrelated storage-level error occurs.
+    """
+    try:
+        expense.save()
+    except OSError as error:
+        receipt = expense.receipt
+        if receipt and not getattr(receipt, "_committed", True):
+            raise ExpenseReceiptStorageError from error
+        raise
+
+
 MEAL_VARIANT_ORDER = [
     MealSignup.Variant.NORMAL,
     MealSignup.Variant.VEGAN,
     MealSignup.Variant.NORMAL_CHILD,
     MealSignup.Variant.VEGAN_CHILD,
 ]
+
+
+def generate_shifts_from_templates(templates: Iterable[DailyShiftTemplate]) -> tuple[int, int]:
+    """Generate shifts for templates while preserving individual descriptions.
+
+    Template descriptions are supplied only through ``create_defaults`` so a
+    later generation updates scheduling defaults without overwriting edits on
+    an existing shift. Related camps and exceptions are loaded in bulk.
+
+    Returns:
+        A ``(generated_count, skipped_count)`` tuple.
+    """
+    template_list = list(templates)
+    if not template_list:
+        return 0, 0
+
+    camp_ids = {template.camp_id for template in template_list}
+    camps = Camp.objects.in_bulk(camp_ids)
+    exceptions = DailyShiftException.objects.filter(template_id__in=[template.pk for template in template_list])
+    exceptions_by_template: dict[int, dict[date, DailyShiftException]] = {}
+    for exception_record in exceptions:
+        exceptions_by_template.setdefault(exception_record.template_id, {})[exception_record.date] = exception_record
+
+    generated_count = 0
+    skipped_count = 0
+    with transaction.atomic():
+        for template in template_list:
+            camp = camps[template.camp_id]
+            if not camp.starts_on or not camp.ends_on:
+                continue
+            current_date = camp.starts_on
+            template_exceptions = exceptions_by_template.get(template.pk, {})
+            while current_date <= camp.ends_on:
+                exception: DailyShiftException | None = template_exceptions.get(current_date)
+                if exception and exception.is_skipped:
+                    skipped_count += 1
+                else:
+                    slots = (
+                        exception.custom_required_slots
+                        if exception and exception.custom_required_slots is not None
+                        else template.required_slots
+                    )
+                    start_time = (
+                        exception.custom_start_time
+                        if exception and exception.custom_start_time is not None
+                        else template.start_time
+                    )
+                    end_time = (
+                        exception.custom_end_time
+                        if exception and exception.custom_end_time is not None
+                        else template.end_time
+                    )
+                    Shift.objects.update_or_create(
+                        camp=camp,
+                        date=current_date,
+                        name=template.name,
+                        start_time=start_time,
+                        defaults={"end_time": end_time, "required_slots": slots},
+                        create_defaults={
+                            "end_time": end_time,
+                            "required_slots": slots,
+                            "description": template.description,
+                        },
+                    )
+                    generated_count += 1
+                current_date += timedelta(days=1)
+    return generated_count, skipped_count
+
+
 MANUAL_CHARGE_KIND_BY_PRICE_RULE_KIND = {
     PriceRule.Kind.CAMP_FLAT: Charge.Kind.CAMP_FLAT,
     PriceRule.Kind.NIGHT: Charge.Kind.OTHER,
@@ -132,6 +235,7 @@ class SettlementResult:
     total_due: Decimal
     total_paid: Decimal
     total_advanced: Decimal
+    total_payouts: Decimal
     balance: Decimal
 
     @property
@@ -150,6 +254,72 @@ class SettlementResult:
 
 def money(value):
     return (value or ZERO).quantize(Decimal("0.01"))
+
+
+_SENSITIVE_PAYOUT_COORDINATES = re.compile(r"(?i)\b[A-Z]{2}\d{2}[A-Z0-9 ]{11,30}\b|(?:\d[ -]?){13,19}")
+
+
+def _validate_payout_text(value: str, field_label: str) -> str:
+    if len(value) > 180 or _SENSITIVE_PAYOUT_COORDINATES.search(value):
+        raise ValidationError(f"{field_label} darf keine Bank- oder Kartendaten enthalten.")
+    return value
+
+
+def calculate_available_credit(participant: Participant | int) -> Decimal:
+    """Return positive current credit remaining after existing payouts."""
+    participant_id = participant.pk if isinstance(participant, Participant) else participant
+    result = calculate_participant_settlement(Participant.objects.get(pk=participant_id))
+    return money(max(-result.balance, ZERO))
+
+
+@transaction.atomic
+def create_credit_payout(
+    participant: Participant | int,
+    amount: Decimal,
+    method: str,
+    created_by: Any,
+    idempotency_key: UUID,
+    external_reference: str = "",
+    note: str = "",
+) -> CreditPayout:
+    """Create one atomic, idempotent payout from the participant's current credit."""
+    if not isinstance(idempotency_key, UUID):
+        raise ValidationError("Ein gültiger Idempotenzschlüssel ist erforderlich.")
+    amount = money(amount)
+    if amount <= ZERO:
+        raise ValidationError("Eine Auszahlung muss positiv sein.")
+    if method not in CreditPayout.Method.values:
+        raise ValidationError("Ungültige Auszahlungsart.")
+    _validate_payout_text(external_reference, "Die externe Referenz")
+    _validate_payout_text(note, "Die Notiz")
+
+    existing = CreditPayout.objects.filter(idempotency_key=idempotency_key).first()
+    if existing is not None:
+        if existing.participant_id != (participant.pk if isinstance(participant, Participant) else participant):
+            raise ValidationError("Der Idempotenzschlüssel gehört zu einem anderen Zahlungskonto.")
+        if existing.amount != amount or existing.method != method:
+            raise ValidationError("Der Idempotenzschlüssel wurde mit anderen Auszahlungsdaten verwendet.")
+        return existing
+
+    participant_id = participant.pk if isinstance(participant, Participant) else participant
+    locked_participant = Participant.objects.select_for_update().get(pk=participant_id)
+    existing = CreditPayout.objects.filter(idempotency_key=idempotency_key).first()
+    if existing is not None:
+        if existing.participant_id != participant_id or existing.amount != amount or existing.method != method:
+            raise ValidationError("Der Idempotenzschlüssel wurde mit anderen Auszahlungsdaten verwendet.")
+        return existing
+    available_credit = calculate_available_credit(locked_participant)
+    if amount > available_credit:
+        raise ValidationError("Die Auszahlung übersteigt das verfügbare Guthaben.")
+    return CreditPayout.objects.create(
+        participant=locked_participant,
+        amount=amount,
+        method=method,
+        created_by=created_by,
+        idempotency_key=idempotency_key,
+        external_reference=external_reference,
+        note=note,
+    )
 
 
 def rate(value):
@@ -213,56 +383,147 @@ def create_manual_charge(
 def is_meal_change_locked(
     camp: Camp,
     meal_date: date,
+    meal: str = MealSignup.Meal.DINNER,
     now: datetime | None = None,
     sent_order_dates: set[date] | None = None,
 ) -> bool:
-    """Return whether kiosk meal changes are closed for the requested meal date.
+    """Return whether policy closes kiosk changes for one meal date.
 
     Args:
-        camp: Camp whose cutoff time controls kiosk meal changes.
+        camp: Camp whose dinner-day state controls kiosk meal changes.
         meal_date: Meal date the participant wants to book or retract.
+        meal: Breakfast or dinner.
         now: Optional timezone-aware timestamp for tests.
-        sent_order_dates: Optional preloaded dates whose catering orders were sent.
+        sent_order_dates: Optional preloaded dates with a sent catering order.
 
     Returns:
-        True when the catering order was sent, the meal date is in the past, or tomorrow's bookings are past cutoff.
+        True for past dates, sent dinner orders, or manually closed dinners.
     """
+    return bool(
+        meal_booking_state(
+            camp,
+            meal_date,
+            meal=meal,
+            now=now,
+            sent_order_dates=sent_order_dates,
+        )["locked"]
+    )
+
+
+def meal_booking_state(
+    camp: Camp,
+    meal_date: date,
+    *,
+    meal: str = MealSignup.Meal.DINNER,
+    now: datetime | None = None,
+    override_states: Mapping[tuple[date, str], str] | None = None,
+    sent_order_dates: set[date] | None = None,
+) -> dict[str, str | bool]:
+    """Return the effective booking state for one meal slot.
+
+    Breakfast is open for today and future dates. A sent catering order closes
+    dinner booking before manual overrides are considered; marking that order
+    as not sent restores the stored manual state. The camp's reminder time is
+    informational. Callers resolving several days can pass both preloaded
+    collections to avoid per-day database queries.
+
+    Args:
+        camp: Camp whose dinner booking state is resolved.
+        meal_date: Calendar date of the meal slot.
+        meal: Breakfast or dinner.
+        now: Optional timezone-aware timestamp for deterministic callers.
+        override_states: Optional preloaded override states keyed by date and meal.
+        sent_order_dates: Optional preloaded dates with a sent catering order.
+
+    Returns:
+        A state identifier, lock flag, and user-facing explanation.
+    """
+    current_time = timezone.localtime(now) if now is not None else timezone.localtime()
+    today = current_time.date() if now is not None else timezone.localdate()
+    if meal_date < today:
+        return {
+            "state": "past",
+            "locked": True,
+            "message": f"Buchungen und Rücknahmen für {meal_date:%d.%m.%Y} sind geschlossen.",
+        }
+    if meal != MealSignup.Meal.DINNER:
+        return {"state": "open", "locked": False, "message": ""}
     order_was_sent = (
         meal_date in sent_order_dates
         if sent_order_dates is not None
-        else MealOrder.objects.filter(camp=camp, meal_date=meal_date).exists()
+        else MealOrder.objects.filter(camp=camp, meal_date=meal_date, is_sent=True).exists()
     )
     if order_was_sent:
-        return True
-    current_time = timezone.localtime(now) if now is not None else timezone.localtime()
-    if meal_date <= current_time.date():
-        return True
-    cutoff_at = datetime.combine(
-        current_time.date(),
-        camp.meal_booking_cutoff_time,
-        tzinfo=current_time.tzinfo,
+        return {
+            "state": "order_sent",
+            "locked": True,
+            "message": f"Die Bestellung für {meal_date:%d.%m.%Y} wurde bereits abgeschickt.",
+        }
+    override_state = (
+        override_states.get((meal_date, meal))
+        if override_states is not None
+        else MealBookingOverride.objects.filter(camp=camp, meal_date=meal_date, meal=meal)
+        .values_list("state", flat=True)
+        .first()
     )
-    return meal_date == current_time.date() + timedelta(days=1) and current_time >= cutoff_at
+    if override_state is not None:
+        if override_state == MealBookingOverride.State.OPEN:
+            return {"state": "manual_open", "locked": False, "message": "Manuell wieder geöffnet."}
+        return {
+            "state": "manual_closed",
+            "locked": True,
+            "message": f"Buchungen und Rücknahmen für {meal_date:%d.%m.%Y} wurden manuell geschlossen.",
+        }
+    return {"state": "open", "locked": False, "message": ""}
+
+
+def preload_meal_booking_state_inputs(
+    camp: Camp,
+    meal_dates: Iterable[date],
+    *,
+    meal: str,
+) -> tuple[dict[tuple[date, str], str], set[date]]:
+    """Load all persisted state inputs needed to resolve several meal dates.
+
+    Args:
+        camp: Camp whose persisted meal state is loaded.
+        meal_dates: Dates that will be resolved in one batch.
+        meal: Breakfast or dinner; breakfast returns empty collections.
+
+    Returns:
+        Override states keyed by date and meal plus dates with sent orders.
+    """
+    dates = set(meal_dates)
+    if meal != MealSignup.Meal.DINNER or not dates:
+        return {}, set()
+    override_states = {
+        (meal_date, stored_meal): state
+        for meal_date, stored_meal, state in MealBookingOverride.objects.filter(
+            camp=camp,
+            meal_date__in=dates,
+            meal=meal,
+        ).values_list("meal_date", "meal", "state")
+    }
+    sent_order_dates = set(
+        MealOrder.objects.filter(camp=camp, meal_date__in=dates, is_sent=True).values_list("meal_date", flat=True)
+    )
+    return override_states, sent_order_dates
 
 
 def meal_change_lock_message(
     camp: Camp,
     meal_date: date,
+    meal: str = MealSignup.Meal.DINNER,
     sent_order_dates: set[date] | None = None,
 ) -> str:
     """Return the user-facing message for a closed kiosk meal slot."""
-    order_was_sent = (
-        meal_date in sent_order_dates
-        if sent_order_dates is not None
-        else MealOrder.objects.filter(camp=camp, meal_date=meal_date).exists()
-    )
-    if order_was_sent:
-        return f"Die Bestellung für {meal_date:%d.%m.%Y} wurde bereits abgeschickt."
-    if meal_date <= timezone.localdate():
-        return f"Buchungen und Rücknahmen für {meal_date:%d.%m.%Y} sind geschlossen."
-    return (
-        f"Buchungen und Rücknahmen für {meal_date:%d.%m.%Y} sind nach "
-        f"{camp.meal_booking_cutoff_time:%H:%M} Uhr geschlossen."
+    return str(
+        meal_booking_state(
+            camp,
+            meal_date,
+            meal=meal,
+            sent_order_dates=sent_order_dates,
+        )["message"]
     )
 
 
@@ -717,8 +978,291 @@ def restore_booking_from_audit_log(audit_log: BookingAuditLog, changed_by: Any) 
     return restored_charge
 
 
+@dataclass(frozen=True)
+class ArticleUsage:
+    """Aggregate active bookings for one billable article."""
+
+    kind: str
+    kind_label: str
+    description: str
+    booking_count: int
+    quantity_total: Decimal
+    gross_total: Decimal
+
+
+@dataclass(frozen=True)
+class MealUsage:
+    """Aggregate active meal signups for one meal type."""
+
+    meal: str
+    meal_label: str
+    variant_counts: dict[str, int]
+    total: int
+
+
+@dataclass(frozen=True)
+class PositionReportDay:
+    """Count the people present on one camp day."""
+
+    day: date
+    participant_count: int
+    family_member_count: int
+
+    @property
+    def total(self) -> int:
+        """Return everyone present on this day, guardians and family members alike."""
+        return self.participant_count + self.family_member_count
+
+
+@dataclass(frozen=True)
+class PositionReport:
+    """Summarize article, meal and attendance usage for one camp."""
+
+    camp: Camp
+    articles: list[ArticleUsage]
+    meals: list[MealUsage]
+    attendance_days: list[PositionReportDay]
+    participant_nights: int
+    family_member_nights: int
+
+    @property
+    def booking_total(self) -> int:
+        """Return the number of active bookings across all articles."""
+        return sum(article.booking_count for article in self.articles)
+
+    @property
+    def gross_total(self) -> Decimal:
+        """Return the gross value of all active bookings."""
+        return money(sum((article.gross_total for article in self.articles), ZERO))
+
+    @property
+    def person_nights(self) -> int:
+        """Return total person-nights spent at the camp."""
+        return self.participant_nights + self.family_member_nights
+
+    @property
+    def peak_day(self) -> PositionReportDay | None:
+        """Return the busiest camp day, or None when nobody is recorded."""
+        populated = [day for day in self.attendance_days if day.total > 0]
+        if not populated:
+            return None
+        return max(populated, key=lambda day: day.total)
+
+
+def _covers_day(arrival: date | None, departure: date | None, day: date) -> bool:
+    """Return whether an open-ended arrival/departure window contains a day."""
+    if arrival is not None and day < arrival:
+        return False
+    if departure is not None and day > departure:
+        return False
+    return arrival is not None or departure is not None
+
+
+def calculate_position_report(camp: Camp) -> PositionReport:
+    """Aggregate per-article, per-meal and per-day usage for one camp.
+
+    Soft-deleted bookings and retracted meal signups are excluded, so the
+    figures match what the camp is actually billed and catered for.
+
+    Args:
+        camp: The camp to evaluate.
+
+    Returns:
+        A report covering article usage, meal counts and daily attendance.
+    """
+    kind_labels = dict(Charge.Kind.choices)
+    article_rows: dict[tuple[str, str], dict[str, Any]] = {}
+    charges = Charge.objects.filter(participant__camp=camp, deleted_at__isnull=True)
+    for charge in charges:
+        key = (charge.kind, charge.description)
+        row = article_rows.setdefault(key, {"count": 0, "quantity": ZERO, "gross": ZERO})
+        row["count"] += 1
+        row["quantity"] += Decimal(str(charge.quantity))
+        row["gross"] += Decimal(str(charge.total))
+    articles = [
+        ArticleUsage(
+            kind=kind,
+            kind_label=kind_labels.get(kind, kind),
+            description=description,
+            booking_count=row["count"],
+            quantity_total=money(row["quantity"]),
+            gross_total=money(row["gross"]),
+        )
+        for (kind, description), row in sorted(
+            article_rows.items(),
+            key=lambda item: (-item[1]["count"], item[0][0], item[0][1]),
+        )
+    ]
+
+    variant_labels = dict(MealSignup.Variant.choices)
+    meal_labels = dict(MealSignup.Meal.choices)
+    if camp.starts_on and camp.ends_on and camp.starts_on <= camp.ends_on:
+        dates = camp_meal_dates(camp)
+        signups = MealSignup.objects.filter(
+            participant__camp=camp,
+            status=MealSignup.Status.ACTIVE,
+            meal_date__range=(dates[0], dates[-1]),
+        ).values_list("meal", "variant")
+    else:
+        signups = MealSignup.objects.filter(
+            participant__camp=camp,
+            status=MealSignup.Status.ACTIVE,
+        ).values_list("meal", "variant")
+    meal_rows: dict[str, dict[str, int]] = {}
+    for meal, variant in signups:
+        meal_rows.setdefault(meal, {})
+        meal_rows[meal][variant] = meal_rows[meal].get(variant, 0) + 1
+    meals = [
+        MealUsage(
+            meal=meal,
+            meal_label=meal_labels.get(meal, meal),
+            variant_counts={
+                variant_labels[variant]: meal_rows.get(meal, {}).get(variant, 0) for variant in MEAL_VARIANT_ORDER
+            },
+            total=sum(meal_rows.get(meal, {}).values()),
+        )
+        for meal in (MealSignup.Meal.DINNER, MealSignup.Meal.BREAKFAST)
+    ]
+
+    participants = list(Participant.objects.filter(camp=camp, archived_at__isnull=True))
+    family_members = list(
+        ParticipantFamilyMember.objects.filter(
+            guardian__camp=camp,
+            guardian__archived_at__isnull=True,
+            is_active=True,
+        )
+        .select_related("guardian__camp")
+        .prefetch_related(
+            Prefetch(
+                "attendance_days",
+                queryset=AttendanceDay.objects.filter(is_present=True),
+                to_attr=_ATTENDANCE_PREFETCH_ATTRIBUTE,
+            )
+        )
+    )
+    attendance_days = [
+        PositionReportDay(
+            day=day,
+            participant_count=sum(
+                1
+                for participant in participants
+                if _covers_day(participant.arrival_date, participant.departure_date, day)
+            ),
+            family_member_count=sum(
+                1
+                for member in family_members
+                if _covers_day(
+                    member.arrival_date or member.guardian.arrival_date,
+                    member.departure_date or member.guardian.departure_date,
+                    day,
+                )
+            ),
+        )
+        for day in camp_meal_dates(camp)
+    ]
+
+    participant_nights = sum(
+        participant.actual_nights or participant.booked_nights or 0 for participant in participants
+    )
+    family_member_nights = sum(
+        member.effective_attendance_nights if member.attendance_tracking_enabled else member.booked_nights or 0
+        for member in family_members
+    )
+
+    return PositionReport(
+        camp=camp,
+        articles=articles,
+        meals=meals,
+        attendance_days=attendance_days,
+        participant_nights=participant_nights,
+        family_member_nights=family_member_nights,
+    )
+
+
+def payment_audit_snapshot(payment: Payment) -> dict[str, str | None]:
+    """Return the auditable business fields for a recorded payment.
+
+    Args:
+        payment: The payment to serialize.
+
+    Returns:
+        A JSON-serializable snapshot of the payment fields an admin may review.
+    """
+    return {
+        "payment_reference": payment.payment_reference,
+        "amount": str(money(Decimal(str(payment.amount)))),
+        "paid_on": payment.paid_on.isoformat() if payment.paid_on else None,
+        "method": payment.method,
+        "note": payment.note,
+    }
+
+
+def create_payment_delete_audit_log(
+    payment: Payment,
+    before: dict[str, str | None],
+    changed_by: Any,
+) -> PaymentAuditLog:
+    """Persist an audit entry before a recorded payment is soft-deleted.
+
+    Args:
+        payment: The payment that will be marked deleted after the audit row exists.
+        before: Snapshot captured before deletion.
+        changed_by: User who performed the deletion.
+
+    Returns:
+        The created audit log entry. The payment relation stays intact because
+        deletion is represented by soft-delete fields on the payment.
+    """
+    return PaymentAuditLog.objects.create(
+        participant=payment.participant,
+        payment=payment,
+        changed_by=changed_by,
+        action=PaymentAuditLog.Action.DELETED,
+        before=before,
+        after={},
+    )
+
+
+def restore_payment_from_audit_log(audit_log: PaymentAuditLog, changed_by: Any) -> Payment:
+    """Restore a soft-deleted payment referenced by its deletion audit entry.
+
+    Args:
+        audit_log: The deletion audit row that points at the deleted payment.
+        changed_by: User who requested the restoration.
+
+    Returns:
+        The restored payment.
+
+    Raises:
+        ValidationError: If the audit row is not a restorable deletion snapshot.
+    """
+    if audit_log.action != PaymentAuditLog.Action.DELETED:
+        raise ValidationError("Nur gelöschte Zahlungen können wiederhergestellt werden.")
+    restored_payment = audit_log.payment
+    if audit_log.payment_id is None or restored_payment is None:
+        raise ValidationError("Diese Zahlung kann ohne ursprüngliche Zahlung nicht wiederhergestellt werden.")
+    if restored_payment.deleted_at is None:
+        raise ValidationError("Diese Zahlung wurde bereits wiederhergestellt.")
+    if audit_log.participant_id is None:
+        raise ValidationError("Diese Zahlung kann keinem Teilnehmer mehr zugeordnet werden.")
+
+    before = payment_audit_snapshot(restored_payment)
+    restored_payment.deleted_at = None
+    restored_payment.deleted_by = None
+    restored_payment.save(update_fields=["deleted_at", "deleted_by"])
+    PaymentAuditLog.objects.create(
+        participant=audit_log.participant,
+        payment=restored_payment,
+        changed_by=changed_by,
+        action=PaymentAuditLog.Action.RESTORED,
+        before=before,
+        after=payment_audit_snapshot(restored_payment),
+    )
+    return restored_payment
+
+
 def participant_camp_flat_duration(participant):
-    nights = participant.actual_nights or participant.booked_nights or 0
+    nights = participant.effective_attendance_nights
     if nights > 7:
         return PriceRule.CampFlatDuration.TWO_WEEKS
     return PriceRule.CampFlatDuration.ONE_WEEK
@@ -805,7 +1349,7 @@ def default_charge_lines(
             continue
         quantity = Decimal("1.00")
         if rule.kind == PriceRule.Kind.NIGHT:
-            quantity = Decimal(participant.actual_nights or participant.booked_nights or 0)
+            quantity = Decimal(participant.effective_attendance_nights)
         lines.append(
             build_settlement_line(
                 label=rule.name,
@@ -821,11 +1365,117 @@ def default_charge_lines(
 
 def family_member_camp_flat_duration(member: ParticipantFamilyMember, guardian: Participant) -> str:
     """Resolve a family member's camp-fee duration from their stay, falling back to the guardian."""
-    if member.arrival_date and member.departure_date and member.departure_date > member.arrival_date:
-        nights = (member.departure_date - member.arrival_date).days
-    else:
-        nights = guardian.actual_nights or guardian.booked_nights or 0
+    nights = member.effective_attendance_nights
     return PriceRule.CampFlatDuration.TWO_WEEKS if nights > 7 else PriceRule.CampFlatDuration.ONE_WEEK
+
+
+@transaction.atomic
+def save_attendance_day(
+    participant: Participant,
+    attendance_date: date,
+    *,
+    is_present: bool,
+    family_member: ParticipantFamilyMember | None = None,
+    comment: str = "",
+) -> AttendanceDay:
+    """Atomically validate, track and upsert one attendance decision for its exact target."""
+    locked_participant = Participant.objects.select_for_update().get(pk=participant.pk)
+    locked_member = None
+    if family_member is not None:
+        locked_member = ParticipantFamilyMember.objects.select_for_update().get(pk=family_member.pk)
+        if locked_member.guardian_id != locked_participant.pk:
+            raise ValidationError("Das Familienmitglied gehört nicht zum Zielkonto.")
+        if not locked_member.attendance_tracking_enabled:
+            locked_member.attendance_tracking_enabled = True
+            locked_member.save(update_fields=["attendance_tracking_enabled", "updated_at"])
+    elif not locked_participant.attendance_tracking_enabled:
+        locked_participant.attendance_tracking_enabled = True
+        locked_participant.save(update_fields=["attendance_tracking_enabled", "updated_at"])
+
+    lookup = {"participant": locked_participant, "family_member": locked_member, "date": attendance_date}
+    attendance = AttendanceDay.objects.select_for_update().filter(**lookup).first()
+    if attendance is None:
+        attendance = AttendanceDay(**lookup)
+    attendance.is_present = is_present
+    attendance.comment = comment
+    attendance.full_clean()
+    attendance.save()
+    return attendance
+
+
+@transaction.atomic
+def replace_attendance_days(
+    participant: Participant,
+    *,
+    start_date: date,
+    end_date: date,
+    days: Iterable[Mapping[str, Any]],
+    family_member: ParticipantFamilyMember | None = None,
+    may_remove_comments: bool = True,
+) -> list[AttendanceDay]:
+    """Atomically replace attendance in [start_date, end_date) for one target."""
+    if start_date >= end_date:
+        raise ValidationError("Der Anwesenheitsbereich muss mindestens eine Nacht enthalten.")
+
+    prepared_days: list[tuple[date, bool, str, bool]] = []
+    seen_dates: set[date] = set()
+    for day in days:
+        attendance_date = day.get("date")
+        is_present = day.get("is_present")
+        comment_was_omitted = "comment" not in day
+        comment = day.get("comment", "")
+        if not isinstance(attendance_date, date) or isinstance(attendance_date, datetime):
+            raise ValidationError("Jeder Anwesenheitstag benötigt ein gültiges Datum.")
+        if attendance_date < start_date or attendance_date >= end_date:
+            raise ValidationError("Der Anwesenheitstag liegt außerhalb des gewählten Bereichs.")
+        if not isinstance(is_present, bool):
+            raise ValidationError("Anwesenheit muss als Wahrheitswert angegeben werden.")
+        if not isinstance(comment, str) or len(comment) > 500:
+            raise ValidationError("Der Kommentar darf höchstens 500 Zeichen enthalten.")
+        if attendance_date in seen_dates:
+            raise ValidationError("Jeder Anwesenheitstag darf nur einmal angegeben werden.")
+        seen_dates.add(attendance_date)
+        validation_candidate = AttendanceDay(
+            participant=participant,
+            family_member=family_member,
+            date=attendance_date,
+            is_present=is_present,
+            comment=comment,
+        )
+        validation_candidate.full_clean(validate_unique=False, validate_constraints=False)
+        prepared_days.append((attendance_date, is_present, comment, comment_was_omitted))
+
+    if family_member is None:
+        scope = Q(participant=participant, family_member__isnull=True)
+        participant.attendance_tracking_enabled = True
+        participant.save(update_fields=["attendance_tracking_enabled", "updated_at"])
+    else:
+        if family_member.guardian_id != participant.pk:
+            raise ValidationError("Das Familienmitglied gehört nicht zum Zielkonto.")
+        scope = Q(participant=participant, family_member=family_member)
+        family_member.attendance_tracking_enabled = True
+        family_member.save(update_fields=["attendance_tracking_enabled", "updated_at"])
+
+    existing_records = AttendanceDay.objects.select_for_update().filter(scope)
+    hidden_comment_dates = list(
+        existing_records.exclude(date__in=seen_dates).exclude(comment="").values_list("date", flat=True)
+    )
+    if hidden_comment_dates and not may_remove_comments:
+        raise ValidationError("Eine Datumsänderung würde einen nicht sichtbaren Kommentar löschen.")
+    existing_comments = dict(existing_records.filter(date__in=seen_dates).values_list("date", "comment"))
+    existing_records.exclude(date__in=seen_dates).delete()
+    saved_days = []
+    for attendance_date, is_present, comment, comment_was_omitted in prepared_days:
+        saved_days.append(
+            save_attendance_day(
+                participant,
+                attendance_date,
+                is_present=is_present,
+                family_member=family_member,
+                comment=existing_comments.get(attendance_date, "") if comment_was_omitted else comment,
+            )
+        )
+    return saved_days
 
 
 def family_member_camp_flat_role(member: ParticipantFamilyMember) -> str:
@@ -1029,20 +1679,30 @@ def calculate_participant_settlement(participant):
     participant = (
         Participant.objects.select_related("camp")
         .prefetch_related(
-            Prefetch("charges", queryset=Charge.objects.select_related("family_member")),
-            "family_members",
-            "payments",
+            Prefetch(
+                "charges",
+                queryset=Charge.objects.filter(deleted_at__isnull=True).select_related("family_member"),
+            ),
+            Prefetch(
+                "family_members",
+                queryset=ParticipantFamilyMember.objects.order_by("last_name", "first_name", "pk"),
+                to_attr="settlement_family_members",
+            ),
+            Prefetch("payments", queryset=Payment.objects.filter(deleted_at__isnull=True)),
+            Prefetch("credit_payouts", queryset=CreditPayout.objects.order_by("created_at", "pk")),
             "expenses",
             "drink_entries",
             "expense_allocations__expense",
         )
         .get(pk=participant.pk)
     )
+    _prefetch_tracked_settlement_attendance([participant])
+    settlement_family_members = cast(Any, participant).settlement_family_members
     lines = (
         default_charge_lines(participant)
         + family_camp_flat_lines(
             participant,
-            participant.family_members.all(),
+            settlement_family_members,
             participant.camp.price_rules.filter(is_default=True),
         )
         + manual_charge_lines(participant)
@@ -1052,7 +1712,7 @@ def calculate_participant_settlement(participant):
     total_gross = money(sum((line.gross_total for line in lines), ZERO))
     total_subsidy = money(sum((line.subsidy_amount for line in lines), ZERO))
     total_due = money(sum((line.total for line in lines), ZERO))
-    total_paid = money(participant.payments.aggregate(total=Sum("amount"))["total"])
+    total_paid = money(participant.payments.filter(deleted_at__isnull=True).aggregate(total=Sum("amount"))["total"])
     total_advanced = money(
         Expense.objects.filter(
             participant=participant,
@@ -1060,7 +1720,8 @@ def calculate_participant_settlement(participant):
             status=Expense.Status.APPROVED,
         ).aggregate(total=Sum("amount"))["total"]
     )
-    balance = money(total_due - total_paid - total_advanced)
+    total_payouts = money(sum((payout.amount for payout in participant.credit_payouts.all()), ZERO))
+    balance = money(total_due - total_paid - total_advanced + total_payouts)
     return SettlementResult(
         participant=participant,
         lines=lines,
@@ -1069,6 +1730,7 @@ def calculate_participant_settlement(participant):
         total_due=total_due,
         total_paid=total_paid,
         total_advanced=total_advanced,
+        total_payouts=total_payouts,
         balance=balance,
     )
 
@@ -1116,7 +1778,16 @@ def calculate_participant_settlements(
                 queryset=ExpenseAllocation.objects.select_related("expense"),
                 to_attr="settlement_expense_allocations",
             ),
-            Prefetch("payments", to_attr="settlement_payments"),
+            Prefetch(
+                "payments",
+                queryset=Payment.objects.filter(deleted_at__isnull=True),
+                to_attr="settlement_payments",
+            ),
+            Prefetch(
+                "credit_payouts",
+                queryset=CreditPayout.objects.order_by("created_at", "pk"),
+                to_attr="settlement_payouts",
+            ),
             Prefetch(
                 "expenses",
                 queryset=Expense.objects.filter(
@@ -1128,6 +1799,7 @@ def calculate_participant_settlements(
         )
     )
     participants_by_id = {participant.pk: participant for participant in loaded_participants}
+    _prefetch_tracked_settlement_attendance(participants_by_id.values())
     default_rules_by_camp: dict[int, list[PriceRule]] = {}
     for rule in PriceRule.objects.filter(
         camp_id__in={participant.camp_id for participant in participants_by_id.values()},
@@ -1159,6 +1831,7 @@ def calculate_participant_settlements(
         total_advanced = money(
             sum((expense.amount for expense in prefetched_participant.settlement_advanced_expenses), ZERO)
         )
+        total_payouts = money(sum((payout.amount for payout in prefetched_participant.settlement_payouts), ZERO))
         results[participant_id] = SettlementResult(
             participant=participant,
             lines=lines,
@@ -1167,9 +1840,50 @@ def calculate_participant_settlements(
             total_due=total_due,
             total_paid=total_paid,
             total_advanced=total_advanced,
-            balance=money(total_due - total_paid - total_advanced),
+            total_payouts=total_payouts,
+            balance=money(total_due - total_paid - total_advanced + total_payouts),
         )
     return results
+
+
+def _prefetch_tracked_settlement_attendance(participants: Iterable[Participant]) -> None:
+    """Attach attendance rows only when settlement targets actually use tracking."""
+    participant_list = list(participants)
+    tracked_participant_ids = {
+        participant.pk for participant in participant_list if participant.attendance_tracking_enabled
+    }
+    tracked_members = [
+        member
+        for participant in participant_list
+        for member in cast(Any, participant).settlement_family_members
+        if member.attendance_tracking_enabled
+    ]
+    tracked_member_ids = {member.pk for member in tracked_members}
+
+    if tracked_participant_ids:
+        records_by_participant_id: dict[int, list[AttendanceDay]] = {
+            participant_id: [] for participant_id in tracked_participant_ids
+        }
+        for record in AttendanceDay.objects.filter(
+            participant_id__in=tracked_participant_ids,
+            family_member__isnull=True,
+        ).order_by("date", "pk"):
+            records_by_participant_id[record.participant_id].append(record)
+        for participant in participant_list:
+            participant_id = participant.pk
+            if participant_id is not None and participant_id in records_by_participant_id:
+                setattr(participant, _ATTENDANCE_PREFETCH_ATTRIBUTE, records_by_participant_id[participant_id])
+
+    if tracked_member_ids:
+        records_by_member_id: dict[int, list[AttendanceDay]] = {member_id: [] for member_id in tracked_member_ids}
+        for record in AttendanceDay.objects.filter(family_member_id__in=tracked_member_ids).order_by("date", "pk"):
+            family_member_id = record.family_member_id
+            if family_member_id is not None:
+                records_by_member_id[family_member_id].append(record)
+        for member in tracked_members:
+            member_id = member.pk
+            if member_id is not None:
+                setattr(member, _ATTENDANCE_PREFETCH_ATTRIBUTE, records_by_member_id[member_id])
 
 
 def calculate_camp_settlements(camp):
@@ -1179,7 +1893,7 @@ def calculate_camp_settlements(camp):
 
 
 def _settlement_snapshot_data(result: SettlementResult) -> dict[str, Any]:
-    return {
+    data = {
         "participant": {
             "name": result.participant.full_name,
             "status": result.participant.status,
@@ -1201,6 +1915,41 @@ def _settlement_snapshot_data(result: SettlementResult) -> dict[str, Any]:
             }
             for line in result.lines
         ],
+    }
+    if result.total_payouts:
+        data["total_payouts"] = str(result.total_payouts)
+    return data
+
+
+class _CostCenterExpenseDetail(TypedDict):
+    paid_on: date | None
+    created_at: datetime | None
+    participant: Participant | None
+    description: str
+    amount: Decimal
+
+
+def _cost_center_expense_snapshot(expense: Expense | _CostCenterExpenseDetail) -> dict[str, str]:
+    """Serialize an ORM expense or a normalized subsidy expense detail."""
+    paid_date: date | None
+    if isinstance(expense, Expense):
+        paid_date = expense.paid_on or expense.created_at.date()
+        participant = expense.participant
+        description = expense.description
+        amount = expense.amount
+    else:
+        paid_date = expense["paid_on"]
+        created_at = expense["created_at"]
+        if paid_date is None and created_at is not None:
+            paid_date = created_at.date()
+        participant = expense["participant"]
+        description = expense["description"]
+        amount = expense["amount"]
+    return {
+        "paid_date": paid_date.isoformat() if paid_date else "",
+        "applicant_name": participant.full_name if participant else "Unbekannt",
+        "description": description,
+        "amount": str(money(amount)),
     }
 
 
@@ -1237,15 +1986,7 @@ def _cost_center_snapshot_data(camp: Camp) -> list[dict[str, Any]]:
                     )
                     for signup in data["income_details"]
                 ],
-                "expense_details": [
-                    {
-                        "paid_date": (expense.paid_on or expense.created_at.date()).isoformat(),
-                        "applicant_name": expense.participant.full_name if expense.participant else "Unbekannt",
-                        "description": expense.description,
-                        "amount": str(money(expense.amount)),
-                    }
-                    for expense in data["expense_details"]
-                ],
+                "expense_details": [_cost_center_expense_snapshot(expense) for expense in data["expense_details"]],
             }
         )
     return snapshot
@@ -1271,6 +2012,7 @@ def create_settlement_run(
         total_due=money(sum((result.total_due for result in results), ZERO)),
         total_paid=money(sum((result.total_paid for result in results), ZERO)),
         total_advanced=money(sum((result.total_advanced for result in results), ZERO)),
+        total_payouts=money(sum((result.total_payouts for result in results), ZERO)),
         balance=money(sum((result.balance for result in results), ZERO)),
         cost_center_data=_cost_center_snapshot_data(locked_camp),
     )
@@ -1287,6 +2029,7 @@ def create_settlement_run(
                 total_due=result.total_due,
                 total_paid=result.total_paid,
                 total_advanced=result.total_advanced,
+                total_payouts=result.total_payouts,
                 balance=result.balance,
                 data=_settlement_snapshot_data(result),
             )
@@ -1304,6 +2047,7 @@ def _participant_kiosk_summary_from_result(result: SettlementResult) -> dict[str
         "total_due": result.total_due,
         "total_paid": result.total_paid,
         "total_advanced": result.total_advanced,
+        "total_payouts": result.total_payouts,
         "balance": result.balance,
         "lines": [
             {
@@ -1554,8 +2298,16 @@ def get_cost_center_evaluation(camp):
             status__in=[Participant.Status.REGISTERED, Participant.Status.ACTIVE, Participant.Status.SETTLED],
         )
         .select_related("camp")
-        .prefetch_related("family_members")
+        .prefetch_related(
+            Prefetch(
+                "family_members",
+                queryset=ParticipantFamilyMember.objects.order_by("last_name", "first_name", "pk"),
+                to_attr="settlement_family_members",
+            )
+        )
     )
+    active_participants = list(active_participants)
+    _prefetch_tracked_settlement_attendance(active_participants)
     default_rules = list(PriceRule.objects.filter(camp=camp, is_default=True))
     camp_flat_rules = [rule for rule in default_rules if rule.kind == PriceRule.Kind.CAMP_FLAT]
 
@@ -1587,7 +2339,7 @@ def get_cost_center_evaluation(camp):
                 }
             )
 
-        for line in family_camp_flat_lines(participant, participant.family_members.all(), default_rules):
+        for line in family_camp_flat_lines(participant, participant.settlement_family_members, default_rules):
             evaluation["camp_flat"]["income"] += line.gross_total
             evaluation["camp_flat"]["income_count"] += 1
             evaluation["camp_flat"]["income_details"].append(

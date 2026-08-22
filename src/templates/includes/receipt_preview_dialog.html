@@ -1,0 +1,15 @@
+<dialog id="global-receipt-dialog" class="receipt-preview-dialog" aria-labelledby="global-receipt-dialog-title">
+  <div class="dialog-heading">
+    <h2 id="global-receipt-dialog-title">Belegvorschau</h2>
+    <form method="dialog">
+      <button type="submit" class="button button-secondary receipt-preview-dialog__close">Schließen</button>
+    </form>
+  </div>
+  <div class="receipt-preview-dialog__content">
+    <img id="global-receipt-image" class="receipt-preview-dialog__image" alt="" hidden>
+    <p class="hint receipt-preview-dialog__fallback" data-receipt-preview-fallback hidden>
+      Dieses Bild kann in deinem Browser nicht angezeigt werden.
+      <a href="#" target="_blank" rel="noopener" data-receipt-open-external>Beleg direkt öffnen</a>
+    </p>
+  </div>
+</dialog>

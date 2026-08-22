@@ -1,5 +1,7 @@
+import json
 from pathlib import Path
 
+import pytest
 from scripts import build_changelog_manifest
 
 
@@ -25,6 +27,68 @@ def test_build_manifest_adds_first_parent_version(monkeypatch, tmp_path: Path):
     ]
 
 
+def test_bounded_manifest_keeps_newest_complete_entries_within_byte_budget(monkeypatch):
+    entries = [
+        {"version": "1", "revision": "rev1", "path": "changelog/old.md", "title": "Old", "body": "old"},
+        {"version": "2", "revision": "rev2", "path": "changelog/new.md", "title": "New", "body": "new"},
+    ]
+    monkeypatch.setattr(build_changelog_manifest, "build_manifest", lambda: entries)
+
+    rendered = build_changelog_manifest.render_bounded_manifest(max_bytes=150)
+
+    assert len(rendered.encode("utf-8")) <= 150
+    assert rendered.endswith("\n")
+    assert [entry["version"] for entry in json.loads(rendered)] == ["2"]
+
+
+def test_bounded_manifest_does_not_skip_overflowing_entry_and_include_older_entries(monkeypatch):
+    entries = [
+        {"version": "1", "revision": "rev1", "path": "changelog/old.md", "title": "Old", "body": "old"},
+        {
+            "version": "2",
+            "revision": "rev2",
+            "path": "changelog/middle.md",
+            "title": "Middle",
+            "body": "m" * 500,
+        },
+        {"version": "3", "revision": "rev3", "path": "changelog/new.md", "title": "New", "body": "new"},
+    ]
+    monkeypatch.setattr(build_changelog_manifest, "build_manifest", lambda: entries)
+    max_bytes = len(build_changelog_manifest._render([entries[0], entries[2]]).encode("utf-8"))
+
+    rendered = build_changelog_manifest.render_bounded_manifest(max_bytes=max_bytes)
+
+    assert [entry["version"] for entry in json.loads(rendered)] == ["3"]
+
+
+def test_bounded_manifest_truncates_oversized_latest_entry_on_utf8_boundary(monkeypatch):
+    entries = [
+        {
+            "version": "7",
+            "revision": "rev7",
+            "path": "changelog/huge.md",
+            "title": "Überschrift",
+            "body": "🛩️" * 1000,
+        }
+    ]
+    monkeypatch.setattr(build_changelog_manifest, "build_manifest", lambda: entries)
+
+    rendered = build_changelog_manifest.render_bounded_manifest(max_bytes=180)
+    decoded = json.loads(rendered)
+
+    assert len(rendered.encode("utf-8")) <= 180
+    assert decoded[0]["version"] == "7"
+    assert decoded[0]["body"].encode("utf-8").decode("utf-8") == decoded[0]["body"]
+    assert decoded[0]["body"] != entries[0]["body"]
+
+
+def test_bounded_manifest_rejects_non_positive_byte_budget(monkeypatch):
+    monkeypatch.setattr(build_changelog_manifest, "build_manifest", lambda: [])
+
+    with pytest.raises(ValueError, match="positive"):
+        build_changelog_manifest.render_bounded_manifest(max_bytes=0)
+
+
 def test_docker_workflow_uses_first_parent_version():
     workflow = (Path(__file__).parents[1] / ".github" / "workflows" / "docker.yml").read_text(encoding="utf-8")
 
@@ -33,6 +97,7 @@ def test_docker_workflow_uses_first_parent_version():
     ) in workflow
     assert 'echo "version=$(git rev-list --first-parent --count HEAD)"' in workflow
     assert workflow.count("APP_VERSION=${{ steps.metadata.outputs.version }}") == 2
+    assert workflow.count("python scripts/build_changelog_manifest.py --max-bytes 60000") == 2
 
 
 RESOURCE_INTENSIVE_WORKFLOWS = ("ci.yml", "security.yml", "dast.yml")

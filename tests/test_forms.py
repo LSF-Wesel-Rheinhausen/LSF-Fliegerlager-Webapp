@@ -7,10 +7,12 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 
 from billing.forms import (
     CampForm,
+    ExpenseForm,
     FirstAdminSetupForm,
     KioskLoginForm,
     ParticipantForm,
     ParticipantRegistrationApprovalForm,
+    SharedExpenseRequestForm,
     UserCreateForm,
     UserEditForm,
     validate_receipt_upload,
@@ -18,6 +20,41 @@ from billing.forms import (
 from billing.models import Participant, ParticipantFamilyMember
 from billing.roles import ROLE_EDITOR
 from tests.factories import CampFactory, ParticipantFactory, SuperUserFactory
+
+RECEIPT_ACCEPT = "application/pdf,image/jpeg,image/png,image/heic,.pdf,.jpg,.jpeg,.png,.heic"
+
+
+@pytest.mark.parametrize("form_class", [ExpenseForm, SharedExpenseRequestForm])
+def test_receipt_widgets_allow_file_selection_without_forced_capture(form_class):
+    widget = form_class().fields["receipt"].widget
+
+    assert widget.attrs["accept"] == RECEIPT_ACCEPT
+    assert "capture" not in widget.attrs
+
+
+@pytest.mark.parametrize(
+    ("form_class", "filename", "content_type", "content"),
+    [
+        (ExpenseForm, "rechnung.pdf", "application/pdf", b"%PDF-1.7\n"),
+        (SharedExpenseRequestForm, "rechnung.jpg", "image/jpeg", b"\xff\xd8\xff\xe0"),
+    ],
+)
+def test_receipt_form_fields_accept_supported_pdf_and_image_uploads(form_class, filename, content_type, content):
+    upload = SimpleUploadedFile(filename, content, content_type=content_type)
+    form = form_class()
+    form.cleaned_data = {"receipt": upload}
+
+    assert form.clean_receipt() is upload
+
+
+@pytest.mark.parametrize("form_class", [ExpenseForm, SharedExpenseRequestForm])
+def test_receipt_form_fields_reject_spoofed_uploads(form_class):
+    upload = SimpleUploadedFile("rechnung.pdf", b"not a pdf", content_type="application/pdf")
+    form = form_class()
+    form.cleaned_data = {"receipt": upload}
+
+    with pytest.raises(ValidationError, match="Dateiinhalt passt nicht zum Dateityp"):
+        form.clean_receipt()
 
 
 @pytest.mark.parametrize(

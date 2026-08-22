@@ -9,8 +9,13 @@
   const pdfDialog = document.getElementById("global-pdf-dialog");
   const pdfFrame = document.getElementById("global-pdf-iframe");
   const pdfExternalLink = pdfDialog?.querySelector("[data-pdf-open-external]");
+  const receiptDialog = document.getElementById("global-receipt-dialog");
+  const receiptImage = document.getElementById("global-receipt-image");
+  const receiptExternalLink = receiptDialog?.querySelector("[data-receipt-open-external]");
+  const receiptFallback = receiptDialog?.querySelector("[data-receipt-preview-fallback]");
   let installPrompt;
   let pdfTrigger;
+  let imageTrigger;
 
   const isIos = () =>
     /iPad|iPhone|iPod/.test(navigator.userAgent) ||
@@ -104,7 +109,16 @@
 
   document.addEventListener("click", (event) => {
     const link = event.target.closest("a[data-pdf-preview]");
-    if (!link || !pdfDialog || !pdfFrame || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    if (
+      !link ||
+      !pdfDialog ||
+      !pdfFrame ||
+      event.button !== 0 ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      event.altKey
+    ) return;
 
     const pdfUrl = new URL(link.href, window.location.href);
     if (pdfUrl.origin !== window.location.origin) return;
@@ -116,6 +130,32 @@
     pdfDialog.showModal();
   });
 
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest('a[data-receipt-preview="image"]');
+    if (
+      !link ||
+      !receiptDialog ||
+      !receiptImage ||
+      event.button !== 0 ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      event.altKey
+    ) return;
+
+    const imageUrl = new URL(link.href, window.location.href);
+    if (imageUrl.origin !== window.location.origin) return;
+
+    event.preventDefault();
+    imageTrigger = link;
+    receiptImage.alt = link.dataset.receiptAlt || "Belegvorschau";
+    receiptImage.hidden = false;
+    if (receiptFallback) receiptFallback.hidden = true;
+    receiptImage.src = imageUrl.href;
+    if (receiptExternalLink) receiptExternalLink.href = imageUrl.href;
+    receiptDialog.showModal();
+  });
+
   pdfDialog?.addEventListener("click", (event) => {
     if (event.target === pdfDialog) pdfDialog.close();
   });
@@ -125,6 +165,26 @@
     if (pdfExternalLink) pdfExternalLink.href = "#";
     const trigger = pdfTrigger;
     pdfTrigger = undefined;
+    window.requestAnimationFrame(() => trigger?.focus());
+  });
+
+  receiptImage?.addEventListener("error", () => {
+    receiptImage.hidden = true;
+    if (receiptFallback) receiptFallback.hidden = false;
+  });
+
+  receiptDialog?.addEventListener("click", (event) => {
+    if (event.target === receiptDialog) receiptDialog.close();
+  });
+
+  receiptDialog?.addEventListener("close", () => {
+    receiptImage.hidden = true;
+    receiptImage.removeAttribute("src");
+    receiptImage.alt = "";
+    if (receiptFallback) receiptFallback.hidden = true;
+    if (receiptExternalLink) receiptExternalLink.href = "#";
+    const trigger = imageTrigger;
+    imageTrigger = undefined;
     window.requestAnimationFrame(() => trigger?.focus());
   });
 })();
