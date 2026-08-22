@@ -1,5 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 from threading import Barrier, Event, Lock, local
 
@@ -39,7 +39,7 @@ def _require_postgresql() -> None:
 def test_payment_restore_has_one_winner_across_postgresql_connections():
     _require_postgresql()
     admin = SuperUserFactory(username="payment-restore-race-admin")
-    payment = PaymentFactory(amount=Decimal("42.50"), paid_on="2026-07-03", method="Überweisung", note="Original")
+    payment = PaymentFactory(amount=Decimal("42.50"), paid_on=date(2026, 7, 3), method="Überweisung", note="Original")
     payment.deleted_at = timezone.now()
     payment.deleted_by = admin
     payment.save(update_fields=["deleted_at", "deleted_by"])
