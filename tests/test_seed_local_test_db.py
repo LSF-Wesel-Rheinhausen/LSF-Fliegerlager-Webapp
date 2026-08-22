@@ -360,12 +360,12 @@ def test_seeded_issue_417_attendance_export_is_person_rows_by_day_columns(client
     workbook = load_workbook(BytesIO(response.content), data_only=False)
     sheet = workbook["Anwesenheit"]
     summary = workbook["Tagesübersicht"]
-    date_columns = {sheet.cell(1, column).value: column for column in range(3, sheet.max_column + 1)}
+    date_columns = {sheet.cell(1, column).value: column for column in range(4, sheet.max_column + 1)}
     people = {sheet.cell(row, 1).value: row for row in range(2, sheet.max_row + 1)}
     summary_rows = {summary.cell(row, 1).value: row for row in range(2, summary.max_row + 1)}
 
     assert sheet.max_row == 7
-    assert sheet.max_column == 20
+    assert sheet.max_column == 21
     assert {
         "AdultComplete Synthetic",
         "ChildPartial Synthetic",
@@ -374,9 +374,9 @@ def test_seeded_issue_417_attendance_export_is_person_rows_by_day_columns(client
     } <= people.keys()
     assert date(2026, 8, 14) in date_columns
     assert date(2026, 8, 31) in date_columns
-    assert sheet.cell(people["AdultComplete Synthetic"], date_columns[date(2026, 8, 18)]).value == "Anwesend"
-    assert sheet.cell(people["AdultComplete Synthetic"], date_columns[date(2026, 8, 19)]).value == "Abwesend"
-    assert sheet.cell(people["ChildPartial Synthetic"], date_columns[date(2026, 8, 21)]).value == "Anwesend"
-    assert sheet.cell(people["FamilyChild Synthetic"], date_columns[date(2026, 8, 21)]).value == "Anwesend"
-    assert sheet.cell(people["FamilyChild Synthetic"], date_columns[date(2026, 8, 25)]).value == "Außerhalb"
+    assert sheet.cell(people["AdultComplete Synthetic"], date_columns[date(2026, 8, 18)]).value == "AN"
+    assert sheet.cell(people["AdultComplete Synthetic"], date_columns[date(2026, 8, 19)]).value == "AB"
+    assert sheet.cell(people["ChildPartial Synthetic"], date_columns[date(2026, 8, 21)]).value == "AN"
+    assert sheet.cell(people["FamilyChild Synthetic"], date_columns[date(2026, 8, 21)]).value == "AN"
+    assert sheet.cell(people["FamilyChild Synthetic"], date_columns[date(2026, 8, 25)]).value == "–"
     assert summary.cell(summary_rows[date(2026, 8, 19)], 4).value == "Seed attendance note"
