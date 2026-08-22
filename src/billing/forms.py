@@ -1,4 +1,3 @@
-import re
 from datetime import date, time, timedelta
 from decimal import Decimal
 from typing import Any, cast
@@ -30,6 +29,7 @@ from .models import (
     PriceRule,
     Shift,
     UserProfile,
+    validate_credit_payout_metadata,
 )
 from .roles import ROLE_ADMIN, ROLE_CHOICES, user_role
 
@@ -803,17 +803,11 @@ class CreditPayoutForm(forms.Form):
     external_reference = forms.CharField(max_length=120, required=False, label="Externe Referenz")
     note = forms.CharField(max_length=180, required=False, label="Notiz", widget=forms.Textarea)
 
-    @staticmethod
-    def _reject_sensitive_coordinates(value: str) -> str:
-        if re.search(r"(?i)\b[A-Z]{2}\d{2}[A-Z0-9 ]{11,30}\b", value) or re.search(r"(?:\d[ -]?){13,19}", value):
-            raise forms.ValidationError("Bank- oder Kartendaten dürfen nicht erfasst werden.")
-        return value
-
     def clean_external_reference(self):
-        return self._reject_sensitive_coordinates(self.cleaned_data["external_reference"])
+        return validate_credit_payout_metadata(self.cleaned_data["external_reference"], "Die externe Referenz")
 
     def clean_note(self):
-        return self._reject_sensitive_coordinates(self.cleaned_data["note"])
+        return validate_credit_payout_metadata(self.cleaned_data["note"], "Die Notiz")
 
 
 EXPENSE_CATEGORY_CHOICES = [

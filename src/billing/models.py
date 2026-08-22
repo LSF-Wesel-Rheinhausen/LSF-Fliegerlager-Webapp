@@ -11,7 +11,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from django.core.validators import MaxValueValidator, MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models, transaction
 from django.db.models.functions import Round
 from django.utils import timezone
@@ -1313,6 +1313,100 @@ class PaymentAuditLog(models.Model):
         return f"{self.payment}: {self.get_action_display()} am {self.created_at:%Y-%m-%d %H:%M}"
 
 
+_PAYOUT_IBAN_CANDIDATE = re.compile(r"(?i)\b[A-Z]{2}[ -]?\d{2}(?:[ -]?[A-Z0-9]){11,30}\b")
+_PAYOUT_CARD_CANDIDATE = re.compile(r"(?<!\d)(?:\d[ -]?){13,19}(?!\d)")
+_PAYOUT_INTERNATIONAL_PHONE = re.compile(r"(?<!\w)(?:\+|00)[0-9 ()/.-]{8,22}[0-9](?!\w)")
+_PAYOUT_NATIONAL_PHONE = re.compile(r"(?<!\w)0[0-9 ()/.-]{9,20}[0-9](?!\w)")
+_PAYOUT_PAYPAL_ACCOUNT = re.compile(
+    r"(?i)paypal(?:\.me/[a-z0-9._-]+|(?:[ -]*(?:konto|account))?[ :]\s*[\w.+-]+@[\w.-]+\.[a-z]{2,})"
+)
+
+
+def _iban_checksum_is_valid(candidate: str) -> bool:
+    normalized = re.sub(r"[ -]", "", candidate).upper()
+    if not re.fullmatch(r"[A-Z]{2}\d{2}[A-Z0-9]{11,30}", normalized):
+        return False
+    rearranged = normalized[4:] + normalized[:4]
+    numeric = "".join(
+        str(ord(character) - ord("A") + 10) if character.isalpha() else character for character in rearranged
+    )
+    return int(numeric) % 97 == 1
+
+
+def _card_checksum_is_valid(candidate: str) -> bool:
+    digits = re.sub(r"[ -]", "", candidate)
+    if not 13 <= len(digits) <= 19:
+        return False
+    checksum = 0
+    for index, digit in enumerate(reversed(digits)):
+        value = int(digit)
+        if index % 2:
+            value *= 2
+            if value > 9:
+                value -= 9
+        checksum += value
+    return checksum % 10 == 0
+
+
+def _is_standalone_card(value: str) -> bool:
+    candidate = value.strip()
+    match = _PAYOUT_CARD_CANDIDATE.fullmatch(candidate)
+    return match is not None and _card_checksum_is_valid(match.group())
+
+
+def _is_known_card_number(candidate: str) -> bool:
+    digits = re.sub(r"[ -]", "", candidate)
+    if not _card_checksum_is_valid(candidate):
+        return False
+    return digits.startswith("4") or 51 <= int(digits[:2]) <= 55 or 2221 <= int(digits[:4]) <= 2720
+
+
+def _contains_known_card_number(value: str) -> bool:
+    return any(_is_known_card_number(match.group()) for match in _PAYOUT_CARD_CANDIDATE.finditer(value))
+
+
+def _phone_candidate_is_valid(candidate: str, international: bool) -> bool:
+    digits = re.sub(r"\D", "", candidate)
+    if international:
+        return 10 <= len(digits) <= 15
+    return 10 <= len(digits) <= 12 and digits.startswith(("01", "02", "03", "04", "05", "06", "07", "08", "09"))
+
+
+def _is_standalone_email(value: str) -> bool:
+    try:
+        validate_email(value)
+    except ValidationError:
+        return False
+    return True
+
+
+def _normalize_unicode_whitespace(value: str) -> str:
+    return re.sub(r"\s", " ", value)
+
+
+def validate_credit_payout_metadata(value: str, field_label: str = "Die Angabe") -> str:
+    """Reject payment coordinates in free-text payout metadata."""
+    if not value:
+        return value
+    candidate_text = _normalize_unicode_whitespace(value)
+    if (
+        any(_iban_checksum_is_valid(match.group()) for match in _PAYOUT_IBAN_CANDIDATE.finditer(candidate_text))
+        or _is_standalone_card(candidate_text)
+        or _contains_known_card_number(candidate_text)
+        or _is_standalone_email(value)
+        or _PAYOUT_PAYPAL_ACCOUNT.search(candidate_text)
+        or any(
+            _phone_candidate_is_valid(match.group(), True)
+            for match in _PAYOUT_INTERNATIONAL_PHONE.finditer(candidate_text)
+        )
+        or any(
+            _phone_candidate_is_valid(match.group(), False) for match in _PAYOUT_NATIONAL_PHONE.finditer(candidate_text)
+        )
+    ):
+        raise ValidationError(f"{field_label} darf keine Zahlungskoordinaten enthalten.")
+    return value
+
+
 class CreditPayout(models.Model):
     """Immutable append-only record of credit paid back to a participant."""
 
@@ -1353,10 +1447,8 @@ class CreditPayout(models.Model):
 
     def clean(self):
         super().clean()
-        sensitive = re.compile(r"(?i)\b[A-Z]{2}\d{2}[A-Z0-9 ]{11,30}\b|(?:\d[ -]?){13,19}")
         for value in (self.external_reference, self.note):
-            if sensitive.search(value or ""):
-                raise ValidationError("Bank-, Karten- oder PayPal-Kontodaten sind nicht zulässig.")
+            validate_credit_payout_metadata(value, "Referenz oder Notiz")
 
     def save(self, *args, **kwargs):
         if self.pk is not None:

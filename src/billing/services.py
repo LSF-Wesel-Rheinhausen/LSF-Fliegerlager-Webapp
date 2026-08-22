@@ -37,6 +37,7 @@ from .models import (
     Settlement,
     SettlementRun,
     Shift,
+    validate_credit_payout_metadata,
 )
 from .permissions import ADMIN_GROUP, EDITOR_GROUP, HUEBERS_GROUP
 
@@ -256,13 +257,10 @@ def money(value):
     return (value or ZERO).quantize(Decimal("0.01"))
 
 
-_SENSITIVE_PAYOUT_COORDINATES = re.compile(r"(?i)\b[A-Z]{2}\d{2}[A-Z0-9 ]{11,30}\b|(?:\d[ -]?){13,19}")
-
-
 def _validate_payout_text(value: str, field_label: str) -> str:
-    if len(value) > 180 or _SENSITIVE_PAYOUT_COORDINATES.search(value):
-        raise ValidationError(f"{field_label} darf keine Bank- oder Kartendaten enthalten.")
-    return value
+    if len(value) > 180:
+        raise ValidationError(f"{field_label} darf höchstens 180 Zeichen enthalten.")
+    return validate_credit_payout_metadata(value, field_label)
 
 
 def calculate_available_credit(participant: Participant | int) -> Decimal:
