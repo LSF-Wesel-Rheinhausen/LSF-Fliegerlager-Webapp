@@ -30,6 +30,7 @@ from billing.models import (
     Settlement,
     SettlementRun,
 )
+from billing.services import calculate_position_report
 from billing.views import (
     _book_meal_for_target,
     _kiosk_checkin_participants,
@@ -1894,6 +1895,54 @@ def test_linked_family_quick_booking_and_cancellation_are_audited(kiosk_client):
 
 
 @pytest.mark.django_db
+def test_linked_family_quick_booking_keeps_fuer_inside_target_name_out_of_report_description(kiosk_client):
+    camp = CampFactory(is_active=True)
+    actor = ParticipantFactory(camp=camp)
+    partner = ParticipantFactory(camp=camp)
+    family_member = ParticipantFamilyMember.objects.create(
+        guardian=partner,
+        first_name="Hans für",
+        last_name="Müller",
+        role=ParticipantFamilyMember.Role.CHILD,
+    )
+    ParticipantBookingLink.objects.create(
+        inviter=actor,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    rule = PriceRuleFactory(
+        camp=camp,
+        kind=PriceRule.Kind.DRINK,
+        name="Wasser",
+        unit_price=Decimal("1.50"),
+        applies_to_children=True,
+        applies_to_adults=False,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = actor.pk
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "quick",
+            "quick-price_rule": rule.pk,
+            "quick-quantity": 2,
+            "quick-target": [f"family-{family_member.pk}"],
+        },
+    )
+
+    assert response.status_code == 302
+    charge = Charge.objects.get(participant=partner, family_member=family_member)
+    base_description = "Wasser (Kiosk)"
+    assert family_member.full_name == "Hans für Müller"
+    assert charge.description == f"{base_description} für Hans für Müller"
+    assert charge.position_report_description == base_description
+    report = calculate_position_report(camp)
+    assert [article.description for article in report.articles] == [base_description]
+
+
+@pytest.mark.django_db
 def test_partner_cancellation_retains_target_of_own_family_quick_booking(kiosk_client):
     camp = CampFactory(is_active=True)
     participant = ParticipantFactory(camp=camp)
@@ -2605,6 +2654,43 @@ def test_partner_meal_retraction_revalidates_stale_state_after_row_lock(
     assert stale_result is False
     assert KioskActionAuditLog.objects.filter(action=KioskActionAuditLog.Action.MEAL_RETRACTED).count() == 1
     assert len(notification_callbacks) == 1
+
+
+@pytest.mark.django_db
+def test_partner_meal_with_natural_fuer_text_persists_full_report_description(monkeypatch):
+    _freeze_meal_booking_time(monkeypatch)
+    actor = ParticipantFactory()
+    partner = ParticipantFactory(camp=actor.camp)
+    ParticipantBookingLink.objects.create(
+        inviter=actor,
+        invitee=partner,
+        status=ParticipantBookingLink.Status.ACCEPTED,
+    )
+    price_rule = PriceRuleFactory(
+        camp=actor.camp,
+        kind=PriceRule.Kind.MEAL,
+        meal_type=MealSignup.Meal.DINNER,
+        is_default=True,
+        name="Menü für Helfer",
+        unit_price=Decimal("8.00"),
+    )
+
+    with transaction.atomic():
+        _book_meal_for_target(
+            {"kind": "participant", "object": partner},
+            date(2026, 7, 2),
+            MealSignup.Meal.DINNER,
+            MealSignup.Variant.NORMAL,
+            price_rule,
+            actor,
+        )
+
+    charge = Charge.objects.get(participant=partner)
+    expected_description = "Menü für Helfer Abendessen"
+    assert charge.description == expected_description
+    assert charge.position_report_description == expected_description
+    report = calculate_position_report(actor.camp)
+    assert [article.description for article in report.articles] == [expected_description]
 
 
 @pytest.mark.django_db
