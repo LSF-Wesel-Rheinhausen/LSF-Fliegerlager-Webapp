@@ -11,6 +11,7 @@ from .models import (
     BookingAuditLog,
     Camp,
     Charge,
+    CreditPayout,
     DailySettlementBackupLog,
     DailySettlementBackupSettings,
     DailyShiftException,
@@ -417,6 +418,32 @@ class PaymentAuditLogAdmin(admin.ModelAdmin):
                     continue
                 restored_count += 1
         self.message_user(request, f"{restored_count} Zahlung(en) wurden aus dem Audit-Protokoll wiederhergestellt.")
+
+
+@admin.register(CreditPayout)
+class CreditPayoutAdmin(admin.ModelAdmin):
+    list_display = ("participant", "amount", "method", "created_by", "created_at", "external_reference")
+    list_filter = ("method", "created_at")
+    readonly_fields = (
+        "participant",
+        "amount",
+        "method",
+        "created_by",
+        "created_at",
+        "idempotency_key",
+        "external_reference",
+        "note",
+    )
+    actions = []
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Expense)

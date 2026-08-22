@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from functools import partial
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
@@ -37,6 +38,7 @@ from .attendance import (
 from .daily_settlement_backups import update_daily_backup_settings
 from .deployment_updates import UpdateAgentError, check_for_update, deployment_status, install_update
 from .exporters import (
+    PDF_PREVIEW_CONTENT_SECURITY_POLICY,
     camp_settlement_csv,
     camp_workbook_response,
     drink_entries_csv,
@@ -49,6 +51,7 @@ from .forms import (
     CampFlatRateSettingsForm,
     CampForm,
     ChargeForm,
+    CreditPayoutForm,
     DailySettlementBackupSettingsForm,
     ExpenseForm,
     FirstAdminSetupForm,
@@ -158,6 +161,7 @@ from .services import (
     charge_audit_snapshot,
     create_booking_audit_log,
     create_booking_delete_audit_log,
+    create_credit_payout,
     create_kiosk_action_audit_log,
     create_manual_charge,
     create_payment_delete_audit_log,
@@ -187,6 +191,26 @@ from .services import (
 logger = logging.getLogger(__name__)
 signer = Signer()
 User = get_user_model()
+
+RECEIPT_PREVIEW_EXTENSIONS = {
+    ".pdf": "pdf",
+    ".heic": "image",
+    ".jpeg": "image",
+    ".jpg": "image",
+    ".png": "image",
+}
+
+
+def _annotate_receipt_preview(expenses):
+    """Attach trusted receipt preview metadata for rendered expense links."""
+    annotated_expenses = list(expenses)
+    for expense in annotated_expenses:
+        receipt_name = expense.receipt.name if expense.receipt else ""
+        expense.receipt_preview_kind = RECEIPT_PREVIEW_EXTENSIONS.get(Path(receipt_name).suffix.lower(), "")
+        expense.receipt_preview_alt = expense.description or "Beleg"
+    return annotated_expenses
+
+
 PRE_CAMP_KIOSK_ACTIONS = frozenset(
     {
         "family_member_create",
@@ -996,7 +1020,7 @@ def camp_detail(request, camp_id):
         "balance": sum(result.balance for result in settlements),
     }
     price_rules = camp.price_rules.all()
-    pending_expenses = camp.expenses.filter(status=Expense.Status.PENDING)
+    pending_expenses = _annotate_receipt_preview(camp.expenses.filter(status=Expense.Status.PENDING))
     pending_registrations = list(
         camp.participants.select_related("pin")
         .filter(status=Participant.Status.PENDING_APPROVAL, archived_at__isnull=True)
@@ -1220,6 +1244,13 @@ def participant_detail(request, participant_id):
     payment_audit_logs = PaymentAuditLog.objects.filter(
         Q(participant=participant) | Q(payment__participant=participant)
     ).select_related("changed_by", "payment")
+    credit_payouts = participant.credit_payouts.select_related("created_by").order_by("-created_at", "-id")
+    available_credit = max(-settlement.balance, Decimal("0.00"))
+    credit_payout_form = (
+        CreditPayoutForm(initial={"idempotency_key": uuid.uuid4()})
+        if is_admin(request.user) and available_credit > Decimal("0.00")
+        else None
+    )
     settlement_snapshots = participant.settlements.filter(run__isnull=False).select_related("run", "run__camp")
     family_audit_logs = (
         KioskActionAuditLog.objects.filter(target_participant=participant, target_family_member__isnull=False)
@@ -1255,6 +1286,9 @@ def participant_detail(request, participant_id):
             "settlement": settlement,
             "charges": charges,
             "payments": payments,
+            "credit_payouts": credit_payouts,
+            "available_credit": available_credit,
+            "credit_payout_form": credit_payout_form,
             "family_members": family_members,
             "family_meal_signups": family_meal_signups,
             "family_audit_logs": family_audit_logs,
@@ -1267,6 +1301,30 @@ def participant_detail(request, participant_id):
             "manual_charge_form": manual_charge_form,
         },
     )
+
+
+@admin_required
+@require_POST
+def credit_payout_create(request, participant_id):
+    participant = get_object_or_404(Participant, pk=participant_id, archived_at__isnull=True)
+    form = CreditPayoutForm(request.POST)
+    if form.is_valid():
+        try:
+            payout = create_credit_payout(
+                participant=participant,
+                amount=form.cleaned_data["amount"],
+                method=form.cleaned_data["method"],
+                created_by=request.user,
+                idempotency_key=form.cleaned_data["idempotency_key"],
+                external_reference=form.cleaned_data["external_reference"],
+                note=form.cleaned_data["note"],
+            )
+        except ValidationError as error:
+            form.add_error(None, error)
+        else:
+            messages.success(request, f"Auszahlung über {payout.amount} EUR wurde protokolliert.")
+            return redirect("participant-detail", participant_id=participant.pk)
+    return render(request, "billing/form.html", {"form": form, "title": "Guthaben auszahlen"})
 
 
 @admin_required
@@ -1910,13 +1968,12 @@ def expense_receipt_download(request: HttpRequest, expense_id: int) -> FileRespo
     requests, keeping uploaded billing files out of unauthenticated public URLs.
     """
     expense = get_object_or_404(Expense.objects.select_related("participant"), pk=expense_id)
-    if not expense.receipt:
-        raise Http404("Kein Rechnungsbeleg vorhanden.")
-
     participant = _kiosk_participant(request)
     can_view_own_receipt = participant is not None and expense.participant_id == participant.pk
     if not can_view_own_receipt and not is_editor(request.user):
-        raise PermissionDenied
+        raise Http404("Rechnungsbeleg wurde nicht gefunden.")
+    if not expense.receipt:
+        raise Http404("Kein Rechnungsbeleg vorhanden.")
 
     receipt_name = expense.receipt.name
     if not receipt_name:
@@ -1943,12 +2000,16 @@ def expense_receipt_download(request: HttpRequest, expense_id: int) -> FileRespo
     )
     as_attachment = content_type == "application/octet-stream"
 
-    return FileResponse(
+    response = FileResponse(
         expense.receipt.open("rb"),
         as_attachment=as_attachment,
         content_type=content_type,
         filename=receipt_filename,
     )
+    if content_type == "application/pdf":
+        response["X-Frame-Options"] = "SAMEORIGIN"
+        response["Content-Security-Policy"] = PDF_PREVIEW_CONTENT_SECURITY_POLICY
+    return response
 
 
 @editor_required
@@ -4991,15 +5052,17 @@ def kiosk_home(request, kiosk_mode="private"):
         "next_order_locked": bool(next_order_day and next_order_day["locked"]),
         "today": today,
         "tomorrow": tomorrow,
-        "participant_expenses": participant.expenses.annotate(
-            kiosk_status_order=Case(
-                When(status=Expense.Status.PENDING, then=Value(0)),
-                When(status=Expense.Status.REJECTED, then=Value(1)),
-                When(status=Expense.Status.APPROVED, then=Value(2)),
-                default=Value(3),
-                output_field=IntegerField(),
-            )
-        ).order_by("kiosk_status_order", "-created_at"),
+        "participant_expenses": _annotate_receipt_preview(
+            participant.expenses.annotate(
+                kiosk_status_order=Case(
+                    When(status=Expense.Status.PENDING, then=Value(0)),
+                    When(status=Expense.Status.REJECTED, then=Value(1)),
+                    When(status=Expense.Status.APPROVED, then=Value(2)),
+                    default=Value(3),
+                    output_field=IntegerField(),
+                )
+            ).order_by("kiosk_status_order", "-created_at")
+        ),
     }
     return render(request, "billing/kiosk_home.html", context)
 
