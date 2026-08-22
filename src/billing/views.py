@@ -19,7 +19,7 @@ from django.core import signing
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.core.signing import BadSignature, Signer
 from django.db import IntegrityError, transaction
-from django.db.models import Case, Count, Exists, IntegerField, OuterRef, Prefetch, Q, Value, When
+from django.db.models import Case, Count, Exists, F, IntegerField, OuterRef, Prefetch, Q, Value, When
 from django.http import FileResponse, Http404, HttpRequest, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -1021,6 +1021,11 @@ def camp_detail(request, camp_id):
     }
     price_rules = camp.price_rules.all()
     pending_expenses = _annotate_receipt_preview(camp.expenses.filter(status=Expense.Status.PENDING))
+    approved_expenses = _annotate_receipt_preview(
+        camp.expenses.filter(status=Expense.Status.APPROVED)
+        .select_related("participant", "approved_by")
+        .order_by(F("approved_at").desc(nulls_last=True), "-pk")
+    )
     pending_registrations = list(
         camp.participants.select_related("pin")
         .filter(status=Participant.Status.PENDING_APPROVAL, archived_at__isnull=True)
@@ -1051,6 +1056,7 @@ def camp_detail(request, camp_id):
             "archived_participants": archived_participants,
             "settlement_runs": settlement_runs,
             "pending_expenses": pending_expenses,
+            "approved_expenses": approved_expenses,
             "pending_registration_rows": pending_registration_rows,
             "cost_centers": cost_centers,
         },

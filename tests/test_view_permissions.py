@@ -3,7 +3,9 @@ from decimal import Decimal
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connection
 from django.http import HttpResponse
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -338,6 +340,149 @@ def test_shared_expense_approval_persists_selected_cost_center(client, editor_us
 
     assert detail_response.status_code == 200
     assert "Frühstück für alle".encode() in detail_response.content
+
+
+@pytest.mark.django_db
+def test_camp_detail_lists_approved_expenses_with_receipt_and_safe_placeholders(
+    client, editor_user, permission_dataset
+):
+    camp = permission_dataset["camp"]
+    participant = permission_dataset["participant"]
+    editor_user.first_name = "Grace"
+    editor_user.last_name = "Hopper"
+    editor_user.save(update_fields=["first_name", "last_name"])
+    username_approver = UserFactory(username="reviewer")
+    approved_at = timezone.datetime(2025, 7, 3, 12, 0, tzinfo=timezone.get_current_timezone())
+    newer_expense = Expense.objects.create(
+        camp=camp,
+        participant=participant,
+        category="Material",
+        description="Neu genehmigt",
+        amount=Decimal("42.50"),
+        receipt=SimpleUploadedFile("neu.pdf", b"receipt", content_type="application/pdf"),
+        paid_on=timezone.datetime(2025, 7, 2, tzinfo=timezone.get_current_timezone()).date(),
+        status=Expense.Status.APPROVED,
+        allocation_method=Expense.AllocationMethod.SELECTED,
+        approved_at=approved_at,
+        approved_by=editor_user,
+    )
+    Expense.objects.create(
+        camp=camp,
+        category="Sonstiges",
+        description="Ohne optionale Daten",
+        amount=Decimal("5.00"),
+        status=Expense.Status.APPROVED,
+        allocation_method=Expense.AllocationMethod.NONE,
+        approved_at=approved_at - timezone.timedelta(days=1),
+        approved_by=username_approver,
+    )
+    Expense.objects.create(
+        camp=camp,
+        category="Sonstiges",
+        description="Ohne Genehmiger",
+        amount=Decimal("4.00"),
+        status=Expense.Status.APPROVED,
+        allocation_method=Expense.AllocationMethod.NONE,
+        approved_at=approved_at - timezone.timedelta(days=2),
+    )
+    Expense.objects.create(
+        camp=camp,
+        participant=participant,
+        description="Noch ausstehend",
+        category="Material",
+        amount=Decimal("6.00"),
+        status=Expense.Status.PENDING,
+    )
+    Expense.objects.create(
+        camp=camp,
+        participant=participant,
+        description="Abgelehnt",
+        category="Material",
+        amount=Decimal("7.00"),
+        status=Expense.Status.REJECTED,
+    )
+    other_camp = CampFactory(name="Anderes Lager")
+    Expense.objects.create(
+        camp=other_camp,
+        description="Andere Camp-Ausgabe",
+        category="Material",
+        amount=Decimal("8.00"),
+        status=Expense.Status.APPROVED,
+    )
+    client.force_login(editor_user)
+
+    response = client.get(reverse("camp-detail", args=[camp.pk]))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "Genehmigte Gemeinschaftsausgaben" in content
+    approved_section_start = content.index("Genehmigte Gemeinschaftsausgaben")
+    approved_section = content[
+        approved_section_start : content.index("Kostenstellenauswertung", approved_section_start)
+    ]
+    assert "Neu genehmigt" in approved_section
+    assert "Material" in approved_section
+    assert "42,50" in approved_section
+    assert "Ausgewählte Teilnehmer" in approved_section
+    assert "02.07.2025" in approved_section
+    assert "Grace Hopper" in approved_section
+    assert editor_user.email not in approved_section
+    assert "reviewer" in approved_section
+    assert username_approver.email not in approved_section
+    assert f'href="{reverse("expense-receipt", args=[newer_expense.pk])}"' in approved_section
+    assert newer_expense.receipt.url not in approved_section
+    assert "Ohne optionale Daten" in approved_section
+    assert "Ohne Genehmiger" in approved_section
+    assert "Keine Person angegeben" in approved_section
+    assert "Kein Genehmiger angegeben" in approved_section
+    assert "Kein Beleg vorhanden" in approved_section
+    assert "Noch ausstehend" not in approved_section
+    assert "Abgelehnt" not in approved_section
+    assert "Andere Camp-Ausgabe" not in approved_section
+    assert approved_section.index("Neu genehmigt") < approved_section.index("Ohne optionale Daten")
+
+    newer_expense.receipt.delete(save=False)
+
+
+@pytest.mark.django_db
+def test_camp_detail_approved_expenses_do_not_add_per_row_queries(client, editor_user, permission_dataset):
+    single_expense_camp = permission_dataset["camp"]
+    many_expenses_camp = CampFactory(name="Mehrere Auslagen")
+    many_participants = [ParticipantFactory(camp=many_expenses_camp) for _ in range(4)]
+    single_approver = UserFactory(username="single-approver")
+    Expense.objects.create(
+        camp=single_expense_camp,
+        participant=permission_dataset["participant"],
+        category="Material",
+        description="Eine genehmigte Ausgabe",
+        amount=Decimal("10.00"),
+        status=Expense.Status.APPROVED,
+        approved_at=timezone.now(),
+        approved_by=single_approver,
+    )
+    for index, (participant, approver) in enumerate(
+        zip(many_participants, [UserFactory(username=f"approver-{index}") for index in range(4)], strict=True)
+    ):
+        Expense.objects.create(
+            camp=many_expenses_camp,
+            participant=participant,
+            category="Material",
+            description=f"Genehmigte Ausgabe {index}",
+            amount=Decimal("10.00"),
+            status=Expense.Status.APPROVED,
+            approved_at=timezone.now() - timezone.timedelta(days=index),
+            approved_by=approver,
+        )
+    client.force_login(editor_user)
+
+    with CaptureQueriesContext(connection) as single_queries:
+        single_response = client.get(reverse("camp-detail", args=[single_expense_camp.pk]))
+    with CaptureQueriesContext(connection) as many_queries:
+        many_response = client.get(reverse("camp-detail", args=[many_expenses_camp.pk]))
+
+    assert single_response.status_code == 200
+    assert many_response.status_code == 200
+    assert len(many_queries) == len(single_queries)
 
 
 @pytest.mark.django_db
