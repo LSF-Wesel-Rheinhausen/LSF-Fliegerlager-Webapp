@@ -237,6 +237,12 @@ class ChargeAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("participant", "family_member")
 
+    def save_model(self, request, obj, form, change):
+        """Discard a generated report label when an admin edits the ledger description."""
+        if change and "description" in form.changed_data:
+            obj.position_report_description = None
+        super().save_model(request, obj, form, change)
+
     @admin.display(description="Buchungsnr.", ordering="id")
     def booking_reference(self, charge: Charge) -> str:
         """Return the formatted booking reference for the admin changelist."""

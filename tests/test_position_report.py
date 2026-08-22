@@ -66,6 +66,239 @@ def test_articles_group_by_kind_and_description_with_totals(camp):
 
 
 @pytest.mark.django_db
+def test_articles_group_direct_family_and_partner_bookings_by_base_description(camp):
+    actor = ParticipantFactory(camp=camp, first_name="Anna", last_name="Adler")
+    partner = ParticipantFactory(camp=camp, first_name="Peter", last_name="Partner")
+    family_member = ParticipantFamilyMemberFactory(
+        guardian=actor,
+        first_name="Fiona",
+        last_name="Familie",
+    )
+    base_description = "Apfelschorle (Kiosk)"
+    direct_charge = ChargeFactory(
+        participant=actor,
+        kiosk_booked_by=actor,
+        kind=Charge.Kind.DRINK,
+        description=base_description,
+        position_report_description=base_description,
+        quantity=Decimal("1.00"),
+        unit_price=Decimal("2.50"),
+    )
+    family_charge = ChargeFactory(
+        participant=actor,
+        family_member=family_member,
+        kiosk_booked_by=actor,
+        kind=Charge.Kind.DRINK,
+        description=f"{base_description} für {family_member.full_name}",
+        position_report_description=base_description,
+        quantity=Decimal("2.00"),
+        unit_price=Decimal("2.50"),
+    )
+    partner_charge = ChargeFactory(
+        participant=partner,
+        kiosk_booked_by=actor,
+        kind=Charge.Kind.DRINK,
+        description=f"{base_description} für {partner.full_name}",
+        position_report_description=base_description,
+        quantity=Decimal("3.00"),
+        unit_price=Decimal("2.50"),
+    )
+
+    report = calculate_position_report(camp)
+
+    assert len(report.articles) == 1
+    article = report.articles[0]
+    assert article.kind == Charge.Kind.DRINK
+    assert article.kind_label == "Getränke"
+    assert article.description == base_description
+    assert article.booking_count == 3
+    assert article.quantity_total == Decimal("6.00")
+    assert article.gross_total == Decimal("15.00")
+    assert Charge.objects.get(pk=direct_charge.pk).description == base_description
+    assert Charge.objects.get(pk=family_charge.pk).description == f"{base_description} für {family_member.full_name}"
+    assert Charge.objects.get(pk=partner_charge.pk).description == f"{base_description} für {partner.full_name}"
+
+
+@pytest.mark.django_db
+def test_article_description_with_natural_target_suffix_without_matching_relation_is_preserved(camp):
+    participant = ParticipantFactory(camp=camp, first_name="Nora", last_name="Natürlich")
+    description = f"Workshop für {participant.full_name}"
+    ChargeFactory(participant=participant, description=description)
+
+    report = calculate_position_report(camp)
+
+    assert [article.description for article in report.articles] == [description]
+
+
+@pytest.mark.django_db
+def test_position_report_uses_persisted_description_and_falls_back_to_ledger_description(camp):
+    participant = ParticipantFactory(camp=camp)
+    ChargeFactory(
+        participant=participant,
+        description="Wasser (Kiosk) für Historisches Ziel",
+        position_report_description="Wasser (Kiosk)",
+    )
+    ChargeFactory(
+        participant=participant,
+        description="Manuelle Sonderbuchung",
+        position_report_description=None,
+    )
+
+    report = calculate_position_report(camp)
+
+    assert {article.description for article in report.articles} == {
+        "Wasser (Kiosk)",
+        "Manuelle Sonderbuchung",
+    }
+
+
+@pytest.mark.django_db
+def test_manual_family_charge_preserves_natural_description_matching_member_name(client, camp):
+    guardian = ParticipantFactory(camp=camp)
+    family_member = ParticipantFamilyMemberFactory(
+        guardian=guardian,
+        first_name="Fiona",
+        last_name="Familie",
+    )
+    description = f"Spende für {family_member.full_name}"
+    client.force_login(SuperUserFactory())
+
+    response = client.post(
+        reverse("charge-create", args=[guardian.pk]),
+        {
+            "kind": Charge.Kind.DONATION,
+            "description": description,
+            "family_member": family_member.pk,
+            "quantity": "1",
+            "unit_price": "25.00",
+            "foerdersatz": "0",
+            "occurred_on": "",
+        },
+    )
+
+    assert response.status_code == 302
+    charge = Charge.objects.get(participant=guardian, family_member=family_member)
+    assert charge.kiosk_booked_by_id is None
+    report = calculate_position_report(camp)
+    assert [article.description for article in report.articles] == [description]
+
+
+@pytest.mark.django_db
+def test_family_kiosk_booking_uses_historical_target_suffix_after_member_rename(camp):
+    guardian = ParticipantFactory(camp=camp)
+    family_member = ParticipantFamilyMemberFactory(
+        guardian=guardian,
+        first_name="Alt",
+        last_name="Familie",
+    )
+    base_description = "Abendessen"
+    historical_description = f"{base_description} für {family_member.full_name}"
+    ChargeFactory(
+        participant=guardian,
+        kiosk_booked_by=guardian,
+        kind=Charge.Kind.FOOD,
+        description=base_description,
+        position_report_description=base_description,
+        unit_price=Decimal("8.00"),
+    )
+    target_charge = ChargeFactory(
+        participant=guardian,
+        family_member=family_member,
+        kiosk_booked_by=guardian,
+        kind=Charge.Kind.FOOD,
+        description=historical_description,
+        position_report_description=base_description,
+        unit_price=Decimal("8.00"),
+    )
+    family_member.first_name = "Neu"
+    family_member.save(update_fields=["first_name", "updated_at"])
+
+    report = calculate_position_report(camp)
+
+    assert len(report.articles) == 1
+    assert report.articles[0].description == base_description
+    assert report.articles[0].booking_count == 2
+    assert Charge.objects.get(pk=target_charge.pk).description == historical_description
+
+
+@pytest.mark.django_db
+def test_partner_kiosk_booking_uses_historical_target_suffix_after_participant_rename(camp):
+    actor = ParticipantFactory(camp=camp)
+    target = ParticipantFactory(camp=camp, first_name="Alt", last_name="Partner")
+    base_description = "Apfelschorle (Kiosk)"
+    historical_description = f"{base_description} für {target.full_name}"
+    ChargeFactory(
+        participant=actor,
+        kiosk_booked_by=actor,
+        kind=Charge.Kind.DRINK,
+        description=base_description,
+        position_report_description=base_description,
+        unit_price=Decimal("2.50"),
+    )
+    target_charge = ChargeFactory(
+        participant=target,
+        kiosk_booked_by=actor,
+        kind=Charge.Kind.DRINK,
+        description=historical_description,
+        position_report_description=base_description,
+        unit_price=Decimal("2.50"),
+    )
+    target.first_name = "Neu"
+    target.save(update_fields=["first_name", "updated_at"])
+
+    report = calculate_position_report(camp)
+
+    assert len(report.articles) == 1
+    assert report.articles[0].description == base_description
+    assert report.articles[0].booking_count == 2
+    assert Charge.objects.get(pk=target_charge.pk).description == historical_description
+
+
+@pytest.mark.django_db
+def test_kiosk_target_booking_removes_only_last_appended_target_segment(camp):
+    guardian = ParticipantFactory(camp=camp)
+    family_member = ParticipantFamilyMemberFactory(guardian=guardian)
+    base_description = "Workshop für Fortgeschrittene"
+    ChargeFactory(
+        participant=guardian,
+        kiosk_booked_by=guardian,
+        description=base_description,
+        position_report_description=base_description,
+    )
+    ChargeFactory(
+        participant=guardian,
+        family_member=family_member,
+        kiosk_booked_by=guardian,
+        description=f"{base_description} für {family_member.full_name}",
+        position_report_description=base_description,
+    )
+
+    report = calculate_position_report(camp)
+
+    assert len(report.articles) == 1
+    assert report.articles[0].description == base_description
+    assert report.articles[0].booking_count == 2
+
+
+@pytest.mark.django_db
+def test_kiosk_target_booking_preserves_empty_or_malformed_trailing_separator(camp):
+    guardian = ParticipantFactory(camp=camp)
+    family_member = ParticipantFamilyMemberFactory(guardian=guardian)
+    descriptions = ["Artikel für ", "Artikel für", " für Historisches Ziel"]
+    for description in descriptions:
+        ChargeFactory(
+            participant=guardian,
+            family_member=family_member,
+            kiosk_booked_by=guardian,
+            description=description,
+        )
+
+    report = calculate_position_report(camp)
+
+    assert {article.description for article in report.articles} == set(descriptions)
+
+
+@pytest.mark.django_db
 def test_articles_are_sorted_by_booking_count_descending(camp):
     participant = ParticipantFactory(camp=camp)
     ChargeFactory(participant=participant, description="Selten", quantity=Decimal("1.00"))
@@ -372,18 +605,23 @@ def test_position_report_query_budget_is_bounded_as_camp_size_grows(camp):
                 arrival_date=CAMP_START,
                 departure_date=CAMP_END,
             )
-            ChargeFactory(participant=participant, description=f"Artikel{index}")
+            member = ParticipantFamilyMemberFactory(
+                guardian=participant,
+                first_name=f"Familie{index}",
+                arrival_date=CAMP_START,
+                departure_date=CAMP_END,
+                attendance_tracking_enabled=True,
+            )
+            ChargeFactory(
+                participant=participant,
+                family_member=member,
+                description=f"Artikel{index} für {member.full_name}",
+            )
             MealSignup.objects.create(
                 participant=participant,
                 meal_date=CAMP_START,
                 meal=MealSignup.Meal.DINNER,
                 variant=MealSignup.Variant.NORMAL,
-            )
-            ParticipantFamilyMemberFactory(
-                guardian=participant,
-                arrival_date=CAMP_START,
-                departure_date=CAMP_END,
-                attendance_tracking_enabled=True,
             )
 
     populate(camp, 1)

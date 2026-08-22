@@ -1072,7 +1072,7 @@ def calculate_position_report(camp: Camp) -> PositionReport:
     article_rows: dict[tuple[str, str], dict[str, Any]] = {}
     charges = Charge.objects.filter(participant__camp=camp, deleted_at__isnull=True)
     for charge in charges:
-        key = (charge.kind, charge.description)
+        key = (charge.kind, charge.position_report_description or charge.description)
         row = article_rows.setdefault(key, {"count": 0, "quantity": ZERO, "gross": ZERO})
         row["count"] += 1
         row["quantity"] += Decimal(str(charge.quantity))
