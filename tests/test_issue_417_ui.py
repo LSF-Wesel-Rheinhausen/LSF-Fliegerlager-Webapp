@@ -75,6 +75,11 @@ def test_kiosk_profile_errors_are_associated_with_invalid_controls():
         },
     )
     assert " novalidate" not in content
+    assert '<form method="post" class="kiosk-profile-form">' in content
+    assert content.count('class="form-group kiosk-profile-form__field') == len(form.fields)
+    assert 'class="button-row kiosk-profile-form__actions"' in content
+    for field in form:
+        assert f'<label for="{field.id_for_label}">{field.label}</label>' in content
     assert re.search(
         r'<input(?=[^>]*\bid="id_first_name")(?=[^>]*\baria-invalid="true")'
         r'(?=[^>]*\baria-describedby="id_first_name_error")[^>]*>',

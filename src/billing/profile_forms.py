@@ -17,7 +17,7 @@ class _ProfileForm(forms.ModelForm):
 
     class Meta:
         fields = PROFILE_FIELDS
-        widgets = {"birth_date": forms.DateInput(attrs={"type": "date"})}
+        widgets = {"birth_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"})}
 
     def add_error(self, field: str | None, error: Any) -> None:
         """Expose server-side field errors to assistive technologies."""
