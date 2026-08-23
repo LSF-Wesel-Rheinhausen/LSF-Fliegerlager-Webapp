@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -53,6 +54,11 @@ def kiosk_registration_today(monkeypatch):
 def _checkin_state_tokens(kiosk_client):
     response = kiosk_client.get(reverse("kiosk-home"))
     return {target["token"]: target["state_token"] for target in response.context["checkin_participants"]}
+
+
+def _rendered_quick_booking_token(kiosk_client):
+    response = kiosk_client.get(reverse("kiosk-home"))
+    return re.search(rb'name="quick-booking-token" value="([^"]+)"', response.content).group(1).decode()
 
 
 @pytest.mark.django_db
@@ -2086,6 +2092,7 @@ def test_kiosk_books_drink_with_camp_drink_price_and_subsidy_flag(kiosk_client):
             "action": "quick",
             "quick-price_rule": PriceRule.objects.get(camp=camp, kind=PriceRule.Kind.DRINK).pk,
             "quick-quantity": 2,
+            "quick-booking-token": _rendered_quick_booking_token(kiosk_client),
         },
     )
 
@@ -2097,6 +2104,95 @@ def test_kiosk_books_drink_with_camp_drink_price_and_subsidy_flag(kiosk_client):
     assert entry.unit_price == Decimal("2.50")
     assert entry.foerdersatz == Decimal("1.0000")
     assert entry.kiosk_booked_by == participant
+
+
+@pytest.mark.django_db
+def test_kiosk_quick_booking_token_is_one_time_but_fresh_render_allows_identical_booking(kiosk_client):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp)
+    rule = PriceRuleFactory(camp=camp, kind=PriceRule.Kind.DRINK, name="Wasser", unit_price=Decimal("1.50"))
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    first_render = kiosk_client.get(reverse("kiosk-home"))
+    token_match = re.search(
+        rb'name="quick-booking-token" value="([^"]+)"',
+        first_render.content,
+    )
+    assert token_match is not None
+    token = token_match.group(1).decode()
+    payload = {
+        "action": "quick",
+        "quick-price_rule": rule.pk,
+        "quick-quantity": 1,
+        "quick-booking-token": token,
+    }
+
+    first_post = kiosk_client.post(reverse("kiosk-home"), payload)
+    replay_post = kiosk_client.post(reverse("kiosk-home"), payload)
+    changed_replay_post = kiosk_client.post(
+        reverse("kiosk-home"),
+        {**payload, "quick-quantity": 3},
+    )
+
+    assert first_post.status_code == 302
+    assert replay_post.status_code == 302
+    assert changed_replay_post.status_code == 302
+    assert Charge.objects.filter(participant=participant, kind=Charge.Kind.DRINK).count() == 1
+    charge = Charge.objects.get(participant=participant, kind=Charge.Kind.DRINK)
+    assert charge.quantity == Decimal("1")
+
+    fresh_render = kiosk_client.get(reverse("kiosk-home"))
+    fresh_token = (
+        re.search(
+            rb'name="quick-booking-token" value="([^"]+)"',
+            fresh_render.content,
+        )
+        .group(1)
+        .decode()
+    )
+    fresh_payload = {**payload, "quick-booking-token": fresh_token}
+    fresh_post = kiosk_client.post(reverse("kiosk-home"), fresh_payload)
+
+    assert fresh_post.status_code == 302
+    assert Charge.objects.filter(participant=participant, kind=Charge.Kind.DRINK).count() == 2
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("token_mutation", ["tampered", "expired", "wrong_participant"])
+def test_kiosk_quick_booking_rejects_invalid_one_time_tokens_without_charge(kiosk_client, token_mutation, monkeypatch):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp)
+    other_participant = ParticipantFactory(camp=camp)
+    rule = PriceRuleFactory(camp=camp, kind=PriceRule.Kind.DRINK, name="Wasser", unit_price=Decimal("1.50"))
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+
+    response = kiosk_client.get(reverse("kiosk-home"))
+    token = re.search(rb'name="quick-booking-token" value="([^"]+)"', response.content).group(1).decode()
+    if token_mutation == "tampered":
+        token = f"{token}x"
+    elif token_mutation == "expired":
+        monkeypatch.setattr("billing.views.KIOSK_QUICK_BOOKING_TOKEN_MAX_AGE_SECONDS", 0)
+    else:
+        session[KIOSK_PARTICIPANT_SESSION_KEY] = other_participant.pk
+        session.save()
+
+    post_response = kiosk_client.post(
+        reverse("kiosk-home"),
+        {
+            "action": "quick",
+            "quick-price_rule": rule.pk,
+            "quick-quantity": 1,
+            "quick-booking-token": token,
+        },
+    )
+
+    assert post_response.status_code == 200
+    assert "Buchung konnte nicht verarbeitet werden" in post_response.content.decode()
+    assert not Charge.objects.exists()
 
 
 @pytest.mark.django_db
@@ -2151,6 +2247,7 @@ def test_companion_uses_own_booking_identity_but_guardian_pays_and_controls_targ
             "quick-price_rule": rule.pk,
             "quick-quantity": 1,
             "quick-target": f"family-{companion.pk}",
+            "quick-booking-token": _rendered_quick_booking_token(kiosk_client),
         },
     )
 
@@ -2339,6 +2436,7 @@ def test_kiosk_linked_quick_booking_can_be_cancelled_by_booking_participant(kios
             "quick-price_rule": PriceRule.objects.get(camp=camp, kind=PriceRule.Kind.DRINK).pk,
             "quick-quantity": 1,
             "quick-target": [f"participant-{linked.pk}"],
+            "quick-booking-token": _rendered_quick_booking_token(kiosk_client),
         },
     )
     charge = Charge.objects.get(participant=linked, kind=Charge.Kind.DRINK)
@@ -3623,6 +3721,7 @@ def test_kiosk_quick_food_booking_applies_todays_date_specific_breakfast_price(k
             "quick-price_rule": standard_rule.pk,
             "quick-quantity": 1,
             "quick-quick_date": date(2030, 1, 1).isoformat(),
+            "quick-booking-token": _rendered_quick_booking_token(kiosk_client),
         },
     )
 
@@ -4106,6 +4205,7 @@ def test_kiosk_books_snack_successfully(kiosk_client):
             "action": "quick",
             "quick-price_rule": rule.pk,
             "quick-quantity": 1,
+            "quick-booking-token": _rendered_quick_booking_token(kiosk_client),
         },
     )
 

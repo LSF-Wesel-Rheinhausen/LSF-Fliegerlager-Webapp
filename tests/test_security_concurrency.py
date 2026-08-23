@@ -5,6 +5,7 @@ from threading import Barrier, Event, Lock, local
 from uuid import uuid4
 
 import pytest
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import DataError, IntegrityError, close_old_connections, connection, connections, transaction
@@ -13,7 +14,8 @@ from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
 
-from billing.kiosk_access import KIOSK_PARTICIPANT_SESSION_KEY
+from billing import views as billing_views
+from billing.kiosk_access import KIOSK_ACCESS_COOKIE_NAME, KIOSK_PARTICIPANT_SESSION_KEY
 from billing.models import (
     Charge,
     CreditPayout,
@@ -137,6 +139,60 @@ def test_payment_restore_has_one_winner_across_postgresql_connections():
     assert payment.note == "Original"
     assert PaymentAuditLog.objects.filter(action=PaymentAuditLog.Action.RESTORED).count() == 1
     assert calculate_participant_settlement(original_participant).total_paid == Decimal("42.50")
+
+
+def test_quick_booking_replay_is_idempotent_across_postgresql_connections(kiosk_client, monkeypatch):
+    _require_postgresql()
+    camp = CampFactory(is_active=True)
+    participant = ParticipantFactory(camp=camp)
+    rule = PriceRuleFactory(camp=camp, kind=PriceRule.Kind.DRINK, name="Wasser")
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session.save()
+    rendered_response = kiosk_client.get(reverse("kiosk-home"))
+    token = rendered_response.context["quick_booking_token"]
+    session_key = kiosk_client.session.session_key
+    kiosk_access_cookie = kiosk_client.cookies[KIOSK_ACCESS_COOKIE_NAME].value
+    authorization_lock_barrier = Barrier(2)
+    real_lock_booking_authorization_dependencies = billing_views._lock_booking_authorization_dependencies
+
+    def synchronize_before_authorization_lock(*args, **kwargs):
+        authorization_lock_barrier.wait(timeout=10)
+        return real_lock_booking_authorization_dependencies(*args, **kwargs)
+
+    monkeypatch.setattr(
+        billing_views,
+        "_lock_booking_authorization_dependencies",
+        synchronize_before_authorization_lock,
+    )
+
+    def submit_once() -> int:
+        close_old_connections()
+        client = Client()
+        client.cookies[settings.SESSION_COOKIE_NAME] = session_key
+        client.cookies[KIOSK_ACCESS_COOKIE_NAME] = kiosk_access_cookie
+        try:
+            return client.post(
+                reverse("kiosk-home"),
+                {
+                    "action": "quick",
+                    "quick-price_rule": rule.pk,
+                    "quick-quantity": 1,
+                    "quick-booking-token": token,
+                },
+            ).status_code
+        finally:
+            connections.close_all()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        statuses = sorted(executor.map(lambda _worker: submit_once(), (1, 2)))
+
+    assert statuses == [302, 302]
+    charge = Charge.objects.get(kiosk_confirmation_nonce__isnull=False)
+    assert charge.participant == participant
+    assert charge.kind == Charge.Kind.DRINK
+    assert charge.quantity == Decimal("1")
+    assert charge.unit_price == rule.unit_price
 
 
 def test_first_admin_bootstrap_allows_only_one_winner_across_postgresql_connections(monkeypatch):

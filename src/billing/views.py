@@ -272,6 +272,8 @@ GUARDIAN_ONLY_KIOSK_ACTIONS = frozenset(
 KIOSK_QUICK_BOOKING_CANCEL_WINDOW = timedelta(minutes=15)
 KIOSK_QUICK_CONFIRMATION_SIGNING_SALT = "billing.kiosk-quick-confirmation.v1"
 KIOSK_QUICK_CONFIRMATION_MAX_AGE_SECONDS = 10 * 60
+KIOSK_QUICK_BOOKING_TOKEN_SIGNING_SALT = "billing.kiosk-quick-booking.v1"
+KIOSK_QUICK_BOOKING_TOKEN_MAX_AGE_SECONDS = 10 * 60
 KIOSK_MEAL_RETRACTION_SIGNING_SALT = "billing.kiosk-meal-retraction.v1"
 KIOSK_MEAL_RETRACTION_MAX_AGE_SECONDS = 10 * 60
 KIOSK_CHECKIN_STATE_SIGNING_SALT = "billing.kiosk-checkin-state.v1"
@@ -416,6 +418,39 @@ def _kiosk_quick_confirmation_nonce(token: str, payload: dict[str, object]) -> u
     try:
         return uuid.UUID(nonce)
     except ValueError:
+        return None
+
+
+def _sign_kiosk_quick_booking_token(participant: Participant) -> str:
+    """Sign a one-time submission marker; booking fields are validated separately."""
+    return signing.dumps(
+        {
+            "participant_id": participant.pk,
+            "camp_id": participant.camp_id,
+            "nonce": str(uuid.uuid4()),
+        },
+        salt=KIOSK_QUICK_BOOKING_TOKEN_SIGNING_SALT,
+        compress=True,
+    )
+
+
+def _kiosk_quick_booking_nonce(token: str, participant: Participant) -> uuid.UUID | None:
+    """Return a participant/camp-bound marker without trusting submitted booking fields."""
+    try:
+        payload = signing.loads(
+            token,
+            salt=KIOSK_QUICK_BOOKING_TOKEN_SIGNING_SALT,
+            max_age=KIOSK_QUICK_BOOKING_TOKEN_MAX_AGE_SECONDS,
+        )
+    except signing.BadSignature:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("participant_id") != participant.pk or payload.get("camp_id") != participant.camp_id:
+        return None
+    try:
+        return uuid.UUID(payload["nonce"])
+    except (KeyError, TypeError, ValueError):
         return None
 
 
@@ -4293,6 +4328,14 @@ def kiosk_home(request, kiosk_mode="private"):
 
                 confirmation_requested = request.POST.get("quick-confirmed") == "1"
                 requires_confirmation = len(resolved_bookings) > 1 or confirmation_requested
+                direct_booking_nonce = None
+                if not quick_form.errors and not requires_confirmation:
+                    direct_booking_nonce = _kiosk_quick_booking_nonce(
+                        request.POST.get("quick-booking-token", ""),
+                        participant,
+                    )
+                    if direct_booking_nonce is None:
+                        quick_form.add_error(None, "Buchung konnte nicht verarbeitet werden. Bitte lade die Seite neu.")
                 confirmation_matches = False
                 confirmation_nonce = None
                 if not quick_form.errors and requires_confirmation:
@@ -4335,9 +4378,10 @@ def kiosk_home(request, kiosk_mode="private"):
                             "changed": confirmation_requested,
                         }
                 if not quick_form.errors and (not requires_confirmation or confirmation_matches):
+                    booking_nonce = direct_booking_nonce if not requires_confirmation else confirmation_nonce
                     if (
-                        confirmation_nonce is not None
-                        and Charge.objects.filter(kiosk_confirmation_nonce=confirmation_nonce).exists()
+                        booking_nonce is not None
+                        and Charge.objects.filter(kiosk_confirmation_nonce=booking_nonce).exists()
                     ):
                         messages.info(request, "Diese Bestätigung wurde bereits verarbeitet.")
                         return redirect(_kiosk_route(kiosk_mode, "home"))
@@ -4458,7 +4502,7 @@ def kiosk_home(request, kiosk_mode="private"):
                                     occurred_on=occurred_on,
                                     family_member=target_family_member,
                                     kiosk_booked_by=locked_actor,
-                                    kiosk_confirmation_nonce=(confirmation_nonce if booking_index == 0 else None),
+                                    kiosk_confirmation_nonce=(booking_nonce if booking_index == 0 else None),
                                 )
                                 charge.save()
                                 if booking_link is not None or target_family_member is not None:
@@ -4490,8 +4534,8 @@ def kiosk_home(request, kiosk_mode="private"):
                                 )
                     except IntegrityError:
                         if (
-                            confirmation_nonce is None
-                            or not Charge.objects.filter(kiosk_confirmation_nonce=confirmation_nonce).exists()
+                            booking_nonce is None
+                            or not Charge.objects.filter(kiosk_confirmation_nonce=booking_nonce).exists()
                         ):
                             raise
                         messages.info(request, "Diese Bestätigung wurde bereits verarbeitet.")
@@ -5069,6 +5113,7 @@ def kiosk_home(request, kiosk_mode="private"):
         "snack_rules": quick_form.fields["price_rule"].queryset.filter(kind=PriceRule.Kind.MEAL),
         "dinner_rule": dinner_rule,
         "quick_form": quick_form,
+        "quick_booking_token": _sign_kiosk_quick_booking_token(participant),
         "quick_confirmation": quick_confirmation,
         "meal_targets": meal_targets,
         "checkin_participants": checkin_participants,

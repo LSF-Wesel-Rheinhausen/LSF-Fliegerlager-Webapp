@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import patch
@@ -48,6 +49,12 @@ def _freeze_meal_booking_time(monkeypatch):
     fixed_now = timezone.make_aware(datetime(2026, 6, 30, 10, 0))
     monkeypatch.setattr("billing.services.timezone.localtime", lambda value=None, timezone=None: fixed_now)
     monkeypatch.setattr("billing.services.timezone.localdate", lambda value=None, timezone=None: fixed_now.date())
+
+
+def _rendered_quick_booking_token(kiosk_client):
+    """Return the direct-booking token from a real rendered kiosk form."""
+    response = kiosk_client.get(reverse("kiosk-home"))
+    return re.search(rb'name="quick-booking-token" value="([^"]+)"', response.content).group(1).decode()
 
 
 def test_kiosk_action_audit_log_model_is_registered():
@@ -246,6 +253,7 @@ def test_quick_booking_snapshots_names_from_freshly_locked_identities(kiosk_clie
             "quick-price_rule": rule.pk,
             "quick-quantity": 1,
             "quick-target": [f"family-{partner_child.pk}"],
+            "quick-booking-token": _rendered_quick_booking_token(kiosk_client),
         },
     )
 
@@ -303,6 +311,7 @@ def test_quick_booking_rejects_camp_deactivated_before_dependency_lock(kiosk_cli
             "quick-price_rule": rule.pk,
             "quick-quantity": 1,
             "quick-target": [f"participant-{participant.pk}"],
+            "quick-booking-token": _rendered_quick_booking_token(kiosk_client),
         },
     )
 
@@ -361,6 +370,7 @@ def test_quick_booking_rejects_participant_state_changed_before_dependency_lock(
             "quick-price_rule": rule.pk,
             "quick-quantity": 1,
             "quick-target": [f"participant-{participant.pk}"],
+            "quick-booking-token": _rendered_quick_booking_token(kiosk_client),
         },
     )
 
@@ -438,6 +448,7 @@ def test_quick_booking_rejects_effective_rule_changed_before_rule_lock(
             "quick-price_rule": selected_rule.pk,
             "quick-quantity": 1,
             "quick-target": [f"family-{partner_child.pk}"],
+            "quick-booking-token": _rendered_quick_booking_token(kiosk_client),
         },
     )
 
@@ -546,6 +557,7 @@ def test_quick_booking_notification_uses_locked_actor_name_snapshot(
                 "quick-price_rule": rule.pk,
                 "quick-quantity": 1,
                 "quick-target": [f"participant-{partner.pk}"],
+                "quick-booking-token": _rendered_quick_booking_token(kiosk_client),
             },
         )
 
@@ -601,6 +613,7 @@ def test_companion_quick_booking_notification_attributes_actual_actor(
                 "quick-price_rule": rule.pk,
                 "quick-quantity": 1,
                 "quick-target": [f"participant-{partner.pk}"],
+                "quick-booking-token": _rendered_quick_booking_token(kiosk_client),
             },
         )
 
@@ -1847,6 +1860,7 @@ def test_linked_family_quick_booking_and_cancellation_are_audited(kiosk_client):
             "quick-price_rule": rule.pk,
             "quick-quantity": 1,
             "quick-target": [f"family-{partner_child.pk}"],
+            "quick-booking-token": _rendered_quick_booking_token(kiosk_client),
         },
     )
 
@@ -1929,6 +1943,7 @@ def test_linked_family_quick_booking_keeps_fuer_inside_target_name_out_of_report
             "quick-price_rule": rule.pk,
             "quick-quantity": 2,
             "quick-target": [f"family-{family_member.pk}"],
+            "quick-booking-token": _rendered_quick_booking_token(kiosk_client),
         },
     )
 
@@ -1971,6 +1986,7 @@ def test_partner_cancellation_retains_target_of_own_family_quick_booking(kiosk_c
             "quick-price_rule": rule.pk,
             "quick-quantity": 1,
             "quick-target": [f"family-{child.pk}"],
+            "quick-booking-token": _rendered_quick_booking_token(kiosk_client),
         },
     )
 
@@ -2061,6 +2077,7 @@ def test_quick_booking_rejects_family_role_changed_before_dependency_lock(kiosk_
             "quick-price_rule": rule.pk,
             "quick-quantity": 1,
             "quick-target": [f"family-{partner_child.pk}"],
+            "quick-booking-token": _rendered_quick_booking_token(kiosk_client),
         },
     )
 
@@ -3174,6 +3191,7 @@ def test_quick_food_booking_resolves_the_selected_partner_child_price(kiosk_clie
             "quick-price_rule": adult_rule.pk,
             "quick-quantity": 1,
             "quick-target": [f"family-{partner_child.pk}"],
+            "quick-booking-token": _rendered_quick_booking_token(kiosk_client),
         },
     )
 
@@ -3224,6 +3242,7 @@ def test_adult_can_select_child_only_drink_for_authorized_partner_child(kiosk_cl
             "quick-price_rule": child_rule.pk,
             "quick-quantity": 1,
             "quick-target": [f"family-{partner_child.pk}"],
+            "quick-booking-token": _rendered_quick_booking_token(kiosk_client),
         },
     )
 
