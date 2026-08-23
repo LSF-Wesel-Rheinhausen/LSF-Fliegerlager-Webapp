@@ -97,11 +97,38 @@ def test_dast_pr_job_has_no_write_permissions_and_trusted_job_is_separate() -> N
 
     assert dict(pr_job["permissions"]) == {"contents": "read"}
     assert dict(trusted_job["permissions"]) == {"contents": "read", "issues": "write"}
-    assert dict(pr_job["steps"][-1]["with"])["allow_issue_writing"] == "false"
-    assert dict(trusted_job["steps"][-1]["with"])["allow_issue_writing"] == "true"
+    pr_zap = next(step for step in pr_job["steps"] if "zaproxy/action-baseline@" in step.get("uses", ""))
+    trusted_zap = next(step for step in trusted_job["steps"] if "zaproxy/action-baseline@" in step.get("uses", ""))
+    assert dict(pr_zap["with"])["allow_issue_writing"] == "false"
+    assert dict(trusted_zap["with"])["allow_issue_writing"] == "true"
     assert "actions" not in dict(pr_job["permissions"])
     assert "actions" not in dict(trusted_job["permissions"])
     assert "pull_request" in str(pr_job["if"])
+    assert "secrets" not in str(pr_job)
+    assert "continue-on-error" not in str(pr_job)
+    assert "continue-on-error" not in str(trusted_job)
+
+
+def test_dast_jobs_use_bounded_lifecycle_cleanup_and_keep_findings_report_only() -> None:
+    workflow = next(workflow for path, workflow in _workflow_documents() if path.name == "dast.yml")
+    jobs = dict(workflow["jobs"])
+
+    for job_name in ("zap_scan_pr", "zap_scan_trusted"):
+        job = dict(jobs[job_name])
+        assert 1 <= int(job["timeout-minutes"]) <= 45
+        steps = [dict(step) for step in job["steps"]]
+        runs = [step.get("run", "") for step in steps]
+        assert any("dast-lifecycle.sh start" in run for run in runs)
+        assert any("dast-lifecycle.sh wait" in run for run in runs)
+        cleanup = next(step for step in steps if step.get("name") == "Clean up DAST application")
+        assert cleanup["if"] == "${{ always() }}"
+        assert "dast-lifecycle.sh cleanup" in cleanup["run"]
+        assert "sleep 10" not in "\n".join(runs)
+
+    pr_zap = dict(jobs["zap_scan_pr"]["steps"][-2]["with"])
+    trusted_zap = dict(jobs["zap_scan_trusted"]["steps"][-2]["with"])
+    assert pr_zap["allow_issue_writing"] == "false"
+    assert trusted_zap["allow_issue_writing"] == "true"
 
 
 def test_workflow_discovery_includes_nested_yml_and_yaml_files(tmp_path: Path) -> None:
