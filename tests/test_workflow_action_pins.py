@@ -22,6 +22,10 @@ def _workflow_documents(workflow_dir: Path = WORKFLOW_DIR) -> list[tuple[Path, d
     ]
 
 
+def _docker_workflow() -> dict[str, object]:
+    return next(workflow for path, workflow in _workflow_documents() if path.name == "docker.yml")
+
+
 def _uses_values(value: object) -> list[str]:
     if isinstance(value, dict):
         values: list[str] = []
@@ -82,6 +86,7 @@ def test_docker_permissions_are_job_scoped_and_publish_waits_for_tests() -> None
     assert dict(test_job["permissions"]) == {"contents": "read"}
     assert dict(publish_job["permissions"]) == {"contents": "read", "packages": "write"}
     assert publish_job["needs"] == "docker-test"
+    assert "workflow_run.conclusion == 'success'" in publish_job["if"]
 
 
 def test_dast_pr_job_has_no_write_permissions_and_trusted_job_is_separate() -> None:
@@ -119,3 +124,79 @@ def test_pull_request_target_semantic_action_has_no_checkout_or_run_step() -> No
         assert "run" not in step
         assert "checkout" not in step.get("uses", "")
         assert step["uses"] == _uses_values(job)[0]
+
+
+def test_docker_builds_pull_requests_and_main_without_publishing() -> None:
+    workflow = _docker_workflow()
+    events = dict(workflow["on"])
+    jobs = dict(workflow["jobs"])
+    docker_test = dict(jobs["docker-test"])
+    publish = dict(jobs["docker-publish"])
+
+    assert "pull_request" in events
+    assert "push" not in events
+    assert "workflow_run" in events
+    assert "pull_request" in docker_test["if"]
+    assert "workflow_run" in docker_test["if"]
+    assert "workflow_run.conclusion == 'success'" in docker_test["if"]
+    assert "push: true" not in "\n".join(str(step) for step in docker_test["steps"])
+    assert "workflow_run" in publish["if"]
+    assert "pull_request" not in publish["if"]
+    assert publish["needs"] == "docker-test"
+    test_builds = [step for step in docker_test["steps"] if "build-push-action@" in str(step)]
+    assert len(test_builds) == 2
+    assert all(dict(step["with"])["load"] == "true" for step in test_builds)
+    assert "Test application image" in [dict(step)["name"] for step in docker_test["steps"]]
+    assert "Test updater image" in [dict(step)["name"] for step in docker_test["steps"]]
+
+
+def test_docker_publish_is_bound_to_successful_trusted_main_sha_and_checks_race() -> None:
+    workflow = _docker_workflow()
+    publish = dict(dict(workflow["jobs"])["docker-publish"])
+    steps = list(publish["steps"])
+    checkout = dict(steps[0])
+    checkout_with = dict(checkout["with"])
+    verify = next(step for step in steps if dict(step).get("name") == "Verify main has not moved")
+    publish_text = "\n".join(str(step) for step in steps if "build-push-action@" in str(step))
+
+    assert checkout_with["ref"] == "${{ github.event.workflow_run.head_sha }}"
+    assert "workflow_run.conclusion == 'success'" in publish["if"]
+    assert "workflow_run.event == 'push'" in publish["if"]
+    assert "workflow_run.head_branch == 'main'" in publish["if"]
+    assert "workflow_run.head_repository.full_name == github.repository" in publish["if"]
+    assert "needs.docker-test.result == 'success'" in publish["if"]
+    assert "git ls-remote" in verify["run"]
+    assert "refs/heads/main" in verify["run"]
+    assert sum("git ls-remote" in dict(step).get("run", "") for step in steps) == 3
+    assert "workflow_run.head_sha" in publish_text
+    assert "github.sha" not in publish_text
+
+
+def test_docker_test_and_publish_share_the_exact_sha_for_pr_and_workflow_run() -> None:
+    jobs = dict(_docker_workflow()["jobs"])
+    docker_test = dict(jobs["docker-test"])
+    checkout = dict(docker_test["steps"][0])
+    application_build = next(
+        step for step in docker_test["steps"] if "Build application image" in dict(step).get("name", "")
+    )
+    build_args = dict(application_build["with"])["build-args"]
+    expected_sha = "${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}"
+
+    assert dict(checkout["with"])["ref"] == expected_sha
+    assert f"APP_REVISION={expected_sha}" in build_args
+
+
+def test_docker_publish_permissions_and_cache_scopes_are_isolated_and_bounded() -> None:
+    jobs = dict(_docker_workflow()["jobs"])
+    docker_test = dict(jobs["docker-test"])
+    publish = dict(jobs["docker-publish"])
+
+    assert dict(docker_test["permissions"]) == {"contents": "read"}
+    assert dict(publish["permissions"]) == {"contents": "read", "packages": "write"}
+    assert "secrets" not in str(docker_test)
+    assert "scope=app" in str(docker_test)
+    assert "scope=updater" in str(docker_test)
+    assert "scope=app" in str(publish)
+    assert "scope=updater" in str(publish)
+    assert 1 <= int(docker_test["timeout-minutes"]) <= 60
+    assert 1 <= int(publish["timeout-minutes"]) <= 60
