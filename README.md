@@ -131,7 +131,7 @@ Die wichtigsten Umgebungsvariablen stehen mit sicheren Platzhaltern in [`.env.ex
 - `DJANGO_DEBUG`: `1` für lokale Entwicklung, `0` für Docker/Deployment.
 - `DJANGO_ALLOWED_HOSTS`: kommaseparierte Hostnamen.
 - `CSRF_TRUSTED_ORIGINS`: kommaseparierte vertrauenswürdige Origins mit Schema.
-- `DATABASE_URL`: Datenbank-URL; lokal kann SQLite genutzt werden, Docker nutzt PostgreSQL.
+- `DATABASE_URL`: Datenbank-URL; lokal kann SQLite für einen einzelnen Entwicklungsprozess genutzt werden, Docker und parallele Kiosk-Nutzung setzen PostgreSQL voraus.
 - `DJANGO_HTTPS`: aktiviert in Produktion HTTPS-Redirect sowie sichere Session- und CSRF-Cookies.
 - `KIOSK_ACCESS_TRUSTED_PROXY_ADDRESSES`: exakte direkte Proxy-IP-Adressen für die gerätegetrennte Lager-PIN-Drosselung.
 - `AUTHELIA_SSO_ENABLED`: aktiviert optional Trusted-Header-SSO fuer vorhandene aktive Konten.

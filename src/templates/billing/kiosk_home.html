@@ -287,6 +287,7 @@
         <form method="post" id="quick-booking-form" class="kiosk-masonry__contents">
           {% csrf_token %}
           <input type="hidden" name="action" value="quick">
+          <input type="hidden" name="quick-booking-token" value="{{ quick_booking_token }}">
           <input type="hidden" name="quick-price_rule" id="quick-price-rule" value="">
           <input type="hidden" name="quick-quantity" id="id_quick-quantity" value="1">
           <span data-quick-submitted-targets></span>
@@ -808,6 +809,7 @@
       <button class="button button-secondary">Schließen</button>
     </form>
     <p class="hint" data-quick-dialog-name></p>
+    <p id="quick-submit-status-drink" class="kiosk-note" role="status" aria-live="polite" hidden>Buchung wird verarbeitet …</p>
     <div class="stack stack--compact">
       <p>Für wen soll gebucht werden?</p>
       {% include "billing/includes/kiosk_quick_targets.html" with target_scope="drink" %}
@@ -837,6 +839,7 @@
         <button class="button button-secondary">Abbrechen</button>
       </form>
       <p>Bitte prüfe Personen, Mengen und Preise, bevor du die Buchungen kostenpflichtig bestätigst.</p>
+      <p id="quick-submit-status-confirmation" class="kiosk-note" role="status" aria-live="polite" hidden>Buchung wird verarbeitet …</p>
       {% if quick_confirmation.changed %}
         <div class="kiosk-note" role="alert">
           <strong>Buchungsdaten wurden aktualisiert</strong>
@@ -858,7 +861,7 @@
           <strong>{{ quick_confirmation.total|money_eur }}</strong>
         </div>
       </div>
-      <form method="post" class="stack">
+      <form method="post" id="quick-confirmation-form" class="stack">
         {% csrf_token %}
         <input type="hidden" name="action" value="quick">
         <input type="hidden" name="quick-confirmed" value="1">
@@ -881,6 +884,7 @@
       <button class="button button-secondary">Schließen</button>
     </form>
     <p class="hint" id="food-dialog-name"></p>
+    <p id="quick-submit-status-food" class="kiosk-note" role="status" aria-live="polite" hidden>Buchung wird verarbeitet …</p>
 
     <div class="stack">
       <p>Wer soll eingebucht werden?</p>
@@ -1381,6 +1385,11 @@
       const priceRuleInput = document.getElementById("quick-price-rule");
       const quantityInput = document.getElementById("id_quick-quantity");
       const submittedTargetContainer = document.querySelector("[data-quick-submitted-targets]");
+      const quickSubmitStatuses = {
+        drink: document.getElementById("quick-submit-status-drink"),
+        food: document.getElementById("quick-submit-status-food"),
+        confirmation: document.getElementById("quick-submit-status-confirmation"),
+      };
       const customQuantityInput = document.getElementById("custom-drink-quantity");
       const drinkName = document.querySelector("[data-quick-dialog-name]");
       const mealDialog = document.getElementById("meal-dialog");
@@ -1574,6 +1583,34 @@
         quantityInput.value = quantity;
         drinkForm.requestSubmit();
       };
+
+      drinkForm?.addEventListener("submit", (event) => {
+        if (drinkForm.dataset.submitting === "true") {
+          event.preventDefault();
+          return;
+        }
+        drinkForm.dataset.submitting = "true";
+        drinkForm.setAttribute("aria-busy", "true");
+        const status = foodDialog?.open ? quickSubmitStatuses.food : quickSubmitStatuses.drink;
+        if (status) status.hidden = false;
+        document.querySelectorAll("[data-drink-quantity], [data-submit-custom-drink], #submit-food-booking").forEach((button) => {
+          button.disabled = true;
+        });
+      });
+
+      const confirmationForm = document.getElementById("quick-confirmation-form");
+      confirmationForm?.addEventListener("submit", (event) => {
+        if (confirmationForm.dataset.submitting === "true") {
+          event.preventDefault();
+          return;
+        }
+        confirmationForm.dataset.submitting = "true";
+        confirmationForm.setAttribute("aria-busy", "true");
+        if (quickSubmitStatuses.confirmation) quickSubmitStatuses.confirmation.hidden = false;
+        confirmationForm.querySelectorAll("button[type=submit]").forEach((button) => {
+          button.disabled = true;
+        });
+      });
 
       document.querySelectorAll("[data-drink-quantity]").forEach((button) => {
         button.addEventListener("click", () => submitDrink(button.dataset.drinkQuantity));

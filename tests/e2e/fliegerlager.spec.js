@@ -940,8 +940,31 @@ test("Kiosk quick booking validates targets and supports cancellation", async ({
   await expect(quickConfirmationDialog).toContainText("Irène Curie");
   await expect(quickConfirmationDialog).toContainText("3,00 €");
   await assertNoUnexpectedOverflow(page);
-  await quickConfirmationDialog.getByRole("button", { name: "Jetzt kostenpflichtig buchen" }).click();
+  await page.route("**/kiosk/", async (route) => {
+    if (route.request().method() === "POST") {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+    await route.continue();
+  });
+  const confirmationPostRequests = [];
+  page.on("request", (request) => {
+    if (request.method() === "POST" && new URL(request.url()).pathname === "/kiosk/") {
+      confirmationPostRequests.push(request);
+    }
+  });
+  const confirmationButton = quickConfirmationDialog.getByRole("button", { name: "Jetzt kostenpflichtig buchen" });
+  const confirmationBusyState = await confirmationButton.evaluate((button) => {
+    button.click();
+    button.click();
+    return {
+      disabled: button.disabled,
+      ariaBusy: document.getElementById("quick-confirmation-form")?.getAttribute("aria-busy"),
+      statusHidden: document.getElementById("quick-submit-status-confirmation")?.hidden,
+    };
+  });
+  expect(confirmationBusyState).toEqual({ disabled: true, ariaBusy: "true", statusHidden: false });
   await expect(page.getByText("Apfelsaft gebucht.")).toBeVisible();
+  expect(confirmationPostRequests).toHaveLength(1);
   await page.emulateMedia({ colorScheme: "light" });
   await assertNoUnexpectedOverflow(page);
   await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).or(page.locator(".kiosk-mobile-bottom-nav").getByRole("link", { name: "Mehr" })).click();
@@ -953,6 +976,76 @@ test("Kiosk quick booking validates targets and supports cancellation", async ({
   await expect(page.locator("dialog#quick-cancel-dialog")).toContainText("Apfelsaft");
   await page.locator("dialog#quick-cancel-dialog").getByRole("button", { name: "Jetzt stornieren" }).click();
   await expect(page.getByText("Buchung wurde storniert.")).toBeVisible();
+});
+
+test("Kiosk quick booking becomes busy immediately and sends one rapid activation POST", async ({ page }) => {
+  await setupKioskScenario(page, "Kiosk Schnellbuchung Idempotenz");
+  const quickDialog = page.locator("dialog#quick-dialog");
+  await page.getByRole("button", { name: "Apfelsaft" }).click();
+  await page.route("**/kiosk/", async (route) => {
+    if (route.request().method() === "POST") {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+    await route.continue();
+  });
+
+  const postRequests = [];
+  page.on("request", (request) => {
+    if (request.method() === "POST" && new URL(request.url()).pathname === "/kiosk/") {
+      postRequests.push(request);
+    }
+  });
+  const submitButton = quickDialog.getByRole("button", { name: "1x" });
+  const busyState = await submitButton.evaluate((button) => {
+    button.click();
+    button.click();
+    return {
+      disabled: button.disabled,
+      ariaBusy: document.getElementById("quick-booking-form")?.getAttribute("aria-busy"),
+    };
+  });
+
+  expect(busyState).toEqual({ disabled: true, ariaBusy: "true" });
+  await expect(page.getByText("Apfelsaft gebucht.")).toBeVisible();
+  expect(postRequests).toHaveLength(1);
+});
+
+test("Kiosk food quick booking shows busy feedback and creates one booking after rapid activation", async ({ page }) => {
+  await setupKioskScenario(page, "Kiosk Verpflegung Idempotenz");
+  await page.locator("[data-food-button]").first().click();
+  const foodDialog = page.locator("dialog#food-dialog");
+  await expect(foodDialog).toBeVisible();
+  await page.route("**/kiosk/", async (route) => {
+    if (route.request().method() === "POST") {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+    await route.continue();
+  });
+  const postRequests = [];
+  page.on("request", (request) => {
+    if (request.method() === "POST" && new URL(request.url()).pathname === "/kiosk/") {
+      postRequests.push(request);
+    }
+  });
+
+  const submitButton = foodDialog.getByRole("button", { name: "Jetzt buchen" });
+  const busyState = await submitButton.evaluate((button) => {
+    button.click();
+    button.click();
+    const form = document.getElementById("quick-booking-form");
+    const status = document.getElementById("quick-submit-status-food");
+    return {
+      disabled: button.disabled,
+      ariaBusy: form?.getAttribute("aria-busy"),
+      statusHidden: status?.hidden,
+      statusVisible: Boolean(status?.getClientRects().length),
+    };
+  });
+
+  expect(busyState).toEqual({ disabled: true, ariaBusy: "true", statusHidden: false, statusVisible: true });
+  await expect(page.getByText(/Standard Frühstück.*gebucht\./)).toBeVisible();
+  expect(postRequests).toHaveLength(1);
+  await expect(page.locator(".quick-booking-row").filter({ hasText: "Standard Frühstück" })).toHaveCount(1);
 });
 
 test("Kiosk meal calendar saves multiple dinner dates", async ({ page }) => {

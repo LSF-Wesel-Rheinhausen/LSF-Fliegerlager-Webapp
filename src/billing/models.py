@@ -1033,7 +1033,7 @@ class Charge(TimeStampedModel):
         blank=True,
         unique=True,
         editable=False,
-        help_text="Einmaliger Marker der kostenpflichtig bestätigten Kiosk-Mehrfachbuchung.",
+        help_text="Einmaliger Idempotenzmarker für eine Kiosk-Schnellbuchung.",
     )
 
     class Meta:
