@@ -140,6 +140,7 @@
     </div>
     <form method="post" action="{% url 'deployment-update-install' %}" class="dialog-actions">
       {% csrf_token %}
+      <input type="hidden" name="candidate_id" value="{{ deployment_status.candidate_id }}">
       <button type="button" class="button-secondary" data-dialog-close>Abbrechen</button>
       <button type="submit" class="button-danger">Backup erstellen und installieren</button>
     </form>

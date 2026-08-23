@@ -92,7 +92,6 @@ services:
     restart: unless-stopped
     environment:
       UPDATE_AGENT_TOKEN: ${UPDATE_AGENT_TOKEN:?UPDATE_AGENT_TOKEN must be set in .env}
-      APP_IMAGE: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set in .env}
       PORTAINER_URL: ${PORTAINER_URL:?PORTAINER_URL must be set in .env}
       PORTAINER_API_KEY: ${PORTAINER_API_KEY:?PORTAINER_API_KEY must be set in .env}
@@ -101,6 +100,7 @@ services:
       APP_HEALTH_URL: ${APP_HEALTH_URL:-http://app:8000/healthz/}
       TARGET_SERVICE: ${TARGET_SERVICE:-app}
       GHCR_TOKEN: ${GHCR_TOKEN:-}
+      UPDATE_REGISTRY_ALLOWED_HOSTS: ${UPDATE_REGISTRY_ALLOWED_HOSTS:-ghcr.io}
       UPDATE_HEALTH_TIMEOUT: ${UPDATE_HEALTH_TIMEOUT:-180}
       MAX_AGENT_BODY_BYTES: ${MAX_AGENT_BODY_BYTES:-1048576}
       AGENT_READ_TIMEOUT_SECONDS: ${AGENT_READ_TIMEOUT_SECONDS:-10}

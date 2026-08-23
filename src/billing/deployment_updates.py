@@ -17,7 +17,24 @@ class UpdateAgentError(RuntimeError):
 
 
 AGENT_ERROR_MESSAGES = {
+    "candidate_mismatch": "Der bestätigte Update-Kandidat ist nicht mehr aktuell. Bitte erneut prüfen.",
     "invalid_registry_metadata": "Registry/Image prüfen und erneut versuchen.",
+    "updater_stack_upgrade_required": (
+        "Die aktive Portainer-Compose-Definition ist veraltet. Zuerst die aktuelle Compose-Definition kontrolliert "
+        "einspielen und den Updater-Healthcheck prüfen."
+    ),
+    "updater_stack_indirect_configuration": (
+        "Der updater-Service verwendet YAML-Aliase, Anchors oder Merge-Keys. Diese Konfiguration vor dem Update "
+        "vollständig und direkt in der aktiven Compose-Definition ausschreiben."
+    ),
+    "update_in_progress": "Eine Update-Prüfung oder Installation läuft bereits.",
+    "update_recovery_required": (
+        "Die Update-Recovery ist noch nicht sicher abgeschlossen. Portainer-Stack, laufenden App-Digest und "
+        "Updater-Status prüfen."
+    ),
+    "stale_runtime_base": (
+        "Der laufende Image-Zustand hat sich seit der Prüfung geändert. Bitte zuerst erneut auf ein Update prüfen."
+    ),
 }
 
 
@@ -84,9 +101,9 @@ def check_for_update() -> dict[str, Any]:
     )
 
 
-def install_update() -> dict[str, Any]:
-    """Ask the agent to install the configured application image."""
-    return agent_request("/install", method="POST")
+def install_update(candidate_id: str) -> dict[str, Any]:
+    """Ask the agent to install the exact candidate confirmed by the user."""
+    return agent_request("/install", method="POST", payload={"candidate_id": candidate_id})
 
 
 def create_backup_archive(staging_dir: str, archive_prefix: str) -> dict[str, Any]:

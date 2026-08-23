@@ -5,6 +5,7 @@ import gzip
 import hashlib
 import hmac
 import io
+import ipaddress
 import json
 import logging
 import math
@@ -25,7 +26,7 @@ from enum import Enum
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("deployment-agent")
@@ -101,7 +102,6 @@ def positive_float_setting(name: str, default: str) -> float:
 
 
 TOKEN = os.environ["UPDATE_AGENT_TOKEN"]
-TARGET_IMAGE = os.getenv("APP_IMAGE", "ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest")
 TARGET_SERVICE = os.getenv("TARGET_SERVICE", "app")
 PORTAINER_URL = os.getenv("PORTAINER_URL", "").rstrip("/")
 PORTAINER_API_KEY = os.getenv("PORTAINER_API_KEY", "")
@@ -112,6 +112,7 @@ APP_HEALTH_URL = os.getenv("APP_HEALTH_URL", "http://app:8000/healthz/")
 BACKUP_DIR = Path(os.getenv("BACKUP_DIR", "/backups"))
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 GHCR_TOKEN = os.getenv("GHCR_TOKEN", "")
+REGISTRY_ALLOWED_HOSTS = os.getenv("UPDATE_REGISTRY_ALLOWED_HOSTS", "ghcr.io")
 HEALTH_TIMEOUT = int(os.getenv("UPDATE_HEALTH_TIMEOUT", "180"))
 STATE_FILE = Path(os.getenv("UPDATE_STATE_FILE", "/state/status.json"))
 MAX_AGENT_BODY_BYTES = positive_int_setting("MAX_AGENT_BODY_BYTES", "1048576")
@@ -121,6 +122,11 @@ BACKUP_STAGING_PATTERN = re.compile(r"^staging/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
 BACKUP_ARCHIVE_PREFIX_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$")
 CONTENT_LENGTH_PATTERN = re.compile(r"^[0-9]+$")
 IMAGE_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
+IMAGE_TAG_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
+REGISTRY_HOST_LABEL_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+CANDIDATE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{16,128}$")
+CANDIDATE_CONTRACT_VERSION = 2
+RECOVERY_CONTRACT_VERSION = 1
 
 update_lock = threading.Lock()
 backup_lock = threading.Lock()
@@ -141,6 +147,10 @@ MANIFEST_ACCEPT = ", ".join(
         "application/vnd.docker.distribution.manifest.v2+json",
     ]
 )
+IMAGE_MANIFEST_MEDIA_TYPES = {
+    "application/vnd.oci.image.manifest.v1+json",
+    "application/vnd.docker.distribution.manifest.v2+json",
+}
 
 
 def require_env(name: str, value: str) -> str:
@@ -315,6 +325,7 @@ class PortainerClient:
         """Update APP_IMAGE in the stack variables and redeploy the stack."""
         stack = self.get_stack()
         stack_file_content = self.get_stack_file_content(stack)
+        validate_updater_stack_contract(stack_file_content)
         env = update_env_pairs(extract_stack_env(stack), "APP_IMAGE", image)
         return self.request(
             "PUT",
@@ -370,14 +381,159 @@ def update_env_pairs(env: list[dict[str, str]], name: str, value: str) -> list[d
 
 
 def stack_app_image(stack: dict[str, Any]) -> str:
-    """Return APP_IMAGE from the Portainer stack variables."""
-    for item in extract_stack_env(stack):
-        if item["name"] == "APP_IMAGE":
-            return item["value"]
-    return TARGET_IMAGE
+    """Return the single validated APP_IMAGE value from the Portainer stack variables."""
+    values = [item["value"] for item in extract_stack_env(stack) if item["name"] == "APP_IMAGE"]
+    if len(values) != 1:
+        raise RuntimeError("Portainer Stack muss genau einen APP_IMAGE-Wert enthalten.")
+    latest_image_reference(values[0])
+    return values[0]
 
 
-def immutable_running_image(client: PortainerClient) -> str:
+def _yaml_content(line: str) -> tuple[int, str]:
+    """Return indentation and significant YAML text for the supported Compose subset."""
+    expanded = line.expandtabs(8)
+    content = expanded.lstrip()
+    return len(expanded) - len(content), content
+
+
+def _yaml_unquoted_content(content: str) -> str:
+    """Remove YAML comments and quoted scalar contents for lexical safety checks."""
+    unquoted: list[str] = []
+    quote: str | None = None
+    index = 0
+    while index < len(content):
+        character = content[index]
+        if quote == "'":
+            if character == "'" and index + 1 < len(content) and content[index + 1] == "'":
+                unquoted.extend((" ", " "))
+                index += 2
+                continue
+            if character == "'":
+                quote = None
+            unquoted.append(" ")
+        elif quote == '"':
+            if character == "\\" and index + 1 < len(content):
+                unquoted.extend((" ", " "))
+                index += 2
+                continue
+            if character == '"':
+                quote = None
+            unquoted.append(" ")
+        elif character == "#":
+            break
+        elif character in {"'", '"'}:
+            quote = character
+            unquoted.append(" ")
+        else:
+            unquoted.append(character)
+        index += 1
+    return "".join(unquoted)
+
+
+def _yaml_has_indirect_configuration(content: str) -> bool:
+    """Return whether a line uses YAML merge, anchor, or alias syntax."""
+    unquoted = _yaml_unquoted_content(content)
+    return bool(
+        re.search(r"(?:^|[\s\[\]{},:?])<<\s*:", unquoted)
+        or re.search(r"(?:^|[\s\[\]{},:?])[&*](?:[^\s\[\]{},]+)?", unquoted)
+    )
+
+
+def validate_updater_stack_contract(stack_file_content: str) -> None:
+    """Reject Compose definitions that can inject APP_IMAGE into the updater service.
+
+    This deliberately supports only the ordinary block mapping/list forms emitted by
+    this repository. Indirect or ambiguous updater configuration fails closed because
+    safely resolving arbitrary YAML would require a full YAML implementation.
+    """
+    if not isinstance(stack_file_content, str) or not stack_file_content.strip():
+        raise AgentRequestError(HTTPStatus.CONFLICT, "updater_stack_upgrade_required")
+
+    lines = [_yaml_content(line) for line in stack_file_content.splitlines()]
+    services_index = next(
+        (index for index, (_indent, content) in enumerate(lines) if content == "services:"),
+        None,
+    )
+    if services_index is None:
+        raise AgentRequestError(HTTPStatus.CONFLICT, "updater_stack_upgrade_required")
+    services_indent = lines[services_index][0]
+    service_lines: list[tuple[int, int, str]] = []
+    for index in range(services_index + 1, len(lines)):
+        indent, content = lines[index]
+        if not content or content.startswith("#"):
+            continue
+        if indent <= services_indent:
+            break
+        service_lines.append((index, indent, content))
+    if not service_lines:
+        raise AgentRequestError(HTTPStatus.CONFLICT, "updater_stack_upgrade_required")
+    service_indent = min(indent for _index, indent, _content in service_lines)
+    updater_entries = []
+    for entry in service_lines:
+        if entry[1] != service_indent:
+            continue
+        key, separator, _value = entry[2].partition(":")
+        if separator and key.strip() == "updater":
+            updater_entries.append(entry)
+    if len(updater_entries) != 1:
+        raise AgentRequestError(HTTPStatus.CONFLICT, "updater_stack_upgrade_required")
+    updater_index, updater_indent, updater_content = updater_entries[0]
+
+    updater_lines: list[tuple[int, int, str]] = []
+    for index in range(updater_index + 1, len(lines)):
+        indent, content = lines[index]
+        if not content or content.startswith("#"):
+            continue
+        if indent <= updater_indent:
+            break
+        updater_lines.append((index, indent, content))
+    if (
+        not re.fullmatch(r"updater:\s*(?:#.*)?", updater_content)
+        or _yaml_has_indirect_configuration(updater_content)
+        or any(_yaml_has_indirect_configuration(content) for _index, _indent, content in updater_lines)
+    ):
+        raise AgentRequestError(HTTPStatus.CONFLICT, "updater_stack_indirect_configuration")
+    if not updater_lines:
+        return
+    updater_child_indent = min(indent for _index, indent, _content in updater_lines)
+    environment_entries: list[tuple[int, int, str]] = []
+    for index, indent, content in updater_lines:
+        if indent != updater_child_indent:
+            continue
+        key, separator, value = content.partition(":")
+        if separator and key.strip() in {"env_file", "extends"}:
+            raise AgentRequestError(HTTPStatus.CONFLICT, "updater_stack_upgrade_required")
+        if key.strip() == "environment" and separator:
+            if value.strip() not in {"", "{}", "[]"}:
+                raise AgentRequestError(HTTPStatus.CONFLICT, "updater_stack_upgrade_required")
+            environment_entries.append((index, indent, value.strip()))
+    if len(environment_entries) > 1:
+        raise AgentRequestError(HTTPStatus.CONFLICT, "updater_stack_upgrade_required")
+    if not environment_entries or environment_entries[0][2] in {"{}", "[]"}:
+        return
+    environment_index, environment_indent, _environment_value = environment_entries[0]
+
+    for indent, content in lines[environment_index + 1 :]:
+        if not content or content.startswith("#"):
+            continue
+        if indent <= environment_indent:
+            break
+        item = content.removeprefix("- ").strip()
+        name = item.split("=", 1)[0].split(":", 1)[0].strip().strip("'\"")
+        if name == "APP_IMAGE":
+            raise AgentRequestError(HTTPStatus.CONFLICT, "updater_stack_upgrade_required")
+
+
+def validate_active_stack_contract(client: PortainerClient, stack: dict[str, Any]) -> None:
+    """Validate the active Portainer Compose definition before update mutation."""
+    embedded = stack.get("StackFileContent") or stack.get("stackFileContent")
+    stack_file_content = (
+        embedded if isinstance(embedded, str) and embedded.strip() else client.get_stack_file_content(stack)
+    )
+    validate_updater_stack_contract(stack_file_content)
+
+
+def immutable_running_image(client: PortainerClient, target_image: str) -> str:
     """Return the currently running app image as an immutable repo digest."""
     filters = json.dumps({"label": [f"com.docker.compose.service={TARGET_SERVICE}"], "status": ["running"]})
     containers = client.docker_request("GET", "/containers/json", query={"filters": filters})
@@ -390,12 +546,14 @@ def immutable_running_image(client: PortainerClient) -> str:
     repo_digests = image.get("RepoDigests") if isinstance(image, dict) else None
     if not isinstance(repo_digests, list):
         raise RuntimeError("Laufendes App-Image enthaelt keine RepoDigests fuer Rollback.")
-    target_registry, target_repository, _reference = parse_image_reference(TARGET_IMAGE)
+    target_registry, target_repository, _reference = parse_image_reference(target_image)
     target_prefix = f"{target_registry}/{target_repository}@"
-    for digest in repo_digests:
-        if isinstance(digest, str) and digest.startswith(target_prefix):
-            return digest
-    raise RuntimeError("Kein unveraenderlicher Image-Digest fuer Rollback gefunden.")
+    matching_digests = [
+        digest for digest in repo_digests if isinstance(digest, str) and digest.startswith(target_prefix)
+    ]
+    if len(matching_digests) != 1 or not IMAGE_DIGEST_PATTERN.fullmatch(matching_digests[0].split("@", 1)[-1]):
+        raise RuntimeError("Laufendes App-Image enthaelt nicht genau einen validen RepoDigest.")
+    return matching_digests[0]
 
 
 def parse_image_reference(image: str) -> tuple[str, str, str]:
@@ -411,6 +569,30 @@ def parse_image_reference(image: str) -> tuple[str, str, str]:
     if separator and "/" not in tag:
         return registry, name_part, tag
     return registry, remainder, "latest"
+
+
+def latest_image_reference(image: str) -> str:
+    """Derive the mutable latest release channel from one explicit OCI repository reference."""
+    if any(character.isspace() for character in image):
+        raise RuntimeError("APP_IMAGE darf keine Leerzeichen enthalten.")
+    normalized = image.removeprefix("https://").removeprefix("http://")
+    if normalized.count("@") > 1:
+        raise RuntimeError("APP_IMAGE ist durch mehrere Digest-Trennzeichen mehrdeutig.")
+
+    registry, repository, reference = parse_image_reference(image)
+    repository_parts = repository.split("/")
+    if not registry or any(part in {"", ".", ".."} for part in repository_parts):
+        raise RuntimeError("APP_IMAGE muss einen gültigen Repository-Namen enthalten.")
+    if ":" in repository:
+        raise RuntimeError("APP_IMAGE enthält eine mehrdeutige Tag-Referenz.")
+    if any(character in registry + repository for character in "?#"):
+        raise RuntimeError("APP_IMAGE enthält eine ungültige Registry- oder Repository-Referenz.")
+    if "@" in normalized:
+        if not IMAGE_DIGEST_PATTERN.fullmatch(reference):
+            raise RuntimeError("APP_IMAGE enthält keinen validen OCI-Digest.")
+    elif not IMAGE_TAG_PATTERN.fullmatch(reference):
+        raise RuntimeError("APP_IMAGE enthält keinen validen OCI-Tag.")
+    return f"{registry}/{repository}:latest"
 
 
 def immutable_image_reference(image: str, digest: Any) -> str:
@@ -431,12 +613,107 @@ def validate_immutable_image_reference(image: Any) -> tuple[str, str]:
     return f"{registry}/{repository}@{reference}", reference
 
 
-def registry_basic_auth_header() -> str | None:
-    """Return a GHCR Basic auth header when a token is configured."""
-    if not GHCR_TOKEN:
+def canonical_registry_authority(value: str, *, configuration: bool = False) -> str:
+    """Return one strict lowercase registry Host[:Port] authority."""
+
+    def invalid(message: str) -> NoReturn:
+        if configuration:
+            raise AgentConfigError(f"UPDATE_REGISTRY_ALLOWED_HOSTS {message}")
+        raise RegistryMetadataError(f"Registry-Host {message}")
+
+    if (
+        not isinstance(value, str)
+        or not value
+        or value != value.strip()
+        or any(character.isspace() for character in value)
+    ):
+        invalid("ist leer oder enthält Leerzeichen.")
+    if any(character in value for character in "/?#") or "://" in value:
+        invalid("muss als exakter Host[:Port] ohne Schema oder Pfad angegeben werden.")
+    try:
+        parsed = urllib.parse.urlsplit(f"//{value}")
+        port = parsed.port
+    except ValueError:
+        invalid("enthält einen ungültigen Port oder eine ungültige IPv6-Adresse.")
+    if port == 0:
+        invalid("enthält keinen gültigen TCP-Port.")
+    if parsed.username is not None or parsed.password is not None or parsed.path or parsed.query or parsed.fragment:
+        invalid("darf keine Userinfo, Pfade, Querys oder Fragmente enthalten.")
+    hostname = parsed.hostname
+    if not hostname or hostname.endswith(".") or "*" in hostname:
+        invalid("ist ungültig; Wildcards und abschließende Punkte sind nicht erlaubt.")
+    normalized_host = hostname.lower()
+    try:
+        address = ipaddress.ip_address(normalized_host)
+    except ValueError:
+        try:
+            normalized_host.encode("ascii")
+        except UnicodeEncodeError:
+            invalid("muss ein ASCII-Hostname sein.")
+        labels = normalized_host.split(".")
+        if len(labels) < 2 or any(not REGISTRY_HOST_LABEL_PATTERN.fullmatch(label) for label in labels):
+            invalid("ist kein gültiger vollqualifizierter Hostname.")
+    else:
+        if (
+            address.is_multicast
+            or address.is_loopback
+            or address.is_link_local
+            or address.is_private
+            or address.is_reserved
+            or address.is_unspecified
+            or not address.is_global
+        ):
+            invalid("darf kein privates, reserviertes oder anderweitig spezielles IP-Literal sein.")
+        normalized_host = address.compressed
+    authority = f"[{normalized_host}]" if ":" in normalized_host else normalized_host
+    if port is not None:
+        authority = f"{authority}:{port}"
+    return authority
+
+
+def allowed_registry_authorities() -> frozenset[str]:
+    """Parse the explicit registry allowlist without DNS or wildcard matching."""
+    entries = REGISTRY_ALLOWED_HOSTS.split(",")
+    if not entries or any(not entry.strip() for entry in entries):
+        raise AgentConfigError("UPDATE_REGISTRY_ALLOWED_HOSTS darf keine leeren Einträge enthalten.")
+    return frozenset(canonical_registry_authority(entry.strip(), configuration=True) for entry in entries)
+
+
+def validate_registry_url(url: str, *, expected_authority: str | None = None) -> str:
+    """Validate an HTTPS registry URL against the exact configured host allowlist."""
+    try:
+        parsed = urllib.parse.urlsplit(url)
+    except ValueError as error:
+        raise RegistryMetadataError("Registry-URL ist ungültig.") from error
+    if parsed.scheme != "https" or not parsed.netloc or parsed.username is not None or parsed.password is not None:
+        raise RegistryMetadataError("Registry-URL muss HTTPS ohne Userinfo verwenden.")
+    authority = canonical_registry_authority(parsed.netloc)
+    if authority not in allowed_registry_authorities():
+        raise RegistryMetadataError("Registry-Host ist nicht explizit erlaubt.")
+    if expected_authority is not None and authority != expected_authority:
+        raise RegistryMetadataError("Registry-URL wechselt auf einen anderen Host.")
+    return authority
+
+
+def registry_basic_auth_header(registry_authority: str) -> str | None:
+    """Return the configured GHCR Basic credential only for exact ghcr.io requests."""
+    if not GHCR_TOKEN or registry_authority != "ghcr.io":
         return None
     encoded = base64.b64encode(f"unused:{GHCR_TOKEN}".encode()).decode("ascii")
     return f"Basic {encoded}"
+
+
+class RejectRegistryRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Reject every registry redirect so credentials never cross request authorities."""
+
+    def redirect_request(self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str) -> None:
+        raise RegistryMetadataError("Registry-Redirects sind nicht erlaubt.")
+
+
+def registry_urlopen(request: urllib.request.Request, *, timeout: int) -> Any:
+    """Open one registry URL with redirects disabled."""
+    opener = urllib.request.build_opener(RejectRegistryRedirectHandler())
+    return opener.open(request, timeout=timeout)
 
 
 def registry_request(
@@ -447,21 +724,27 @@ def registry_request(
     timeout: int = 30,
 ) -> tuple[bytes, dict[str, str]]:
     """Fetch a registry resource and resolve public GHCR bearer auth challenges."""
+    registry_authority = validate_registry_url(url)
     headers = {"Accept": accept}
     if token:
         headers["Authorization"] = f"Bearer {token}"
     else:
-        authorization = registry_basic_auth_header()
+        authorization = registry_basic_auth_header(registry_authority)
         if authorization:
             headers["Authorization"] = authorization
     request = urllib.request.Request(url, headers=headers)
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with registry_urlopen(request, timeout=timeout) as response:
             return response.read(), dict(response.headers)
     except urllib.error.HTTPError as error:
+        if HTTPStatus.MULTIPLE_CHOICES <= error.code < HTTPStatus.BAD_REQUEST:
+            raise RegistryMetadataError("Registry-Redirects sind nicht erlaubt.") from error
         if error.code != HTTPStatus.UNAUTHORIZED or token:
             raise RuntimeError("Registry-Abfrage fehlgeschlagen.") from error
-        bearer_token = fetch_registry_token(error.headers.get("WWW-Authenticate", ""))
+        bearer_token = fetch_registry_token(
+            error.headers.get("WWW-Authenticate", ""),
+            registry_host=registry_authority,
+        )
         return registry_request(url, accept=accept, token=bearer_token, timeout=timeout)
     except (OSError, TimeoutError) as error:
         raise RuntimeError("Registry ist nicht erreichbar.") from error
@@ -487,24 +770,32 @@ def manifest_digest(raw_manifest: bytes, headers: dict[str, str]) -> str:
     return advertised
 
 
-def fetch_registry_token(auth_header: str) -> str:
+def fetch_registry_token(auth_header: str, *, registry_host: str = "ghcr.io") -> str:
     """Fetch a bearer token from a registry WWW-Authenticate challenge."""
+    canonical_host = canonical_registry_authority(registry_host)
+    if canonical_host not in allowed_registry_authorities():
+        raise RegistryMetadataError("Registry-Host ist nicht explizit erlaubt.")
     if not auth_header.startswith("Bearer "):
         raise RuntimeError("Registry verlangt eine unbekannte Authentifizierung.")
     values = urllib.parse.parse_qs(auth_header.removeprefix("Bearer ").replace(",", "&").replace('"', ""))
     realm = values.get("realm", [""])[0]
     if not realm:
         raise RuntimeError("Registry-Authentifizierung enthaelt keinen Token-Endpunkt.")
+    validate_registry_url(realm, expected_authority=canonical_host)
     query = {key: value[0] for key, value in values.items() if key in {"service", "scope"} and value}
     url = f"{realm}?{urllib.parse.urlencode(query)}" if query else realm
     headers = {"Accept": "application/json"}
-    authorization = registry_basic_auth_header()
+    authorization = registry_basic_auth_header(canonical_host)
     if authorization:
         headers["Authorization"] = authorization
     request = urllib.request.Request(url, headers=headers)
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with registry_urlopen(request, timeout=30) as response:
             payload = json.load(response)
+    except urllib.error.HTTPError as error:
+        if HTTPStatus.MULTIPLE_CHOICES <= error.code < HTTPStatus.BAD_REQUEST:
+            raise RegistryMetadataError("Registry-Redirects sind nicht erlaubt.") from error
+        raise RuntimeError("Registry-Token konnte nicht geladen werden.") from error
     except (OSError, TimeoutError, json.JSONDecodeError) as error:
         raise RuntimeError("Registry-Token konnte nicht geladen werden.") from error
     token = payload.get("token") or payload.get("access_token")
@@ -514,18 +805,46 @@ def fetch_registry_token(auth_header: str) -> str:
 
 
 def choose_manifest_descriptor(index: dict[str, Any]) -> dict[str, Any]:
-    """Pick a linux/amd64 manifest from an OCI index, falling back to the first item."""
+    """Return the single validated baseline linux/amd64 image descriptor."""
     manifests = index.get("manifests")
     if not isinstance(manifests, list) or not manifests:
-        raise RuntimeError("OCI-Index enthaelt keine Manifest-Eintraege.")
-    for manifest in manifests:
-        platform = manifest.get("platform", {}) if isinstance(manifest, dict) else {}
-        if platform.get("os") == "linux" and platform.get("architecture") == "amd64":
-            return manifest
-    first = manifests[0]
-    if not isinstance(first, dict):
-        raise RuntimeError("OCI-Index enthaelt ein ungueltiges Manifest.")
-    return first
+        raise RegistryMetadataError("OCI-Index enthaelt keine Manifest-Deskriptoren.")
+
+    matches: list[dict[str, Any]] = []
+    for descriptor in manifests:
+        if not isinstance(descriptor, dict):
+            raise RegistryMetadataError("OCI-Index enthaelt einen ungueltigen Descriptor.")
+        if descriptor.get("mediaType") not in IMAGE_MANIFEST_MEDIA_TYPES:
+            raise RegistryMetadataError("OCI-Index enthaelt einen ungueltigen Manifest-Media-Type.")
+        digest = descriptor.get("digest")
+        if not isinstance(digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(digest):
+            raise RegistryMetadataError("OCI-Index enthaelt einen ungueltigen Manifest-Digest.")
+
+        platform = descriptor.get("platform")
+        if not isinstance(platform, dict):
+            raise RegistryMetadataError("OCI-Index enthaelt keine valide Platform-Angabe.")
+        os_name = platform.get("os")
+        architecture = platform.get("architecture")
+        variant = platform.get("variant")
+        variant_present = "variant" in platform
+        if (
+            not isinstance(os_name, str)
+            or not os_name
+            or not isinstance(architecture, str)
+            or not architecture
+            or (variant_present and (not isinstance(variant, str) or not variant))
+        ):
+            raise RegistryMetadataError("OCI-Index enthaelt keine valide Platform-Angabe.")
+        if os_name == "linux" and architecture == "amd64":
+            if variant not in {None, "v1"}:
+                raise RegistryMetadataError("OCI-Index enthaelt eine nicht unterstuetzte amd64-Variante.")
+            matches.append(descriptor)
+
+    if not matches:
+        raise RegistryMetadataError("OCI-Index enthaelt kein eindeutiges linux/amd64-Manifest.")
+    if len(matches) != 1:
+        raise RegistryMetadataError("OCI-Index enthaelt mehrere linux/amd64-Manifeste.")
+    return matches[0]
 
 
 def fetch_image_metadata(image: str) -> dict[str, Any]:
@@ -604,11 +923,11 @@ def image_metadata(image: Any) -> dict[str, Any]:
     if isinstance(image, dict):
         labels = image.get("labels") or {}
         image_id = str(image.get("id", "unknown"))
-        image_ref = str(image.get("image", TARGET_IMAGE))
+        image_ref = str(image.get("image", "unknown"))
     else:
         labels = image.labels or {}
         image_id = str(image.id)
-        image_ref = TARGET_IMAGE
+        image_ref = "unknown"
     return {
         "id": image_id,
         "image": image_ref,
@@ -629,18 +948,36 @@ def current_metadata_from_payload(payload: dict[str, Any] | None) -> dict[str, s
 
 
 def has_update(latest: dict[str, Any], current: dict[str, str], current_image: str) -> bool:
-    """Compare latest OCI labels with the currently running Django build metadata."""
-    compared = False
-    for key in ("revision", "version", "build_date"):
-        current_value = current.get(key)
-        latest_value = latest.get(key)
-        if current_value and latest_value and current_value != "unknown" and latest_value != "unknown":
-            compared = True
-            if current_value != latest_value:
-                return True
-    if compared:
+    """Authorize only monotonic numeric releases or changed equal-release identities."""
+    current_version = current.get("version", "")
+    latest_version = str(latest.get("version", ""))
+    if not re.fullmatch(r"[0-9]+", current_version) or not re.fullmatch(r"[0-9]+", latest_version):
         return False
-    return latest.get("image") != current_image
+
+    current_build = int(current_version)
+    latest_build = int(latest_version)
+    if latest_build != current_build:
+        return latest_build > current_build
+
+    current_revision = current.get("revision", "")
+    latest_revision = str(latest.get("revision", ""))
+    if (
+        current_revision
+        and latest_revision
+        and current_revision != "unknown"
+        and latest_revision != "unknown"
+        and current_revision != latest_revision
+    ):
+        return True
+
+    _registry, _repository, current_reference = parse_image_reference(current_image)
+    latest_digest = latest.get("id")
+    return (
+        isinstance(latest_digest, str)
+        and IMAGE_DIGEST_PATTERN.fullmatch(latest_digest) is not None
+        and IMAGE_DIGEST_PATTERN.fullmatch(current_reference) is not None
+        and latest_digest != current_reference
+    )
 
 
 def changelog_between_versions(latest: dict[str, Any], current: dict[str, str]) -> list[dict[str, str]]:
@@ -693,31 +1030,136 @@ def deployment_status() -> dict[str, Any]:
 
 def check_update(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     """Check GHCR metadata and compare it with current Django build metadata."""
-    if update_lock.locked():
-        raise RuntimeError("Ein Update laeuft bereits.")
-    stack = PortainerClient().get_stack()
-    running_image = stack_app_image(stack)
-    latest = fetch_image_metadata(TARGET_IMAGE)
-    approved_image = immutable_image_reference(str(latest.get("image") or TARGET_IMAGE), latest.get("id"))
-    approved_digest = str(latest["id"])
-    current = current_metadata_from_payload(payload)
-    update_available = has_update(latest, current, running_image)
-    changelog = changelog_between_versions(latest, current)
-    state = save_state(
+    if not update_lock.acquire(blocking=False):
+        raise AgentRequestError(HTTPStatus.CONFLICT, "update_in_progress")
+    try:
+        ensure_update_mutations_allowed()
+        client = PortainerClient()
+        stack = client.get_stack()
+        running_image = stack_app_image(stack)
+        validate_active_stack_contract(client, stack)
+        running_digest_image = immutable_running_image(client, running_image)
+        _running_repository, running_digest = validate_immutable_image_reference(running_digest_image)
+        discovery_image = latest_image_reference(running_image)
+        latest = fetch_image_metadata(discovery_image)
+        approved_image = immutable_image_reference(str(latest.get("image") or discovery_image), latest.get("id"))
+        approved_digest = str(latest["id"])
+        current = current_metadata_from_payload(payload)
+        update_available = has_update(latest, current, running_image)
+        changelog = changelog_between_versions(latest, current)
+        candidate_id = secrets.token_urlsafe(32) if update_available else ""
+        return save_state(
+            phase="checked",
+            message="Image-Pruefung abgeschlossen.",
+            error="",
+            rollback_error="",
+            recovery="",
+            latest=latest,
+            approved_image=approved_image,
+            approved_digest=approved_digest,
+            candidate_id=candidate_id,
+            candidate_digest=approved_digest if update_available else "",
+            candidate_base_digest=running_digest,
+            candidate_contract=CANDIDATE_CONTRACT_VERSION,
+            running={"image": running_image, **current},
+            update_available=update_available,
+            changelog=changelog,
+            checked_at=utc_now(),
+        )
+    finally:
+        update_lock.release()
+
+
+def checked_install_candidate(candidate_id: Any) -> tuple[str, dict[str, Any]]:
+    """Return checked state only when the opaque install candidate matches exactly."""
+    state = load_state()
+    expected_candidate_id = state.get("candidate_id")
+    if (
+        state.get("phase") != "checked"
+        or state.get("update_available") is not True
+        or state.get("candidate_contract") != CANDIDATE_CONTRACT_VERSION
+        or not isinstance(candidate_id, str)
+        or not CANDIDATE_ID_PATTERN.fullmatch(candidate_id)
+        or not isinstance(expected_candidate_id, str)
+        or not CANDIDATE_ID_PATTERN.fullmatch(expected_candidate_id)
+        or not hmac.compare_digest(candidate_id, expected_candidate_id)
+    ):
+        raise AgentRequestError(HTTPStatus.CONFLICT, "candidate_mismatch")
+
+    try:
+        _approved_image, approved_digest = validate_immutable_image_reference(state.get("approved_image"))
+    except RuntimeError as error:
+        raise AgentRequestError(HTTPStatus.CONFLICT, "candidate_mismatch") from error
+    if state.get("approved_digest") != approved_digest or state.get("candidate_digest") != approved_digest:
+        raise AgentRequestError(HTTPStatus.CONFLICT, "candidate_mismatch")
+    candidate_base_digest = state.get("candidate_base_digest")
+    if not isinstance(candidate_base_digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(candidate_base_digest):
+        raise AgentRequestError(HTTPStatus.CONFLICT, "candidate_mismatch")
+    latest = state.get("latest")
+    if not isinstance(latest, dict) or latest.get("id") != approved_digest:
+        raise AgentRequestError(HTTPStatus.CONFLICT, "candidate_mismatch")
+    return candidate_id, state
+
+
+def invalidate_install_candidate(public_code: str) -> None:
+    """Invalidate a checked candidate while retaining an actionable status reason."""
+    save_state(
         phase="checked",
-        message="Image-Pruefung abgeschlossen.",
+        message="Der laufende Image-Zustand hat sich geändert. Bitte erneut prüfen.",
+        error="stale_runtime_base",
+        candidate_id="",
+        candidate_digest="",
+        candidate_base_digest="",
+        update_available=False,
+        candidate_invalidated_reason=public_code,
+    )
+
+
+def validate_candidate_runtime_base(client: PortainerClient, stack: dict[str, Any], state: dict[str, Any]) -> None:
+    """Reject a candidate when the immutable running image changed after checking."""
+    expected_digest = state.get("candidate_base_digest")
+    if not isinstance(expected_digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(expected_digest):
+        raise RuntimeError("Der geprüfte Runtime-Basisdigest fehlt oder ist ungültig.")
+    running_image = stack_app_image(stack)
+    runtime_image = immutable_running_image(client, running_image)
+    _runtime_repository, runtime_digest = validate_immutable_image_reference(runtime_image)
+    if runtime_digest != expected_digest:
+        raise RuntimeError("Der laufende Runtime-Basisdigest hat sich seit der Prüfung geändert.")
+
+
+def consume_install_candidate(candidate_id: Any) -> dict[str, Any]:
+    """Atomically invalidate one checked candidate before background installation starts."""
+    confirmed_candidate_id, checked_state = checked_install_candidate(candidate_id)
+    operation_started_at = utc_now()
+    operation_id = secrets.token_urlsafe(24)
+    candidate_identity = hashlib.sha256(confirmed_candidate_id.encode("utf-8")).hexdigest()
+    save_state(
+        phase="installing",
+        message="Update wird vorbereitet.",
         error="",
         rollback_error="",
         recovery="",
-        latest=latest,
-        approved_image=approved_image,
-        approved_digest=approved_digest,
-        running={"image": running_image, **current},
-        update_available=update_available,
-        changelog=changelog,
-        checked_at=utc_now(),
+        candidate_id="",
+        candidate_digest="",
+        candidate_base_digest="",
+        update_available=False,
+        candidate_consumed_at=operation_started_at,
+        operation_started_at=operation_started_at,
+        operation_id=operation_id,
+        candidate_identity=candidate_identity,
     )
-    return state
+    return {
+        **checked_state,
+        "operation_started_at": operation_started_at,
+        "operation_id": operation_id,
+        "candidate_identity": candidate_identity,
+    }
+
+
+def ensure_update_mutations_allowed() -> None:
+    """Block new checks and installs while persisted recovery needs resolution."""
+    if load_state().get("phase") in {"installing", "rollback", "recovery_required"}:
+        raise AgentRequestError(HTTPStatus.CONFLICT, "update_recovery_required")
 
 
 def parse_database_url(database_url: str) -> dict[str, str]:
@@ -895,6 +1337,143 @@ def wait_until_healthy() -> None:
     raise RuntimeError("Die Anwendung wurde nicht rechtzeitig healthy.")
 
 
+def application_is_healthy() -> bool:
+    """Return whether the application health endpoint currently reports success."""
+    try:
+        with urllib.request.urlopen(APP_HEALTH_URL, timeout=5) as response:
+            return 200 <= response.status < 300
+    except (OSError, TimeoutError):
+        return False
+
+
+def _recovery_images(state: dict[str, Any]) -> tuple[str, str, str]:
+    """Validate and return target image, target digest and rollback image."""
+    if state.get("recovery_contract") != RECOVERY_CONTRACT_VERSION:
+        raise RuntimeError("Recovery-Vertrag fehlt oder ist nicht kompatibel.")
+    target_image, target_digest = validate_immutable_image_reference(state.get("target_image"))
+    rollback_image, _rollback_digest = validate_immutable_image_reference(state.get("rollback_image"))
+    if state.get("target_digest") != target_digest:
+        raise RuntimeError("Recovery-Zieldigest ist widerspruechlich.")
+    target_registry, target_repository, _target_reference = parse_image_reference(target_image)
+    rollback_registry, rollback_repository, _rollback_reference = parse_image_reference(rollback_image)
+    if (target_registry, target_repository) != (rollback_registry, rollback_repository):
+        raise RuntimeError("Recovery-Images gehoeren nicht zum selben Repository.")
+    for field in ("operation_id", "candidate_identity", "operation_started_at"):
+        if not isinstance(state.get(field), str) or not state[field]:
+            raise RuntimeError("Recovery-Identitaet ist unvollstaendig.")
+    return target_image, target_digest, rollback_image
+
+
+def _recovery_required(*, error: str, outcome: str = "invalid_state") -> dict[str, Any]:
+    """Persist a terminal fail-closed recovery state."""
+    return save_state(
+        phase="recovery_required",
+        message="Update-Recovery erfordert einen kontrollierten Eingriff.",
+        error=error,
+        recovery_outcome=outcome,
+        candidate_id="",
+        candidate_digest="",
+        update_available=False,
+    )
+
+
+def reconcile_interrupted_update() -> dict[str, Any]:
+    """Resolve one persisted interrupted update exactly once during agent startup."""
+    state = load_state()
+    if state.get("phase") not in {"installing", "rollback"}:
+        return state
+    try:
+        target_image, target_digest, rollback_image = _recovery_images(state)
+    except RuntimeError as error:
+        logger.error("Update-Recoverydaten sind ungueltig: %s", error)
+        return _recovery_required(error=f"Recovery nicht automatisch moeglich: {error}")
+
+    client = PortainerClient()
+    operation_id = state["operation_id"]
+    try:
+        try:
+            running_image = immutable_running_image(client, target_image)
+        except (PortainerAPIError, OSError, RuntimeError) as inspection_error:
+            logger.warning(
+                "Laufender Digest fuer Update-Recovery nicht lesbar, Operation %s: %s",
+                operation_id,
+                inspection_error,
+            )
+            running_image = ""
+        healthy = application_is_healthy()
+        if running_image == target_image and healthy:
+            raw_latest = state.get("latest")
+            latest: dict[str, Any] = raw_latest if isinstance(raw_latest, dict) else {}
+            logger.info("Update-Recovery abgeschlossen; Ziel laeuft, Operation %s", operation_id)
+            return save_state(
+                phase="complete",
+                message="Update nach Neustart erfolgreich verifiziert.",
+                error="",
+                rollback_error="",
+                recovery_outcome="target_verified",
+                installed={**latest, "id": target_digest, "image": target_image},
+                running={"image": running_image},
+                candidate_id="",
+                candidate_digest="",
+                update_available=False,
+                completed_at=utc_now(),
+            )
+        if running_image == rollback_image and healthy:
+            logger.info("Update-Recovery bestaetigt vorhandenen Rollback, Operation %s", operation_id)
+            return save_state(
+                phase="failed",
+                message="Unterbrochenes Update wurde auf das vorherige Image zurueckgesetzt.",
+                rollback_error="",
+                recovery_outcome="rolled_back",
+                running={"image": running_image},
+                candidate_id="",
+                candidate_digest="",
+                update_available=False,
+                completed_at=utc_now(),
+            )
+
+        save_state(
+            phase="rollback",
+            message="Unterbrochenes Update wird kontrolliert zurueckgesetzt.",
+            recovery_contract=RECOVERY_CONTRACT_VERSION,
+            operation_id=state["operation_id"],
+            candidate_identity=state["candidate_identity"],
+            operation_started_at=state["operation_started_at"],
+            target_image=target_image,
+            target_digest=target_digest,
+            rollback_image=rollback_image,
+            rollback_put_started_at=utc_now(),
+            candidate_id="",
+            candidate_digest="",
+            update_available=False,
+        )
+        logger.warning("Update-Recovery startet Rollback, Operation %s", operation_id)
+        client.update_stack_image(rollback_image)
+        wait_until_healthy()
+        verified_image = immutable_running_image(client, target_image)
+        if verified_image != rollback_image:
+            raise RuntimeError("Rollback-Digest konnte nach Neustart nicht verifiziert werden.")
+        return save_state(
+            phase="failed",
+            message="Unterbrochenes Update wurde kontrolliert zurueckgesetzt.",
+            error=state.get("error", "Update wurde durch einen Neustart unterbrochen."),
+            rollback_error="",
+            recovery_outcome="rolled_back",
+            running={"image": verified_image},
+            candidate_id="",
+            candidate_digest="",
+            update_available=False,
+            completed_at=utc_now(),
+        )
+    except (AgentConfigError, PortainerAPIError, OSError, RuntimeError, subprocess.SubprocessError) as error:
+        logger.exception("Automatische Update-Recovery fehlgeschlagen, Operation %s", operation_id)
+        _recovery_required(
+            error="Automatische Recovery fehlgeschlagen; Portainer und App-Health pruefen.",
+            outcome="rollback_failed",
+        )
+        return save_state(rollback_error=update_error("Rollback-Recovery", error))
+
+
 def update_error(step: str, error: BaseException) -> str:
     """Format an update error for the Django status page."""
     return f"{step} fehlgeschlagen: {error}"
@@ -913,15 +1492,13 @@ def recovery_hint(backup_name: str, old_image: str) -> str:
     return "\n".join(lines)
 
 
-def perform_update() -> None:
+def perform_update(checked_state: dict[str, Any]) -> None:
     """Install the checked immutable image through Portainer and rollback on failure."""
     old_image = ""
     stack_mutated = False
     backup_name = ""
     step = "Update vorbereiten"
     try:
-        save_state(phase="preparing", message="Update wird vorbereitet.", error="", rollback_error="", recovery="")
-        checked_state = load_state()
         approved_image, approved_digest = validate_immutable_image_reference(checked_state.get("approved_image"))
         if checked_state.get("approved_digest") != approved_digest:
             raise RuntimeError("Der freigegebene Image-Digest passt nicht zum Update-Status.")
@@ -930,8 +1507,14 @@ def perform_update() -> None:
             raise RuntimeError("Der freigegebene Image-Digest passt nicht zu den geprüften Metadaten.")
         client = PortainerClient()
         step = "Rollback-Image ermitteln"
-        old_image = immutable_running_image(client)
+        old_image = immutable_running_image(client, approved_image)
         checked_changelog = normalized_changelog_entries(checked_state.get("changelog", []))
+        operation_started_at = str(checked_state.get("operation_started_at") or utc_now())
+        operation_id = str(checked_state.get("operation_id") or secrets.token_urlsafe(24))
+        candidate_identity = str(
+            checked_state.get("candidate_identity")
+            or hashlib.sha256(str(checked_state.get("candidate_id", approved_digest)).encode("utf-8")).hexdigest()
+        )
         step = "Datenbank-Backup erstellen"
         backup_name = create_backup()
         save_state(
@@ -941,6 +1524,17 @@ def perform_update() -> None:
             rollback_error="",
             recovery="",
             backup=backup_name,
+            recovery_contract=RECOVERY_CONTRACT_VERSION,
+            operation_id=operation_id,
+            candidate_identity=candidate_identity,
+            operation_started_at=operation_started_at,
+            target_image=approved_image,
+            target_digest=approved_digest,
+            rollback_image=old_image,
+            target_put_started_at=utc_now(),
+            candidate_id="",
+            candidate_digest="",
+            update_available=False,
         )
         step = "Portainer Stack aktualisieren"
         stack_mutated = True
@@ -948,7 +1542,7 @@ def perform_update() -> None:
         step = "Healthcheck abwarten"
         wait_until_healthy()
         step = "Installiertes Image verifizieren"
-        running_image = immutable_running_image(client)
+        running_image = immutable_running_image(client, approved_image)
         if running_image != approved_image:
             raise RuntimeError("Nach dem Healthcheck wurde nicht der freigegebene Image-Digest gestartet.")
         installed = {**latest, "id": approved_digest, "image": approved_image}
@@ -963,6 +1557,8 @@ def perform_update() -> None:
             update_available=False,
             changelog=checked_changelog,
             backup=backup_name,
+            candidate_id="",
+            candidate_digest="",
             completed_at=utc_now(),
         )
     except (AgentConfigError, PortainerAPIError, OSError, RuntimeError, subprocess.SubprocessError) as error:
@@ -970,19 +1566,44 @@ def perform_update() -> None:
         rollback_error = ""
         if old_image and stack_mutated:
             try:
-                save_state(phase="rollback", message="Update fehlgeschlagen; vorheriges Image wird wiederhergestellt.")
-                redeploy_stack(old_image)
+                save_state(
+                    phase="rollback",
+                    message="Update fehlgeschlagen; vorheriges Image wird wiederhergestellt.",
+                    recovery_contract=RECOVERY_CONTRACT_VERSION,
+                    operation_id=operation_id,
+                    candidate_identity=candidate_identity,
+                    operation_started_at=operation_started_at,
+                    target_image=approved_image,
+                    target_digest=approved_digest,
+                    rollback_image=old_image,
+                    rollback_put_started_at=utc_now(),
+                    candidate_id="",
+                    candidate_digest="",
+                    update_available=False,
+                )
+                client.update_stack_image(old_image)
                 wait_until_healthy()
+                restored_image = immutable_running_image(client, approved_image)
+                if restored_image != old_image:
+                    raise RuntimeError("Rollback-Digest konnte nicht verifiziert werden.")
             except (AgentConfigError, PortainerAPIError, OSError, RuntimeError, subprocess.SubprocessError) as rollback:
                 logger.exception("Rollback fehlgeschlagen")
                 rollback_error = update_error("Rollback", rollback)
         save_state(
-            phase="failed",
-            message="Update fehlgeschlagen; bitte Logs pruefen.",
+            phase="recovery_required" if rollback_error else "failed",
+            message=(
+                "Update und automatischer Rollback fehlgeschlagen; kontrollierte Recovery erforderlich."
+                if rollback_error
+                else "Update fehlgeschlagen; bitte Logs pruefen."
+            ),
             error=update_error(step, error),
             rollback_error=rollback_error,
+            recovery_outcome="rollback_failed" if rollback_error else "rolled_back" if stack_mutated else "not_started",
             recovery=recovery_hint(backup_name, old_image),
             backup=backup_name,
+            candidate_id="",
+            candidate_digest="",
+            update_available=False,
         )
     finally:
         update_lock.release()
@@ -1059,8 +1680,42 @@ class RequestHandler(BaseHTTPRequestHandler):
                 if not update_lock.acquire(blocking=False):
                     self.respond(HTTPStatus.CONFLICT, {"error": "update_in_progress"})
                     return
-                thread = threading.Thread(target=perform_update, name="deployment-update", daemon=True)
-                thread.start()
+                lock_handed_to_thread = False
+                try:
+                    ensure_update_mutations_allowed()
+                    request_candidate_id = read_json_body(self).get("candidate_id")
+                    checked_install_candidate(request_candidate_id)
+                    client = PortainerClient()
+                    stack = client.get_stack()
+                    validate_active_stack_contract(client, stack)
+                    try:
+                        validate_candidate_runtime_base(client, stack, load_state())
+                    except (AgentConfigError, OSError, PortainerAPIError, RuntimeError):
+                        invalidate_install_candidate("stale_runtime_base")
+                        raise AgentRequestError(HTTPStatus.CONFLICT, "stale_runtime_base") from None
+                    checked_state = consume_install_candidate(request_candidate_id)
+                    thread = threading.Thread(
+                        target=perform_update,
+                        args=(checked_state,),
+                        name="deployment-update",
+                        daemon=True,
+                    )
+                    try:
+                        thread.start()
+                    except (OSError, RuntimeError) as error:
+                        save_state(
+                            phase="failed",
+                            message="Update konnte nicht gestartet werden.",
+                            error=update_error("Installations-Thread starten", error),
+                            candidate_id="",
+                            candidate_digest="",
+                            update_available=False,
+                        )
+                        raise
+                    lock_handed_to_thread = True
+                finally:
+                    if not lock_handed_to_thread:
+                        update_lock.release()
                 self.respond(HTTPStatus.ACCEPTED, {"status": "accepted"})
             elif self.command == "POST" and self.path == "/backup":
                 payload = read_json_body(self)
@@ -1143,10 +1798,12 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
             self.shutdown_request(request)
 
 
-if __name__ == "__main__":
+def run_agent() -> None:
+    """Reconcile persisted update work before accepting mutating agent requests."""
     PortainerClient().get_stack()
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    reconcile_interrupted_update()
     server = BoundedThreadingHTTPServer(
         ("0.0.0.0", 8080),
         RequestHandler,
@@ -1154,3 +1811,7 @@ if __name__ == "__main__":
     )
     logger.info("Deployment-Agent gestartet fuer Portainer Stack %s", PORTAINER_STACK_ID)
     server.serve_forever()
+
+
+if __name__ == "__main__":
+    run_agent()
