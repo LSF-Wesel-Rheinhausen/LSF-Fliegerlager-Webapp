@@ -18,7 +18,8 @@ Pflichtvariablen für den Update-Agent:
 
 - `UPDATE_AGENT_TOKEN`: internes Bearer-Token zwischen Django und Updater.
 - `UPDATE_AGENT_URL`: interne Django-Adresse des Updaters; im Compose-Beispiel `http://updater:8080`.
-- `APP_IMAGE`: Ziel-Image, das der Updater in Portainer als Stack-Variable setzt.
+- `APP_IMAGE`: Ziel-Image als Portainer-Stack-Variable für den `app`-Service; diese Variable darf nicht an den
+  `updater`-Service übergeben werden.
 - `DATABASE_URL`: PostgreSQL-Verbindung für `pg_dump`-Backups.
 - `PORTAINER_URL`: Portainer-Basis-URL, zum Beispiel `https://portainer.example.org` oder `https://host:9443`.
 - `PORTAINER_API_KEY`: API-Key eines dedizierten technischen Portainer-Benutzers.
@@ -37,7 +38,8 @@ Prozess benötigten Variablen:
   Push-Origins und das Worker-Intervall.
 - `email-worker`: Django-Secret, Django-Host-Allowlist und Datenbank-URL. SMTP-Zugangsdaten liegen verschlüsselt in
   PostgreSQL; Web-Push-Schlüssel werden diesem Dienst nicht bereitgestellt.
-- `updater`: Update-Agent-Token, Datenbank-/Backup-Konfiguration, Portainer-Zugangsdaten und optional `GHCR_TOKEN`.
+- `updater`: Update-Agent-Token, Datenbank-/Backup-Konfiguration, Portainer-Zugangsdaten, Registry-Allowlist und
+  optional `GHCR_TOKEN`.
 
 `PORTAINER_URL`, `PORTAINER_API_KEY`, `PORTAINER_ENDPOINT_ID`, `PORTAINER_STACK_ID` und `GHCR_TOKEN` dürfen nur im
 `updater`-Service vorkommen. Änderungen an der Allowlist müssen durch die Compose-Konfigurationstests abgesichert
@@ -62,6 +64,10 @@ Optionale Variablen mit Defaults:
 - `BACKUP_DIR`: bisheriger Host-Pfad der Backups; dient nur als Quelle bei der einmaligen Speichermigration.
 - `PORTAINER_VERIFY_SSL`: Portainer-Zertifikatsprüfung; Default `true`. Für interne Portainer-Instanzen mit Self-Signed-Zertifikat `false` setzen.
 - `GHCR_TOKEN`: nur für private GHCR-Images setzen; bei öffentlichen Images leer lassen.
+- `UPDATE_REGISTRY_ALLOWED_HOSTS`: komma-separierte Liste exakter Registry-Hosts mit optionalem Port; Default
+  `ghcr.io`. Erlaubt sind ausschließlich `Host[:Port]` ohne Schema, Pfad, Userinfo, Wildcards oder abschließenden
+  Punkt. Benutzerdefinierte Registries müssen hier explizit eingetragen werden, zum Beispiel
+  `ghcr.io,registry.example.org:5443`.
 - `TZ`: Zeitzone des Updaters; Default `Europe/Berlin`.
 
 Der Compose-Service `storage-migrate` legt die Zielstruktur an und setzt die schreibbaren App-Verzeichnisse auf
@@ -206,6 +212,23 @@ veröffentlicht aber keinen Port. Betriebs- und Sicherheitshinweise stehen in
 
 ## Updates
 
+### First Upgrade auf den entkoppelten Updater
+
+Vor dem ersten normalen Update mit dieser Version muss die aktive Stack-Definition kontrolliert aktualisiert werden:
+
+1. Die aktuelle [`docker-compose.example.yml`](docker-compose.example.yml) in Portainer mit der aktiven Definition
+   vergleichen und übernehmen. Insbesondere darf `APP_IMAGE` nicht in der Environment des `updater`-Service stehen.
+   Dessen Konfiguration muss direkt ausgeschrieben sein: YAML-Aliase, Anchors und Merge-Keys im `updater`-Block vor
+   dem Upgrade auflösen; `env_file` und `extends` werden dort ebenfalls nicht akzeptiert.
+2. Den Stack neu bereitstellen und warten, bis der `updater`-Container neu gestartet ist.
+3. Den Health-Status von `updater` und `app` in Portainer prüfen; beide müssen healthy sein. Zusätzlich darf der
+   Updater-Healthcheck intern mit `GET /healthz` geprüft werden.
+4. Erst danach den normalen Update-Check (`POST /check`) und anschließend die bestätigte Installation
+   (`POST /install`) verwenden.
+
+Ein noch nicht migrierter Altstack wird bewusst vor der Kandidatenerzeugung abgewiesen. Dadurch kann eine Änderung von
+`APP_IMAGE` den laufenden Updater beim ersten Upgrade nicht mehr ersetzen oder mit einer neuen Environment starten.
+
 Ein Django-Superuser öffnet **Updates**, prüft das bereitgestellte `latest`-Image und bestätigt die Installation. Der
 Updater liest die OCI-Metadaten aus GHCR und speichert den dabei validierten `repo@sha256:...`-Digest als freigegebenen
 Installationskandidaten. `/install` verwendet ausschließlich diesen gespeicherten Digest und fragt das bewegliche Tag
@@ -222,8 +245,9 @@ Backups teilen sich einen Lock; während eines laufenden Backups antwortet `POST
 enthalten einen kryptografischen Zufallssuffix und werden exklusiv angelegt, sodass auch gleiche Zeitstempel keine
 vorhandenen Archive überschreiben.
 
-Der Updater erhält keinen Docker-Socket und keine Compose-Dateien. Er hat keinen veröffentlichten Port, akzeptiert nur
-das gemeinsame `UPDATE_AGENT_TOKEN` und darf nicht in ein öffentlich erreichbares Netzwerk gelegt werden.
+Der Updater erhält keinen Docker-Socket und keine lokal eingebundenen Compose-Dateien. Die aktive Definition liest er
+ausschließlich über den begrenzten Portainer-Stackvertrag. Er hat keinen veröffentlichten Port, akzeptiert nur das
+gemeinsame `UPDATE_AGENT_TOKEN` und darf nicht in ein öffentlich erreichbares Netzwerk gelegt werden.
 
 Der Portainer API-Key gehört einem dedizierten technischen Benutzer oder Service-Account. Er benötigt nur Zugriff auf
 die Ziel-Environment und Rechte zum Lesen, Aktualisieren und Redeployen genau dieses Ziel-Stacks. Registry-Pull-Rechte
@@ -231,7 +255,11 @@ sind nur nötig, falls Portainer sie für den Redeploy des Stacks verlangt. Nich
 Admin-Rechte, User-/Team-Verwaltung sowie Zugriff auf andere Environments oder Stacks.
 
 GHCR ist für dieses Projekt öffentlich lesbar. `GHCR_TOKEN` bleibt leer und wird erst benötigt, falls das Image später
-privat wird.
+privat wird. Der Update-Agent sendet dieses Credential ausschließlich an den exakt validierten Host `ghcr.io`.
+Discovery-Requests verwenden nur HTTPS und ausschließlich Hosts aus `UPDATE_REGISTRY_ALLOWED_HOSTS`; private,
+reservierte und anderweitig spezielle IP-Literale sowie nicht exakt erlaubte Hosts werden ohne DNS-Vertrauensprüfung
+abgewiesen. Registry- und Token-Endpunkte dürfen nicht redirecten, sodass Credentials und Bearer-Tokens den geprüften
+Host nicht verlassen.
 
 ## Manuelle Wartung
 

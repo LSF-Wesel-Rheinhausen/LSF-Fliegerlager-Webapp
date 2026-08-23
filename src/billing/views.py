@@ -821,7 +821,7 @@ def deployment_update_check(request: HttpRequest) -> HttpResponse:
 def deployment_update_install(request: HttpRequest) -> HttpResponse:
     """Ask the isolated agent to install the latest image asynchronously."""
     try:
-        install_update()
+        install_update(request.POST.get("candidate_id", ""))
     except UpdateAgentError as error:
         messages.error(request, str(error))
     else:

@@ -8,7 +8,13 @@ from django.contrib.auth.models import Group
 from django.test import override_settings
 from django.urls import reverse
 
-from billing.deployment_updates import UpdateAgentError, agent_request, check_for_update, create_backup_archive
+from billing.deployment_updates import (
+    UpdateAgentError,
+    agent_request,
+    check_for_update,
+    create_backup_archive,
+    install_update,
+)
 from billing.models import DailySettlementBackupSettings
 from billing.permissions import ADMIN_GROUP
 from tests.factories import SuperUserFactory, UserFactory
@@ -81,10 +87,14 @@ def test_update_install_starts_agent(client, superuser):
     client.force_login(superuser)
 
     with patch("billing.views.install_update", return_value={"status": "accepted"}) as install:
-        response = client.post(reverse("deployment-update-install"), follow=True)
+        response = client.post(
+            reverse("deployment-update-install"),
+            {"candidate_id": "checked-candidate-token"},
+            follow=True,
+        )
 
     assert response.status_code == 200
-    install.assert_called_once_with()
+    install.assert_called_once_with("checked-candidate-token")
     assert "Update gestartet. Die Anwendung wird in Kürze neu gestartet." in [
         str(message) for message in response.context["messages"]
     ]
@@ -160,6 +170,21 @@ def test_check_for_update_sends_current_build_metadata():
 
 
 @override_settings(UPDATE_AGENT_URL="http://updater:8080", UPDATE_AGENT_TOKEN="secret-token")
+def test_install_update_sends_only_checked_candidate_id():
+    response = Mock()
+    response.__enter__ = Mock(return_value=io.BytesIO(json.dumps({"status": "accepted"}).encode()))
+    response.__exit__ = Mock(return_value=False)
+
+    with patch("urllib.request.urlopen", return_value=response) as urlopen:
+        result = install_update("checked-candidate-token")
+
+    request = urlopen.call_args.args[0]
+    assert request.full_url == "http://updater:8080/install"
+    assert json.loads(request.data.decode()) == {"candidate_id": "checked-candidate-token"}
+    assert result == {"status": "accepted"}
+
+
+@override_settings(UPDATE_AGENT_URL="http://updater:8080", UPDATE_AGENT_TOKEN="secret-token")
 def test_check_for_update_maps_invalid_registry_metadata_to_operator_message():
     response = urllib.error.HTTPError(
         url="http://updater:8080/check",
@@ -174,6 +199,32 @@ def test_check_for_update_maps_invalid_registry_metadata_to_operator_message():
             check_for_update()
 
     assert error.value.public_code == "invalid_registry_metadata"
+
+
+@override_settings(UPDATE_AGENT_URL="http://updater:8080", UPDATE_AGENT_TOKEN="secret-token")
+@pytest.mark.parametrize(
+    ("public_code", "message"),
+    [
+        ("updater_stack_upgrade_required", "Compose-Definition"),
+        ("updater_stack_indirect_configuration", "YAML-Aliase"),
+        ("update_recovery_required", "Recovery"),
+        ("stale_runtime_base", "laufende Image-Zustand"),
+    ],
+)
+def test_update_agent_maps_recovery_contract_errors_to_actionable_messages(public_code, message):
+    response = urllib.error.HTTPError(
+        "http://updater/check",
+        409,
+        "Conflict",
+        {},
+        fp=io.BytesIO(json.dumps({"error": public_code}).encode()),
+    )
+
+    with patch("billing.deployment_updates.urllib.request.urlopen", side_effect=response):
+        with pytest.raises(UpdateAgentError, match=message) as error:
+            agent_request("/check", method="POST", payload={})
+
+    assert error.value.public_code == public_code
 
 
 @pytest.mark.django_db
@@ -211,6 +262,7 @@ def test_deployment_page_renders_update_dialog_script_as_external_asset(client, 
             "phase": "checked",
             "message": "Update verfügbar",
             "update_available": True,
+            "candidate_id": "checked-candidate-token",
             "latest": {"version": "1.2.4", "revision": "newrev", "build_date": "2026-07-08"},
         },
     ):
@@ -220,6 +272,7 @@ def test_deployment_page_renders_update_dialog_script_as_external_asset(client, 
     assert response.status_code == 200
     assert 'data-dialog-open="update-confirmation"' in content
     assert 'action="/deployment/update/install/"' in content
+    assert 'name="candidate_id" value="checked-candidate-token"' in content
     assert 'data-cfasync="false" defer src="/static/billing/deployment_update.js"' in content
     assert 'document.querySelectorAll("[data-dialog-open]")' not in content
 

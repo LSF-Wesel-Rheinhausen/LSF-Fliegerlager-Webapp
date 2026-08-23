@@ -1,3 +1,5 @@
+import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -5,6 +7,7 @@ import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DJANGO_ALLOWED_HOSTS = "${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}"
+APP_IMAGE_EXPRESSION = "${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}"
 
 FORBIDDEN_NON_UPDATER_ENVIRONMENT_KEYS = {
     "PORTAINER_URL",
@@ -12,6 +15,7 @@ FORBIDDEN_NON_UPDATER_ENVIRONMENT_KEYS = {
     "PORTAINER_ENDPOINT_ID",
     "PORTAINER_STACK_ID",
     "GHCR_TOKEN",
+    "UPDATE_REGISTRY_ALLOWED_HOSTS",
 }
 
 EXPECTED_SERVICE_ENVIRONMENT_KEYS = {
@@ -79,6 +83,44 @@ def test_app_container_defaults_to_production_mode() -> None:
 
     assert "    DJANGO_DEBUG=0 \\\n" in dockerfile
     assert "DJANGO_SECRET_KEY=" not in dockerfile
+
+
+@pytest.mark.parametrize("compose_path", ["docker-compose.yml", "deploy/docker-compose.example.yml"])
+def test_updater_configuration_is_independent_from_app_image(compose_path: str) -> None:
+    configuration = yaml.safe_load((PROJECT_ROOT / compose_path).read_text(encoding="utf-8"))
+    services = configuration["services"]
+    updater = services["updater"]
+
+    assert "APP_IMAGE" not in updater["environment"]
+    assert updater["image"] == "${UPDATER_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater:latest}"
+
+    def resolved_hash(service: dict, app_image: str) -> str:
+        serialized = json.dumps(service, sort_keys=True).replace(APP_IMAGE_EXPRESSION, app_image)
+        return hashlib.sha256(serialized.encode()).hexdigest()
+
+    old_image = "ghcr.io/lsf/app@sha256:" + ("a" * 64)
+    new_image = "ghcr.io/lsf/app@sha256:" + ("b" * 64)
+    assert resolved_hash(updater, old_image) == resolved_hash(updater, new_image)
+    assert resolved_hash(services["app"], old_image) != resolved_hash(services["app"], new_image)
+
+
+@pytest.mark.parametrize("compose_path", ["docker-compose.yml", "deploy/docker-compose.example.yml"])
+def test_updater_registry_allowlist_defaults_to_exact_ghcr_host(compose_path: str) -> None:
+    configuration = yaml.safe_load((PROJECT_ROOT / compose_path).read_text(encoding="utf-8"))
+    services = configuration["services"]
+
+    assert services["updater"]["environment"]["UPDATE_REGISTRY_ALLOWED_HOSTS"] == (
+        "${UPDATE_REGISTRY_ALLOWED_HOSTS:-ghcr.io}"
+    )
+    for service_name, service in services.items():
+        if service_name != "updater":
+            assert "UPDATE_REGISTRY_ALLOWED_HOSTS" not in service.get("environment", {})
+
+
+def test_example_environment_documents_registry_allowlist_default() -> None:
+    example = (PROJECT_ROOT / ".env.example").read_text(encoding="utf-8")
+
+    assert "UPDATE_REGISTRY_ALLOWED_HOSTS=ghcr.io" in example
 
 
 @pytest.mark.parametrize("compose_path", ["docker-compose.yml", "deploy/docker-compose.example.yml"])
