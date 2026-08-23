@@ -5,3 +5,4 @@
 - Clean up the DAST container on successful and failed scans while preserving report-only ZAP findings.
 
 Closes #522
+Closes #556
