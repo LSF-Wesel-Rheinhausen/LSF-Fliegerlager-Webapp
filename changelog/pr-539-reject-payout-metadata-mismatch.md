@@ -1,4 +1,4 @@
-# Issue #464: Idempotente Auszahlungen lehnen abweichende Metadaten ab
+# Idempotente Auszahlungen lehnen abweichende Metadaten ab
 
 - `create_credit_payout` prüft bei Idempotenz-Replays jetzt auch externe Referenz und Notiz.
 - Referenz und Notiz werden vor Validierung und Speicherung an den Rändern normalisiert; die Modellgrenzen von 120 bzw. 180 Zeichen gelten auch im Service.
