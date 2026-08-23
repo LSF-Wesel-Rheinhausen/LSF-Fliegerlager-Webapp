@@ -1,4 +1,4 @@
-# Bounded DAST lifecycle
+# PR #555: Bounded DAST lifecycle
 
 - Replace fixed DAST startup sleep with bounded `/healthz/` polling.
 - Fail visibly on application startup, healthcheck, timeout, or cleanup errors.
