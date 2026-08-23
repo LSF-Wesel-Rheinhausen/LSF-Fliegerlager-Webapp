@@ -109,6 +109,17 @@ def test_dast_pr_job_has_no_write_permissions_and_trusted_job_is_separate() -> N
     assert "continue-on-error" not in str(trusted_job)
 
 
+def test_dast_pull_request_trigger_covers_stacked_feature_branch_targets() -> None:
+    workflow = next(workflow for path, workflow in _workflow_documents() if path.name == "dast.yml")
+    events = dict(workflow["on"])
+    pull_request = dict(events["pull_request"])
+
+    assert "branches" not in pull_request
+    assert pull_request["paths-ignore"] == ["graphify-out/**", "**.md", "docs/**"]
+    assert dict(events["push"])["branches"] == ["main"]
+    assert events["schedule"] == [{"cron": "0 5 * * 1"}]
+
+
 def test_dast_jobs_use_bounded_lifecycle_cleanup_and_keep_findings_report_only() -> None:
     workflow = next(workflow for path, workflow in _workflow_documents() if path.name == "dast.yml")
     jobs = dict(workflow["jobs"])
