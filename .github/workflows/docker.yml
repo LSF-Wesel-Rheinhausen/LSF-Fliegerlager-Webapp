@@ -1,14 +1,28 @@
 name: Docker
 
 on:
-  push:
-    branches:
-      - main
+  pull_request: {}
+  workflow_run:
+    workflows:
+      - Tests
+    types:
+      - completed
+
+permissions:
+  contents: read
 
 jobs:
   docker-test:
     name: Build and test containers
+    if: >-
+      ${{ github.event_name == 'pull_request' ||
+          (github.event_name == 'workflow_run' &&
+           github.event.workflow_run.conclusion == 'success' &&
+           github.event.workflow_run.event == 'push' &&
+           github.event.workflow_run.head_branch == 'main' &&
+           github.event.workflow_run.head_repository.full_name == github.repository) }}
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     concurrency:
       group: docker-test-${{ github.ref }}
       cancel-in-progress: true
@@ -20,6 +34,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
@@ -44,7 +59,7 @@ jobs:
           tags: lsf-webapp:test
           build-args: |
             APP_VERSION=${{ steps.metadata.outputs.version }}
-            APP_REVISION=${{ github.sha }}
+            APP_REVISION=${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
             APP_BUILD_DATE=${{ steps.metadata.outputs.created }}
             APP_CHANGE=${{ steps.metadata.outputs.change }}
             APP_CHANGELOG=${{ steps.metadata.outputs.changelog }}
@@ -79,8 +94,15 @@ jobs:
   docker-publish:
     name: Publish containers
     needs: docker-test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      ${{ needs.docker-test.result == 'success' &&
+          github.event_name == 'workflow_run' &&
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_branch == 'main' &&
+          github.event.workflow_run.head_repository.full_name == github.repository }}
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     concurrency:
       group: docker-publish-${{ github.ref }}
       cancel-in-progress: false
@@ -93,6 +115,15 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Verify main has not moved
+        env:
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          actual_sha="$(git ls-remote --exit-code origin refs/heads/main | cut -f1)"
+          test "$actual_sha" = "$TESTED_SHA"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
@@ -116,6 +147,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Verify main has not moved before application publication
+        env:
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          actual_sha="$(git ls-remote --exit-code origin refs/heads/main | cut -f1)"
+          test "$actual_sha" = "$TESTED_SHA"
+
       - name: Publish application image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
@@ -124,15 +163,23 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: |
             ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest
-            ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:${{ github.sha }}
+            ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:${{ github.event.workflow_run.head_sha }}
           build-args: |
             APP_VERSION=${{ steps.metadata.outputs.version }}
-            APP_REVISION=${{ github.sha }}
+            APP_REVISION=${{ github.event.workflow_run.head_sha }}
             APP_BUILD_DATE=${{ steps.metadata.outputs.created }}
             APP_CHANGE=${{ steps.metadata.outputs.change }}
             APP_CHANGELOG=${{ steps.metadata.outputs.changelog }}
           cache-from: type=gha,scope=app
           cache-to: type=gha,mode=max,scope=app
+
+      - name: Verify main has not moved before updater publication
+        env:
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          actual_sha="$(git ls-remote --exit-code origin refs/heads/main | cut -f1)"
+          test "$actual_sha" = "$TESTED_SHA"
 
       - name: Publish updater image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
@@ -143,6 +190,6 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: |
             ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater:latest
-            ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater:${{ github.sha }}
+            ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater:${{ github.event.workflow_run.head_sha }}
           cache-from: type=gha,scope=updater
           cache-to: type=gha,mode=max,scope=updater
