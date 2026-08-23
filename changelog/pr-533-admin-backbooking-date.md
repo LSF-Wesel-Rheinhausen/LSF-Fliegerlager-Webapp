@@ -1,4 +1,4 @@
-# Admin-Nachbuchungen mit Leistungsdatum
+# Leistungsdatum für Admin-Nachbuchungen
 
 Closes #418, #529, #530, #531, #532
 
