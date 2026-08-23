@@ -5,9 +5,11 @@ from billing.forms import (
     ExpenseForm,
     KioskLoginForm,
     KioskSelfEnrollmentForm,
+    MealBookingForm,
     ParticipantFamilyMemberForm,
     ParticipantForm,
     PaymentForm,
+    QuickBookingForm,
 )
 
 
@@ -45,11 +47,50 @@ def test_participant_and_enrollment_forms_have_semantic_input_metadata():
         assert phone_attrs.get("autocomplete") == "tel"
         assert phone_attrs.get("inputmode") == "tel"
 
+        notes_attrs = form.fields["notes"].widget.attrs
+        assert notes_attrs.get("spellcheck") == "true"
+        assert notes_attrs.get("autocapitalize") == "sentences"
+
 
 def test_family_member_form_has_name_metadata():
     form = ParticipantFamilyMemberForm()
     assert form.fields["first_name"].widget.attrs.get("autocomplete") == "given-name"
     assert form.fields["last_name"].widget.attrs.get("autocomplete") == "family-name"
+    assert form.fields["email"].widget.attrs == {
+        "autocomplete": "email",
+        "inputmode": "email",
+        "spellcheck": "false",
+        "maxlength": "254",
+    }
+    assert form.fields["phone"].widget.attrs == {
+        "autocomplete": "tel",
+        "inputmode": "tel",
+        "maxlength": "80",
+    }
+
+
+def test_booking_forms_have_explicit_names_labels_and_meaningful_metadata():
+    quick_form = QuickBookingForm()
+    assert list(quick_form.fields) == ["price_rule", "quantity"]
+    assert quick_form.fields["price_rule"].label == "Artikel"
+    assert quick_form.fields["quantity"].label == "Menge"
+    assert quick_form.fields["price_rule"].widget.attrs == {}
+    assert quick_form.fields["quantity"].widget.attrs == {
+        "inputmode": "numeric",
+        "min": 1,
+        "max": 99,
+        "step": "1",
+    }
+
+    meal_form = MealBookingForm()
+    assert list(meal_form.fields) == ["meal_dates", "meal", "variant"]
+    assert {name: field.label for name, field in meal_form.fields.items()} == {
+        "meal_dates": "Lagertage",
+        "meal": "Mahlzeit",
+        "variant": "Variante",
+    }
+    for field_name in ("meal_dates", "meal", "variant"):
+        assert "autocomplete" not in meal_form.fields[field_name].widget.attrs
 
 
 @pytest.mark.django_db

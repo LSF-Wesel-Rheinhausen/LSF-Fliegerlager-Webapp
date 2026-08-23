@@ -3820,7 +3820,7 @@ code {
 }
 
 /* Mobile Touch Target Standards (Issues #346 & #349) */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-width: 900px) and (orientation: landscape) {
   .theme-toggle {
     flex: 0 0 44px;
     width: 44px;
@@ -3849,15 +3849,20 @@ code {
   .dialog-close,
   [data-dialog-close],
   button.close,
-  .dialog-heading .button {
+  .dialog-heading .button,
+  dialog form[method="dialog"] .button {
     min-width: 44px;
     min-height: 44px;
+  }
+
+  dialog form[method="dialog"] .button {
+    min-height: 44px !important;
   }
 
   .checkbox-cell label,
   .form-grid p:has(input[type="checkbox"]),
   .form-grid p:has(input[type="radio"]),
-  .form-grid p label,
+  .form-grid label,
   label.checkbox-label,
   label.radio-label {
     display: flex;
@@ -3872,14 +3877,14 @@ code {
 
   .checkbox-cell label input[type="checkbox"],
   .checkbox-cell label input[type="radio"],
-  .form-grid p input[type="checkbox"],
-  .form-grid p input[type="radio"],
+  .form-grid input[type="checkbox"],
+  .form-grid input[type="radio"],
   label.checkbox-label input[type="checkbox"],
   label.radio-label input[type="radio"] {
-    width: 22px;
-    height: 22px;
-    min-width: 22px;
-    min-height: 22px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
     margin-right: 8px;
     flex-shrink: 0;
   }

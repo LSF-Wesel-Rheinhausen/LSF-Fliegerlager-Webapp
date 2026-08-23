@@ -1453,7 +1453,7 @@ test("Kiosk masonry and expense cards stay responsive and accessible", async ({ 
       columns: new Set(navigationItems.map((item) => Math.round(item.getBoundingClientRect().left))).size,
     };
   });
-  expect(mobileAdminHeader.height, "Mobile Admin-Kopfzeile bleibt überschaubar").toBeLessThanOrEqual(360);
+  expect(mobileAdminHeader.height, "Mobile Admin-Kopfzeile bleibt überschaubar").toBeLessThanOrEqual(280);
   expect(mobileAdminHeader.columns, "Mobile Admin-Aktionen nutzen zwei Spalten").toBe(2);
   await assertNoUnexpectedOverflow(page);
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -2024,6 +2024,68 @@ test("Admin can batch delete and restore booking charges via table checkboxes", 
   await expect(page.getByText("2 Buchung(en) wurden wiederhergestellt")).toBeVisible();
   await expect(chargeCell1).toBeVisible();
   await expect(chargeCell2).toBeVisible();
+});
+
+test("Price rule checkbox and radio labels are touch-sized in portrait and landscape", async ({ page }) => {
+  await setupFirstAdmin(page);
+  await createCamp(page, "Touchziel-Preisregel");
+  await page.getByRole("link", { name: "Preise verwalten" }).first().click();
+  const priceManageUrl = page.url();
+  const priceRuleUrl = priceManageUrl.replace(/\/prices\/?$/, "/prices/new/");
+
+  for (const viewport of [
+    { name: "portrait", width: 390, height: 844 },
+    { name: "landscape", width: 844, height: 390 },
+  ]) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+
+    const assertTouchTarget = async (locator, description) => {
+      await expect(locator, `${viewport.name}: ${description} is visible`).toBeVisible();
+      const box = await locator.boundingBox();
+      expect(box.width, `${viewport.name}: ${description} width`).toBeGreaterThanOrEqual(44);
+      expect(box.height, `${viewport.name}: ${description} height`).toBeGreaterThanOrEqual(44);
+    };
+
+    await page.goto(priceManageUrl);
+    await assertTouchTarget(page.getByRole("switch", { name: "Dunkles Farbschema" }), "theme toggle");
+    await assertTouchTarget(page.getByRole("button", { name: "Einzelpreis anlegen" }), "action button");
+    await page.getByRole("button", { name: "Einzelpreis anlegen" }).click();
+    const priceDialog = page.locator("#price-rule-dialog");
+    await expect(priceDialog).toBeVisible();
+    await assertTouchTarget(priceDialog.getByRole("button", { name: "Schließen" }), "dialog close");
+    await priceDialog.getByRole("button", { name: "Schließen" }).click();
+
+    await page.goto(priceRuleUrl);
+    await expect(page.getByRole("heading", { name: "Preisregel anlegen" })).toBeVisible();
+    await assertTouchTarget(page.locator("#id_name"), "text input");
+    await assertTouchTarget(page.locator("#id_meal_type"), "select");
+
+    const controls = [page.locator("#id_applies_to_children"), page.locator('input[name="kind"]').first()];
+    for (const control of controls) {
+      await expect(control, `${viewport.name}: input is visible`).toBeVisible();
+      const id = await control.getAttribute("id");
+      const label = page.locator(`label[for="${id}"]`);
+      await expect(label, `${viewport.name}: label for ${id} is visible`).toBeVisible();
+
+      const inputBox = await control.boundingBox();
+      const labelBox = await label.boundingBox();
+      expect(inputBox.width, `${viewport.name}: ${id} input width`).toBeGreaterThanOrEqual(44);
+      expect(inputBox.height, `${viewport.name}: ${id} input height`).toBeGreaterThanOrEqual(44);
+      expect(labelBox.width, `${viewport.name}: ${id} label width`).toBeGreaterThanOrEqual(44);
+      expect(labelBox.height, `${viewport.name}: ${id} label height`).toBeGreaterThanOrEqual(44);
+
+      await control.focus();
+      await expect(control).toBeFocused();
+      expect(await control.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe("none");
+    }
+
+    await page.emulateMedia({ colorScheme: "dark" });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await assertNoUnexpectedOverflow(page);
+    await page.emulateMedia({ colorScheme: "light" });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await assertNoUnexpectedOverflow(page);
+  }
 });
 
 test("Login rate limiting blocks user after repeated failed attempts", async ({ page }, testInfo) => {

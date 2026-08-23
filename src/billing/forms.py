@@ -479,6 +479,7 @@ class ParticipantForm(forms.ModelForm):
             "phone": forms.TextInput(attrs={"autocomplete": "tel", "inputmode": "tel"}),
             "hilfssatz": forms.NumberInput(attrs={"step": "0.0001", "min": "0", "max": "1", "inputmode": "decimal"}),
             "berufssatz": forms.NumberInput(attrs={"step": "0.0001", "min": "0", "max": "1", "inputmode": "decimal"}),
+            "notes": forms.Textarea(attrs={"spellcheck": "true", "autocapitalize": "sentences"}),
             "arrival_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "departure_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "birth_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
@@ -526,6 +527,8 @@ class ParticipantFamilyMemberForm(forms.ModelForm):
         widgets = {
             "first_name": forms.TextInput(attrs={"autocomplete": "given-name", "spellcheck": "false"}),
             "last_name": forms.TextInput(attrs={"autocomplete": "family-name", "spellcheck": "false"}),
+            "email": forms.EmailInput(attrs={"autocomplete": "email", "inputmode": "email", "spellcheck": "false"}),
+            "phone": forms.TextInput(attrs={"autocomplete": "tel", "inputmode": "tel"}),
             "arrival_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "departure_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "birth_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
@@ -1323,7 +1326,7 @@ class KioskSelfEnrollmentForm(forms.ModelForm):
             "phone": forms.TextInput(attrs={"autocomplete": "tel", "inputmode": "tel"}),
             "arrival_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "departure_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
-            "notes": forms.Textarea(attrs={"rows": 2}),
+            "notes": forms.Textarea(attrs={"rows": 2, "spellcheck": "true", "autocapitalize": "sentences"}),
         }
 
     def clean(self) -> dict[str, Any]:
