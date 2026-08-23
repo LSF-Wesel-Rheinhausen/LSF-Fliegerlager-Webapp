@@ -324,12 +324,18 @@ def rate(value):
     return (value or ZERO).quantize(Decimal("0.0001"))
 
 
+def _lock_manual_charge_camp(camp_id: int) -> Camp:
+    """Lock the camp before participant and price-rule rows for a manual charge."""
+    return Camp.objects.select_for_update(of=("self",), no_key=True).get(pk=camp_id)
+
+
 @transaction.atomic
 def create_manual_charge(
     participant: Participant,
     price_rule: PriceRule,
     quantity: int,
     description: str,
+    occurred_on: date,
 ) -> Charge:
     """Create a manual charge from validated price-rule input.
 
@@ -338,6 +344,7 @@ def create_manual_charge(
         price_rule: Active rule from the participant's camp.
         quantity: Validated whole-number quantity between 1 and 99.
         description: Optional operator-provided description.
+        occurred_on: Date on which the service was provided.
 
     Returns:
         The persisted charge containing a snapshot of the selected rule.
@@ -345,6 +352,7 @@ def create_manual_charge(
     Raises:
         ValidationError: If the participant or price rule is not eligible.
     """
+    locked_camp = _lock_manual_charge_camp(participant.camp_id)
     locked_participant = Participant.objects.select_for_update().filter(pk=participant.pk).first()
     if locked_participant is None:
         raise ValidationError(
@@ -361,8 +369,25 @@ def create_manual_charge(
             "Für archivierte Teilnehmer können keine Buchungen erfasst werden.",
             code="manual_charge_participant_archived",
         )
-    if locked_price_rule.camp_id != locked_participant.camp_id or locked_price_rule.is_archived:
+    if locked_participant.camp_id != locked_camp.pk:
+        raise ValidationError(
+            "Der Teilnehmer ist nicht mehr verfügbar.",
+            code="manual_charge_participant_unavailable",
+        )
+    if locked_price_rule.camp_id != locked_camp.pk or locked_price_rule.is_archived:
         raise ValidationError("Die ausgewählte Preisregel ist für diesen Teilnehmer nicht verfügbar.")
+    if locked_camp.starts_on and locked_camp.ends_on and locked_camp.starts_on > locked_camp.ends_on:
+        raise ValidationError("Der Lagerzeitraum ist inkonsistent.", code="manual_charge_invalid_camp_period")
+    if locked_camp.starts_on and occurred_on < locked_camp.starts_on:
+        raise ValidationError(
+            "Das Leistungsdatum muss am oder nach dem Lagerbeginn liegen.",
+            code="manual_charge_date_outside_camp",
+        )
+    if locked_camp.ends_on and occurred_on > locked_camp.ends_on:
+        raise ValidationError(
+            "Das Leistungsdatum muss am oder vor dem Lagerende liegen.",
+            code="manual_charge_date_outside_camp",
+        )
     try:
         price_rule_kind = PriceRule.Kind(locked_price_rule.kind)
     except ValueError as error:
@@ -375,6 +400,7 @@ def create_manual_charge(
         quantity=Decimal(quantity),
         unit_price=locked_price_rule.unit_price,
         foerdersatz=locked_price_rule.foerdersatz,
+        occurred_on=occurred_on,
     )
 
 

@@ -1264,13 +1264,19 @@ def participant_detail(request, participant_id):
                     price_rule=rule,
                     quantity=manual_charge_form.cleaned_data["quantity"],
                     description=manual_charge_form.cleaned_data["description"],
+                    occurred_on=manual_charge_form.cleaned_data["occurred_on"],
                 )
             except ValidationError as error:
                 participant_error_codes = {
                     "manual_charge_participant_archived",
                     "manual_charge_participant_unavailable",
                 }
-                error_field = None if error.code in participant_error_codes else "price_rule_id"
+                if error.code in participant_error_codes or error.code == "manual_charge_invalid_camp_period":
+                    error_field = None
+                elif error.code == "manual_charge_date_outside_camp":
+                    error_field = "occurred_on"
+                else:
+                    error_field = "price_rule_id"
                 manual_charge_form.add_error(error_field, error)
             else:
                 messages.success(request, f"Buchung '{rule.name}' hinzugefügt.")

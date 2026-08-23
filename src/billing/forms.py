@@ -745,6 +745,13 @@ class _ManualPriceRuleChoiceField(forms.ModelChoiceField):
 class ManualChargeForm(forms.Form):
     """Validate a price-rule-backed manual charge for one camp."""
 
+    occurred_on = forms.DateField(
+        label="Leistungsdatum",
+        required=True,
+        input_formats=["%Y-%m-%d"],
+        widget=forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+    )
+
     price_rule_id = _ManualPriceRuleChoiceField(
         label="Preisregel auswählen",
         queryset=PriceRule.objects.none(),
@@ -766,9 +773,37 @@ class ManualChargeForm(forms.Form):
 
     def __init__(self, *args: Any, camp: Camp, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        self.camp = camp
         price_rules = PriceRule.objects.filter(camp=camp, is_archived=False).order_by("name")
         price_rule_field = cast(_ManualPriceRuleChoiceField, self.fields["price_rule_id"])
         price_rule_field.queryset = price_rules
+        if camp.starts_on:
+            self.fields["occurred_on"].widget.attrs["min"] = camp.starts_on.isoformat()
+        if camp.ends_on:
+            self.fields["occurred_on"].widget.attrs["max"] = camp.ends_on.isoformat()
+
+    def clean(self) -> dict[str, Any]:
+        cleaned_data = super().clean() or {}
+        if self.camp.starts_on and self.camp.ends_on and self.camp.starts_on > self.camp.ends_on:
+            raise forms.ValidationError(
+                "Der Lagerzeitraum ist inkonsistent.",
+                code="manual_charge_invalid_camp_period",
+            )
+        return cleaned_data
+
+    def clean_occurred_on(self) -> date:
+        occurred_on = self.cleaned_data["occurred_on"]
+        if self.camp.starts_on and occurred_on < self.camp.starts_on:
+            raise forms.ValidationError(
+                "Das Leistungsdatum muss am oder nach dem Lagerbeginn liegen.",
+                code="manual_charge_date_outside_camp",
+            )
+        if self.camp.ends_on and occurred_on > self.camp.ends_on:
+            raise forms.ValidationError(
+                "Das Leistungsdatum muss am oder vor dem Lagerende liegen.",
+                code="manual_charge_date_outside_camp",
+            )
+        return occurred_on
 
     def add_error(self, field: str | None, error: Any) -> None:
         """Attach field errors to their widgets for accessible rendering."""
