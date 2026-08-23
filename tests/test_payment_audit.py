@@ -2,6 +2,7 @@ from decimal import Decimal
 from unittest.mock import MagicMock
 
 import pytest
+from django.contrib import messages
 from django.contrib.admin.sites import AdminSite
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import RequestFactory
@@ -74,7 +75,208 @@ def test_payment_audit_admin_reports_expected_validation_errors(monkeypatch):
     admin.restore_payments_from_audit_log(request, PaymentAuditLog.objects.filter(pk=audit_log.pk))
 
     request._messages.add.assert_called_once()
-    assert "0 Zahlung(en)" in request._messages.add.call_args.args[1]
+    assert request._messages.add.call_args.args[0] == messages.WARNING
+    assert (
+        f"Fehlgeschlagene Wiederherstellungen: Zahlung #{payment.pk} "
+        f"(Audit-Protokoll #{audit_log.pk})." in request._messages.add.call_args.args[1]
+    )
+
+
+@pytest.mark.django_db
+def test_payment_audit_admin_reports_mixed_restore_results_without_pii_in_logs(monkeypatch, caplog):
+    admin_user = SuperUserFactory(username="admin", email="admin@example.test")
+    valid_payment = PaymentFactory(note="valid private note")
+    invalid_payment = PaymentFactory(participant=valid_payment.participant, note="invalid private note")
+    audit_logs = []
+    for payment in (valid_payment, invalid_payment):
+        payment.deleted_at = timezone.now()
+        payment.deleted_by = admin_user
+        payment.save(update_fields=["deleted_at", "deleted_by"])
+        audit_logs.append(
+            PaymentAuditLog.objects.create(
+                participant=payment.participant,
+                payment=payment,
+                changed_by=admin_user,
+                action=PaymentAuditLog.Action.DELETED,
+                before=payment_audit_snapshot(payment) if payment is valid_payment else {},
+                after={},
+            )
+        )
+    request = RequestFactory().post("/admin/billing/paymentauditlog/")
+    request.user = admin_user
+    request._messages = MagicMock()
+    admin = billing_admin.PaymentAuditLogAdmin(PaymentAuditLog, AdminSite())
+
+    def restore_with_one_invalid_row(audit_log, changed_by):
+        if audit_log.pk == audit_logs[1].pk:
+            raise ValidationError("invalid audit row")
+        return restore_payment_from_audit_log(audit_log, changed_by)
+
+    monkeypatch.setattr(billing_admin, "restore_payment_from_audit_log", restore_with_one_invalid_row)
+
+    with caplog.at_level("WARNING", logger="billing.admin"):
+        admin.restore_payments_from_audit_log(
+            request, PaymentAuditLog.objects.filter(pk__in=[log.pk for log in audit_logs])
+        )
+
+    valid_payment.refresh_from_db()
+    invalid_payment.refresh_from_db()
+    message = request._messages.add.call_args.args[1]
+    assert "1 Zahlung(en) wurden aus dem Audit-Protokoll wiederhergestellt." in message
+    assert "1 Wiederherstellung(en) fehlgeschlagen." in message
+    assert f"Zahlung #{invalid_payment.pk} (Audit-Protokoll #{audit_logs[1].pk})" in message
+    assert request._messages.add.call_args.args[0] == messages.WARNING
+    assert valid_payment.deleted_at is None
+    assert invalid_payment.deleted_at is not None
+    failure_record = caplog.records[0]
+    assert failure_record.payment_id == invalid_payment.pk
+    assert failure_record.audit_log_id == audit_logs[1].pk
+    assert failure_record.reason == "validation_error"
+    assert "invalid private note" not in caplog.text
+    assert "admin@example.test" not in caplog.text
+
+
+@pytest.mark.django_db
+def test_payment_audit_admin_reports_all_failed_restores(monkeypatch, caplog):
+    admin_user = SuperUserFactory(username="admin")
+    payment = PaymentFactory()
+    payment.deleted_at = timezone.now()
+    payment.deleted_by = admin_user
+    payment.save(update_fields=["deleted_at", "deleted_by"])
+    audit_log = PaymentAuditLog.objects.create(
+        participant=payment.participant,
+        payment=payment,
+        changed_by=admin_user,
+        action=PaymentAuditLog.Action.DELETED,
+        before={},
+        after={},
+    )
+    request = RequestFactory().post("/admin/billing/paymentauditlog/")
+    request.user = admin_user
+    request._messages = MagicMock()
+    admin = billing_admin.PaymentAuditLogAdmin(PaymentAuditLog, AdminSite())
+    monkeypatch.setattr(
+        billing_admin,
+        "restore_payment_from_audit_log",
+        lambda *_args: (_ for _ in ()).throw(ValidationError("invalid audit row")),
+    )
+
+    with caplog.at_level("WARNING", logger="billing.admin"):
+        admin.restore_payments_from_audit_log(request, PaymentAuditLog.objects.filter(pk=audit_log.pk))
+
+    message = request._messages.add.call_args.args[1]
+    assert message == (
+        "0 Zahlung(en) wurden aus dem Audit-Protokoll wiederhergestellt. "
+        "1 Wiederherstellung(en) fehlgeschlagen. "
+        f"Fehlgeschlagene Wiederherstellungen: Zahlung #{payment.pk} (Audit-Protokoll #{audit_log.pk})."
+    )
+    assert request._messages.add.call_args.args[0] == messages.WARNING
+    assert payment.deleted_at is not None
+    assert PaymentAuditLog.objects.filter(action=PaymentAuditLog.Action.RESTORED).count() == 0
+    failure_record = caplog.records[0]
+    assert failure_record.payment_id == payment.pk
+    assert failure_record.audit_log_id == audit_log.pk
+    assert failure_record.reason == "validation_error"
+
+
+@pytest.mark.django_db
+def test_payment_admin_reports_missing_audit_in_mixed_batch(monkeypatch, caplog):
+    admin_user = SuperUserFactory(username="admin", email="admin@example.test")
+    valid_payment = PaymentFactory(note="valid private note")
+    missing_audit_payment = PaymentFactory(participant=valid_payment.participant, note="missing private note")
+    PaymentAuditLog.objects.create(
+        participant=valid_payment.participant,
+        payment=valid_payment,
+        changed_by=admin_user,
+        action=PaymentAuditLog.Action.DELETED,
+        before=payment_audit_snapshot(valid_payment),
+        after={},
+    )
+    for payment in (valid_payment, missing_audit_payment):
+        payment.deleted_at = timezone.now()
+        payment.deleted_by = admin_user
+        payment.save(update_fields=["deleted_at", "deleted_by"])
+    request = RequestFactory().post("/admin/billing/payment/")
+    request.user = admin_user
+    request._messages = MagicMock()
+    admin = billing_admin.PaymentAdmin(Payment, AdminSite())
+
+    with caplog.at_level("WARNING", logger="billing.admin"):
+        admin.restore_selected_payments(
+            request, Payment.objects.filter(pk__in=[valid_payment.pk, missing_audit_payment.pk])
+        )
+
+    valid_payment.refresh_from_db()
+    missing_audit_payment.refresh_from_db()
+    message = request._messages.add.call_args.args[1]
+    assert valid_payment.deleted_at is None
+    assert missing_audit_payment.deleted_at is not None
+    assert message == (
+        f"1 Zahlung(en) wurden wiederhergestellt. 1 Wiederherstellung(en) fehlgeschlagen. "
+        f"Fehlgeschlagene Wiederherstellungen: Zahlung #{missing_audit_payment.pk} (Audit-Protokoll nicht vorhanden)."
+    )
+    assert request._messages.add.call_args.args[0] == messages.WARNING
+    failure_record = caplog.records[0]
+    assert failure_record.payment_id == missing_audit_payment.pk
+    assert failure_record.audit_log_id is None
+    assert failure_record.reason == "missing_audit_log"
+    assert "missing private note" not in caplog.text
+    assert "admin@example.test" not in caplog.text
+
+
+@pytest.mark.django_db
+def test_payment_admin_success_restore_uses_success_message_level():
+    admin_user = SuperUserFactory(username="admin")
+    payment = PaymentFactory()
+    payment.deleted_at = timezone.now()
+    payment.deleted_by = admin_user
+    payment.save(update_fields=["deleted_at", "deleted_by"])
+    audit_log = PaymentAuditLog.objects.create(
+        participant=payment.participant,
+        payment=payment,
+        changed_by=admin_user,
+        action=PaymentAuditLog.Action.DELETED,
+        before=payment_audit_snapshot(payment),
+        after={},
+    )
+    request = RequestFactory().post("/admin/billing/payment/")
+    request.user = admin_user
+    request._messages = MagicMock()
+
+    billing_admin.PaymentAdmin(Payment, AdminSite()).restore_selected_payments(
+        request, Payment.objects.filter(pk=payment.pk)
+    )
+
+    assert request._messages.add.call_args.args[0] == messages.SUCCESS
+    assert f"Zahlung #{payment.pk}" not in request._messages.add.call_args.args[1]
+    assert PaymentAuditLog.objects.filter(pk=audit_log.pk).exists()
+
+
+@pytest.mark.django_db
+def test_payment_audit_admin_success_restore_uses_success_message_level():
+    admin_user = SuperUserFactory(username="admin")
+    payment = PaymentFactory()
+    payment.deleted_at = timezone.now()
+    payment.deleted_by = admin_user
+    payment.save(update_fields=["deleted_at", "deleted_by"])
+    audit_log = PaymentAuditLog.objects.create(
+        participant=payment.participant,
+        payment=payment,
+        changed_by=admin_user,
+        action=PaymentAuditLog.Action.DELETED,
+        before=payment_audit_snapshot(payment),
+        after={},
+    )
+    request = RequestFactory().post("/admin/billing/paymentauditlog/")
+    request.user = admin_user
+    request._messages = MagicMock()
+
+    billing_admin.PaymentAuditLogAdmin(PaymentAuditLog, AdminSite()).restore_payments_from_audit_log(
+        request, PaymentAuditLog.objects.filter(pk=audit_log.pk)
+    )
+
+    assert request._messages.add.call_args.args[0] == messages.SUCCESS
+    assert f"Zahlung #{payment.pk}" not in request._messages.add.call_args.args[1]
 
 
 @pytest.mark.django_db
