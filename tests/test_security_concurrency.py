@@ -33,6 +33,7 @@ from billing.models import (
 )
 from billing.services import (
     calculate_participant_settlement,
+    create_credit_payout,
     create_manual_charge,
     payment_audit_snapshot,
     restore_payment_from_audit_log,
@@ -200,6 +201,49 @@ def test_quick_booking_replay_is_idempotent_across_postgresql_connections(kiosk_
     assert charge.kind == Charge.Kind.DRINK
     assert charge.quantity == Decimal("1")
     assert charge.unit_price == rule.unit_price
+
+
+def test_credit_payout_same_key_different_participants_has_one_winner(monkeypatch):
+    _require_postgresql()
+    participant_a, _payout_a = _postgresql_credit_payout(Decimal("30.00"))
+    participant_b, _payout_b = _postgresql_credit_payout(Decimal("30.00"))
+    admin = SuperUserFactory(username="credit-payout-race-admin")
+    key = uuid4()
+    final_insert_barrier = Barrier(2)
+    real_create = CreditPayout.objects.create
+
+    def synchronize_final_insert(*args, **kwargs):
+        final_insert_barrier.wait(timeout=10)
+        return real_create(*args, **kwargs)
+
+    monkeypatch.setattr(CreditPayout.objects, "create", synchronize_final_insert)
+
+    def submit_once(participant_id: int):
+        close_old_connections()
+        try:
+            try:
+                payout = create_credit_payout(
+                    participant_id,
+                    Decimal("30.00"),
+                    CreditPayout.Method.CASH,
+                    admin,
+                    key,
+                )
+            except ValidationError as error:
+                return "validation_error", str(error)
+            except IntegrityError as error:
+                return "integrity_error", str(error)
+            return "created", payout.pk
+        finally:
+            connections.close_all()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(submit_once, (participant_a.pk, participant_b.pk)))
+
+    assert sorted(result[0] for result in results) == ["created", "validation_error"]
+    assert all("anderen Zahlungskonto" in result[1] for result in results if result[0] == "validation_error")
+    assert not any(result[0] == "integrity_error" for result in results)
+    assert CreditPayout.objects.filter(idempotency_key=key).count() == 1
 
 
 def test_manual_charge_revalidates_after_concurrent_camp_period_change(monkeypatch):

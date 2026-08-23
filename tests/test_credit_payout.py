@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from decimal import Decimal
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -143,6 +144,416 @@ def test_duplicate_idempotency_key_is_a_noop():
 
     assert duplicate.pk == first.pk
     assert CreditPayout.objects.filter(participant=participant).count() == 1
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("changed_field", ["external_reference", "note"])
+def test_replay_rejects_changed_payout_metadata(changed_field):
+    participant, _camp = _participant_with_credit()
+    admin_user = SuperUserFactory()
+    key = uuid4()
+    first_values = {"external_reference": "Ticket 42", "note": "Übergabe"}
+    changed_values = {**first_values, changed_field: "Anderer Wert"}
+
+    create_credit_payout(
+        participant,
+        Decimal("30.00"),
+        CreditPayout.Method.CASH,
+        admin_user,
+        key,
+        **first_values,
+    )
+
+    with pytest.raises(ValidationError) as exc_info:
+        create_credit_payout(
+            participant,
+            Decimal("30.00"),
+            CreditPayout.Method.CASH,
+            admin_user,
+            key,
+            **changed_values,
+        )
+
+    assert "anderen Auszahlungsdaten" in str(exc_info.value)
+    assert "Anderer Wert" not in str(exc_info.value)
+    assert CreditPayout.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_identical_payout_replay_compares_trimmed_metadata_without_second_write():
+    participant, _camp = _participant_with_credit()
+    admin_user = SuperUserFactory()
+    key = uuid4()
+
+    first = create_credit_payout(
+        participant,
+        Decimal("30.00"),
+        CreditPayout.Method.CASH,
+        admin_user,
+        key,
+        external_reference="  Ticket 42  ",
+        note="\t Übergabe \n",
+    )
+    replay = create_credit_payout(
+        participant,
+        Decimal("30.00"),
+        CreditPayout.Method.CASH,
+        admin_user,
+        key,
+        external_reference="Ticket 42",
+        note="Übergabe",
+    )
+
+    assert replay.pk == first.pk
+    assert first.external_reference == "Ticket 42"
+    assert first.note == "Übergabe"
+    assert CreditPayout.objects.count() == 1
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("external_reference", "x" * 121), ("note", "x" * 181)],
+)
+def test_payout_metadata_length_is_validated_before_idempotent_replay(field, value):
+    participant, _camp = _participant_with_credit()
+    admin_user = SuperUserFactory()
+    key = uuid4()
+    first = {"external_reference": "Ticket 42", "note": "Übergabe"}
+
+    create_credit_payout(
+        participant,
+        Decimal("30.00"),
+        CreditPayout.Method.CASH,
+        admin_user,
+        key,
+        **first,
+    )
+
+    with pytest.raises(ValidationError) as exc_info:
+        create_credit_payout(
+            participant,
+            Decimal("30.00"),
+            CreditPayout.Method.CASH,
+            admin_user,
+            key,
+            **{**first, field: value},
+        )
+
+    assert "höchstens" in str(exc_info.value)
+    assert CreditPayout.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_post_lock_replay_rejects_changed_payout_metadata(monkeypatch):
+    participant, _camp = _participant_with_credit()
+    admin_user = SuperUserFactory()
+    key = uuid4()
+    first = {"external_reference": "Ticket 42", "note": "Übergabe"}
+    create_credit_payout(
+        participant,
+        Decimal("30.00"),
+        CreditPayout.Method.CASH,
+        admin_user,
+        key,
+        **first,
+    )
+
+    real_filter = CreditPayout.objects.filter
+    calls = 0
+
+    def hide_first_lookup(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return CreditPayout.objects.none()
+        return real_filter(*args, **kwargs)
+
+    monkeypatch.setattr(CreditPayout.objects, "filter", hide_first_lookup)
+
+    with pytest.raises(ValidationError) as exc_info:
+        create_credit_payout(
+            participant,
+            Decimal("30.00"),
+            CreditPayout.Method.CASH,
+            admin_user,
+            key,
+            external_reference="Ticket 43",
+            note=first["note"],
+        )
+
+    assert "anderen Auszahlungsdaten" in str(exc_info.value)
+    assert CreditPayout.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_post_lock_identical_payout_replay_returns_existing_row(monkeypatch):
+    participant, _camp = _participant_with_credit()
+    admin_user = SuperUserFactory()
+    key = uuid4()
+    values = {"external_reference": "Ticket 42", "note": "Übergabe"}
+    first = create_credit_payout(
+        participant,
+        Decimal("30.00"),
+        CreditPayout.Method.CASH,
+        admin_user,
+        key,
+        **values,
+    )
+
+    real_filter = CreditPayout.objects.filter
+    calls = 0
+
+    def hide_first_lookup(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return CreditPayout.objects.none()
+        return real_filter(*args, **kwargs)
+
+    monkeypatch.setattr(CreditPayout.objects, "filter", hide_first_lookup)
+
+    replay = create_credit_payout(
+        participant,
+        Decimal("30.00"),
+        CreditPayout.Method.CASH,
+        admin_user,
+        key,
+        **values,
+    )
+
+    assert replay.pk == first.pk
+    assert CreditPayout.objects.count() == 1
+
+
+def _hide_initial_payout_lookups(monkeypatch):
+    real_filter = CreditPayout.objects.filter
+    calls = 0
+
+    def hide_initial_lookups(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls <= 2:
+            return CreditPayout.objects.none()
+        return real_filter(*args, **kwargs)
+
+    monkeypatch.setattr(CreditPayout.objects, "filter", hide_initial_lookups)
+
+
+class _PostgresIntegrityCause(Exception):
+    def __init__(self, constraint_name):
+        super().__init__("duplicate key value violates unique constraint")
+        self.diag = SimpleNamespace(constraint_name=constraint_name)
+
+
+def _postgres_integrity_error(constraint_name):
+    error = IntegrityError("duplicate key value violates unique constraint")
+    error.__cause__ = _PostgresIntegrityCause(constraint_name)
+    return error
+
+
+def _credit_payout_idempotency_integrity_error():
+    if connection.vendor == "postgresql":
+        return _postgres_integrity_error("billing_creditpayout_idempotency_key_key")
+    return IntegrityError("UNIQUE constraint failed: billing_creditpayout.idempotency_key")
+
+
+@pytest.mark.django_db
+def test_insert_integrity_error_revalidates_existing_payout_metadata(monkeypatch):
+    participant, _camp = _participant_with_credit()
+    admin_user = SuperUserFactory()
+    key = uuid4()
+    first = create_credit_payout(
+        participant,
+        Decimal("30.00"),
+        CreditPayout.Method.CASH,
+        admin_user,
+        key,
+        external_reference="Ticket 42",
+        note="Übergabe",
+    )
+    _hide_initial_payout_lookups(monkeypatch)
+
+    def duplicate_insert(*args, **kwargs):
+        raise _credit_payout_idempotency_integrity_error()
+
+    monkeypatch.setattr(CreditPayout.objects, "create", duplicate_insert)
+
+    with pytest.raises(ValidationError) as exc_info:
+        create_credit_payout(
+            participant,
+            Decimal("30.00"),
+            CreditPayout.Method.CASH,
+            admin_user,
+            key,
+            external_reference="Ticket 43",
+            note="Übergabe",
+        )
+
+    assert "anderen Auszahlungsdaten" in str(exc_info.value)
+    assert first.pk == CreditPayout.objects.get(idempotency_key=key).pk
+
+
+@pytest.mark.django_db
+def test_insert_integrity_error_returns_identical_existing_payout(monkeypatch):
+    participant, _camp = _participant_with_credit()
+    admin_user = SuperUserFactory()
+    key = uuid4()
+    first = create_credit_payout(
+        participant,
+        Decimal("30.00"),
+        CreditPayout.Method.CASH,
+        admin_user,
+        key,
+        external_reference="Ticket 42",
+        note="Übergabe",
+    )
+    _hide_initial_payout_lookups(monkeypatch)
+
+    def duplicate_insert(*args, **kwargs):
+        raise _credit_payout_idempotency_integrity_error()
+
+    monkeypatch.setattr(CreditPayout.objects, "create", duplicate_insert)
+
+    replay = create_credit_payout(
+        participant,
+        Decimal("30.00"),
+        CreditPayout.Method.CASH,
+        admin_user,
+        key,
+        external_reference="Ticket 42",
+        note="Übergabe",
+    )
+
+    assert replay.pk == first.pk
+    assert CreditPayout.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_insert_integrity_error_revalidates_postgresql_idempotency_constraint(monkeypatch):
+    participant, _camp = _participant_with_credit()
+    admin_user = SuperUserFactory()
+    key = uuid4()
+    first = create_credit_payout(
+        participant,
+        Decimal("30.00"),
+        CreditPayout.Method.CASH,
+        admin_user,
+        key,
+        external_reference="Ticket 42",
+        note="Übergabe",
+    )
+    _hide_initial_payout_lookups(monkeypatch)
+
+    def duplicate_insert(*args, **kwargs):
+        raise _postgres_integrity_error("billing_creditpayout_idempotency_key_key")
+
+    monkeypatch.setattr(CreditPayout.objects, "create", duplicate_insert)
+
+    replay = create_credit_payout(
+        participant,
+        Decimal("30.00"),
+        CreditPayout.Method.CASH,
+        admin_user,
+        key,
+        external_reference="Ticket 42",
+        note="Übergabe",
+    )
+
+    assert replay.pk == first.pk
+    assert CreditPayout.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_insert_integrity_error_for_other_named_constraint_is_reraised(monkeypatch):
+    participant, _camp = _participant_with_credit()
+    admin_user = SuperUserFactory()
+    key = uuid4()
+    create_credit_payout(
+        participant,
+        Decimal("30.00"),
+        CreditPayout.Method.CASH,
+        admin_user,
+        key,
+        external_reference="Ticket 42",
+        note="Übergabe",
+    )
+    _hide_initial_payout_lookups(monkeypatch)
+
+    def unrelated_insert(*args, **kwargs):
+        raise _postgres_integrity_error("billing_creditpayout_other_unique")
+
+    monkeypatch.setattr(CreditPayout.objects, "create", unrelated_insert)
+
+    with pytest.raises(IntegrityError, match="duplicate key value"):
+        create_credit_payout(
+            participant,
+            Decimal("30.00"),
+            CreditPayout.Method.CASH,
+            admin_user,
+            key,
+            external_reference="Ticket 42",
+            note="Übergabe",
+        )
+
+
+@pytest.mark.django_db
+def test_unknown_insert_integrity_error_is_not_treated_as_replay(monkeypatch):
+    participant, _camp = _participant_with_credit()
+    admin_user = SuperUserFactory()
+    _hide_initial_payout_lookups(monkeypatch)
+
+    def unrelated_integrity_error(*args, **kwargs):
+        raise IntegrityError("UNIQUE constraint failed: billing_creditpayout.participant_id")
+
+    monkeypatch.setattr(CreditPayout.objects, "create", unrelated_integrity_error)
+
+    with pytest.raises(IntegrityError, match="participant_id"):
+        create_credit_payout(
+            participant,
+            Decimal("30.00"),
+            CreditPayout.Method.CASH,
+            admin_user,
+            uuid4(),
+            external_reference="Ticket 42",
+            note="Übergabe",
+        )
+
+
+@pytest.mark.django_db
+def test_historical_payout_metadata_whitespace_is_semantically_canonicalized():
+    participant, _camp = _participant_with_credit()
+    admin_user = SuperUserFactory()
+    key = uuid4()
+    first = create_credit_payout(
+        participant,
+        Decimal("30.00"),
+        CreditPayout.Method.CASH,
+        admin_user,
+        key,
+        external_reference="Ticket 42",
+        note="Übergabe",
+    )
+    CreditPayout.objects.filter(pk=first.pk).update(
+        external_reference="  Ticket 42  ",
+        note="\t Übergabe \n",
+    )
+
+    replay = create_credit_payout(
+        participant,
+        Decimal("30.00"),
+        CreditPayout.Method.CASH,
+        admin_user,
+        key,
+        external_reference="Ticket 42",
+        note="Übergabe",
+    )
+
+    replay.refresh_from_db()
+    assert replay.pk == first.pk
+    assert replay.external_reference == "  Ticket 42  "
+    assert replay.note == "\t Übergabe \n"
+    assert CreditPayout.objects.count() == 1
 
 
 @pytest.mark.django_db

@@ -8,7 +8,7 @@ from typing import Any, TypedDict, cast
 from uuid import UUID
 
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
-from django.db import transaction
+from django.db import IntegrityError, connection, transaction
 from django.db.models import Max, Prefetch, Q, Sum
 from django.utils import timezone
 
@@ -257,10 +257,47 @@ def money(value):
     return (value or ZERO).quantize(Decimal("0.01"))
 
 
-def _validate_payout_text(value: str, field_label: str) -> str:
-    if len(value) > 180:
-        raise ValidationError(f"{field_label} darf höchstens 180 Zeichen enthalten.")
+_CREDIT_PAYOUT_IDEMPOTENCY_CONSTRAINT = "billing_creditpayout_idempotency_key_key"
+_CREDIT_PAYOUT_IDEMPOTENCY_SQLITE_ERROR = "UNIQUE constraint failed: billing_creditpayout.idempotency_key"
+
+
+def _is_credit_payout_idempotency_integrity_error(error: IntegrityError) -> bool:
+    cause = error.__cause__
+    constraint_name = getattr(getattr(cause, "diag", None), "constraint_name", None)
+    if constraint_name is not None:
+        return constraint_name == _CREDIT_PAYOUT_IDEMPOTENCY_CONSTRAINT
+    return connection.vendor == "sqlite" and str(error) == _CREDIT_PAYOUT_IDEMPOTENCY_SQLITE_ERROR
+
+
+def _canonicalize_payout_text(value: str) -> str:
+    return value.strip()
+
+
+def _validate_payout_text(value: str, field_label: str, max_length: int) -> str:
+    value = _canonicalize_payout_text(value)
+    if len(value) > max_length:
+        raise ValidationError(f"{field_label} darf höchstens {max_length} Zeichen enthalten.")
     return validate_credit_payout_metadata(value, field_label)
+
+
+def _validate_existing_credit_payout(
+    existing: CreditPayout,
+    participant_id: int,
+    amount: Decimal,
+    method: str,
+    external_reference: str,
+    note: str,
+) -> CreditPayout:
+    if existing.participant_id != participant_id:
+        raise ValidationError("Der Idempotenzschlüssel gehört zu einem anderen Zahlungskonto.")
+    if (
+        existing.amount != amount
+        or existing.method != method
+        or _canonicalize_payout_text(existing.external_reference) != external_reference
+        or _canonicalize_payout_text(existing.note) != note
+    ):
+        raise ValidationError("Der Idempotenzschlüssel wurde mit anderen Auszahlungsdaten verwendet.")
+    return existing
 
 
 def calculate_available_credit(participant: Participant | int) -> Decimal:
@@ -288,36 +325,39 @@ def create_credit_payout(
         raise ValidationError("Eine Auszahlung muss positiv sein.")
     if method not in CreditPayout.Method.values:
         raise ValidationError("Ungültige Auszahlungsart.")
-    _validate_payout_text(external_reference, "Die externe Referenz")
-    _validate_payout_text(note, "Die Notiz")
-
-    existing = CreditPayout.objects.filter(idempotency_key=idempotency_key).first()
-    if existing is not None:
-        if existing.participant_id != (participant.pk if isinstance(participant, Participant) else participant):
-            raise ValidationError("Der Idempotenzschlüssel gehört zu einem anderen Zahlungskonto.")
-        if existing.amount != amount or existing.method != method:
-            raise ValidationError("Der Idempotenzschlüssel wurde mit anderen Auszahlungsdaten verwendet.")
-        return existing
+    external_reference = _validate_payout_text(external_reference, "Die externe Referenz", 120)
+    note = _validate_payout_text(note, "Die Notiz", 180)
 
     participant_id = participant.pk if isinstance(participant, Participant) else participant
+    existing = CreditPayout.objects.filter(idempotency_key=idempotency_key).first()
+    if existing is not None:
+        return _validate_existing_credit_payout(existing, participant_id, amount, method, external_reference, note)
+
     locked_participant = Participant.objects.select_for_update().get(pk=participant_id)
     existing = CreditPayout.objects.filter(idempotency_key=idempotency_key).first()
     if existing is not None:
-        if existing.participant_id != participant_id or existing.amount != amount or existing.method != method:
-            raise ValidationError("Der Idempotenzschlüssel wurde mit anderen Auszahlungsdaten verwendet.")
-        return existing
+        return _validate_existing_credit_payout(existing, participant_id, amount, method, external_reference, note)
     available_credit = calculate_available_credit(locked_participant)
     if amount > available_credit:
         raise ValidationError("Die Auszahlung übersteigt das verfügbare Guthaben.")
-    return CreditPayout.objects.create(
-        participant=locked_participant,
-        amount=amount,
-        method=method,
-        created_by=created_by,
-        idempotency_key=idempotency_key,
-        external_reference=external_reference,
-        note=note,
-    )
+    try:
+        with transaction.atomic():
+            return CreditPayout.objects.create(
+                participant=locked_participant,
+                amount=amount,
+                method=method,
+                created_by=created_by,
+                idempotency_key=idempotency_key,
+                external_reference=external_reference,
+                note=note,
+            )
+    except IntegrityError as error:
+        if not _is_credit_payout_idempotency_integrity_error(error):
+            raise
+        existing = CreditPayout.objects.filter(idempotency_key=idempotency_key).first()
+        if existing is None:
+            raise
+        return _validate_existing_credit_payout(existing, participant_id, amount, method, external_reference, note)
 
 
 def rate(value):
