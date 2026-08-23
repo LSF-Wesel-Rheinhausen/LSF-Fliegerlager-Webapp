@@ -1,4 +1,6 @@
-from django.contrib import admin
+import logging
+
+from django.contrib import admin, messages
 from django.contrib.admin.widgets import AdminDateWidget, AdminSplitDateTime
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
@@ -47,6 +49,29 @@ from .services import (
 )
 
 admin.site.unregister(User)
+
+logger = logging.getLogger(__name__)
+
+
+def _log_payment_restore_failure(payment_id: int | None, audit_log_id: int | None, reason: str) -> None:
+    """Log a payment restore failure with identifiers that do not contain PII."""
+    logger.warning(
+        "payment_restore_failed",
+        extra={
+            "payment_id": payment_id,
+            "audit_log_id": audit_log_id,
+            "reason": reason,
+        },
+    )
+
+
+def _payment_restore_failure_label(payment_id: int | None, audit_log_id: int | None) -> str:
+    """Format a failed restore identifier pair without exposing payment metadata."""
+    payment_label = f"Zahlung #{payment_id}" if payment_id is not None else "Zahlung unbekannt"
+    audit_log_label = (
+        f"Audit-Protokoll #{audit_log_id}" if audit_log_id is not None else "Audit-Protokoll nicht vorhanden"
+    )
+    return f"{payment_label} ({audit_log_label})"
 
 
 def _without_timezone_warning_reference(value: str | None, name: str) -> str | None:
@@ -381,6 +406,8 @@ class PaymentAdmin(admin.ModelAdmin):
             self.message_user(request, "Keine gelöschten Zahlungen zur Wiederherstellung ausgewählt.", level="warning")
             return
         restored_count = 0
+        failed_count = 0
+        failed_rows: list[str] = []
         with transaction.atomic():
             for payment in deleted_payments:
                 audit_log = (
@@ -389,13 +416,25 @@ class PaymentAdmin(admin.ModelAdmin):
                     .first()
                 )
                 if audit_log is None:
+                    failed_count += 1
+                    failed_rows.append(_payment_restore_failure_label(payment.pk, None))
+                    _log_payment_restore_failure(payment.pk, None, "missing_audit_log")
                     continue
                 try:
                     restore_payment_from_audit_log(audit_log, request.user)
                 except ValidationError:
+                    failed_count += 1
+                    failed_rows.append(_payment_restore_failure_label(payment.pk, audit_log.pk))
+                    _log_payment_restore_failure(payment.pk, audit_log.pk, "validation_error")
                     continue
                 restored_count += 1
-        self.message_user(request, f"{restored_count} Zahlung(en) wurden wiederhergestellt.")
+        message = f"{restored_count} Zahlung(en) wurden wiederhergestellt."
+        if failed_count:
+            message += (
+                f" {failed_count} Wiederherstellung(en) fehlgeschlagen. "
+                f"Fehlgeschlagene Wiederherstellungen: {', '.join(failed_rows)}."
+            )
+        self.message_user(request, message, level=messages.WARNING if failed_count else messages.SUCCESS)
 
 
 @admin.register(PaymentAuditLog)
@@ -421,16 +460,30 @@ class PaymentAuditLogAdmin(admin.ModelAdmin):
             self.message_user(request, "Keine Löschungs-Protokolleinträge ausgewählt.", level="warning")
             return
         restored_count = 0
+        failed_count = 0
+        failed_rows: list[str] = []
         with transaction.atomic():
             for log in deletion_logs:
                 if log.payment is None or log.payment.deleted_at is None:
+                    failed_count += 1
+                    failed_rows.append(_payment_restore_failure_label(log.payment_id, log.pk))
+                    _log_payment_restore_failure(log.payment_id, log.pk, "payment_not_deleted")
                     continue
                 try:
                     restore_payment_from_audit_log(log, request.user)
                 except ValidationError:
+                    failed_count += 1
+                    failed_rows.append(_payment_restore_failure_label(log.payment_id, log.pk))
+                    _log_payment_restore_failure(log.payment_id, log.pk, "validation_error")
                     continue
                 restored_count += 1
-        self.message_user(request, f"{restored_count} Zahlung(en) wurden aus dem Audit-Protokoll wiederhergestellt.")
+        message = f"{restored_count} Zahlung(en) wurden aus dem Audit-Protokoll wiederhergestellt."
+        if failed_count:
+            message += (
+                f" {failed_count} Wiederherstellung(en) fehlgeschlagen. "
+                f"Fehlgeschlagene Wiederherstellungen: {', '.join(failed_rows)}."
+            )
+        self.message_user(request, message, level=messages.WARNING if failed_count else messages.SUCCESS)
 
 
 @admin.register(CreditPayout)
