@@ -55,8 +55,8 @@ def _require_postgresql() -> None:
         pytest.skip("Regression requires PostgreSQL database semantics")
 
 
-def _postgresql_credit_payout(amount: Decimal):
-    participant = ParticipantFactory()
+def _postgresql_credit_payout(amount: Decimal, *, camp=None):
+    participant = ParticipantFactory(camp=camp) if camp is not None else ParticipantFactory()
     ChargeFactory(participant=participant, kind=Charge.Kind.OTHER, unit_price=Decimal("100.00"))
     PaymentFactory(participant=participant, amount=Decimal("150.00"))
     payout = CreditPayout(
@@ -205,8 +205,9 @@ def test_quick_booking_replay_is_idempotent_across_postgresql_connections(kiosk_
 
 def test_credit_payout_same_key_different_participants_has_one_winner(monkeypatch):
     _require_postgresql()
-    participant_a, _payout_a = _postgresql_credit_payout(Decimal("30.00"))
-    participant_b, _payout_b = _postgresql_credit_payout(Decimal("30.00"))
+    camp = CampFactory(name="Credit-Payout-Race", year=2025)
+    participant_a, _payout_a = _postgresql_credit_payout(Decimal("30.00"), camp=camp)
+    participant_b, _payout_b = _postgresql_credit_payout(Decimal("30.00"), camp=camp)
     admin = SuperUserFactory(username="credit-payout-race-admin")
     key = uuid4()
     final_insert_barrier = Barrier(2)

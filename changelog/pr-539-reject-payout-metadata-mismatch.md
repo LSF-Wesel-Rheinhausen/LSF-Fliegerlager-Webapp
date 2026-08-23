@@ -9,3 +9,4 @@
 - PostgreSQL-Concurrency-Test für denselben Schlüssel bei unterschiedlichen Teilnehmern ergänzt. Closes #536
 - Replay-Recovery reagiert nur auf den benannten Idempotenz-Constraint beziehungsweise die exakte SQLite-Constraint-Meldung; fremde IntegrityErrors werden erneut ausgelöst. Closes #537
 - Die beiden Replay-Recovery-Tests erzeugen den passenden PostgreSQL- oder SQLite-IntegrityError abhängig vom aktiven Backend. Closes #538
+- Der PostgreSQL-Race-Test verwendet für beide Teilnehmer ein explizites gemeinsames Camp und vermeidet dadurch kollidierende Defaultcamp-Fixtures. Closes #540
