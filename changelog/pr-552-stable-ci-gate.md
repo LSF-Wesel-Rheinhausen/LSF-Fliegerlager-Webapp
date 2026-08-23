@@ -1,4 +1,4 @@
-# Stable CI gate
+# PR #552: Stable CI gate
 
 - Splits CI into separately diagnosable quality, Python, PostgreSQL, and E2E jobs.
 - Adds a deterministic change-scope classifier and one aggregate `CI gate` for branch protection.
