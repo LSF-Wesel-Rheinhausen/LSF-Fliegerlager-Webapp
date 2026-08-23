@@ -14,9 +14,11 @@ from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
 
+from billing import services as billing_services
 from billing import views as billing_views
 from billing.kiosk_access import KIOSK_ACCESS_COOKIE_NAME, KIOSK_PARTICIPANT_SESSION_KEY
 from billing.models import (
+    Camp,
     Charge,
     CreditPayout,
     FirstAdminBootstrapLock,
@@ -29,7 +31,12 @@ from billing.models import (
     PaymentAuditLog,
     PriceRule,
 )
-from billing.services import calculate_participant_settlement, payment_audit_snapshot, restore_payment_from_audit_log
+from billing.services import (
+    calculate_participant_settlement,
+    create_manual_charge,
+    payment_audit_snapshot,
+    restore_payment_from_audit_log,
+)
 from tests.factories import (
     CampFactory,
     ChargeFactory,
@@ -193,6 +200,69 @@ def test_quick_booking_replay_is_idempotent_across_postgresql_connections(kiosk_
     assert charge.kind == Charge.Kind.DRINK
     assert charge.quantity == Decimal("1")
     assert charge.unit_price == rule.unit_price
+
+
+def test_manual_charge_revalidates_after_concurrent_camp_period_change(monkeypatch):
+    _require_postgresql()
+    camp = CampFactory(starts_on=date(2025, 7, 1), ends_on=date(2025, 7, 4))
+    participant = ParticipantFactory(camp=camp)
+    rule = PriceRuleFactory(camp=camp)
+    camp_update_locked = Event()
+    allow_camp_update_commit = Event()
+    booking_reached_camp_lock = Event()
+    booking_finished = Event()
+    real_lock_manual_charge_camp = billing_services._lock_manual_charge_camp
+
+    def signal_before_camp_lock(camp_id):
+        booking_reached_camp_lock.set()
+        return real_lock_manual_charge_camp(camp_id)
+
+    monkeypatch.setattr(billing_services, "_lock_manual_charge_camp", signal_before_camp_lock)
+
+    def create_booking():
+        close_old_connections()
+        try:
+            try:
+                create_manual_charge(
+                    participant,
+                    rule,
+                    quantity=1,
+                    description="Parallel",
+                    occurred_on=date(2025, 7, 2),
+                )
+            except ValidationError as error:
+                return "rejected", error.code
+            return "created", None
+        finally:
+            booking_finished.set()
+            connections.close_all()
+
+    def update_camp_period():
+        close_old_connections()
+        try:
+            with transaction.atomic():
+                locked_camp = Camp.objects.select_for_update().get(pk=camp.pk)
+                locked_camp.starts_on = date(2025, 7, 3)
+                locked_camp.save(update_fields=["starts_on", "updated_at"])
+                camp_update_locked.set()
+                assert allow_camp_update_commit.wait(timeout=10)
+        finally:
+            connections.close_all()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        update_future = executor.submit(update_camp_period)
+        assert camp_update_locked.wait(timeout=10)
+        booking_future = executor.submit(create_booking)
+        assert booking_reached_camp_lock.wait(timeout=10)
+        assert not booking_finished.wait(timeout=0.5)
+        allow_camp_update_commit.set()
+        update_future.result(timeout=10)
+        booking_result = booking_future.result(timeout=10)
+
+    assert booking_result == ("rejected", "manual_charge_date_outside_camp")
+    assert not Charge.objects.filter(participant=participant).exists()
+    camp.refresh_from_db()
+    assert camp.starts_on == date(2025, 7, 3)
 
 
 def test_first_admin_bootstrap_allows_only_one_winner_across_postgresql_connections(monkeypatch):

@@ -537,6 +537,21 @@
         {% endif %}
 
         <p>
+          <label for="{{ manual_charge_form.occurred_on.id_for_label }}">
+            {{ manual_charge_form.occurred_on.label }}
+          </label>
+          {{ manual_charge_form.occurred_on }}
+          {% if manual_charge_form.occurred_on.help_text %}
+            <span class="helptext">{{ manual_charge_form.occurred_on.help_text }}</span>
+          {% endif %}
+          {% if manual_charge_form.occurred_on.errors %}
+            <span id="id_occurred_on_error" class="helptext error" role="alert">
+              {% for error in manual_charge_form.occurred_on.errors %}{{ error }}{% if not forloop.last %}<br>{% endif %}{% endfor %}
+            </span>
+          {% endif %}
+        </p>
+
+        <p>
           <label for="{{ manual_charge_form.price_rule_id.id_for_label }}">
             {{ manual_charge_form.price_rule_id.label }}
           </label>

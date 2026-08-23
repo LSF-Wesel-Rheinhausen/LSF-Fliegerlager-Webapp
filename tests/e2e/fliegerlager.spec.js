@@ -436,6 +436,14 @@ test("Admin registers and signs in with a passkey", async ({ context, page }) =>
 test("Admin creates and edits a manual booking and sees the change log", async ({ page }) => {
   const correctedDescription =
     "Cola korrigiert mit ausführlicher Sonderkostbeschreibung und zusätzlicher Dokumentation für das Änderungsprotokoll";
+  const campStart = addDays(new Date(), 2);
+  const campEnd = addDays(campStart, 2);
+  const serviceDate = dateInputValue(campStart);
+  const serviceDateDisplay = new Intl.DateTimeFormat("de-DE", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(campStart);
   const { browserErrors, failedRequests } = trackPageIssues(page);
   await setupFirstAdmin(page);
   await createCamp(page);
@@ -456,6 +464,11 @@ test("Admin creates and edits a manual booking and sees the change log", async (
   const manualChargeDialog = page.getByRole("dialog", { name: "Manuelle Buchung" });
   await expect(manualChargeDialog).toBeVisible();
   await expect(manualChargeDialog.getByLabel("Preisregel auswählen")).toBeVisible();
+  const serviceDateInput = manualChargeDialog.getByLabel("Leistungsdatum");
+  await expect(serviceDateInput).toBeVisible();
+  await expect(serviceDateInput).toHaveAttribute("required", "");
+  await expect(serviceDateInput).toHaveAttribute("min", dateInputValue(campStart));
+  await expect(serviceDateInput).toHaveAttribute("max", dateInputValue(campEnd));
   await expect(manualChargeDialog.getByLabel("Menge")).toHaveValue("1");
   await expect(manualChargeDialog.getByLabel("Notiz (optional)")).toBeVisible();
   expect(await manualChargeDialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
@@ -482,6 +495,7 @@ test("Admin creates and edits a manual booking and sees the change log", async (
   await assertReadableContrast(manualChargeDialog);
   await assertNoUnexpectedOverflow(page);
   await manualChargeDialog.getByLabel("Preisregel auswählen").selectOption({ label: "Cola (2,50 €)" });
+  await serviceDateInput.fill(serviceDate);
   const quantityInput = manualChargeDialog.getByLabel("Menge");
   await quantityInput.evaluate((element) => element.removeAttribute("min"));
   await quantityInput.fill("0");
@@ -510,6 +524,7 @@ test("Admin creates and edits a manual booking and sees the change log", async (
   await expect(bookingRow.getByRole("cell", { name: /2,00$/ })).toBeVisible();
   await expect(bookingRow.getByRole("cell", { name: /2,50 €$/ })).toBeVisible();
   await expect(bookingRow.getByRole("cell", { name: /5,00 €$/ })).toBeVisible();
+  await expect(bookingRow.locator('td[data-label="Datum"]')).toHaveText(serviceDateDisplay);
   await bookingRow.getByRole("link", { name: "Bearbeiten", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Buchung bearbeiten" })).toBeVisible();
   await page.getByLabel("Beschreibung").fill(correctedDescription);
@@ -1945,8 +1960,9 @@ for (const viewport of [
 }
 
 test("Admin can batch delete and restore booking charges via table checkboxes", async ({ page }) => {
-  await loginAsAdmin(page);
+  await setupFirstAdmin(page);
   await createCamp(page, "Batch-Lager");
+  const serviceDate = dateInputValue(addDays(new Date(), 2));
 
   await page.getByRole("link", { name: "Preise verwalten" }).first().click();
   await page.getByRole("button", { name: "Getränk anlegen" }).click();
@@ -1964,11 +1980,13 @@ test("Admin can batch delete and restore booking charges via table checkboxes", 
 
   await page.getByRole("button", { name: "Buchung hinzufügen" }).click();
   await manualChargeDialog.getByLabel("Preisregel auswählen").selectOption({ index: 0 });
+  await manualChargeDialog.getByLabel("Leistungsdatum").fill(serviceDate);
   await manualChargeDialog.getByLabel("Notiz (optional)").fill("Batch Pos 1");
   await manualChargeDialog.getByRole("button", { name: "Buchen" }).click();
 
   await page.getByRole("button", { name: "Buchung hinzufügen" }).click();
   await manualChargeDialog.getByLabel("Preisregel auswählen").selectOption({ index: 0 });
+  await manualChargeDialog.getByLabel("Leistungsdatum").fill(serviceDate);
   await manualChargeDialog.getByLabel("Notiz (optional)").fill("Batch Pos 2");
   await manualChargeDialog.getByRole("button", { name: "Buchen" }).click();
 

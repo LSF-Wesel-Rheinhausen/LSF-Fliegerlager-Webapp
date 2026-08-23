@@ -1,4 +1,5 @@
 import re
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -10,6 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from billing.admin import ChargeAdmin
+from billing.forms import ManualChargeForm
 from billing.models import BookingAuditLog, Charge, Participant, PriceRule
 from billing.permissions import EDITOR_GROUP
 from billing.services import calculate_participant_settlement, calculate_position_report, create_manual_charge
@@ -149,6 +151,7 @@ def test_editor_can_add_manual_charge_from_price_rule(
             "price_rule_id": str(rule.pk),
             "quantity": "3",
             "description": "Sonderleistung",
+            "occurred_on": "2025-07-02",
         },
     )
 
@@ -162,6 +165,7 @@ def test_editor_can_add_manual_charge_from_price_rule(
     assert charge.quantity == Decimal("3.00")
     assert charge.unit_price == Decimal("4.25")
     assert charge.foerdersatz == Decimal("0.2500")
+    assert charge.occurred_on.isoformat() == "2025-07-02"
     assert charge.total == Decimal("12.75")
     assert BookingAuditLog.objects.count() == 0
 
@@ -180,11 +184,100 @@ def test_manual_charge_uses_price_rule_name_without_description(client):
             "price_rule_id": str(rule.pk),
             "quantity": "1",
             "description": "   ",
+            "occurred_on": "2025-07-01",
         },
     )
 
     assert response.status_code == 302
     assert Charge.objects.get(participant=participant).description == "Übernachtung extra"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("occurred_on", [None, "not-a-date"])
+def test_manual_charge_rejects_missing_or_invalid_date_without_writing(client, occurred_on):
+    admin = SuperUserFactory(username="admin", email="admin@example.test")
+    participant = ParticipantFactory()
+    rule = PriceRuleFactory(camp=participant.camp)
+    payload = {
+        "action": "add_manual_charge",
+        "price_rule_id": str(rule.pk),
+        "quantity": "1",
+        "description": "Ohne Datum",
+    }
+    if occurred_on is not None:
+        payload["occurred_on"] = occurred_on
+    client.force_login(admin)
+
+    response = client.post(reverse("participant-detail", args=[participant.pk]), payload)
+
+    assert response.status_code == 200
+    assert "occurred_on" in response.context["manual_charge_form"].errors
+    assert_manual_charge_dialog_auto_opens(response)
+    assert not Charge.objects.filter(participant=participant).exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("occurred_on", ["2025-06-30", "2025-07-05"])
+def test_manual_charge_rejects_date_outside_camp_without_writing(client, occurred_on):
+    admin = SuperUserFactory(username="admin", email="admin@example.test")
+    camp = CampFactory(starts_on="2025-07-01", ends_on="2025-07-04")
+    participant = ParticipantFactory(camp=camp)
+    rule = PriceRuleFactory(camp=camp)
+    client.force_login(admin)
+
+    response = client.post(
+        reverse("participant-detail", args=[participant.pk]),
+        {
+            "action": "add_manual_charge",
+            "price_rule_id": str(rule.pk),
+            "quantity": "1",
+            "description": "Außerhalb",
+            "occurred_on": occurred_on,
+        },
+    )
+
+    assert response.status_code == 200
+    assert "occurred_on" in response.context["manual_charge_form"].errors
+    assert_manual_charge_dialog_auto_opens(response)
+    assert not Charge.objects.filter(participant=participant).exists()
+
+
+@pytest.mark.django_db
+def test_manual_charge_service_date_error_maps_to_date_field_accessibly(client, monkeypatch):
+    admin = SuperUserFactory(username="admin", email="admin@example.test")
+    participant = ParticipantFactory()
+    rule = PriceRuleFactory(camp=participant.camp)
+
+    def reject_date(**_kwargs):
+        raise ValidationError(
+            "Das Leistungsdatum ist nicht mehr zulässig.",
+            code="manual_charge_date_outside_camp",
+        )
+
+    monkeypatch.setattr("billing.views.create_manual_charge", reject_date)
+    client.force_login(admin)
+
+    response = client.post(
+        reverse("participant-detail", args=[participant.pk]),
+        {
+            "action": "add_manual_charge",
+            "price_rule_id": str(rule.pk),
+            "quantity": "1",
+            "description": "Servicefehler",
+            "occurred_on": "2025-07-01",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "occurred_on" in response.context["manual_charge_form"].errors
+    assert "price_rule_id" not in response.context["manual_charge_form"].errors
+    assert re.search(
+        rb'<input\b(?=[^>]*\bid="id_occurred_on")(?=[^>]*\baria-invalid="true")'
+        rb'(?=[^>]*\baria-describedby="id_occurred_on_error")[^>]*>',
+        response.content,
+        re.DOTALL,
+    )
+    assert b'id="id_occurred_on_error" class="helptext error" role="alert"' in response.content
 
 
 @pytest.mark.django_db
@@ -198,6 +291,95 @@ def test_manual_charge_price_rule_label_uses_localized_grouping(client):
 
     assert response.status_code == 200
     assert "Großpreis (1.234,50 €)" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_manual_charge_form_exposes_camp_bounded_service_date(client):
+    admin = SuperUserFactory(username="admin", email="admin@example.test")
+    camp = CampFactory(starts_on="2025-07-01", ends_on="2025-07-04")
+    participant = ParticipantFactory(camp=camp)
+    PriceRuleFactory(camp=camp)
+    client.force_login(admin)
+
+    response = client.get(reverse("participant-detail", args=[participant.pk]))
+    content = response.content.decode()
+
+    assert "Leistungsdatum" in content
+    assert 'name="occurred_on"' in content
+    assert 'min="2025-07-01"' in content
+    assert 'max="2025-07-04"' in content
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("starts_on", "ends_on", "occurred_on", "expected_min", "expected_max"),
+    [
+        (date(2025, 7, 1), None, date(2025, 7, 10), "2025-07-01", None),
+        (None, date(2025, 7, 4), date(2025, 6, 30), None, "2025-07-04"),
+    ],
+)
+def test_manual_charge_form_enforces_each_available_camp_boundary(
+    starts_on, ends_on, occurred_on, expected_min, expected_max
+):
+    camp = CampFactory(starts_on=starts_on, ends_on=ends_on)
+    rule = PriceRuleFactory(camp=camp)
+
+    form = ManualChargeForm(
+        data={
+            "occurred_on": occurred_on.isoformat(),
+            "price_rule_id": rule.pk,
+            "quantity": 1,
+            "description": "Teilgrenze",
+        },
+        camp=camp,
+    )
+
+    assert form.is_valid()
+    assert form.fields["occurred_on"].widget.attrs.get("min") == expected_min
+    assert form.fields["occurred_on"].widget.attrs.get("max") == expected_max
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("starts_on", "ends_on", "occurred_on"),
+    [
+        (date(2025, 7, 1), None, date(2025, 6, 30)),
+        (None, date(2025, 7, 4), date(2025, 7, 5)),
+    ],
+)
+def test_manual_charge_form_rejects_date_outside_each_partial_camp_boundary(starts_on, ends_on, occurred_on):
+    camp = CampFactory(starts_on=starts_on, ends_on=ends_on)
+    rule = PriceRuleFactory(camp=camp)
+    form = ManualChargeForm(
+        data={
+            "occurred_on": occurred_on.isoformat(),
+            "price_rule_id": rule.pk,
+            "quantity": 1,
+            "description": "Außerhalb Teilgrenze",
+        },
+        camp=camp,
+    )
+
+    assert not form.is_valid()
+    assert form.errors.as_data()["occurred_on"][0].code == "manual_charge_date_outside_camp"
+
+
+@pytest.mark.django_db
+def test_manual_charge_form_rejects_inconsistent_camp_boundaries_with_stable_code():
+    camp = CampFactory(starts_on=date(2025, 7, 4), ends_on=date(2025, 7, 1))
+    rule = PriceRuleFactory(camp=camp)
+    form = ManualChargeForm(
+        data={
+            "occurred_on": "2025-07-02",
+            "price_rule_id": rule.pk,
+            "quantity": 1,
+            "description": "Inkonsistent",
+        },
+        camp=camp,
+    )
+
+    assert not form.is_valid()
+    assert form.errors.as_data()["__all__"][0].code == "manual_charge_invalid_camp_period"
 
 
 @pytest.mark.django_db
@@ -246,6 +428,7 @@ def test_manual_charge_rejects_unavailable_price_rule_without_writing(client, in
         "action": "add_manual_charge",
         "quantity": "1",
         "description": "Ungültig",
+        "occurred_on": "2025-07-01",
     }
     if invalid_rule == "malformed":
         payload["price_rule_id"] = "not-an-id"
@@ -331,7 +514,7 @@ def test_create_manual_charge_uses_fresh_locked_price_rule_values():
         foerdersatz=Decimal("0.2000"),
     )
 
-    charge = create_manual_charge(participant, rule, quantity=2, description="")
+    charge = create_manual_charge(participant, rule, quantity=2, description="", occurred_on=date(2025, 7, 1))
 
     assert charge.description == "Aktueller Preis"
     assert charge.unit_price == Decimal("3.75")
@@ -345,10 +528,74 @@ def test_create_manual_charge_rejects_freshly_archived_participant():
     Participant.objects.filter(pk=participant.pk).update(archived_at=timezone.now())
 
     with pytest.raises(ValidationError, match="archivierte Teilnehmer") as error_info:
-        create_manual_charge(participant, rule, quantity=1, description="")
+        create_manual_charge(participant, rule, quantity=1, description="", occurred_on=date(2025, 7, 1))
 
     assert error_info.value.code == "manual_charge_participant_archived"
     assert Charge.objects.filter(participant=participant).exists() is False
+
+
+@pytest.mark.django_db
+def test_create_manual_charge_rejects_date_outside_camp_at_service_boundary():
+    camp = CampFactory(starts_on="2025-07-01", ends_on="2025-07-04")
+    participant = ParticipantFactory(camp=camp)
+    rule = PriceRuleFactory(camp=camp)
+
+    with pytest.raises(ValidationError, match="am oder vor dem Lagerende") as error_info:
+        create_manual_charge(participant, rule, quantity=1, description="", occurred_on=date(2025, 7, 5))
+
+    assert error_info.value.code == "manual_charge_date_outside_camp"
+    assert not Charge.objects.filter(participant=participant).exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("starts_on", "ends_on", "occurred_on"),
+    [
+        (date(2025, 7, 1), None, date(2025, 7, 10)),
+        (None, date(2025, 7, 4), date(2025, 6, 30)),
+    ],
+)
+def test_create_manual_charge_enforces_each_available_camp_boundary(starts_on, ends_on, occurred_on):
+    camp = CampFactory(starts_on=starts_on, ends_on=ends_on)
+    participant = ParticipantFactory(camp=camp)
+    rule = PriceRuleFactory(camp=camp)
+
+    charge = create_manual_charge(participant, rule, quantity=1, description="Teilgrenze", occurred_on=occurred_on)
+
+    assert charge.occurred_on == occurred_on
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("starts_on", "ends_on", "occurred_on"),
+    [
+        (date(2025, 7, 1), None, date(2025, 6, 30)),
+        (None, date(2025, 7, 4), date(2025, 7, 5)),
+    ],
+)
+def test_create_manual_charge_rejects_date_outside_each_partial_camp_boundary(starts_on, ends_on, occurred_on):
+    camp = CampFactory(starts_on=starts_on, ends_on=ends_on)
+    participant = ParticipantFactory(camp=camp)
+    rule = PriceRuleFactory(camp=camp)
+
+    with pytest.raises(ValidationError) as error_info:
+        create_manual_charge(participant, rule, quantity=1, description="Außerhalb Teilgrenze", occurred_on=occurred_on)
+
+    assert error_info.value.code == "manual_charge_date_outside_camp"
+    assert not Charge.objects.filter(participant=participant).exists()
+
+
+@pytest.mark.django_db
+def test_create_manual_charge_rejects_inconsistent_camp_boundaries_with_stable_code():
+    camp = CampFactory(starts_on=date(2025, 7, 4), ends_on=date(2025, 7, 1))
+    participant = ParticipantFactory(camp=camp)
+    rule = PriceRuleFactory(camp=camp)
+
+    with pytest.raises(ValidationError, match="Lagerzeitraum") as error_info:
+        create_manual_charge(participant, rule, quantity=1, description="Inkonsistent", occurred_on=date(2025, 7, 2))
+
+    assert error_info.value.code == "manual_charge_invalid_camp_period"
+    assert not Charge.objects.filter(participant=participant).exists()
 
 
 @pytest.mark.django_db
