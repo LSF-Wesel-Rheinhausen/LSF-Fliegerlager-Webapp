@@ -17,6 +17,12 @@
   -webkit-overflow-scrolling: touch;
 }
 
+/* Keep Django's sidebar visible after the responsive wrapper changes its parent. */
+.admin-nav-drawer #nav-sidebar {
+  margin-left: 0;
+  visibility: visible;
+}
+
 .admin-results-scroll .results {
   min-width: max-content;
 }

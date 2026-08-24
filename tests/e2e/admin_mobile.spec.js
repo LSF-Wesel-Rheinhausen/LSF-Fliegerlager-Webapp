@@ -59,6 +59,7 @@ for (const viewport of [
     await page.waitForLoadState("networkidle");
 
     const menu = page.locator(".admin-mobile-menu-toggle");
+    const participantLink = page.locator("#admin-nav-drawer #nav-sidebar").getByRole("link", { name: "Teilnehmer", exact: true });
     await expect(menu).toBeVisible();
     await expect(menu).toHaveCSS("min-width", "44px");
     await expect(menu).toHaveCSS("min-height", "44px");
@@ -68,6 +69,7 @@ for (const viewport of [
 
     await menu.click();
     await expect(page.locator("#admin-nav-drawer")).toBeVisible();
+    await expect(participantLink).toBeVisible();
     await expect(menu).toHaveAttribute("aria-expanded", "true");
     await expect(page.locator(".admin-nav-drawer__close")).toBeFocused();
     expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).toBe("hidden");
@@ -119,6 +121,11 @@ test("Django Admin keeps the desktop navigation layout outside the mobile breakp
 
   await expect(page.locator(".admin-mobile-menu-toggle")).toBeHidden();
   await expect(page.locator("#admin-nav-drawer")).toBeVisible();
+  const participantLink = page.locator("#admin-nav-drawer #nav-sidebar").getByRole("link", { name: "Teilnehmer", exact: true });
+  await expect(participantLink).toBeVisible();
+  await expect(page.locator("#nav-sidebar")).toHaveCSS("margin-left", "0px");
+  const sidebarBox = await page.locator("#nav-sidebar").boundingBox();
+  expect(sidebarBox.x).toBeGreaterThanOrEqual(0);
   await expect(page.locator("#admin-nav-drawer")).toHaveAttribute("role", "navigation");
   await expect(page.locator("#admin-nav-drawer")).not.toHaveAttribute("aria-modal");
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
