@@ -1019,6 +1019,90 @@ async function setupKioskScenario(page, name = "Sommerlager Kiosk") {
   return campName;
 }
 
+test("Kiosk shift selectors provide native mobile touch targets without JavaScript", async ({ browser, page }) => {
+  await setupFirstAdmin(page);
+  await createCamp(page, "Kiosk Dienstwahl Touch", 0, 4);
+  const campId = new URL(page.url()).pathname.match(/\/camps\/(\d+)\//)[1];
+  await createParticipant(page, "Marie", "Curie", "", "1234");
+  const shiftDate = addDays(new Date(), 1);
+  await page.goto(`/camps/${campId}/shifts/new/`);
+  await page.getByLabel("Name des Dienstes").fill("Küchendienst Touch");
+  await page.getByLabel("Datum").fill(dateInputValue(shiftDate));
+  await page.getByLabel("Benötigte Helfer").fill("1");
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await logout(page);
+  await openKiosk(page, "/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Marie Curie" });
+  await page.getByLabel("PIN:", { exact: true }).fill("1234");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await expect(page).toHaveURL(/\/kiosk\/$/);
+  await page.goto("/kiosk/shifts/");
+
+  const selector = page.locator(".shift-selection").filter({ hasText: "Auswählen" }).first();
+  const checkbox = selector.locator('input[type="checkbox"]');
+  for (const viewport of [
+    { width: 390, height: 844, requiresTouchTarget: true },
+    { width: 844, height: 390, requiresTouchTarget: true },
+    { width: 1280, height: 800, requiresTouchTarget: false },
+  ]) {
+    await page.setViewportSize(viewport);
+    const metrics = await selector.evaluate((element) => {
+      const label = element.getBoundingClientRect();
+      const input = element.querySelector('input[type="checkbox"]').getBoundingClientRect();
+      const card = element.closest(".shift-card").getBoundingClientRect();
+      return {
+        display: window.getComputedStyle(element).display,
+        label: { width: label.width, height: label.height, left: label.left, right: label.right },
+        input: { width: input.width, height: input.height },
+        staysInCard: label.left >= card.left - 1 && label.right <= card.right + 1,
+      };
+    });
+
+    expect(["flex", "inline-flex"], `${viewport.width}px selector display`).toContain(metrics.display);
+    expect(metrics.staysInCard, `${viewport.width}px selector containment`).toBe(true);
+    if (viewport.requiresTouchTarget) {
+      expect(metrics.label.width, `${viewport.width}px label width`).toBeGreaterThanOrEqual(44);
+      expect(metrics.label.height, `${viewport.width}px label height`).toBeGreaterThanOrEqual(44);
+      expect(metrics.input.width, `${viewport.width}px checkbox width`).toBeGreaterThanOrEqual(44);
+      expect(metrics.input.height, `${viewport.width}px checkbox height`).toBeGreaterThanOrEqual(44);
+    } else {
+      expect(metrics.input.width, "Desktop checkbox remains compact").toBeLessThan(44);
+      expect(metrics.input.height, "Desktop checkbox remains compact").toBeLessThan(44);
+    }
+  }
+
+  await checkbox.focus();
+  await expect(checkbox).toBeFocused();
+  await page.keyboard.press("Space");
+  await expect(checkbox).toBeChecked();
+
+  const noJavaScriptContext = await browser.newContext({
+    javaScriptEnabled: false,
+    storageState: await page.context().storageState(),
+    viewport: { width: 390, height: 844 },
+  });
+  try {
+    const noJavaScriptPage = await noJavaScriptContext.newPage();
+    await noJavaScriptPage.goto(`${new URL(page.url()).origin}/kiosk/shifts/`);
+    const noJavaScriptSelector = noJavaScriptPage.locator(".shift-selection").first();
+    const noJavaScriptCheckbox = noJavaScriptSelector.locator('input[type="checkbox"]');
+    const noJavaScriptSize = await noJavaScriptSelector.evaluate((element) => {
+      const label = element.getBoundingClientRect();
+      const input = element.querySelector('input[type="checkbox"]').getBoundingClientRect();
+      return { labelHeight: label.height, inputWidth: input.width, inputHeight: input.height };
+    });
+    expect(noJavaScriptSize.labelHeight).toBeGreaterThanOrEqual(44);
+    expect(noJavaScriptSize.inputWidth).toBeGreaterThanOrEqual(44);
+    expect(noJavaScriptSize.inputHeight).toBeGreaterThanOrEqual(44);
+    await noJavaScriptCheckbox.focus();
+    await expect(noJavaScriptCheckbox).toBeFocused();
+    await noJavaScriptPage.keyboard.press("Space");
+    await expect(noJavaScriptCheckbox).toBeChecked();
+  } finally {
+    await noJavaScriptContext.close();
+  }
+});
+
 async function expectOnlyModal(page, dialogId) {
   await expect.poll(() => page.locator("dialog:modal").evaluateAll((dialogs) => dialogs.map((dialog) => dialog.id))).toEqual([dialogId]);
 }
@@ -1325,6 +1409,69 @@ test("Breakfast food dialog opens the prebooking calendar", async ({ page }) => 
   await expectOnlyModal(page, "breakfast-meal-dialog");
   await expect(breakfastQuickDialog).toBeHidden();
   await expect(breakfastCalendar.locator("#breakfast-booking-target-names-dialog")).toContainText("Marie Curie");
+});
+
+test("Breakfast booking cards retain their responsive grid without JavaScript dependency", async ({ browser, page }) => {
+  await setupKioskScenario(page, "Kiosk Frühstück Kartenraster");
+  await page.locator('[data-kiosk-card="food"] [data-food-button][data-meal-type="breakfast"]').click();
+  await page.locator("dialog#food-dialog").getByRole("button", { name: "Für später vorbestellen" }).click();
+  const breakfastCalendar = page.locator("dialog#breakfast-meal-dialog");
+  await expectOnlyModal(page, "breakfast-meal-dialog");
+  const card = breakfastCalendar.locator(".meal-booking-day").first();
+
+  for (const viewport of [
+    { width: 390, height: 844, expectedColumns: 2 },
+    { width: 844, height: 390, expectedColumns: 4 },
+    { width: 1280, height: 800, expectedColumns: 4 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const metrics = await card.evaluate((element) => {
+      const styles = window.getComputedStyle(element);
+      const date = element.querySelector(".meal-booking-day__date").getBoundingClientRect();
+      const menu = element.querySelector(".meal-booking-day__menu").getBoundingClientRect();
+      const price = element.querySelector(".meal-booking-day__price").getBoundingClientRect();
+      return {
+        display: styles.display,
+        columns: styles.gridTemplateColumns.split(" ").filter(Boolean).length,
+        hasOverflow: element.scrollWidth > element.clientWidth + 1,
+        detailsShareColumn: Math.abs(date.left - menu.left) <= 1 && Math.abs(menu.left - price.left) <= 1,
+        detailsAreOrdered: date.top <= menu.top && menu.top <= price.top,
+      };
+    });
+
+    expect(metrics.display, `${viewport.width}px card layout`).toBe("grid");
+    expect(metrics.columns, `${viewport.width}px card columns`).toBe(viewport.expectedColumns);
+    expect(metrics.hasOverflow, `${viewport.width}px card overflow`).toBe(false);
+    if (viewport.expectedColumns === 2) {
+      expect(metrics.detailsShareColumn, `${viewport.width}px detail column`).toBe(true);
+      expect(metrics.detailsAreOrdered, `${viewport.width}px detail order`).toBe(true);
+    }
+  }
+
+  const checkbox = card.locator('input[type="checkbox"]');
+  await checkbox.focus();
+  await expect(checkbox).toBeFocused();
+  const wasChecked = await checkbox.isChecked();
+  await page.keyboard.press("Space");
+  await expect(checkbox).toBeChecked({ checked: !wasChecked });
+
+  const storageState = await page.context().storageState();
+  const noJavaScriptContext = await browser.newContext({
+    javaScriptEnabled: false,
+    storageState,
+    viewport: { width: 390, height: 844 },
+  });
+  try {
+    const noJavaScriptPage = await noJavaScriptContext.newPage();
+    await noJavaScriptPage.goto(`${new URL(page.url()).origin}/kiosk/`);
+    const noJavaScriptCard = noJavaScriptPage.locator(".meal-booking-day").first();
+    await expect(noJavaScriptCard).toHaveCount(1);
+    await expect
+      .poll(() => noJavaScriptCard.evaluate((element) => window.getComputedStyle(element).display))
+      .toBe("grid");
+  } finally {
+    await noJavaScriptContext.close();
+  }
 });
 
 test("Breakfast calendar returns to the food dialog", async ({ page }) => {

@@ -12,6 +12,8 @@
 - Covered visible checkbox and radio inputs with associated labels at 44px touch targets in portrait and narrow landscape viewports.
 - Kept checkbox help text and validation errors below their 44px control rows at full field width on the preorder and shared-expense approval forms.
 - Scoped the checkbox/radio helptext grid to direct checkbox/radio controls so ordinary helptext form fields retain their mobile vertical layout.
+- Preserved the breakfast booking card grid by excluding its specialized label from the generic mobile flex rule.
+- Added 44px mobile touch targets for kiosk shift-selection labels and their native checkboxes without changing desktop sizing.
 - Added an explicit metadata inventory for login, kiosk registration, participant, family-member, QuickBooking, and MealBooking forms, including exact field names, labels, credential autocomplete, and meaningful text/number metadata.
 - Synchronized the final kiosk login before navigating to the authenticated meal calendar, preventing WebKit from cancelling the login POST during the subsequent navigation.
 - Kept kiosk self-registration interaction behind the observable modal/focus-ready contract and asserted both entered names before advancing the wizard, preventing Firefox from validating a partially initialized Step 1.

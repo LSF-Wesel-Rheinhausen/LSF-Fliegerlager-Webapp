@@ -3864,7 +3864,8 @@ code {
   }
 
   .checkbox-cell label,
-  .form-grid label,
+  .form-grid label:not(.meal-booking-day),
+  .shift-selection,
   label.checkbox-label,
   label.radio-label {
     display: flex;
@@ -3924,6 +3925,7 @@ code {
   .checkbox-cell label input[type="radio"],
   .form-grid input[type="checkbox"],
   .form-grid input[type="radio"],
+  .shift-selection input[type="checkbox"],
   label.checkbox-label input[type="checkbox"],
   label.radio-label input[type="radio"] {
     width: 44px;
