@@ -4,7 +4,7 @@ import uuid
 from collections.abc import Collection
 from datetime import date, time, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -2093,6 +2093,9 @@ class ShiftAuditLog(models.Model):
     )
     action = models.CharField(max_length=32, choices=Action.choices)
     identity_name_snapshot = models.CharField(max_length=241, blank=True)
+    shift_id_snapshot = models.PositiveBigIntegerField(editable=False)
+    shift_name_snapshot = models.CharField(max_length=120, editable=False)
+    shift_date_snapshot = models.DateField(editable=False)
     before = models.JSONField(default=dict)
     after = models.JSONField(default=dict)
     capacity_override = models.BooleanField(default=False)
@@ -2111,14 +2114,24 @@ class ShiftAuditLog(models.Model):
         """Create one immutable audit row and reject subsequent model saves."""
         if not self._state.adding:
             raise ValidationError("Dienst-Audit-Einträge dürfen nicht verändert werden.")
+        if self.shift_id is not None:
+            shift = cast(Shift, self.shift)
+            self.shift_id_snapshot = self.shift_id
+            self.shift_name_snapshot = shift.name
+            self.shift_date_snapshot = shift.date
         super().save(*args, **kwargs)
 
     def delete(self, *args: Any, **kwargs: Any):
         """Reject instance deletion so audit history remains append-only."""
         raise ValidationError("Dienst-Audit-Einträge dürfen nicht gelöscht werden.")
 
+    @property
+    def shift_reference(self) -> str:
+        """Return the immutable operational shift reference for audit displays."""
+        return f"{self.shift_name_snapshot} am {self.shift_date_snapshot:%d.%m.%Y} (#{self.shift_id_snapshot})"
+
     def __str__(self) -> str:
-        return f"{self.get_action_display()}: {self.identity_name_snapshot or self.shift}"
+        return f"{self.get_action_display()}: {self.identity_name_snapshot or self.shift_reference}"
 
 
 class PushSubscription(TimeStampedModel):

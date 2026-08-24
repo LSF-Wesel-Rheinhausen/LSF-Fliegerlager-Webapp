@@ -50,6 +50,47 @@ ZERO = Decimal("0.00")
 _SHIFT_IDENTITY_TOKEN = re.compile(r"^(participant|family)-([1-9][0-9]*)$")
 
 
+def _lock_shift_assignment_identity(
+    identity_token: str,
+) -> tuple[Participant, ParticipantFamilyMember | None, str]:
+    """Lock one eligible operational identity in kiosk-compatible order."""
+    token_match = _SHIFT_IDENTITY_TOKEN.fullmatch(identity_token)
+    if token_match is None:
+        raise ValidationError("Die ausgewählte Person ist ungültig.")
+    identity_id = int(token_match.group(2))
+    family_member = None
+    try:
+        if token_match.group(1) == "participant":
+            participant = Participant.objects.select_for_update().get(
+                pk=identity_id,
+                archived_at__isnull=True,
+                status__in=[Participant.Status.ACTIVE, Participant.Status.REGISTERED],
+                is_child=False,
+            )
+            identity_name = participant.full_name
+        else:
+            guardian_id = (
+                ParticipantFamilyMember.objects.filter(pk=identity_id).values_list("guardian_id", flat=True).first()
+            )
+            if guardian_id is None:
+                raise ParticipantFamilyMember.DoesNotExist
+            participant = Participant.objects.select_for_update().get(
+                pk=guardian_id,
+                archived_at__isnull=True,
+                status__in=[Participant.Status.ACTIVE, Participant.Status.REGISTERED],
+            )
+            family_member = ParticipantFamilyMember.objects.select_for_update().get(
+                pk=identity_id,
+                guardian=participant,
+                is_active=True,
+                role=ParticipantFamilyMember.Role.COMPANION,
+            )
+            identity_name = family_member.full_name
+    except (Participant.DoesNotExist, ParticipantFamilyMember.DoesNotExist) as error:
+        raise ValidationError("Die ausgewählte Person ist ungültig.") from error
+    return participant, family_member, identity_name
+
+
 @transaction.atomic
 def add_shift_assignment(
     *,
@@ -64,42 +105,12 @@ def add_shift_assignment(
     if not is_admin(changed_by):
         raise ValidationError("Nur Administratoren dürfen Dienstbesetzungen verändern.")
 
+    participant, family_member, identity_name = _lock_shift_assignment_identity(identity_token)
     shift = Shift.objects.select_for_update().select_related("camp").get(pk=shift_id)
     if shift.assignment_revision != expected_revision:
         raise ValidationError("Die Dienstbesetzung wurde zwischenzeitlich geändert. Bitte lade die Seite neu.")
-
-    token_match = _SHIFT_IDENTITY_TOKEN.fullmatch(identity_token)
-    if token_match is None:
+    if participant.camp_id != shift.camp_id:
         raise ValidationError("Die ausgewählte Person ist ungültig.")
-    identity_id = int(token_match.group(2))
-    family_member = None
-    try:
-        if token_match.group(1) == "participant":
-            participant = Participant.objects.select_for_update().get(
-                pk=identity_id,
-                camp=shift.camp,
-                archived_at__isnull=True,
-                status__in=[Participant.Status.ACTIVE, Participant.Status.REGISTERED],
-                is_child=False,
-            )
-            identity_name = participant.full_name
-        else:
-            family_member = (
-                ParticipantFamilyMember.objects.select_for_update()
-                .select_related("guardian")
-                .get(
-                    pk=identity_id,
-                    guardian__camp=shift.camp,
-                    guardian__archived_at__isnull=True,
-                    guardian__status__in=[Participant.Status.ACTIVE, Participant.Status.REGISTERED],
-                    is_active=True,
-                    role=ParticipantFamilyMember.Role.COMPANION,
-                )
-            )
-            participant = family_member.guardian
-            identity_name = family_member.full_name
-    except (Participant.DoesNotExist, ParticipantFamilyMember.DoesNotExist) as error:
-        raise ValidationError("Die ausgewählte Person ist ungültig.") from error
 
     is_historical = shift.date < timezone.localdate()
     if is_historical and not confirm_historical:

@@ -74,6 +74,11 @@ def test_shift_staffing_migration_preserves_assignments_and_initializes_revision
 
         assert NewShift.objects.get(pk=shift.pk).assignment_revision == 0
         assert NewAssignment.objects.filter(pk=assignment.pk, shift_id=shift.pk).exists()
+        assert {
+            "shift_id_snapshot",
+            "shift_name_snapshot",
+            "shift_date_snapshot",
+        } <= {field.name for field in NewAuditLog._meta.fields}
         assert NewAuditLog.objects.count() == 0
     finally:
         _restore_current_migration_state()

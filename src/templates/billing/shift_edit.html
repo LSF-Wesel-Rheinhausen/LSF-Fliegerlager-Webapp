@@ -34,6 +34,10 @@
               <form method="post" action="{% url 'shift-assignment-remove' shift.pk assignment.pk %}" class="form-grid">
                 {% csrf_token %}
                 <input type="hidden" name="expected_revision" value="{{ shift.assignment_revision }}">
+                <label>
+                  <input type="checkbox" name="confirm_removal" required>
+                  Entfernung ausdrücklich bestätigen
+                </label>
                 {% if assignment.requires_historical_confirmation %}
                   <label>
                     <input type="checkbox" name="confirm_historical">

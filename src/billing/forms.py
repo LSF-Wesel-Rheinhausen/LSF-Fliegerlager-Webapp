@@ -1784,6 +1784,11 @@ class ShiftForm(forms.ModelForm):
         label="Unterbesetzung ausdrücklich bestätigen",
         help_text="Erforderlich, wenn weniger Plätze als bereits eingetragene Personen gespeichert werden.",
     )
+    confirm_historical = forms.BooleanField(
+        required=False,
+        label="Historische Änderung ausdrücklich bestätigen",
+        help_text="Zusätzlich erforderlich, wenn ein vergangener Dienst unter die Ist-Besetzung gesetzt wird.",
+    )
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -1792,6 +1797,7 @@ class ShiftForm(forms.ModelForm):
         else:
             self.fields.pop("assignment_revision")
             self.fields.pop("confirm_over_capacity")
+            self.fields.pop("confirm_historical")
 
     class Meta:
         model = Shift
@@ -1826,6 +1832,7 @@ class ShiftAssignmentRemoveForm(forms.Form):
     """Validate one administrative remove-assignment action."""
 
     expected_revision = forms.IntegerField(min_value=0)
+    confirm_removal = forms.BooleanField(required=True)
     confirm_historical = forms.BooleanField(required=False)
 
 

@@ -68,6 +68,8 @@ test.describe("Admin-Dienstbesetzung ohne JavaScript", () => {
 
     await expect(page.getByText("Ausführende Person wurde eingetragen.")).toBeVisible();
     await expect(page.getByText("Ada Dienstperson")).toBeVisible();
+    const removeConfirmation = page.getByLabel("Entfernung ausdrücklich bestätigen");
+    await removeConfirmation.check();
     const removeButton = page.getByRole("button", { name: "Austragen" });
     const removeBounds = await removeButton.boundingBox();
     expect(removeBounds.height).toBeGreaterThanOrEqual(44);

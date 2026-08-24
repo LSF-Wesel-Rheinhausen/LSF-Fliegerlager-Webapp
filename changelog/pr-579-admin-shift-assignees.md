@@ -9,4 +9,10 @@ Die Bedienung funktioniert auch ohne JavaScript und bleibt auf mobilen Geräten
 tastatur- und touchgerecht. Dienstzuordnungen zählen weiterhin unmittelbar zum
 Dienstfortschritt und verändern keine Abrechnungsbeträge oder Snapshots.
 
+Entfernungen benötigen immer eine ausdrückliche Bestätigung. Historische
+Kapazitätsänderungen werden gesondert bestätigt und auditiert; Dienst-Audits
+behalten auch nach einer Löschung die minimale Dienstreferenz. Admin- und
+Kioskänderungen verwenden dieselbe Sperrreihenfolge, und abgewiesene
+Eintragungen behalten die aktive Personensuche bei.
+
 Closes #578

@@ -4,6 +4,7 @@ from decimal import Decimal
 import pytest
 from django.contrib import admin as django_admin
 from django.core.exceptions import ValidationError
+from django.db.models.query import QuerySet
 from django.test import Client, RequestFactory
 from django.urls import reverse
 from django.utils import timezone
@@ -52,6 +53,34 @@ def test_shift_assignment_audit_is_append_only_and_revisioned():
 
 
 @pytest.mark.django_db
+def test_shift_assignment_audit_keeps_shift_snapshot_after_shift_deletion():
+    camp = CampFactory()
+    shift = Shift.objects.create(camp=camp, name="Frühstücksdienst", date="2026-08-24")
+    shift_id = shift.pk
+    audit_log = ShiftAuditLog.objects.create(
+        shift=shift,
+        camp=camp,
+        changed_by=SuperUserFactory(),
+        action=ShiftAuditLog.Action.CAPACITY_OVERRIDE,
+        before={"required_slots": 2},
+        after={"required_slots": 1},
+    )
+
+    shift.delete()
+    audit_log.refresh_from_db()
+
+    assert audit_log.shift is None
+    assert audit_log.shift_id_snapshot == shift_id
+    assert audit_log.shift_name_snapshot == "Frühstücksdienst"
+    assert audit_log.shift_date_snapshot == datetime.date(2026, 8, 24)
+    assert audit_log.shift_reference == f"Frühstücksdienst am 24.08.2026 (#{shift_id})"
+
+
+def test_shift_audit_admin_lists_immutable_shift_reference():
+    assert "shift_reference" in billing_admin.ShiftAuditLogAdmin.list_display
+
+
+@pytest.mark.django_db
 def test_admin_adds_registered_participant_atomically_with_audit_and_revision():
     assert hasattr(services, "add_shift_assignment")
     camp = CampFactory()
@@ -84,6 +113,74 @@ def test_admin_adds_registered_participant_atomically_with_audit_and_revision():
     assert audit_log.after == {"assignment_revision": 1, "assigned_count": 1}
     assert audit_log.capacity_override is False
     assert audit_log.historical_override is False
+
+
+@pytest.mark.django_db
+def test_admin_add_locks_participant_before_shift_like_kiosk_signup(monkeypatch):
+    camp = CampFactory()
+    participant = ParticipantFactory(camp=camp, status=Participant.Status.ACTIVE)
+    shift = Shift.objects.create(
+        camp=camp,
+        name="Gemeinsame Lockreihenfolge",
+        date=timezone.localdate() + datetime.timedelta(days=1),
+    )
+    original_fetch_all = QuerySet._fetch_all
+    locked_models = []
+
+    def capture_select_for_update(queryset):
+        if queryset._result_cache is None and queryset.query.select_for_update:
+            locked_models.append(queryset.model)
+        original_fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", capture_select_for_update)
+
+    services.add_shift_assignment(
+        shift_id=shift.pk,
+        identity_token=f"participant-{participant.pk}",
+        expected_revision=0,
+        allow_over_capacity=False,
+        confirm_historical=False,
+        changed_by=SuperUserFactory(),
+    )
+
+    assert locked_models.index(Participant) < locked_models.index(Shift)
+
+
+@pytest.mark.django_db
+def test_admin_add_locks_guardian_and_companion_before_shift_like_kiosk_signup(monkeypatch):
+    camp = CampFactory()
+    guardian = ParticipantFactory(camp=camp, status=Participant.Status.ACTIVE)
+    companion = ParticipantFamilyMemberFactory(
+        guardian=guardian,
+        role=ParticipantFamilyMember.Role.COMPANION,
+        is_active=True,
+    )
+    shift = Shift.objects.create(
+        camp=camp,
+        name="Begleitungs-Lockreihenfolge",
+        date=timezone.localdate() + datetime.timedelta(days=1),
+    )
+    original_fetch_all = QuerySet._fetch_all
+    locked_models = []
+
+    def capture_select_for_update(queryset):
+        if queryset._result_cache is None and queryset.query.select_for_update:
+            locked_models.append(queryset.model)
+        original_fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", capture_select_for_update)
+
+    services.add_shift_assignment(
+        shift_id=shift.pk,
+        identity_token=f"family-{companion.pk}",
+        expected_revision=0,
+        allow_over_capacity=False,
+        confirm_historical=False,
+        changed_by=SuperUserFactory(),
+    )
+
+    assert locked_models.index(Participant) < locked_models.index(ParticipantFamilyMember)
+    assert locked_models.index(ParticipantFamilyMember) < locked_models.index(Shift)
 
 
 @pytest.mark.django_db
@@ -451,8 +548,54 @@ def test_shift_edit_audits_confirmed_capacity_reduction(admin_client):
     assert shift.assignment_revision == 3
     audit_log = ShiftAuditLog.objects.get(action=ShiftAuditLog.Action.CAPACITY_OVERRIDE)
     assert audit_log.capacity_override is True
+    assert audit_log.historical_override is False
     assert audit_log.before["required_slots"] == 2
     assert audit_log.after["required_slots"] == 1
+
+
+@pytest.mark.django_db
+def test_past_shift_capacity_reduction_requires_and_audits_both_confirmations(admin_client):
+    camp = CampFactory()
+    shift = Shift.objects.create(
+        camp=camp,
+        name="Historischer Kapazitätsdienst",
+        date=timezone.localdate() - datetime.timedelta(days=1),
+        required_slots=2,
+    )
+    for index in range(2):
+        ShiftAssignment.objects.create(
+            shift=shift,
+            participant=ParticipantFactory(camp=camp, first_name=f"Historisch{index}"),
+        )
+
+    payload = {
+        "name": shift.name,
+        "date": shift.date.isoformat(),
+        "required_slots": 1,
+        "assignment_revision": 2,
+        "confirm_over_capacity": "on",
+    }
+    rejected_response = admin_client.post(reverse("shift-edit", args=[shift.pk]), payload)
+
+    shift.refresh_from_db()
+    assert rejected_response.status_code == 200
+    assert "Historische Änderung ausdrücklich bestätigen" in rejected_response.content.decode()
+    assert shift.required_slots == 2
+    assert shift.assignment_revision == 2
+    assert not ShiftAuditLog.objects.exists()
+
+    accepted_response = admin_client.post(
+        reverse("shift-edit", args=[shift.pk]),
+        {**payload, "confirm_historical": "on"},
+    )
+
+    shift.refresh_from_db()
+    assert accepted_response.status_code == 302
+    assert shift.required_slots == 1
+    assert shift.assignment_revision == 3
+    audit_log = ShiftAuditLog.objects.get(action=ShiftAuditLog.Action.CAPACITY_OVERRIDE)
+    assert audit_log.capacity_override is True
+    assert audit_log.historical_override is True
 
 
 @pytest.mark.django_db
@@ -562,6 +705,34 @@ def test_shift_edit_admin_searches_only_eligible_same_camp_identities_with_no_js
 
 
 @pytest.mark.django_db
+def test_rejected_assignment_add_preserves_validated_search_query(admin_client):
+    camp = CampFactory()
+    existing = ParticipantFactory(camp=camp, status=Participant.Status.ACTIVE)
+    candidate = ParticipantFactory(camp=camp, status=Participant.Status.ACTIVE)
+    shift = Shift.objects.create(
+        camp=camp,
+        name="Volle Suche",
+        date=timezone.localdate() + datetime.timedelta(days=1),
+        required_slots=1,
+    )
+    ShiftAssignment.objects.create(shift=shift, participant=existing)
+    shift.refresh_from_db()
+
+    response = admin_client.post(
+        reverse("shift-assignment-add", args=[shift.pk]),
+        {
+            "identity_token": f"participant-{candidate.pk}",
+            "expected_revision": shift.assignment_revision,
+            "q": "Ada & Bob",
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.url == f"{reverse('shift-edit', args=[shift.pk])}?q=Ada+%26+Bob"
+    assert not ShiftAssignment.objects.filter(shift=shift, participant=candidate).exists()
+
+
+@pytest.mark.django_db
 def test_django_admin_shift_assignments_and_audit_are_read_only():
     assert hasattr(billing_admin, "ShiftAuditLogAdmin")
     request = RequestFactory().get("/admin/billing/shift/1/change/")
@@ -607,10 +778,36 @@ def test_remove_endpoint_scopes_assignment_to_shift_and_admin(client):
     assert ShiftAssignment.objects.filter(pk=assignment.pk).exists()
 
     client.force_login(SuperUserFactory())
-    response = client.post(endpoint, {"expected_revision": 0}, follow=True)
+    response = client.post(endpoint, {"expected_revision": 0, "confirm_removal": "on"}, follow=True)
 
     assert response.status_code == 200
     assert "Ungültige Zuordnung" in response.content.decode()
+    assert ShiftAssignment.objects.filter(pk=assignment.pk).exists()
+    assert not ShiftAuditLog.objects.exists()
+
+
+@pytest.mark.django_db
+def test_remove_endpoint_requires_explicit_confirmation_for_current_assignment(admin_client):
+    camp = CampFactory()
+    shift = Shift.objects.create(
+        camp=camp,
+        name="Bestätigte Entfernung",
+        date=timezone.localdate() + datetime.timedelta(days=1),
+    )
+    assignment = ShiftAssignment.objects.create(
+        shift=shift,
+        participant=ParticipantFactory(camp=camp, status=Participant.Status.ACTIVE),
+    )
+    shift.refresh_from_db()
+
+    response = admin_client.post(
+        reverse("shift-assignment-remove", args=[shift.pk, assignment.pk]),
+        {"expected_revision": shift.assignment_revision},
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    assert "Entfernung ausdrücklich bestätigen" in response.content.decode()
     assert ShiftAssignment.objects.filter(pk=assignment.pk).exists()
     assert not ShiftAuditLog.objects.exists()
 

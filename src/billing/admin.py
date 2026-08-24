@@ -709,7 +709,7 @@ class ShiftAdmin(admin.ModelAdmin):
 
 @admin.register(ShiftAuditLog)
 class ShiftAuditLogAdmin(admin.ModelAdmin):
-    list_display = ("shift", "action", "identity_name_snapshot", "changed_by", "created_at")
+    list_display = ("shift_reference", "action", "identity_name_snapshot", "changed_by", "created_at")
     list_filter = ("action", "camp", "capacity_override", "historical_override")
     readonly_fields = tuple(field.name for field in ShiftAuditLog._meta.fields)
 

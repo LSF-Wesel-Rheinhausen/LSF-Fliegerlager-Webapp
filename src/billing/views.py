@@ -2052,6 +2052,7 @@ def shift_edit(request, shift_id):
                 assigned_count = ShiftAssignment.objects.select_for_update().filter(shift=locked_shift).count()
                 new_required_slots = form.cleaned_data["required_slots"]
                 lowers_below_staffing = new_required_slots < old_required_slots and new_required_slots < assigned_count
+                historical_capacity_override = lowers_below_staffing and locked_shift.date < timezone.localdate()
                 if lowers_below_staffing:
                     expected_revision = form.cleaned_data.get("assignment_revision")
                     if expected_revision != locked_shift.assignment_revision:
@@ -2059,11 +2060,17 @@ def shift_edit(request, shift_id):
                             None,
                             "Die Dienstbesetzung wurde zwischenzeitlich geändert. Bitte lade die Seite neu.",
                         )
-                    elif not form.cleaned_data["confirm_over_capacity"]:
-                        form.add_error(
-                            "confirm_over_capacity",
-                            "Bitte die Unterbesetzung ausdrücklich bestätigen.",
-                        )
+                    else:
+                        if not form.cleaned_data["confirm_over_capacity"]:
+                            form.add_error(
+                                "confirm_over_capacity",
+                                "Bitte die Unterbesetzung ausdrücklich bestätigen.",
+                            )
+                        if historical_capacity_override and not form.cleaned_data["confirm_historical"]:
+                            form.add_error(
+                                "confirm_historical",
+                                "Bitte die historische Änderung ausdrücklich bestätigen.",
+                            )
                 if not form.errors:
                     before_revision = locked_shift.assignment_revision
                     saved_shift = form.save()
@@ -2086,6 +2093,7 @@ def shift_edit(request, shift_id):
                                 "required_slots": new_required_slots,
                             },
                             capacity_override=True,
+                            historical_override=historical_capacity_override,
                         )
                     messages.success(request, "Dienst wurde gespeichert.")
                     return redirect("shift-manage", camp_id=locked_shift.camp.pk)
@@ -2117,7 +2125,9 @@ def shift_assignment_add(request, shift_id):
         )
     else:
         messages.success(request, "Ausführende Person wurde eingetragen.")
-    return redirect("shift-edit", shift_id=shift.pk)
+    target = reverse("shift-edit", args=[shift.pk])
+    query = form.cleaned_data["q"].strip()
+    return redirect(f"{target}?{urlencode({'q': query})}" if query else target)
 
 
 @admin_required
@@ -2127,7 +2137,10 @@ def shift_assignment_remove(request, shift_id, assignment_id):
     shift = get_object_or_404(Shift, pk=shift_id)
     form = ShiftAssignmentRemoveForm(request.POST)
     if not form.is_valid():
-        messages.error(request, "Die Besetzungsanfrage ist ungültig.")
+        if "confirm_removal" in form.errors:
+            messages.error(request, "Bitte die Entfernung ausdrücklich bestätigen.")
+        else:
+            messages.error(request, "Die Besetzungsanfrage ist ungültig.")
         return redirect("shift-edit", shift_id=shift.pk)
     try:
         remove_shift_assignment(
