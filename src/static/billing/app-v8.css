@@ -2650,14 +2650,13 @@ input[placeholder="DD.MM.YYYY"] {
   .admin-topbar > nav {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-auto-flow: dense;
     gap: 6px 10px;
     width: 100%;
   }
 
   .admin-topbar > nav > .theme-toggle {
-    grid-column: 2;
-    justify-self: end;
+    grid-column: 1;
+    justify-self: start;
   }
 
   .admin-topbar .nav-user-group {

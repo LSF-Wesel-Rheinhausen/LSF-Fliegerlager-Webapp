@@ -1603,6 +1603,43 @@ test("Kiosk masonry and expense cards stay responsive and accessible", async ({ 
   expect(failedRequests).toEqual([]);
 });
 
+test("Mobile admin header keeps visual, DOM, and keyboard order aligned", async ({ page }) => {
+  await setupFirstAdmin(page);
+  await createCamp(page, "Header-Reihenfolge", 0, 2);
+
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 780, height: 900 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const navigation = page.locator("header.admin-topbar > nav");
+    const order = await navigation.evaluate((nav) => {
+      const visibleItems = Array.from(nav.children).filter(
+        (item) => window.getComputedStyle(item).display !== "none"
+      );
+      const key = (item) =>
+        item.classList.contains("theme-toggle") ? "theme-toggle" : item.textContent.trim();
+      return {
+        dom: visibleItems.map(key),
+        visual: [...visibleItems]
+          .sort((left, right) => {
+            const leftRect = left.getBoundingClientRect();
+            const rightRect = right.getBoundingClientRect();
+            return leftRect.top - rightRect.top || leftRect.left - rightRect.left;
+          })
+          .map(key),
+      };
+    });
+    expect(order.visual, `Visuelle Reihenfolge bei ${viewport.width}px`).toEqual(order.dom);
+
+    const themeToggle = navigation.locator(".theme-toggle");
+    const visibleNavigationItems = navigation.locator(":scope > :not([hidden])");
+    await themeToggle.focus();
+    await page.keyboard.press("Tab");
+    await expect(visibleNavigationItems.nth(1)).toBeFocused();
+  }
+});
+
 test("Theme switch persists across kiosk and admin layouts", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "light" });
   await openKiosk(page, "/kiosk/login/");
