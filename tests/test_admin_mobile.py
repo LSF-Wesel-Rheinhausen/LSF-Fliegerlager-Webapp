@@ -1,3 +1,5 @@
+import re
+
 import pytest
 from django.urls import reverse
 
@@ -59,3 +61,37 @@ def test_admin_empty_state_is_german_and_explains_next_step(client, model, url_n
     assert label in response.content
     assert b"Noch keine" in response.content
     assert (b"admin-empty-state__action" in response.content) is has_add_action
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "query_params",
+    [
+        {"q": "Treffer gibt es nicht"},
+        {"camp__id__exact": "999999"},
+    ],
+)
+def test_admin_filtered_empty_state_is_not_presented_as_empty_database(client, query_params):
+    admin = SuperUserFactory()
+    camp = CampFactory()
+    ParticipantFactory(camp=camp, first_name="Vorhanden", last_name="Datensatz")
+    if "camp__id__exact" in query_params:
+        empty_camp = CampFactory(name="Leerer Filter-Camp", year=2026)
+        query_params["camp__id__exact"] = str(empty_camp.pk)
+    client.force_login(admin)
+
+    response = client.get(reverse("admin:billing_participant_changelist"), query_params)
+
+    assert response.status_code == 200
+    changelist = response.context["cl"]
+    assert changelist.result_count == 0
+    assert changelist.full_result_count == 1
+    assert changelist.has_active_filters is ("camp__id__exact" in query_params)
+    assert b"Keine Treffer" in response.content
+    assert b"Noch keine" not in response.content
+    assert b"Teilnehmer anlegen" not in response.content
+    assert b"Alle Filter l\xc3\xb6schen" in response.content or b"Filter zur\xc3\xbccksetzen" in response.content
+    reset_link = re.search(rb'class="admin-empty-state__action" href="([^"]+)"', response.content)
+    assert reset_link is not None
+    assert b"q=" not in reset_link.group(1)
+    assert b"camp__id__exact" not in reset_link.group(1)

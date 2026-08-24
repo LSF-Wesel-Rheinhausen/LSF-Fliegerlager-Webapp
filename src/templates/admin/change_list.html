@@ -33,13 +33,23 @@
     {% result_list cl %}
   </div>
   {% if not cl.result_count %}
-    <section class="admin-empty-state" aria-labelledby="admin-empty-state-title">
-      <h2 id="admin-empty-state-title">Noch keine {{ cl.opts.verbose_name_plural }}</h2>
-      <p>Hier werden {{ cl.opts.verbose_name_plural }} angezeigt, sobald sie angelegt oder importiert wurden.</p>
-      {% if has_add_permission %}
-        <a class="admin-empty-state__action" href="{% url cl.opts|admin_urlname:'add' %}">{{ cl.opts.verbose_name|capfirst }} anlegen</a>
-      {% endif %}
-    </section>
+    {% if cl.full_result_count and cl.full_result_count != cl.result_count %}
+      <section class="admin-empty-state" aria-labelledby="admin-empty-state-title">
+        <h2 id="admin-empty-state-title">Keine Treffer</h2>
+        <p>Die aktuelle Suche oder Filterauswahl ergibt keine Treffer.</p>
+        {% if cl.clear_all_filters_qs %}
+          <a class="admin-empty-state__action" href="{% url cl.opts|admin_urlname:'changelist' %}">Filter zurücksetzen</a>
+        {% endif %}
+      </section>
+    {% else %}
+      <section class="admin-empty-state" aria-labelledby="admin-empty-state-title">
+        <h2 id="admin-empty-state-title">Noch keine {{ cl.opts.verbose_name_plural }}</h2>
+        <p>Hier werden {{ cl.opts.verbose_name_plural }} angezeigt, sobald sie angelegt oder importiert wurden.</p>
+        {% if has_add_permission %}
+          <a class="admin-empty-state__action" href="{% url cl.opts|admin_urlname:'add' %}">{{ cl.opts.verbose_name|capfirst }} anlegen</a>
+        {% endif %}
+      </section>
+    {% endif %}
   {% endif %}
   {% if action_form and actions_on_bottom and cl.show_admin_actions %}{% admin_actions %}{% endif %}
 {% endblock %}
