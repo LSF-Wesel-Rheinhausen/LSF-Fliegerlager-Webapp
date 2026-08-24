@@ -352,6 +352,44 @@ test("Camp detail export actions meet mobile touch target contract", async ({ pa
   }
 });
 
+test("Mobile touch targets follow the 780px portrait breakpoint", async ({ page }) => {
+  await setupFirstAdmin(page);
+
+  const viewports = [
+    { width: 769, height: 900, requiresTouchTargets: true },
+    { width: 780, height: 900, requiresTouchTargets: true },
+    { width: 781, height: 900, requiresTouchTargets: false },
+    { width: 900, height: 390, requiresTouchTargets: true },
+  ];
+
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport);
+    await page.goto("/camps/new/");
+    await expect(page.getByRole("heading", { name: "Lager anlegen" })).toBeVisible();
+
+    const controls = [
+      page.locator("[data-theme-toggle]"),
+      page.getByLabel("Name"),
+      page.getByLabel("Jahr"),
+      page.getByLabel("Beginn"),
+      page.getByLabel("Ende"),
+      page.getByRole("button", { name: "Speichern" }),
+    ];
+    const heights = await Promise.all(
+      controls.map((control) => control.evaluate((element) => element.getBoundingClientRect().height)),
+    );
+
+    if (viewport.requiresTouchTargets) {
+      for (const height of heights) {
+        expect(height, `Touch target at ${viewport.width}x${viewport.height}`).toBeGreaterThanOrEqual(44);
+      }
+    } else {
+      expect(heights[0], "Portrait 781px bleibt außerhalb des Touch-Target-Breakpoints").toBeLessThan(44);
+      expect(heights[5], "Portrait 781px bleibt außerhalb des Touch-Target-Breakpoints").toBeLessThan(44);
+    }
+  }
+});
+
 test("Admin configures and centrally revokes every camp kiosk access", async ({ page }) => {
   await setupFirstAdmin(page);
   const campName = await createCamp(page, "Lagerzugang");

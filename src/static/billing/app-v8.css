@@ -3819,7 +3819,7 @@ code {
 }
 
 /* Mobile Touch Target Standards (Issues #346 & #349) */
-@media (max-width: 768px), (max-width: 900px) and (orientation: landscape) {
+@media (max-width: 780px), (max-width: 900px) and (orientation: landscape) {
   .theme-toggle {
     flex: 0 0 44px;
     width: 44px;
