@@ -167,7 +167,7 @@ def test_docker_publish_is_bound_to_successful_trusted_main_sha_and_checks_race(
     assert "needs.docker-test.result == 'success'" in publish["if"]
     assert "git ls-remote" in verify["run"]
     assert "refs/heads/main" in verify["run"]
-    assert sum("git ls-remote" in dict(step).get("run", "") for step in steps) == 3
+    assert sum("git ls-remote" in dict(step).get("run", "") for step in steps) == 2
     assert "workflow_run.head_sha" in publish_text
     assert "github.sha" not in publish_text
 
@@ -200,3 +200,36 @@ def test_docker_publish_permissions_and_cache_scopes_are_isolated_and_bounded() 
     assert "scope=updater" in str(publish)
     assert 1 <= int(docker_test["timeout-minutes"]) <= 60
     assert 1 <= int(publish["timeout-minutes"]) <= 60
+
+
+def test_docker_publish_promotes_latest_only_after_immutable_sha_images_finish() -> None:
+    publish = dict(dict(_docker_workflow()["jobs"])["docker-publish"])
+    steps = [dict(step) for step in publish["steps"]]
+    app_build = next(step for step in steps if step.get("name") == "Publish application image")
+    updater_build = next(step for step in steps if step.get("name") == "Publish updater image")
+    app_promotion = next(step for step in steps if step.get("name") == "Promote application image")
+    updater_promotion = next(step for step in steps if step.get("name") == "Promote updater image")
+
+    for build in (app_build, updater_build):
+        build_text = str(build["with"])
+        assert "latest" not in build_text
+        assert "${{ github.event.workflow_run.head_sha }}" in build_text
+        assert build["with"]["push"] == "true"
+
+    final_verification = next(
+        index
+        for index, step in enumerate(steps)
+        if step.get("name") == "Verify main has not moved before latest promotion"
+    )
+    app_build_index = steps.index(app_build)
+    updater_build_index = steps.index(updater_build)
+    app_promotion_index = steps.index(app_promotion)
+    updater_promotion_index = steps.index(updater_promotion)
+    assert app_build_index < updater_build_index < final_verification < app_promotion_index < updater_promotion_index
+    assert "docker buildx imagetools create" in app_promotion["run"]
+    assert "docker buildx imagetools create" in updater_promotion["run"]
+    assert "latest" in app_promotion["run"]
+    assert "latest" in updater_promotion["run"]
+    for promotion in (app_promotion, updater_promotion):
+        assert promotion["env"]["TESTED_SHA"] == "${{ github.event.workflow_run.head_sha }}"
+        assert "${TESTED_SHA}" in promotion["run"]

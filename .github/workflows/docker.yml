@@ -147,14 +147,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify main has not moved before application publication
-        env:
-          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
-        run: |
-          set -euo pipefail
-          actual_sha="$(git ls-remote --exit-code origin refs/heads/main | cut -f1)"
-          test "$actual_sha" = "$TESTED_SHA"
-
       - name: Publish application image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
@@ -162,7 +154,6 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest
             ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:${{ github.event.workflow_run.head_sha }}
           build-args: |
             APP_VERSION=${{ steps.metadata.outputs.version }}
@@ -173,14 +164,6 @@ jobs:
           cache-from: type=gha,scope=app
           cache-to: type=gha,mode=max,scope=app
 
-      - name: Verify main has not moved before updater publication
-        env:
-          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
-        run: |
-          set -euo pipefail
-          actual_sha="$(git ls-remote --exit-code origin refs/heads/main | cut -f1)"
-          test "$actual_sha" = "$TESTED_SHA"
-
       - name: Publish updater image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
@@ -189,7 +172,30 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater:latest
             ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater:${{ github.event.workflow_run.head_sha }}
           cache-from: type=gha,scope=updater
           cache-to: type=gha,mode=max,scope=updater
+
+      - name: Verify main has not moved before latest promotion
+        env:
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          actual_sha="$(git ls-remote --exit-code origin refs/heads/main | cut -f1)"
+          test "$actual_sha" = "$TESTED_SHA"
+
+      - name: Promote application image
+        env:
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: >-
+          docker buildx imagetools create
+          --tag ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest
+          ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:${TESTED_SHA}
+
+      - name: Promote updater image
+        env:
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: >-
+          docker buildx imagetools create
+          --tag ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater:latest
+          ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater:${TESTED_SHA}
