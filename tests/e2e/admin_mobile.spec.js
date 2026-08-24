@@ -32,28 +32,36 @@ async function createParticipant(page, suffix) {
   await expect(page).toHaveURL(/\/admin\/billing\/participant\/$/);
 }
 
+function attachPageDiagnostics(page) {
+  const browserErrors = [];
+  const failedRequests = [];
+  const httpFailures = [];
+  page.on("console", (message) => { if (message.type() === "error") browserErrors.push(message.text()); });
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  page.on("response", (response) => {
+    if (response.status() >= 400) httpFailures.push(`${response.status()} ${response.url()}`);
+  });
+  page.on("requestfailed", (request) => {
+    const details = requestFailureDetails(request);
+    if (!isAllowedAdminMobileCancelledFailure(details) && !isBenignPageRequestFailure(details)) {
+      failedRequests.push(details);
+    }
+  });
+  return { browserErrors, failedRequests, httpFailures };
+}
+
 for (const viewport of [
   { name: "portrait", width: 390, height: 844 },
   { name: "landscape", width: 844, height: 390 },
 ]) {
   test(`Django Admin mobile navigation and table remain usable in ${viewport.name}`, async ({ page }) => {
-    const browserErrors = [];
-    const failedRequests = [];
-    const httpFailures = [];
-    page.on("console", (message) => { if (message.type() === "error") browserErrors.push(message.text()); });
-    page.on("pageerror", (error) => browserErrors.push(error.message));
-    page.on("response", (response) => {
-      if (response.status() >= 400) httpFailures.push(`${response.status()} ${response.url()}`);
-    });
-    page.on("requestfailed", (request) => {
-      const details = requestFailureDetails(request);
-      if (!isAllowedAdminMobileCancelledFailure(details) && !isBenignPageRequestFailure(details)) {
-        failedRequests.push(details);
-      }
-    });
-
     await signInAdmin(page);
     await createParticipant(page, viewport.name);
+    await page.waitForLoadState("networkidle");
+    const { browserErrors, failedRequests, httpFailures } = attachPageDiagnostics(page);
+    expect(browserErrors).toEqual([]);
+    expect(failedRequests).toEqual([]);
+    expect(httpFailures).toEqual([]);
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await page.reload();
     await page.waitForLoadState("networkidle");
@@ -99,23 +107,13 @@ for (const viewport of [
 }
 
 test("Django Admin keeps the desktop navigation layout outside the mobile breakpoint", async ({ page }) => {
-  const browserErrors = [];
-  const failedRequests = [];
-  const httpFailures = [];
-  page.on("console", (message) => { if (message.type() === "error") browserErrors.push(message.text()); });
-  page.on("pageerror", (error) => browserErrors.push(error.message));
-  page.on("response", (response) => {
-    if (response.status() >= 400) httpFailures.push(`${response.status()} ${response.url()}`);
-  });
-  page.on("requestfailed", (request) => {
-    const details = requestFailureDetails(request);
-    if (!isAllowedAdminMobileCancelledFailure(details) && !isBenignPageRequestFailure(details)) {
-      failedRequests.push(details);
-    }
-  });
-
   await page.setViewportSize({ width: 1280, height: 800 });
   await signInAdmin(page);
+  await page.waitForLoadState("networkidle");
+  const { browserErrors, failedRequests, httpFailures } = attachPageDiagnostics(page);
+  expect(browserErrors).toEqual([]);
+  expect(failedRequests).toEqual([]);
+  expect(httpFailures).toEqual([]);
   await page.goto("/admin/billing/participant/");
   await page.waitForLoadState("networkidle");
 
