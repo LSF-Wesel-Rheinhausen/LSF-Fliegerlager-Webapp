@@ -35,6 +35,7 @@ from .models import (
     SettlementRun,
     Shift,
     ShiftAssignment,
+    ShiftAuditLog,
     UserProfile,
 )
 from .permissions import is_admin
@@ -686,6 +687,17 @@ class DailyShiftTemplateAdmin(admin.ModelAdmin):
 class ShiftAssignmentInline(admin.TabularInline):
     model = ShiftAssignment
     extra = 0
+    can_delete = False
+    readonly_fields = ("participant", "family_member", "offered_for_exchange", "created_at", "updated_at")
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Shift)
@@ -693,3 +705,19 @@ class ShiftAdmin(admin.ModelAdmin):
     list_display = ("name", "camp", "date", "start_time", "end_time", "required_slots", "is_full")
     list_filter = ("camp", "date")
     inlines = [ShiftAssignmentInline]
+
+
+@admin.register(ShiftAuditLog)
+class ShiftAuditLogAdmin(admin.ModelAdmin):
+    list_display = ("shift", "action", "identity_name_snapshot", "changed_by", "created_at")
+    list_filter = ("action", "camp", "capacity_override", "historical_override")
+    readonly_fields = tuple(field.name for field in ShiftAuditLog._meta.fields)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

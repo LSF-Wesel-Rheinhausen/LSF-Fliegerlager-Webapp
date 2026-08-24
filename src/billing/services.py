@@ -37,13 +37,150 @@ from .models import (
     Settlement,
     SettlementRun,
     Shift,
+    ShiftAssignment,
+    ShiftAuditLog,
     validate_credit_payout_metadata,
 )
-from .permissions import ADMIN_GROUP, EDITOR_GROUP, HUEBERS_GROUP
+from .permissions import ADMIN_GROUP, EDITOR_GROUP, HUEBERS_GROUP, is_admin
 
 _ATTENDANCE_PREFETCH_ATTRIBUTE = "prefetched_attendance_days"
 
 ZERO = Decimal("0.00")
+
+_SHIFT_IDENTITY_TOKEN = re.compile(r"^(participant|family)-([1-9][0-9]*)$")
+
+
+@transaction.atomic
+def add_shift_assignment(
+    *,
+    shift_id: int,
+    identity_token: str,
+    expected_revision: int,
+    allow_over_capacity: bool,
+    confirm_historical: bool,
+    changed_by: Any,
+) -> ShiftAssignment:
+    """Add one operational identity to a shift with locking and an audit row."""
+    if not is_admin(changed_by):
+        raise ValidationError("Nur Administratoren dürfen Dienstbesetzungen verändern.")
+
+    shift = Shift.objects.select_for_update().select_related("camp").get(pk=shift_id)
+    if shift.assignment_revision != expected_revision:
+        raise ValidationError("Die Dienstbesetzung wurde zwischenzeitlich geändert. Bitte lade die Seite neu.")
+
+    token_match = _SHIFT_IDENTITY_TOKEN.fullmatch(identity_token)
+    if token_match is None:
+        raise ValidationError("Die ausgewählte Person ist ungültig.")
+    identity_id = int(token_match.group(2))
+    family_member = None
+    try:
+        if token_match.group(1) == "participant":
+            participant = Participant.objects.select_for_update().get(
+                pk=identity_id,
+                camp=shift.camp,
+                archived_at__isnull=True,
+                status__in=[Participant.Status.ACTIVE, Participant.Status.REGISTERED],
+                is_child=False,
+            )
+            identity_name = participant.full_name
+        else:
+            family_member = (
+                ParticipantFamilyMember.objects.select_for_update()
+                .select_related("guardian")
+                .get(
+                    pk=identity_id,
+                    guardian__camp=shift.camp,
+                    guardian__archived_at__isnull=True,
+                    guardian__status__in=[Participant.Status.ACTIVE, Participant.Status.REGISTERED],
+                    is_active=True,
+                    role=ParticipantFamilyMember.Role.COMPANION,
+                )
+            )
+            participant = family_member.guardian
+            identity_name = family_member.full_name
+    except (Participant.DoesNotExist, ParticipantFamilyMember.DoesNotExist) as error:
+        raise ValidationError("Die ausgewählte Person ist ungültig.") from error
+
+    is_historical = shift.date < timezone.localdate()
+    if is_historical and not confirm_historical:
+        raise ValidationError("Vergangene Dienste können nur mit historischer Bestätigung geändert werden.")
+
+    locked_assignments = ShiftAssignment.objects.select_for_update().filter(shift=shift)
+    identity_filter = {"participant": participant, "family_member": family_member}
+    if locked_assignments.filter(**identity_filter).exists():
+        raise ValidationError("Die ausgewählte Person ist bereits für diesen Dienst eingetragen.")
+    assigned_count = locked_assignments.count()
+    capacity_override = assigned_count >= shift.required_slots
+    if capacity_override and not allow_over_capacity:
+        raise ValidationError("Der Dienst ist bereits voll. Bitte bestätige die Überbelegung ausdrücklich.")
+
+    assignment = ShiftAssignment.objects.create(
+        shift=shift,
+        participant=participant,
+        family_member=family_member,
+    )
+    before_revision = shift.assignment_revision
+    shift.refresh_from_db(fields=["assignment_revision"])
+    ShiftAuditLog.objects.create(
+        shift=shift,
+        camp=shift.camp,
+        changed_by=changed_by,
+        participant=participant,
+        family_member=family_member,
+        action=ShiftAuditLog.Action.ADDED,
+        identity_name_snapshot=identity_name,
+        before={"assignment_revision": before_revision, "assigned_count": assigned_count},
+        after={"assignment_revision": shift.assignment_revision, "assigned_count": assigned_count + 1},
+        capacity_override=capacity_override,
+        historical_override=is_historical,
+    )
+    return assignment
+
+
+@transaction.atomic
+def remove_shift_assignment(
+    *,
+    shift_id: int,
+    assignment_id: int,
+    expected_revision: int,
+    confirm_historical: bool,
+    changed_by: Any,
+) -> None:
+    """Remove one exact assignment with optimistic locking and an audit row."""
+    if not is_admin(changed_by):
+        raise ValidationError("Nur Administratoren dürfen Dienstbesetzungen verändern.")
+
+    shift = Shift.objects.select_for_update().select_related("camp").get(pk=shift_id)
+    if shift.assignment_revision != expected_revision:
+        raise ValidationError("Die Dienstbesetzung wurde zwischenzeitlich geändert. Bitte lade die Seite neu.")
+    assignment = (
+        ShiftAssignment.objects.select_for_update()
+        .select_related("participant", "family_member")
+        .get(pk=assignment_id, shift=shift)
+    )
+    is_historical = shift.date < timezone.localdate() or assignment.participant.status == Participant.Status.SETTLED
+    if is_historical and not confirm_historical:
+        raise ValidationError("Diese Zuordnung kann nur mit historischer Bestätigung entfernt werden.")
+
+    participant = assignment.participant
+    family_member = assignment.family_member
+    identity_name = assignment.operational_display_name
+    assigned_count = ShiftAssignment.objects.select_for_update().filter(shift=shift).count()
+    before_revision = shift.assignment_revision
+    assignment.delete()
+    shift.refresh_from_db(fields=["assignment_revision"])
+    ShiftAuditLog.objects.create(
+        shift=shift,
+        camp=shift.camp,
+        changed_by=changed_by,
+        participant=participant,
+        family_member=family_member,
+        action=ShiftAuditLog.Action.REMOVED,
+        identity_name_snapshot=identity_name,
+        before={"assignment_revision": before_revision, "assigned_count": assigned_count},
+        after={"assignment_revision": shift.assignment_revision, "assigned_count": assigned_count - 1},
+        historical_override=is_historical,
+    )
 
 
 class ExpenseReceiptStorageError(RuntimeError):

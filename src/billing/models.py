@@ -13,6 +13,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models, transaction
+from django.db.models import F
 from django.db.models.functions import Round
 from django.utils import timezone
 
@@ -1877,6 +1878,7 @@ class Shift(TimeStampedModel):
     start_time = models.TimeField(null=True, blank=True, verbose_name="Beginn")
     end_time = models.TimeField(null=True, blank=True, verbose_name="Ende")
     required_slots = models.PositiveIntegerField(default=1, verbose_name="Benötigte Plätze")
+    assignment_revision = models.PositiveBigIntegerField(default=0, editable=False)
 
     class Meta:
         verbose_name = "Dienst"
@@ -1934,17 +1936,34 @@ class ShiftAssignmentQuerySet(models.QuerySet):
             raise ValidationError("Identitätsänderungen an Diensten müssen über save() erfolgen.")
         return super().update(**kwargs)
 
+    def delete(self):
+        revision_increments = dict(
+            self.values("shift_id").annotate(total=models.Count("pk")).values_list("shift_id", "total")
+        )
+        result = super().delete()
+        for shift_id, increment in revision_increments.items():
+            Shift.objects.filter(pk=shift_id).update(assignment_revision=F("assignment_revision") + increment)
+        return result
 
-class ShiftAssignmentManager(models.Manager):
+
+class ShiftAssignmentManager(models.Manager["ShiftAssignment"]):
     """Validate cross-table ownership before Django's bulk insert bypasses save()."""
 
     def get_queryset(self) -> ShiftAssignmentQuerySet:
         return ShiftAssignmentQuerySet(self.model, using=self._db)
 
     def bulk_create(self, objs, *args: Any, **kwargs: Any):
+        objs = list(objs)
         for assignment in objs:
             assignment.full_clean()
-        return super().bulk_create(objs, *args, **kwargs)
+        created = super().bulk_create(objs, *args, **kwargs)
+        revision_increments: dict[int, int] = {}
+        for assignment in created:
+            shift_id = assignment.shift_id
+            revision_increments[shift_id] = revision_increments.get(shift_id, 0) + 1
+        for shift_id, increment in revision_increments.items():
+            Shift.objects.filter(pk=shift_id).update(assignment_revision=F("assignment_revision") + increment)
+        return created
 
 
 class ShiftAssignment(TimeStampedModel):
@@ -1976,16 +1995,39 @@ class ShiftAssignment(TimeStampedModel):
         ]
 
     def clean(self) -> None:
-        """Require a family-member assignment to belong to its payer account."""
+        """Require the operational identity and shift to belong to one camp/account."""
         super().clean()
+        if self.shift_id is not None and self.participant_id is not None:
+            if self.shift.camp_id != self.participant.camp_id:
+                raise ValidationError("Dienst und ausführende Person müssen zum selben Lager gehören.")
         if self.family_member_id is not None and self.family_member is not None:
             if self.family_member.guardian_id != self.participant_id:
                 raise ValidationError("Die Begleitung gehört nicht zum Teilnehmerkonto.")
+            if not self.family_member.is_active or self.family_member.role != ParticipantFamilyMember.Role.COMPANION:
+                raise ValidationError("Nur aktive Begleitpersonen dürfen Dienste übernehmen.")
 
     def save(self, *args: Any, **kwargs: Any) -> None:
         """Validate Guardian ownership on every non-bulk assignment write."""
+        previous_identity = None
+        if self.pk is not None:
+            previous_identity = (
+                type(self)
+                .objects.filter(pk=self.pk)
+                .values_list("shift_id", "participant_id", "family_member_id")
+                .first()
+            )
         self.full_clean()
         super().save(*args, **kwargs)
+        current_identity = (self.shift_id, self.participant_id, self.family_member_id)
+        if previous_identity != current_identity:
+            Shift.objects.filter(pk=self.shift_id).update(assignment_revision=F("assignment_revision") + 1)
+
+    def delete(self, *args: Any, **kwargs: Any):
+        """Advance the staffing revision when one assignment is removed."""
+        shift_id = self.shift_id
+        result = super().delete(*args, **kwargs)
+        Shift.objects.filter(pk=shift_id).update(assignment_revision=F("assignment_revision") + 1)
+        return result
 
     @property
     def operational_identity(self) -> Participant | ParticipantFamilyMember:
@@ -2000,6 +2042,83 @@ class ShiftAssignment(TimeStampedModel):
     def __str__(self):
         target = self.family_member or self.participant
         return f"{target} -> {self.shift}"
+
+
+class ShiftAuditLogQuerySet(models.QuerySet):
+    """Keep administrative shift audit rows immutable after creation."""
+
+    def update(self, **kwargs: Any) -> int:
+        raise ValidationError("Dienst-Audit-Einträge dürfen nicht verändert werden.")
+
+    def delete(self):
+        raise ValidationError("Dienst-Audit-Einträge dürfen nicht gelöscht werden.")
+
+
+class ShiftAuditLog(models.Model):
+    """Record append-only administrative changes to shift staffing."""
+
+    class Action(models.TextChoices):
+        ADDED = "added", "Eingetragen"
+        REMOVED = "removed", "Ausgetragen"
+        CAPACITY_OVERRIDE = "capacity_override", "Kapazität unterschritten"
+
+    shift = models.ForeignKey(
+        Shift,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="audit_logs",
+    )
+    camp = models.ForeignKey(Camp, on_delete=models.PROTECT, related_name="shift_audit_logs")
+    changed_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shift_audit_logs",
+    )
+    participant = models.ForeignKey(
+        Participant,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shift_audit_logs",
+    )
+    family_member = models.ForeignKey(
+        ParticipantFamilyMember,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shift_audit_logs",
+    )
+    action = models.CharField(max_length=32, choices=Action.choices)
+    identity_name_snapshot = models.CharField(max_length=241, blank=True)
+    before = models.JSONField(default=dict)
+    after = models.JSONField(default=dict)
+    capacity_override = models.BooleanField(default=False)
+    historical_override = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    objects = ShiftAuditLogQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["shift", "-created_at"], name="shift_audit_shift_created"),
+            models.Index(fields=["camp", "-created_at"], name="shift_audit_camp_created"),
+        ]
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Create one immutable audit row and reject subsequent model saves."""
+        if not self._state.adding:
+            raise ValidationError("Dienst-Audit-Einträge dürfen nicht verändert werden.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args: Any, **kwargs: Any):
+        """Reject instance deletion so audit history remains append-only."""
+        raise ValidationError("Dienst-Audit-Einträge dürfen nicht gelöscht werden.")
+
+    def __str__(self) -> str:
+        return f"{self.get_action_display()}: {self.identity_name_snapshot or self.shift}"
 
 
 class PushSubscription(TimeStampedModel):

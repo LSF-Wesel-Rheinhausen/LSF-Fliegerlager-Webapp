@@ -214,6 +214,16 @@ urlpatterns = [
     ),
     path("shift-templates/<int:template_id>/edit/", views.shift_template_edit, name="shift-template-edit"),
     path("shifts/<int:shift_id>/edit/", views.shift_edit, name="shift-edit"),
+    path(
+        "shifts/<int:shift_id>/assignments/add/",
+        views.shift_assignment_add,
+        name="shift-assignment-add",
+    ),
+    path(
+        "shifts/<int:shift_id>/assignments/<int:assignment_id>/remove/",
+        views.shift_assignment_remove,
+        name="shift-assignment-remove",
+    ),
     path("shifts/<int:shift_id>/delete/", views.shift_delete, name="shift-delete"),
     path("camps/<int:camp_id>/expenses/new/", views.expense_create, name="expense-create"),
     path("expenses/<int:expense_id>/receipt/", views.expense_receipt_download, name="expense-receipt"),

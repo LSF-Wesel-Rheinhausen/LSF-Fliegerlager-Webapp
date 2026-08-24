@@ -1778,6 +1778,21 @@ class MealStandardPricesForm(forms.Form):
 
 
 class ShiftForm(forms.ModelForm):
+    assignment_revision = forms.IntegerField(required=False, min_value=0, widget=forms.HiddenInput)
+    confirm_over_capacity = forms.BooleanField(
+        required=False,
+        label="Unterbesetzung ausdrücklich bestätigen",
+        help_text="Erforderlich, wenn weniger Plätze als bereits eingetragene Personen gespeichert werden.",
+    )
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.fields["assignment_revision"].initial = self.instance.assignment_revision
+        else:
+            self.fields.pop("assignment_revision")
+            self.fields.pop("confirm_over_capacity")
+
     class Meta:
         model = Shift
         fields = ["name", "description", "date", "start_time", "end_time", "required_slots"]
@@ -1795,6 +1810,23 @@ class ShiftForm(forms.ModelForm):
             "start_time": forms.TimeInput(attrs={"type": "time"}),
             "end_time": forms.TimeInput(attrs={"type": "time"}),
         }
+
+
+class ShiftAssignmentAddForm(forms.Form):
+    """Validate one administrative add-assignment action."""
+
+    identity_token = forms.RegexField(regex=r"^(participant|family)-[1-9][0-9]*$", max_length=40)
+    expected_revision = forms.IntegerField(min_value=0)
+    allow_over_capacity = forms.BooleanField(required=False)
+    confirm_historical = forms.BooleanField(required=False)
+    q = forms.CharField(required=False, max_length=120)
+
+
+class ShiftAssignmentRemoveForm(forms.Form):
+    """Validate one administrative remove-assignment action."""
+
+    expected_revision = forms.IntegerField(min_value=0)
+    confirm_historical = forms.BooleanField(required=False)
 
 
 class DailyShiftTemplateForm(forms.ModelForm):
