@@ -3,7 +3,7 @@
 
 {% block filters %}
   {% if cl.has_filters %}
-    <details class="admin-filter-drawer" id="admin-filter-drawer"{% if cl.has_active_filters %} open{% endif %}>
+    <details class="admin-filter-drawer" id="admin-filter-drawer" open data-has-active-filters="{% if cl.has_active_filters %}true{% else %}false{% endif %}">
       <summary class="admin-filter-toggle" id="admin-filter-toggle" aria-controls="changelist-filter" aria-expanded="{% if cl.has_active_filters %}true{% else %}false{% endif %}">
         <span>Filter</span>
         <span class="admin-filter-summary" aria-live="polite">{% if cl.has_active_filters %}aktiv{% else %}keine Auswahl{% endif %}</span>
@@ -29,7 +29,7 @@
 
 {% block result_list %}
   {% if action_form and actions_on_top and cl.show_admin_actions %}{% admin_actions %}{% endif %}
-  <div class="admin-results-scroll">
+  <div class="admin-results-scroll" role="region" tabindex="0" aria-label="Ergebnisse">
     {% result_list cl %}
   </div>
   {% if not cl.result_count %}

@@ -12,11 +12,12 @@
 
   const focusableElements = () => [...drawer.querySelectorAll(focusableSelector)].filter((element) => {
     const style = window.getComputedStyle(element);
-    return style.display !== "none" && style.visibility !== "hidden";
+    return style.display !== "none" && style.visibility !== "hidden" && element.getClientRects().length > 0;
   });
 
   document.querySelectorAll(".admin-filter-drawer").forEach((filterDrawer) => {
     const summary = filterDrawer.querySelector("summary");
+    if (!desktop.matches && filterDrawer.dataset.hasActiveFilters !== "true") filterDrawer.open = false;
     const syncFilterState = () => summary?.setAttribute("aria-expanded", String(filterDrawer.open));
     filterDrawer.addEventListener("toggle", syncFilterState);
     syncFilterState();

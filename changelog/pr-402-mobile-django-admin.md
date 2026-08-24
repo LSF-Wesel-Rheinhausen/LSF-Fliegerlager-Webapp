@@ -18,6 +18,13 @@ PWA-`STATIC_ASSETS`-Vertrags; deshalb wurde `PWA_CACHE_VERSION` nicht erhöht.
 - `src/billing/models.py` und `src/billing/migrations/0070_*.py`
 - fokussierte Admin-Python- und Playwright-Regressionen
 
+Die Review-Nachbesserungen halten den mobilen Menüabstand und 44×44px
+Sidebar-Touchflächen ein, schließen versteckte Navigationslinks aus dem
+Fokus-Trap aus, zeigen Desktop-Filter standardmäßig an und machen
+Changelist-Tabellen als benannte Tastatur-Scrollregion zugänglich. Der
+Desktop-Overflow-Schutz bleibt auf Changelists begrenzt, damit breite
+Admin-Formulare und Inline-Tabellen nicht abgeschnitten werden.
+
 ## Tests
 
 - RED/GREEN: `tests/test_admin_mobile.py`

@@ -112,6 +112,10 @@
     z-index: 2;
   }
 
+  .admin-mobile-enhanced .main > .content {
+    padding-top: calc(44px + 1rem);
+  }
+
   body.admin-nav-open {
     overflow: hidden;
   }
@@ -174,6 +178,8 @@
 
   .admin-nav-drawer #nav-sidebar a,
   .admin-nav-drawer #nav-sidebar button {
+    display: flex;
+    align-items: center;
     min-height: 44px;
   }
 
@@ -223,12 +229,20 @@
 }
 
 @media (min-width: 901px) {
-  html,
-  body {
+  html:has(body.change-list),
+  body.change-list {
     overflow-x: hidden;
   }
 
   .admin-nav-drawer {
+    display: block;
+  }
+
+  .admin-filter-drawer > summary {
+    display: none;
+  }
+
+  .admin-filter-drawer:not([open]) > #changelist-filter {
     display: block;
   }
 }

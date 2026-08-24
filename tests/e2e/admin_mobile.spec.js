@@ -132,6 +132,46 @@ test("Django Admin keeps the desktop navigation layout outside the mobile breakp
   expect(httpFailures).toEqual([]);
 });
 
+for (const viewport of [
+  { name: "portrait", width: 390, height: 844 },
+  { name: "landscape", width: 844, height: 390 },
+]) {
+  test(`mobile menu toggle does not overlap page content in ${viewport.name}`, async ({ page }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await signInAdmin(page);
+    await page.goto("/admin/billing/participant/");
+    await page.waitForLoadState("networkidle");
+
+    const toggle = page.locator(".admin-mobile-menu-toggle");
+    const heading = page.locator("#content h1").first();
+    const toggleBox = await toggle.boundingBox();
+    const headingBox = await heading.boundingBox();
+    expect(toggleBox).not.toBeNull();
+    expect(headingBox).not.toBeNull();
+    expect(toggleBox.y + toggleBox.height).toBeLessThanOrEqual(headingBox.y);
+  });
+}
+
+for (const viewport of [
+  { name: "portrait", width: 390, height: 844 },
+  { name: "landscape", width: 844, height: 390 },
+]) {
+  test(`mobile admin sidebar links have 44px touch targets in ${viewport.name}`, async ({ page }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await signInAdmin(page);
+    await page.goto("/admin/billing/participant/");
+    await page.waitForLoadState("networkidle");
+
+    await page.locator(".admin-mobile-menu-toggle").click();
+    const participantLink = page.locator("#admin-nav-drawer #nav-sidebar").getByRole("link", { name: "Teilnehmer", exact: true });
+    await expect(participantLink).toBeVisible();
+    const linkBox = await participantLink.boundingBox();
+    expect(linkBox).not.toBeNull();
+    expect(linkBox.width).toBeGreaterThanOrEqual(44);
+    expect(linkBox.height).toBeGreaterThanOrEqual(44);
+  });
+}
+
 test("mobile admin navigation keeps modal focus inside the drawer", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await signInAdmin(page);
@@ -156,6 +196,68 @@ test("mobile admin navigation keeps modal focus inside the drawer", async ({ pag
   await page.keyboard.press("Escape");
   await expect(toggle).toBeFocused();
   await expect(drawer).toHaveAttribute("aria-hidden", "true");
+});
+
+test("mobile navigation focus trap skips links hidden by the sidebar filter", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signInAdmin(page);
+  await page.goto("/admin/billing/participant/");
+  await page.waitForLoadState("networkidle");
+
+  const toggle = page.locator(".admin-mobile-menu-toggle");
+  const drawer = page.locator("#admin-nav-drawer");
+  await toggle.click();
+  await drawer.locator("#nav-filter").fill("Startseite");
+
+  const visibleLinks = drawer.locator("#nav-sidebar a:visible");
+  await expect(visibleLinks).not.toHaveCount(0);
+  const predicateFocusableCount = await drawer.locator("a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])").evaluateAll((elements) => elements.filter((element) => {
+    const style = window.getComputedStyle(element);
+    return style.display !== "none" && style.visibility !== "hidden" && element.getClientRects().length > 0;
+  }).length);
+  const visibleFocusableCount = await drawer.locator("a[href]:visible, button:not([disabled]):visible, input:not([disabled]):visible, select:not([disabled]):visible, textarea:not([disabled]):visible").count();
+  expect(predicateFocusableCount).toBe(visibleFocusableCount);
+  await visibleLinks.last().focus();
+  await page.keyboard.press("Tab");
+  await expect(drawer.locator(".admin-nav-drawer__close")).toBeFocused();
+});
+
+test("desktop changelists keep the filter sidebar visible without active filters", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await signInAdmin(page);
+  await page.goto("/admin/billing/participant/");
+  await page.waitForLoadState("networkidle");
+
+  await expect(page.locator("#admin-filter-drawer")).toHaveAttribute("open", "");
+  await expect(page.locator("#changelist-filter")).toBeVisible();
+});
+
+test("mobile changelist results expose a named focusable horizontal scroll region", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signInAdmin(page);
+  await createParticipant(page, "scroll-region");
+  await page.goto("/admin/billing/participant/");
+  await page.waitForLoadState("networkidle");
+
+  const results = page.locator(".admin-results-scroll");
+  await expect(results).toHaveAttribute("role", "region");
+  await expect(results).toHaveAttribute("tabindex", "0");
+  await expect(results).toHaveAccessibleName("Ergebnisse");
+  expect(await results.evaluate((element) => element.scrollWidth)).toBeGreaterThan(await results.evaluate((element) => element.clientWidth));
+  await results.focus();
+  await expect(results).toBeFocused();
+});
+
+test("desktop shift forms preserve overflow for inline tables", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await signInAdmin(page);
+  await page.goto("/admin/billing/shift/add/");
+  await page.waitForLoadState("networkidle");
+
+  await expect(page.locator("body")).toHaveClass(/change-form/);
+  await expect(page.locator(".inline-group")).not.toHaveCount(0);
+  await expect(page.locator("html")).not.toHaveCSS("overflow-x", "hidden");
+  await expect(page.locator("body")).not.toHaveCSS("overflow-x", "hidden");
 });
 
 test.describe("mobile admin navigation without JavaScript", () => {
