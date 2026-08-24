@@ -1393,6 +1393,7 @@ test("Partner meal retraction requires explicit confirmation", async ({ page }) 
   await page.getByLabel("Teilnehmer").selectOption({ label: "Ada Lovelace" });
   await page.getByLabel("PIN:", { exact: true }).fill("1234");
   await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await expect(page).toHaveURL(/\/kiosk\/$/);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ colorScheme: "dark" });
   await page.goto("/kiosk/#meal-calendar");
@@ -2598,7 +2599,14 @@ test("Kiosk: Participant can open donate dialog, enter amount and see confetti",
   await expect(dialog).toBeVisible();
 
   // Fill amount and submit
-  await dialog.getByLabel("Betrag in €").fill("10.50");
+  await expect.poll(() => dialog.evaluate((element) => ({
+    isModal: element.matches(":modal"),
+    containsFocus: element.contains(document.activeElement),
+  }))).toEqual({ isModal: true, containsFocus: true });
+
+  const donationAmount = dialog.getByLabel("Betrag in €");
+  await donationAmount.fill("10.50");
+  await expect(donationAmount).toHaveValue("10.50");
   await dialog.getByRole("button", { name: "Spenden eintragen" }).click();
 
   // Should show success message
