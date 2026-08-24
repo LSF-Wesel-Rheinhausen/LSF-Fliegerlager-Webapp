@@ -3835,6 +3835,11 @@ code {
     min-width: 44px;
   }
 
+  .exportbar a {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
   input:not([type="checkbox"]):not([type="radio"]),
   select,
   textarea {

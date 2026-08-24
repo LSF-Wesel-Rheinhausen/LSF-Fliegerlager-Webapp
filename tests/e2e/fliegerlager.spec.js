@@ -323,6 +323,35 @@ test("Admin completes setup, login, camp workflow and logout", async ({ page }) 
   await loginAsAdmin(page);
 });
 
+test("Camp detail export actions meet mobile touch target contract", async ({ page }) => {
+  await setupFirstAdmin(page);
+  await createCamp(page, "Export-Touchziele", 0, 2);
+
+  const exportNames = [
+    "Abrechnung als CSV herunterladen",
+    "Arbeitsmappe herunterladen",
+    "Getränke als CSV herunterladen",
+    "Essensübersicht öffnen",
+  ];
+
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 844, height: 390 },
+  ]) {
+    await page.setViewportSize(viewport);
+    for (const name of exportNames) {
+      const link = page.locator(".exportbar").getByRole("link", { name, exact: true });
+      await expect(link).toBeVisible();
+      const metrics = await link.evaluate((element) => ({
+        boundingHeight: element.getBoundingClientRect().height,
+        minHeight: Number.parseFloat(window.getComputedStyle(element).minHeight),
+      }));
+      expect(metrics.boundingHeight, `${name} bounding height at ${viewport.width}px`).toBeGreaterThanOrEqual(44);
+      expect(metrics.minHeight, `${name} computed min-height at ${viewport.width}px`).toBeGreaterThanOrEqual(44);
+    }
+  }
+});
+
 test("Admin configures and centrally revokes every camp kiosk access", async ({ page }) => {
   await setupFirstAdmin(page);
   const campName = await createCamp(page, "Lagerzugang");
