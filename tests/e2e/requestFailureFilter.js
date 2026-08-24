@@ -9,6 +9,8 @@ const ADMIN_MOBILE_CANCELLED_PATHS = new Set([
   "/static/admin/css/changelists.css",
   "/static/admin/img/search.svg",
   "/static/admin/img/icon-no.svg",
+  "/static/admin/img/sorting-icons.svg",
+  "/static/admin/img/tooltag-add.svg",
 ]);
 
 function requestFailureDetails(request) {

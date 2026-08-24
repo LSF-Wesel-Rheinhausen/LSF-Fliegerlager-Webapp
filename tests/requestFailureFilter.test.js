@@ -53,6 +53,8 @@ test("allows only the exact admin mobile cancellation contract", () => {
     "/static/admin/css/changelists.css",
     "/static/admin/img/search.svg",
     "/static/admin/img/icon-no.svg",
+    "/static/admin/img/sorting-icons.svg",
+    "/static/admin/img/tooltag-add.svg",
   ];
 
   for (const path of allowedPaths) {
@@ -103,6 +105,36 @@ test("does not hide product, method, path, or error failures", () => {
     {
       method: "GET",
       url: "http://localhost:3102/static/admin/img/not-allowed.svg",
+      errorText: "Load request cancelled",
+    },
+    {
+      method: "GET",
+      url: "http://localhost:3102/static/admin/img/sorting-icons.svg?cache=1",
+      errorText: "Load request cancelled",
+    },
+    {
+      method: "GET",
+      url: "http://localhost:3102/static/admin/img/tooltag-add.svg#fragment",
+      errorText: "Load request cancelled",
+    },
+    {
+      method: "GET",
+      url: "http://localhost:3102/static/admin/img/sorting-icons.svg",
+      errorText: "NS_BINDING_ABORTED",
+    },
+    {
+      method: "POST",
+      url: "http://localhost:3102/static/admin/img/tooltag-add.svg",
+      errorText: "Load request cancelled",
+    },
+    {
+      method: "GET",
+      url: "http://localhost:3102/static/admin/img/sorting-icon.svg",
+      errorText: "Load request cancelled",
+    },
+    {
+      method: "GET",
+      url: "http://localhost:3102/static/billing/admin-mobile.js",
       errorText: "Load request cancelled",
     },
   ];
