@@ -4,29 +4,7 @@ on:
   push:
     branches:
       - main
-    paths:
-      - ".github/workflows/ci.yml"
-      - "package.json"
-      - "package-lock.json"
-      - "playwright.config.js"
-      - "pyproject.toml"
-      - "pytest.ini"
-      - "requirements*.txt"
-      - "scripts/**"
-      - "src/**"
-      - "tests/**"
-  pull_request:
-    paths:
-      - ".github/workflows/ci.yml"
-      - "package.json"
-      - "package-lock.json"
-      - "playwright.config.js"
-      - "pyproject.toml"
-      - "pytest.ini"
-      - "requirements*.txt"
-      - "scripts/**"
-      - "src/**"
-      - "tests/**"
+  pull_request: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
@@ -36,9 +14,93 @@ permissions:
   contents: read
 
 jobs:
-  python-quality:
-    name: Python quality tests
+  change-scope:
+    name: Change scope
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Classify changed paths
+        id: classify
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          base_sha="$BASE_SHA"
+          if [ -z "$base_sha" ] || [ "$base_sha" = "0000000000000000000000000000000000000000" ]; then
+            base_sha=""
+          fi
+
+          docs_only=false
+          if [ -n "$base_sha" ] && git cat-file -e "$base_sha^{commit}" 2>/dev/null; then
+            docs_only=true
+            has_changes=false
+            while IFS= read -r -d '' status && IFS= read -r -d '' path; do
+              has_changes=true
+              case "$path" in
+                graphify-out/graph.json|changelog/*|docs/*|graphify-out/*|*.md|*.mdx) ;;
+                .github/workflows/*.yml|.github/workflows/*.yaml|.github/actions/*|src/*|tests/*|scripts/*|build/*|docker/*|Dockerfile*|docker-compose*|.dockerignore|requirements*|package*|pyproject.toml|pytest.ini|*.yml|*.yaml|*.json|*.toml|*.ini|*.cfg|*.conf|*.sh|security/*) docs_only=false; break ;;
+                *) docs_only=false; break ;;
+              esac
+            done < <(git diff --name-status --no-renames -z --diff-filter=ACDMRTUXB "$base_sha" "$HEAD_SHA")
+            if [ "$has_changes" != true ]; then
+              docs_only=false
+            fi
+          fi
+
+          printf 'docs_only=%s\n' "$docs_only" >> "$GITHUB_OUTPUT"
+
+  quality:
+    name: Quality
+    needs: change-scope
+    if: ${{ needs.change-scope.outputs.docs_only != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Ruff lint
+        run: ruff check .
+
+      - name: Ruff format
+        run: ruff format --check .
+
+      - name: Mypy
+        run: mypy src
+
+  python:
+    name: Python tests
+    needs: change-scope
+    if: ${{ needs.change-scope.outputs.docs_only != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
@@ -61,7 +123,12 @@ jobs:
 
   browser_matrix:
     name: Browser UI tests (${{ matrix.browser }})
+    needs: change-scope
+    if: ${{ needs.change-scope.outputs.docs_only != 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -118,36 +185,31 @@ jobs:
         run: npx playwright test --project=${{ matrix.browser }}
 
       - name: Upload Playwright report
-        if: always()
+        if: ${{ failure() || cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: playwright-report-${{ matrix.browser }}-${{ github.run_id }}
           path: playwright-report
           if-no-files-found: ignore
+          retention-days: 7
 
       - name: Upload Playwright test results
-        if: always()
+        if: ${{ failure() || cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: playwright-test-results-${{ matrix.browser }}-${{ github.run_id }}
           path: test-results
           if-no-files-found: ignore
-
-  browser-gate:
-    name: Browser UI tests
-    needs: browser_matrix
-    if: ${{ always() }}
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Require every browser job to pass
-        env:
-          MATRIX_RESULT: ${{ needs.browser_matrix.result }}
-        run: test "$MATRIX_RESULT" = success
+          retention-days: 7
 
   security-concurrency:
     name: PostgreSQL security concurrency tests
+    needs: change-scope
+    if: ${{ needs.change-scope.outputs.docs_only != 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
 
     services:
       postgres:
@@ -181,3 +243,43 @@ jobs:
         env:
           DATABASE_URL: postgresql://fliegerlager:test-password@127.0.0.1:5432/fliegerlager_test
         run: pytest tests/test_security_concurrency.py
+
+  ci-gate:
+    name: CI gate
+    needs: [change-scope, quality, python, security-concurrency, browser_matrix]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - name: Require executed jobs to pass
+        env:
+          CHANGE_SCOPE_RESULT: ${{ needs.change-scope.result }}
+          DOCS_ONLY: ${{ needs.change-scope.outputs.docs_only }}
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          PYTHON_RESULT: ${{ needs.python.result }}
+          SECURITY_RESULT: ${{ needs.security-concurrency.result }}
+          BROWSER_RESULT: ${{ needs.browser_matrix.result }}
+        run: |
+          set -euo pipefail
+          if [ "$CHANGE_SCOPE_RESULT" != "success" ]; then
+            exit 1
+          fi
+
+          if [ "$DOCS_ONLY" != "true" ]; then
+            allow_skipped=false
+          else
+            allow_skipped=true
+          fi
+
+          for result in "$QUALITY_RESULT" "$PYTHON_RESULT" "$SECURITY_RESULT" "$BROWSER_RESULT"; do
+            if [ "$result" = "skipped" ] && [ "$allow_skipped" = "true" ]; then
+              continue
+            fi
+            case "$result" in
+              success) ;;
+              failure|cancelled|*) exit 1 ;;
+            esac
+          done
