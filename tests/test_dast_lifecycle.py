@@ -32,7 +32,7 @@ def test_lifecycle_polls_health_and_cleans_container(tmp_path: Path) -> None:
     docker = """
 case "$1" in
   run) echo container-id ;;
-  inspect) exit 0 ;;
+  inspect) printf 'true\n' ;;
   rm) echo removed >> "$DAST_LOG" ;;
 esac
 """
@@ -63,10 +63,29 @@ test "$count" -ge 2
 
 def test_lifecycle_health_timeout_is_nonzero(tmp_path: Path) -> None:
     (tmp_path / "state").write_text("lsf-webapp\n", encoding="utf-8")
-    result = _run_lifecycle(tmp_path, "wait", "exit 0", "exit 1")
+    result = _run_lifecycle(tmp_path, "wait", "printf 'true\\n'", "exit 1")
 
     assert result.returncode != 0
     assert "timed out" in result.stderr
+
+
+def test_lifecycle_stopped_container_is_reported_before_health_timeout(tmp_path: Path) -> None:
+    (tmp_path / "state").write_text("lsf-webapp\n", encoding="utf-8")
+    docker = """
+case "$1" in
+  inspect)
+    printf '{"State":{"Running":false}}\n'
+    exit 0
+    ;;
+esac
+exit 0
+"""
+
+    result = _run_lifecycle(tmp_path, "wait", docker, "exit 1")
+
+    assert result.returncode != 0
+    assert "stopped before health check succeeded" in result.stderr
+    assert "timed out" not in result.stderr
 
 
 def test_lifecycle_start_failure_is_nonzero(tmp_path: Path) -> None:

@@ -60,7 +60,11 @@ wait_for_health() {
     if curl --fail --silent --show-error --max-time 2 "$health_url" >/dev/null; then
       return 0
     fi
-    if ! docker inspect "$container_name" >/dev/null 2>&1; then
+    if ! running_state="$(docker inspect --format '{{.State.Running}}' "$container_name" 2>/dev/null)"; then
+      echo "DAST application stopped before health check succeeded" >&2
+      return 1
+    fi
+    if [ "$running_state" != "true" ]; then
       echo "DAST application stopped before health check succeeded" >&2
       return 1
     fi
