@@ -35,3 +35,4 @@ Closes #574
 Closes #572
 Closes #573
 Closes #575
+Closes #576
