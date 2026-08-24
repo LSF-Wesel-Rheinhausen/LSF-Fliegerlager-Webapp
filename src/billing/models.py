@@ -305,6 +305,8 @@ class Camp(TimeStampedModel):
     )
 
     class Meta:
+        verbose_name = "Lager"
+        verbose_name_plural = "Lager"
         ordering = ["-year", "name"]
         constraints = [
             models.UniqueConstraint(fields=["name", "year"], name="unique_camp_name_year"),
@@ -459,20 +461,21 @@ class Participant(TimeStampedModel):
         SETTLED = "settled", "Abgerechnet"
         CANCELLED = "cancelled", "Storniert"
 
-    camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="participants")
-    first_name = models.CharField(max_length=120)
-    last_name = models.CharField(max_length=120)
-    email = models.EmailField(blank=True)
-    phone = models.CharField(max_length=80, blank=True)
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.REGISTERED)
-    is_child = models.BooleanField(default=False)
-    is_youth_group = models.BooleanField(default=False)
-    is_companion = models.BooleanField(default=False)
+    camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="participants", verbose_name="Lager")
+    first_name = models.CharField(max_length=120, verbose_name="Vorname")
+    last_name = models.CharField(max_length=120, verbose_name="Nachname")
+    email = models.EmailField(blank=True, verbose_name="E-Mail-Adresse")
+    phone = models.CharField(max_length=80, blank=True, verbose_name="Telefon")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.REGISTERED, verbose_name="Status")
+    is_child = models.BooleanField(default=False, verbose_name="Kind")
+    is_youth_group = models.BooleanField(default=False, verbose_name="Jugendgruppe")
+    is_companion = models.BooleanField(default=False, verbose_name="Begleitperson")
     hilfssatz = models.DecimalField(
         max_digits=6,
         decimal_places=4,
         default=Decimal("0.0000"),
         validators=[MinValueValidator(Decimal("0")), MaxValueValidator(Decimal("1"))],
+        verbose_name="Hilfssatz",
         help_text="0 bis 1, zum Beispiel 0,5000.",
     )
     berufssatz = models.DecimalField(
@@ -480,6 +483,7 @@ class Participant(TimeStampedModel):
         decimal_places=4,
         default=Decimal("0.0000"),
         validators=[MinValueValidator(Decimal("0")), MaxValueValidator(Decimal("1"))],
+        verbose_name="Berufssatz",
         help_text="0 bis 1, zum Beispiel 0,3300.",
     )
     arrival_date = models.DateField(null=True, blank=True)
@@ -487,7 +491,7 @@ class Participant(TimeStampedModel):
     birth_date = models.DateField(null=True, blank=True)
     attendance_tracking_enabled = models.BooleanField(default=False, editable=False)
     booked_nights = models.PositiveIntegerField(default=0)
-    actual_nights = models.PositiveIntegerField(default=0)
+    actual_nights = models.PositiveIntegerField(default=0, verbose_name="Tatsächliche Nächte")
     notes = models.TextField(blank=True)
     archived_at = models.DateTimeField(null=True, blank=True)
     archived_by = models.ForeignKey(
@@ -499,6 +503,8 @@ class Participant(TimeStampedModel):
     )
 
     class Meta:
+        verbose_name = "Teilnehmer"
+        verbose_name_plural = "Teilnehmer"
         ordering = ["last_name", "first_name"]
         constraints = [
             models.UniqueConstraint(
@@ -971,6 +977,8 @@ class PriceRule(TimeStampedModel):
     is_archived = models.BooleanField(default=False)
 
     class Meta:
+        verbose_name = "Preisregel"
+        verbose_name_plural = "Preisregeln"
         ordering = ["kind", "name"]
 
     def __str__(self):
@@ -1586,6 +1594,8 @@ class MealSignup(TimeStampedModel):
     )
 
     class Meta:
+        verbose_name = "Essensanmeldung"
+        verbose_name_plural = "Essensanmeldungen"
         ordering = ["meal_date", "meal", "participant"]
         constraints = [
             models.UniqueConstraint(
@@ -1607,15 +1617,16 @@ class MealSignup(TimeStampedModel):
 class MealOrder(TimeStampedModel):
     """Track that the catering meal order for one camp day has been sent."""
 
-    camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="meal_orders")
-    meal_date = models.DateField()
-    ordered_at = models.DateTimeField(default=timezone.now)
+    camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="meal_orders", verbose_name="Lager")
+    meal_date = models.DateField(verbose_name="Mahlzeitentag")
+    ordered_at = models.DateTimeField(default=timezone.now, verbose_name="Bestellt am")
     ordered_by = models.ForeignKey(
         get_user_model(),
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="sent_meal_orders",
+        verbose_name="Bestellt von",
     )
     is_sent = models.BooleanField(default=True)
     unmarked_at = models.DateTimeField(null=True, blank=True)
@@ -1628,6 +1639,8 @@ class MealOrder(TimeStampedModel):
     )
 
     class Meta:
+        verbose_name = "Essensbestellung"
+        verbose_name_plural = "Essensbestellungen"
         ordering = ["-meal_date"]
         constraints = [
             models.UniqueConstraint(fields=["camp", "meal_date"], name="unique_meal_order_per_camp_date"),
@@ -1679,6 +1692,8 @@ class MealPlanEntry(TimeStampedModel):
     description = models.TextField(blank=True)
 
     class Meta:
+        verbose_name = "Speiseplan"
+        verbose_name_plural = "Speisepläne"
         ordering = ["meal_date", "meal"]
         constraints = [
             models.UniqueConstraint(fields=["camp", "meal_date", "meal"], name="unique_meal_plan_entry"),
@@ -1855,15 +1870,17 @@ class Settlement(TimeStampedModel):
 
 
 class Shift(TimeStampedModel):
-    camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="shifts")
-    name = models.CharField(max_length=120)
+    camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="shifts", verbose_name="Lager")
+    name = models.CharField(max_length=120, verbose_name="Bezeichnung")
     description = models.TextField(blank=True, default="")
-    date = models.DateField()
-    start_time = models.TimeField(null=True, blank=True)
-    end_time = models.TimeField(null=True, blank=True)
-    required_slots = models.PositiveIntegerField(default=1)
+    date = models.DateField(verbose_name="Datum")
+    start_time = models.TimeField(null=True, blank=True, verbose_name="Beginn")
+    end_time = models.TimeField(null=True, blank=True, verbose_name="Ende")
+    required_slots = models.PositiveIntegerField(default=1, verbose_name="Benötigte Plätze")
 
     class Meta:
+        verbose_name = "Dienst"
+        verbose_name_plural = "Dienste"
         ordering = ["date", "start_time", "name"]
 
     @property
@@ -1885,6 +1902,8 @@ class DailyShiftTemplate(TimeStampedModel):
     required_slots = models.PositiveIntegerField(default=1)
 
     class Meta:
+        verbose_name = "Dienstvorlage"
+        verbose_name_plural = "Dienstvorlagen"
         ordering = ["start_time", "name"]
 
     def __str__(self):

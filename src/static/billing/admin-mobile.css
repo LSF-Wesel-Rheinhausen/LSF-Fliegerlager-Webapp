@@ -1,0 +1,228 @@
+/* Responsive Django Admin surface for Issues #352 and #353. */
+.admin-mobile-menu-toggle {
+  display: none;
+}
+
+.admin-nav-drawer__header {
+  display: none;
+}
+
+.admin-results-scroll {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.admin-results-scroll .results {
+  min-width: max-content;
+}
+
+.admin-filter-toggle {
+  cursor: pointer;
+  min-height: 44px;
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  font-weight: 700;
+}
+
+.admin-filter-summary {
+  font-weight: 400;
+  color: var(--body-quiet-color, #666);
+}
+
+.admin-empty-state {
+  border: 1px solid var(--hairline-color, #ddd);
+  padding: 1.25rem;
+  margin: 1rem 0;
+  background: var(--darkened-bg, #f8f8f8);
+}
+
+.admin-empty-state h2,
+.admin-empty-state p {
+  margin-top: 0;
+}
+
+.admin-empty-state__action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.5rem 1rem;
+  background: var(--default-button-bg, #417690);
+  color: var(--header-link-color, #fff);
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  html,
+  body {
+    overflow-x: hidden;
+  }
+
+  .main > .content {
+    width: auto;
+    margin-left: 0;
+  }
+
+  .main {
+    position: relative;
+  }
+
+  html:not(.admin-mobile-enhanced) #nav-sidebar {
+    display: block;
+    position: static;
+    transform: none;
+    margin-left: 0;
+    width: 100%;
+    max-height: none;
+    overflow: visible;
+    padding: 0;
+  }
+
+  .admin-nav-drawer {
+    display: block;
+    position: static;
+    width: 100%;
+    box-sizing: border-box;
+    overflow: visible;
+    padding: 0;
+    background: var(--body-bg, #fff);
+  }
+
+  .admin-nav-drawer__header {
+    display: none;
+  }
+
+  .admin-mobile-enhanced .admin-mobile-menu-toggle {
+    position: absolute;
+    top: 0.5rem;
+    left: 0;
+    z-index: 2;
+  }
+
+  body.admin-nav-open {
+    overflow: hidden;
+  }
+
+  .admin-mobile-enhanced .admin-mobile-menu-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 44px;
+    min-height: 44px;
+    margin: 0.5rem 0;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--hairline-color, #ddd);
+    background: var(--body-bg, #fff);
+    color: var(--body-fg, #333);
+    font-weight: 700;
+  }
+
+  .admin-mobile-enhanced .admin-nav-drawer {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    overflow-y: auto;
+    padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0) env(safe-area-inset-bottom, 0)
+      env(safe-area-inset-left, 0);
+    background: var(--body-bg, #fff);
+  }
+
+  .admin-mobile-enhanced .admin-nav-drawer.is-open {
+    display: block;
+  }
+
+  .admin-mobile-enhanced .admin-nav-drawer__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 56px;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid var(--hairline-color, #ddd);
+  }
+
+  .admin-nav-drawer__close {
+    min-width: 44px;
+    min-height: 44px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font-size: 2rem;
+    line-height: 1;
+  }
+
+  .admin-nav-drawer #nav-sidebar {
+    display: block;
+    width: auto;
+    max-height: none;
+    overflow: visible;
+    padding: 0.5rem 1rem;
+  }
+
+  .admin-nav-drawer #nav-sidebar a,
+  .admin-nav-drawer #nav-sidebar button {
+    min-height: 44px;
+  }
+
+  #content-main a,
+  #content-main button,
+  #content-main input[type="submit"],
+  #content-main input[type="button"],
+  #content-main select {
+    min-height: 44px;
+  }
+
+  .admin-filter-drawer {
+    margin-bottom: 1rem;
+    border: 1px solid var(--hairline-color, #ddd);
+  }
+
+  .admin-filter-drawer[open] {
+    padding-bottom: 0.5rem;
+  }
+
+  .admin-filter-drawer search {
+    padding: 0 1rem;
+  }
+
+  .admin-filter-drawer search h2 {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .admin-results-scroll {
+    margin-inline: -1rem;
+    padding-inline: 1rem;
+  }
+
+  .admin-results-scroll #result_list th,
+  .admin-results-scroll #result_list td {
+    white-space: nowrap;
+  }
+
+  .admin-empty-state {
+    margin-inline: 0;
+  }
+}
+
+@media (min-width: 901px) {
+  html,
+  body {
+    overflow-x: hidden;
+  }
+
+  .admin-nav-drawer {
+    display: block;
+  }
+}
