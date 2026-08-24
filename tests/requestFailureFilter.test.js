@@ -46,6 +46,92 @@ test("keeps unrelated request failures visible", () => {
   );
 });
 
+test("allows only known aborted failures for canonical PWA manifests", () => {
+  const paths = [
+    "/manifest.webmanifest",
+    "/kiosk/manifest.webmanifest",
+    "/central/kiosk/manifest.webmanifest",
+  ];
+  const errorTexts = ["NS_BINDING_ABORTED", "ERR_ABORTED", "net::ERR_ABORTED"];
+
+  for (const path of paths) {
+    for (const errorText of errorTexts) {
+      const details = {
+        method: "GET",
+        url: `http://localhost:3102${path}`,
+        errorText,
+      };
+      assert.equal(isBenignPageRequestFailure(details), true, `${path} ${errorText}`);
+    }
+  }
+
+  const adminCancellation = {
+    method: "GET",
+    url: "http://localhost:3102/manifest.webmanifest",
+    errorText: "Load request cancelled",
+  };
+  assert.equal(isBenignPageRequestFailure(adminCancellation), false);
+  assert.equal(isAllowedAdminMobileCancelledFailure(adminCancellation), true);
+});
+
+test("keeps manifest network, HTTP, URL, and host failures visible", () => {
+  const failures = [
+    "DNS failure",
+    "NS_ERROR_CONNECTION_REFUSED",
+    "SSL_ERROR_BAD_CERT_DOMAIN",
+    "404 Not Found",
+  ];
+  for (const errorText of failures) {
+    const details = {
+      method: "GET",
+      url: "http://localhost:3102/manifest.webmanifest",
+      errorText,
+    };
+    assert.equal(isBenignPageRequestFailure(details), false, errorText);
+    assert.equal(isAllowedAdminMobileCancelledFailure(details), false, errorText);
+  }
+
+  for (const url of [
+    "http://localhost:3102/manifest.webmanifest?cache=1",
+    "http://localhost:3102/manifest.webmanifest#fragment",
+    "http://localhost.evil.test:3102/manifest.webmanifest",
+    "https://evil.example/manifest.webmanifest",
+    "http://localhost:3102/not-a-manifest.webmanifest",
+    "http://localhost:3102/assets/manifest.webmanifest",
+  ]) {
+    const details = {
+      method: "GET",
+      url,
+      errorText: "NS_BINDING_ABORTED",
+    };
+    assert.equal(isBenignPageRequestFailure(details), false, url);
+    assert.equal(isAllowedAdminMobileCancelledFailure(details), false, url);
+  }
+});
+
+test("recognizes IPv6 loopback as a local request origin", () => {
+  const manifestAbort = {
+    method: "GET",
+    url: "http://[::1]:3102/manifest.webmanifest",
+    errorText: "NS_BINDING_ABORTED",
+  };
+  assert.equal(isBenignPageRequestFailure(manifestAbort), true);
+
+  const adminCancellation = {
+    ...manifestAbort,
+    errorText: "Load request cancelled",
+  };
+  assert.equal(isBenignPageRequestFailure(adminCancellation), false);
+  assert.equal(isAllowedAdminMobileCancelledFailure(adminCancellation), true);
+
+  const nonLocalIpv6 = {
+    ...manifestAbort,
+    url: "http://[2001:db8::1]:3102/manifest.webmanifest",
+  };
+  assert.equal(isBenignPageRequestFailure(nonLocalIpv6), false);
+  assert.equal(isAllowedAdminMobileCancelledFailure({ ...nonLocalIpv6, errorText: "Load request cancelled" }), false);
+});
+
 test("allows only the exact admin mobile cancellation contract", () => {
   const allowedPaths = [
     "/service-worker.js",

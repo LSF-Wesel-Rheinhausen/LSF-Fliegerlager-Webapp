@@ -3,6 +3,12 @@
 const ADMIN_ICON_PATH = "/static/billing/icons/admin-icon-192.png";
 const ABORTED_FAILURE_TEXT_PATTERNS = ["NS_BINDING_ABORTED", "ERR_ABORTED"];
 const ADMIN_MOBILE_CANCELLED_FAILURE_TEXT = "Load request cancelled";
+const LOCAL_REQUEST_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+const PWA_MANIFEST_PATHS = new Set([
+  "/manifest.webmanifest",
+  "/kiosk/manifest.webmanifest",
+  "/central/kiosk/manifest.webmanifest",
+]);
 const ADMIN_MOBILE_CANCELLED_PATHS = new Set([
   "/service-worker.js",
   "/manifest.webmanifest",
@@ -22,29 +28,41 @@ function requestFailureDetails(request) {
   };
 }
 
+function parseLocalRequestUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl);
+    if (!LOCAL_REQUEST_HOSTS.has(url.hostname) || url.search || url.hash) {
+      return null;
+    }
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+function hasKnownAbortedFailure(errorText) {
+  return ABORTED_FAILURE_TEXT_PATTERNS.some(
+    (pattern) => errorText === pattern || errorText.endsWith(`::${pattern}`),
+  );
+}
+
 function isBenignPageRequestFailure(details) {
   if (details.method !== "GET") {
     return false;
   }
-  if (details.url.endsWith(".webmanifest") || details.url.includes("/manifest")) {
-    return true;
-  }
-  if (!details.url.endsWith(ADMIN_ICON_PATH)) {
+  const url = parseLocalRequestUrl(details.url);
+  if (!url || !hasKnownAbortedFailure(details.errorText)) {
     return false;
   }
-  return ABORTED_FAILURE_TEXT_PATTERNS.some((pattern) => details.errorText.includes(pattern));
+  return url.pathname === ADMIN_ICON_PATH || PWA_MANIFEST_PATHS.has(url.pathname);
 }
 
 function isAllowedAdminMobileCancelledFailure(details) {
   if (details.method !== "GET" || details.errorText !== ADMIN_MOBILE_CANCELLED_FAILURE_TEXT) {
     return false;
   }
-  try {
-    const url = new URL(details.url);
-    return ADMIN_MOBILE_CANCELLED_PATHS.has(url.pathname) && !url.search && !url.hash;
-  } catch {
-    return false;
-  }
+  const url = parseLocalRequestUrl(details.url);
+  return url !== null && ADMIN_MOBILE_CANCELLED_PATHS.has(url.pathname);
 }
 
 module.exports = {
