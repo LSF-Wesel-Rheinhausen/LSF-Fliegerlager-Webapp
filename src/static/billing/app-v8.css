@@ -3864,8 +3864,6 @@ code {
   }
 
   .checkbox-cell label,
-  .form-grid p:has(input[type="checkbox"]),
-  .form-grid p:has(input[type="radio"]),
   .form-grid label,
   label.checkbox-label,
   label.radio-label {
@@ -3877,6 +3875,49 @@ code {
     padding-top: 4px;
     padding-bottom: 4px;
     cursor: pointer;
+  }
+
+  .form-grid p:has(> input:is([type="checkbox"], [type="radio"])):has(> .helptext) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .form-grid p:has(> input:is([type="checkbox"], [type="radio"])):has(> .helptext) > label {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .form-grid p:has(> input:is([type="checkbox"], [type="radio"])):has(> .helptext) > input:is([type="checkbox"], [type="radio"]) {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .form-grid p:has(> input:is([type="checkbox"], [type="radio"])):has(> .helptext) > .helptext {
+    grid-column: 1 / -1;
+  }
+
+  .form-grid .checkbox-form-field {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .form-grid .checkbox-form-field > .errorlist,
+  .form-grid .checkbox-form-field > label,
+  .form-grid .checkbox-form-field > div {
+    grid-column: 1;
+  }
+
+  .form-grid .checkbox-form-field > label {
+    order: 1;
+  }
+
+  .form-grid .checkbox-form-field > div {
+    order: 2;
+  }
+
+  .form-grid .checkbox-form-field > .errorlist {
+    order: 3;
   }
 
   .checkbox-cell label input[type="checkbox"],

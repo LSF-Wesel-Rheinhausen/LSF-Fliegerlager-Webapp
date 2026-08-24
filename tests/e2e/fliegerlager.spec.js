@@ -390,6 +390,157 @@ test("Mobile touch targets follow the 780px portrait breakpoint", async ({ page 
   }
 });
 
+test("Mobile form checkbox help text stays below its touch target", async ({ page }) => {
+  await setupFirstAdmin(page);
+  await createCamp(page, "Vorbestellungen-Touch", 0, 2);
+
+  for (const colorScheme of ["light", "dark"]) {
+    await page.emulateMedia({ colorScheme });
+    for (const viewport of [
+      { width: 390, height: 844 },
+      { width: 844, height: 390 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.goto("/settings/preorders/");
+      await expect(page.getByRole("heading", { name: "Vorbestellungen" })).toBeVisible();
+
+      const field = page.locator('form.form-grid > p:has(input[type="checkbox"])').first();
+      const metrics = await field.evaluate((element) => {
+        const container = element.getBoundingClientRect();
+        const label = element.querySelector("label").getBoundingClientRect();
+        const input = element.querySelector('input[type="checkbox"]').getBoundingClientRect();
+        const help = element.querySelector(".helptext").getBoundingClientRect();
+        return {
+          container: { left: container.left, right: container.right },
+          label: { bottom: label.bottom },
+          input: { width: input.width, height: input.height, bottom: input.bottom },
+          help: { left: help.left, right: help.right, top: help.top, height: help.height },
+          display: window.getComputedStyle(element).display,
+        };
+      });
+
+      expect(metrics.input.width, `${viewport.width}px checkbox width`).toBeGreaterThanOrEqual(44);
+      expect(metrics.input.height, `${viewport.width}px checkbox height`).toBeGreaterThanOrEqual(44);
+      expect(metrics.help.left, `${viewport.width}px help text starts at field`).toBeCloseTo(metrics.container.left, 0);
+      expect(metrics.help.right, `${viewport.width}px help text spans field`).toBeCloseTo(metrics.container.right, 0);
+      expect(metrics.help.top, `${viewport.width}px help text follows control`).toBeGreaterThanOrEqual(
+        Math.max(metrics.label.bottom, metrics.input.bottom),
+      );
+      expect(metrics.display, `${viewport.width}px ${colorScheme} uses a field layout`).toBe("grid");
+      const checkbox = field.locator('input[type="checkbox"]');
+      await checkbox.focus();
+      await expect(checkbox).toBeFocused();
+    }
+  }
+  await assertNoUnexpectedOverflow(page);
+});
+
+test("Mobile checkbox errors stay below the control row", async ({ page }) => {
+  await setupFirstAdmin(page);
+  const campName = await createCamp(page, "Umlage-Touch", 0, 2);
+  await createParticipant(page, "Marie", "Curie", "", "1234");
+  await logout(page);
+  await openKiosk(page, "/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Marie Curie" });
+  await page.getByLabel("PIN:", { exact: true }).fill("1234");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await expect(page).toHaveURL(/\/kiosk\/$/);
+  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).or(page.locator(".kiosk-mobile-bottom-nav").getByRole("link", { name: "Mehr" })).click();
+  await page.getByRole("button", { name: "Gemeinschaftsausgaben" }).click();
+  await page.getByRole("link", { name: "Antrag einreichen" }).click();
+  await page.getByLabel("Kategorie").selectOption({ label: "Verbrauchsmaterial" });
+  await page.getByLabel("Beschreibung").fill("Langer Testbeleg für die Umlageprüfung");
+  await page.getByLabel("Betrag").fill("42.00");
+  await page.getByLabel("Zahlungsdatum").fill(dateInputValue(new Date()));
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByText("Antrag auf Gemeinschaftsausgabe eingereicht.")).toBeVisible();
+  await page.getByRole("link", { name: "Abmelden" }).first().click();
+  await loginAsAdmin(page);
+  await page.getByRole("link", { name: campName, exact: true }).click();
+  await expect(page.getByRole("link", { name: "Genehmigen & Umlegen" })).toBeVisible();
+  await page.getByRole("link", { name: "Genehmigen & Umlegen" }).click();
+  await expect(page.getByRole("heading", { name: /Umlage genehmigen:/ })).toBeVisible();
+
+  for (const colorScheme of ["light", "dark"]) {
+    await page.emulateMedia({ colorScheme });
+    for (const viewport of [
+      { width: 390, height: 844 },
+      { width: 844, height: 390 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.getByLabel("Umlagemethode").selectOption("selected");
+      await page.getByRole("button", { name: "Speichern" }).click();
+      await expect(page.getByText("Bitte wähle mindestens einen Teilnehmer aus.")).toBeVisible();
+
+      const field = page.locator('form.form-grid > .checkbox-form-field:has(input[type="checkbox"]):has(.errorlist)');
+      const metrics = await field.evaluate((element) => {
+        const container = element.getBoundingClientRect();
+        const controls = [...element.querySelectorAll('input[type="checkbox"], input[type="checkbox"] + label')];
+        const controlBottom = Math.max(...controls.map((control) => control.getBoundingClientRect().bottom));
+        const error = element.querySelector(".errorlist").getBoundingClientRect();
+        return {
+          container: { left: container.left, right: container.right },
+          controlBottom,
+          error: { left: error.left, right: error.right, top: error.top, height: error.height },
+          display: window.getComputedStyle(element).display,
+        };
+      });
+
+      expect(metrics.display, `${viewport.width}px ${colorScheme} uses a field layout`).toBe("grid");
+      expect(metrics.error.left, `${viewport.width}px error starts at field`).toBeCloseTo(metrics.container.left, 0);
+      expect(metrics.error.right, `${viewport.width}px error spans field`).toBeCloseTo(metrics.container.right, 0);
+      expect(metrics.error.top, `${viewport.width}px error follows controls`).toBeGreaterThanOrEqual(metrics.controlBottom);
+      const checkbox = field.locator('input[type="checkbox"]');
+      await checkbox.focus();
+      await expect(checkbox).toBeFocused();
+      await assertNoUnexpectedOverflow(page);
+    }
+  }
+});
+
+test("Mobile normal helptext fields stay vertical", async ({ page }) => {
+  await setupKioskScenario(page, "Normal-Helptext-Touch");
+  const openKioskMenu = page
+    .getByRole("button", { name: /Weitere Bereiche öffnen/ })
+    .or(page.locator(".kiosk-mobile-bottom-nav").getByRole("link", { name: "Mehr" }));
+  await openKioskMenu.click();
+  const kioskMenu = page.locator("dialog#kiosk-menu-dialog");
+  await waitForKioskDialogReady(page, kioskMenu, "kiosk-menu-dialog");
+  await kioskMenu.getByRole("button", { name: /Familie/ }).click();
+  const familyManagementDialog = page.locator("dialog#family-management-dialog");
+  await waitForKioskDialogReady(page, familyManagementDialog, "family-management-dialog");
+  await familyManagementDialog.getByRole("button", { name: "Anlegen" }).click();
+  const familyDialog = page.locator("dialog#family-dialog");
+  await waitForKioskDialogReady(page, familyDialog, "family-dialog");
+
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 844, height: 390 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const field = familyDialog.locator('form.form-grid > p:has(> .helptext)').filter({ hasText: "Persönliche PIN" });
+    const metrics = await field.evaluate((element) => {
+      const container = element.getBoundingClientRect();
+      const label = element.querySelector("label").getBoundingClientRect();
+      const input = element.querySelector("input").getBoundingClientRect();
+      const help = element.querySelector(".helptext").getBoundingClientRect();
+      return {
+        container: { left: container.left, right: container.right },
+        label: { top: label.top, bottom: label.bottom },
+        input: { left: input.left, right: input.right, top: input.top, bottom: input.bottom },
+        help: { left: help.left, right: help.right, top: help.top },
+      };
+    });
+
+    expect(metrics.input.left, `${viewport.width}px input starts at field`).toBeCloseTo(metrics.container.left, 0);
+    expect(metrics.input.right, `${viewport.width}px input spans field`).toBeCloseTo(metrics.container.right, 0);
+    expect(metrics.input.top, `${viewport.width}px input follows label`).toBeGreaterThanOrEqual(metrics.label.bottom);
+    expect(metrics.help.left, `${viewport.width}px help starts at field`).toBeCloseTo(metrics.container.left, 0);
+    expect(metrics.help.right, `${viewport.width}px help spans field`).toBeCloseTo(metrics.container.right, 0);
+    expect(metrics.help.top, `${viewport.width}px help follows input`).toBeGreaterThanOrEqual(metrics.input.bottom);
+  }
+});
+
 test("Admin configures and centrally revokes every camp kiosk access", async ({ page }) => {
   await setupFirstAdmin(page);
   const campName = await createCamp(page, "Lagerzugang");

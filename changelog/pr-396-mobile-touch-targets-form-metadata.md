@@ -1,4 +1,4 @@
-# Mobile Touch Targets & Form Metadata (Closes #346, #349, #557, #558, #559, #560, #561, #562, #566, #567, #569)
+# Mobile Touch Targets & Form Metadata (Closes #346, #349, #557, #558, #559, #560, #561, #562, #566, #567, #568, #569, #570)
 
 - Standardized mobile interactive touch targets to 44px minimum height and width in portrait and narrow landscape viewports (`@media (max-width: 780px), (max-width: 900px) and (orientation: landscape)`).
 - Updated `.theme-toggle`, standard buttons, input/select/textarea fields, dialog close controls, and checkbox/radio label touch targets.
@@ -10,6 +10,8 @@
 - Covered the real Camp-Detail export and meal-overview links with 44px mobile touch targets without changing the existing PWA cache contract.
 - Aligned portrait touch targets with the existing 780px mobile layout breakpoint while preserving the 900px narrow-landscape boundary.
 - Covered visible checkbox and radio inputs with associated labels at 44px touch targets in portrait and narrow landscape viewports.
+- Kept checkbox help text and validation errors below their 44px control rows at full field width on the preorder and shared-expense approval forms.
+- Scoped the checkbox/radio helptext grid to direct checkbox/radio controls so ordinary helptext form fields retain their mobile vertical layout.
 - Added an explicit metadata inventory for login, kiosk registration, participant, family-member, QuickBooking, and MealBooking forms, including exact field names, labels, credential autocomplete, and meaningful text/number metadata.
 - Synchronized the final kiosk login before navigating to the authenticated meal calendar, preventing WebKit from cancelling the login POST during the subsequent navigation.
 - Kept kiosk self-registration interaction behind the observable modal/focus-ready contract and asserted both entered names before advancing the wizard, preventing Firefox from validating a partially initialized Step 1.
