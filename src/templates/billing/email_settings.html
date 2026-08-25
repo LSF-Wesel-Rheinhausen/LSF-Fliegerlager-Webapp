@@ -33,12 +33,12 @@
 
   <section class="panel stack">
     <h2>Letzte manuelle Versandaufträge</h2>
-    <table>
-      <thead><tr><th>Zeitpunkt</th><th>Lager</th><th>Art</th><th>Betreff</th><th>Empfänger</th><th></th></tr></thead>
+    <table data-sortable>
+      <thead><tr><th data-sort-type="date">Zeitpunkt</th><th>Lager</th><th>Art</th><th>Betreff</th><th data-sort-type="number">Empfänger</th><th></th></tr></thead>
       <tbody>
         {% for batch in recent_batches %}
           <tr>
-            <td>{{ batch.created_at }}</td>
+            <td data-sort-value="{{ batch.created_at|date:'YmdHis' }}">{{ batch.created_at }}</td>
             <td>{{ batch.camp }}</td>
             <td>{{ batch.get_kind_display }}</td>
             <td>{{ batch.subject }}</td>

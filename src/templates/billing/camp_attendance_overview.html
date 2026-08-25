@@ -12,9 +12,9 @@
       </section>
     {% else %}
       <h2 id="attendance-totals-title">Tägliche Summen</h2>
-      <table aria-labelledby="attendance-totals-title">
+      <table aria-labelledby="attendance-totals-title" data-sortable>
         <caption>Anwesenheit pro Übernachtung</caption>
-        <thead><tr><th scope="col">Datum</th><th scope="col">Anwesend</th><th scope="col">Abwesend</th></tr></thead>
+        <thead><tr><th scope="col" data-sort-type="date">Datum</th><th scope="col" data-sort-type="number">Anwesend</th><th scope="col" data-sort-type="number">Abwesend</th></tr></thead>
         <tbody>
           {% for total in attendance_totals %}
             <tr><th scope="row">{{ total.date|date:"d.m.Y" }}</th><td>{{ total.present }}</td><td>{{ total.absent }}</td></tr>
@@ -27,7 +27,7 @@
       <h2 id="attendance-matrix-title">Kalender</h2>
       <p id="attendance-matrix-help" class="helptext">Auf kleinen Bildschirmen kannst du die Matrix horizontal scrollen. Jede Zelle enthält zusätzlich den Status als Text.</p>
       <div class="kiosk-table__wrapper attendance-matrix-scroll" tabindex="0" role="region" aria-label="Anwesenheitsmatrix" aria-describedby="attendance-matrix-help">
-        <table>
+        <table data-filterable>
           <caption>Anwesenheit je Person und Übernachtung</caption>
           <thead>
             <tr>

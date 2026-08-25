@@ -44,7 +44,7 @@
       <input type="hidden" name="preview_token" value="{{ preview_token }}">
       <section class="panel stack" aria-labelledby="settlement-email-preview-heading">
         <h2 id="settlement-email-preview-heading">Versandvorschau</h2>
-        <table>
+        <table data-sortable data-filterable>
           <thead><tr><th>Adresse</th><th>Teilnehmer</th><th>Anhang</th><th>Vorheriger Versand</th></tr></thead>
           <tbody>
             {% for recipient in preview %}

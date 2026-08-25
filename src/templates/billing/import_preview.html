@@ -22,8 +22,8 @@
   </section>
 
   {% if rows %}
-    <table>
-      <thead><tr><th>Zeile</th><th>Name</th><th>E-Mail</th><th>Nächte</th><th>Validierung</th></tr></thead>
+    <table data-sortable data-filterable>
+      <thead><tr><th data-sort-type="number">Zeile</th><th>Name</th><th>E-Mail</th><th data-sort-type="number">Nächte</th><th>Validierung</th></tr></thead>
       <tbody>
         {% for row in rows %}
           <tr>
