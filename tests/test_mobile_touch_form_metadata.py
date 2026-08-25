@@ -20,9 +20,9 @@ CSS = Path(__file__).parents[1] / "src" / "static" / "billing" / "app-v8.css"
 def test_mobile_touch_targets_cover_stacked_email_recipient_widgets():
     css = CSS.read_text(encoding="utf-8")
 
-    assert '.stack input[type="checkbox"]' in css
-    assert '.stack input[type="radio"]' in css
-    assert '.stack label:has(> input:is([type="checkbox"], [type="radio"]))' in css
+    assert '.email-recipient-form input[type="checkbox"]' in css
+    assert '.email-recipient-form input[type="radio"]' in css
+    assert '.email-recipient-form label:has(> input:is([type="checkbox"], [type="radio"]))' in css
     assert ".form-grid .checkbox-form-field > legend" in css
 
 

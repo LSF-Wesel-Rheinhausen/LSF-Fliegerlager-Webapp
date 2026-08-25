@@ -3878,7 +3878,7 @@ code {
     cursor: pointer;
   }
 
-  .stack label:has(> input:is([type="checkbox"], [type="radio"])) {
+  .email-recipient-form label:has(> input:is([type="checkbox"], [type="radio"])) {
     display: flex;
     align-items: center;
     min-height: 44px;
@@ -3886,8 +3886,8 @@ code {
     cursor: pointer;
   }
 
-  .stack input[type="checkbox"],
-  .stack input[type="radio"] {
+  .email-recipient-form input[type="checkbox"],
+  .email-recipient-form input[type="radio"] {
     width: 44px;
     height: 44px;
     min-width: 44px;
