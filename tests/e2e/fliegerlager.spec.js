@@ -1117,7 +1117,6 @@ test("Shift template time fields remain stacked on mobile", async ({ page }) => 
 
   for (const field of ["Startzeit", "Endzeit"]) {
     const label = dialog.getByLabel(field).locator("..", { has: page.locator("input") });
-    const input = dialog.getByLabel(field);
     const layout = await label.evaluate((element) => {
       const labelRect = element.getBoundingClientRect();
       const inputRect = element.querySelector("input").getBoundingClientRect();
