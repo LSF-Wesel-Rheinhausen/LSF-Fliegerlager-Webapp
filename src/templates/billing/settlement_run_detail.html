@@ -32,8 +32,8 @@
     <div class="metric"><dt>Offen</dt><dd><strong>{{ run.balance|money_eur }}</strong></dd></div>
   </dl>
 
-  <table>
-    <thead><tr><th>Teilnehmer</th><th>Status</th><th>Soll</th><th>Gezahlt</th><th>Vorgestreckt</th><th>Offen</th><th></th></tr></thead>
+  <table data-sortable data-filterable>
+    <thead><tr><th>Teilnehmer</th><th>Status</th><th data-sort-type="number">Soll</th><th data-sort-type="number">Gezahlt</th><th data-sort-type="number">Vorgestreckt</th><th data-sort-type="number">Offen</th><th></th></tr></thead>
     <tbody>
       {% for snapshot in snapshots %}
         <tr>

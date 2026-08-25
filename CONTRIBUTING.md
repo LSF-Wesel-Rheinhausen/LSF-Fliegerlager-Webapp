@@ -64,3 +64,20 @@ Report suspected vulnerabilities privately to the repository maintainers rather 
 ## Agent Configuration
 
 `AGENTS.md` is the repository source of truth. `CLAUDE.md` and `.agents/rules/repository-guidelines.md` import it for Claude Code and Google Antigravity; do not duplicate project rules in those adapters.
+
+
+## Lizenzierung von Beiträgen
+
+Beiträge zu diesem Projekt unterliegen dem
+[Contributor License Agreement](CLA.md).
+
+Mit einem Pull Request muss der Beitragende ausdrücklich bestätigen,
+dass er dem CLA zustimmt.
+
+Das Copyright am jeweiligen Beitrag verbleibt beim Beitragenden.
+Dem Projektinhaber werden jedoch die im CLA beschriebenen Nutzungs-
+und Relizenzierungsrechte eingeräumt.
+
+Beiträge dürfen insbesondere als Teil des Projekts sowohl unter der
+öffentlichen nichtkommerziellen Lizenz als auch unter separaten
+kommerziellen Lizenzbedingungen angeboten werden.

@@ -219,6 +219,7 @@ def test_service_workers_have_explicit_scopes(client, route_name, expected_scope
     assert expected_cache_name in javascript
     assert "/static/billing/app-v8.css" in javascript
     assert "/static/billing/dialog-scroll-lock.js" in javascript
+    assert "/static/billing/table_tools.js" in javascript
     assert '"/static/billing/app.css"' not in javascript
     assert b"offline" in response.content
     assert b'request.method !== "GET"' in response.content

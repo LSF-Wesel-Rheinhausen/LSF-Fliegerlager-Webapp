@@ -44,6 +44,24 @@ def test_mobile_touch_target_class_covers_standalone_admin_checkboxes():
     assert 'name="price_attributes_confirmed" class="mobile-touch-target"' in camp_detail
 
 
+def test_mobile_touch_target_class_covers_all_registration_approval_checkboxes():
+    camp_detail = (TEMPLATES / "camp_detail.html").read_text(encoding="utf-8")
+
+    for name in ("is_child", "is_youth_group", "is_companion", "price_attributes_confirmed"):
+        assert f'name="{name}"' in camp_detail
+        assert f'name="{name}" class="mobile-touch-target"' in camp_detail
+
+
+def test_mobile_touch_target_rules_preserve_textarea_minimum_height():
+    css = CSS.read_text(encoding="utf-8")
+    mobile_touch_rules = css.split("/* Mobile Touch Target Standards", maxsplit=1)[1].split(
+        "/* Table tools:", maxsplit=1
+    )[0]
+
+    assert "textarea {\n  min-height: 90px;\n}" in css
+    assert "textarea" not in mobile_touch_rules
+
+
 def test_authentication_form_metadata_does_not_disable_autocomplete():
     form = EmailOrUsernameAuthenticationForm()
     username_widget = form.fields["username"].widget
