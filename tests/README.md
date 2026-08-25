@@ -56,4 +56,4 @@ Der Seed ist idempotent, lokal-only und nicht für Produktion bestimmt. Die dete
 
 pytest, CI und parallele Playwright-Worker verwenden weiterhin isolierte Datenbanken; nur ein serieller lokaler E2E-/Review-Lauf darf bewusst gegen dieselbe lokale Seed-Datenbank zeigen.
 
-Der lokale Sammellauf ist `npm run test:local`; die Logs werden unter `.test-local-logs/<timestamp>/` abgelegt.
+Der lokale Sammellauf ist `npm run test:local`; die Logs werden unter `.test-local-logs/<timestamp>/` abgelegt. Dabei verteilt pytest die normalen Tests standardmaessig auf vier Prozesse und fuehrt die schemaveraendernden Migrationstests danach seriell aus. Der direkte Befehl `.venv/bin/python -m pytest` bleibt unveraendert seriell. Fuer ressourcenarme Systeme kann die Worker-Zahl beispielsweise mit `PYTEST_WORKERS=2` reduziert werden; `PYTEST_WORKERS=0 npm run test:local` erzwingt den seriellen Fallback.

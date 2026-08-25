@@ -6,11 +6,18 @@ if [[ "${CI:-}" == "true" ]]; then
   exit 2
 fi
 
+pytest_workers="${PYTEST_WORKERS:-4}"
+if [[ ! "${pytest_workers}" =~ ^[0-9]+$ ]]; then
+  printf 'PYTEST_WORKERS muss eine nicht-negative Ganzzahl sein.\n'
+  exit 2
+fi
+
 declare -a STEPS=(
   "Ruff lint|.venv/bin/python -m ruff check ."
   "Ruff format|.venv/bin/python -m ruff format --check ."
   "Django check|.venv/bin/python src/manage.py check"
-  "Python tests|.venv/bin/python -m pytest"
+  "Python tests|.venv/bin/python -m pytest -n ${pytest_workers} --dist=loadfile --ignore=tests/test_migrations.py"
+  "Python migration tests|.venv/bin/python -m pytest tests/test_migrations.py"
   "E2E (Playwright)|npm run test:e2e"
 )
 
