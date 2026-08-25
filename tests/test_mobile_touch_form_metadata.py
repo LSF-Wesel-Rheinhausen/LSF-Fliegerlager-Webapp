@@ -15,6 +15,7 @@ from billing.forms import (
 )
 
 CSS = Path(__file__).parents[1] / "src" / "static" / "billing" / "app-v8.css"
+TEMPLATES = Path(__file__).parents[1] / "src" / "templates" / "billing"
 
 
 def test_mobile_touch_targets_cover_stacked_email_recipient_widgets():
@@ -24,6 +25,23 @@ def test_mobile_touch_targets_cover_stacked_email_recipient_widgets():
     assert '.email-recipient-form input[type="radio"]' in css
     assert '.email-recipient-form label:has(> input:is([type="checkbox"], [type="radio"]))' in css
     assert ".form-grid .checkbox-form-field > legend" in css
+
+
+def test_mobile_touch_target_class_covers_standalone_admin_checkboxes():
+    css = CSS.read_text(encoding="utf-8")
+
+    assert ".mobile-touch-target" in css
+    assert 'id="select-all-shifts" class="mobile-touch-target"' in (TEMPLATES / "shift_manage.html").read_text(
+        encoding="utf-8"
+    )
+    assert 'class="shift-checkbox mobile-touch-target"' in (TEMPLATES / "shift_manage.html").read_text(encoding="utf-8")
+    participant_detail = (TEMPLATES / "participant_detail.html").read_text(encoding="utf-8")
+    assert 'id="select-all-charges" class="mobile-touch-target"' in participant_detail
+    assert 'class="charge-checkbox mobile-touch-target"' in participant_detail
+    assert 'id="select-all-audit-logs" class="mobile-touch-target"' in participant_detail
+    assert 'class="audit-log-checkbox mobile-touch-target"' in participant_detail
+    camp_detail = (TEMPLATES / "camp_detail.html").read_text(encoding="utf-8")
+    assert 'name="price_attributes_confirmed" class="mobile-touch-target"' in camp_detail
 
 
 def test_authentication_form_metadata_does_not_disable_autocomplete():

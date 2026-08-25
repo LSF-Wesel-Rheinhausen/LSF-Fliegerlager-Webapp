@@ -3974,6 +3974,7 @@ code {
   .form-grid input[type="checkbox"],
   .form-grid input[type="radio"],
   .shift-selection input[type="checkbox"],
+  .mobile-touch-target,
   label.checkbox-label input[type="checkbox"],
   label.radio-label input[type="radio"] {
     width: 44px;

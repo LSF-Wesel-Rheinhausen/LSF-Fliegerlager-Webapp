@@ -160,7 +160,7 @@
                     · <a href="{% url 'participant-detail' p.pk %}">Profil und PIN öffnen</a>
                   </p>
                   <label for="approval-{{ p.pk }}-confirmed">
-                    <input id="approval-{{ p.pk }}-confirmed" type="checkbox" name="price_attributes_confirmed" required>
+                    <input id="approval-{{ p.pk }}-confirmed" type="checkbox" name="price_attributes_confirmed" class="mobile-touch-target" required>
                     Preisrelevante Angaben geprüft
                   </label>
                   <div class="inline-actions">

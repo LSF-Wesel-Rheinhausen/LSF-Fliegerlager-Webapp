@@ -21,6 +21,7 @@
 - Applied 44px targets to stacked email recipient widgets and rendered shared-expense participants as an accessible fieldset with legend semantics.
 - Scoped stacked email touch rules to the two recipient forms so breakfast cards and existing checkbox-helptext layouts retain their grid contracts.
 - Preserved stacked shift-template time fields, enlarged kiosk help controls, and covered quick-booking target rows with real mobile dialog regressions.
+- Extended the shared 44px mobile target contract to standalone administrative bulk-selection and registration-confirmation checkboxes.
 
 ## Scope
 
