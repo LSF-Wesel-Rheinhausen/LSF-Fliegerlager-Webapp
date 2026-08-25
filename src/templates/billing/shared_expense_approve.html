@@ -14,11 +14,11 @@
         {{ form.cost_center.label_tag }}
         {{ form.cost_center }}
       </p>
-      <div class="checkbox-form-field">
+      <fieldset class="checkbox-form-field">
         {{ form.participant_ids.errors }}
-        {{ form.participant_ids.label_tag }}
+        <legend>{{ form.participant_ids.label }}</legend>
         {{ form.participant_ids }}
-      </div>
+      </fieldset>
       <div class="form-actions">
         <button type="submit">Speichern</button>
       </div>

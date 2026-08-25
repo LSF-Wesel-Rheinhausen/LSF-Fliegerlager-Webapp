@@ -3864,7 +3864,8 @@ code {
   }
 
   .checkbox-cell label,
-  .form-grid label,
+  .form-grid label:not(.meal-booking-day),
+  .shift-selection,
   label.checkbox-label,
   label.radio-label {
     display: flex;
@@ -3875,6 +3876,24 @@ code {
     padding-top: 4px;
     padding-bottom: 4px;
     cursor: pointer;
+  }
+
+  .email-recipient-form label:has(> input:is([type="checkbox"], [type="radio"])) {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    min-width: 44px;
+    cursor: pointer;
+  }
+
+  .email-recipient-form input[type="checkbox"],
+  .email-recipient-form input[type="radio"] {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    flex: 0 0 44px;
+    margin-right: 8px;
   }
 
   .form-grid p:has(> input:is([type="checkbox"], [type="radio"])):has(> .helptext) {
@@ -3904,11 +3923,16 @@ code {
 
   .form-grid .checkbox-form-field > .errorlist,
   .form-grid .checkbox-form-field > label,
+  .form-grid .checkbox-form-field > legend,
   .form-grid .checkbox-form-field > div {
     grid-column: 1;
   }
 
   .form-grid .checkbox-form-field > label {
+    order: 1;
+  }
+
+  .form-grid .checkbox-form-field > legend {
     order: 1;
   }
 
@@ -3924,6 +3948,7 @@ code {
   .checkbox-cell label input[type="radio"],
   .form-grid input[type="checkbox"],
   .form-grid input[type="radio"],
+  .shift-selection input[type="checkbox"],
   label.checkbox-label input[type="checkbox"],
   label.radio-label input[type="radio"] {
     width: 44px;
