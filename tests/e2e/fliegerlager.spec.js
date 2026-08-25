@@ -1103,6 +1103,67 @@ test("Kiosk shift selectors provide native mobile touch targets without JavaScri
   }
 });
 
+test("Shift template time fields remain stacked on mobile", async ({ page }) => {
+  await setupFirstAdmin(page);
+  await createCamp(page, "Dienstvorlagen Touch", 0, 4);
+  const campId = new URL(page.url()).pathname.match(/\/camps\/(\d+)\//)[1];
+  await page.goto(`/camps/${campId}/shift-templates/`);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.getByRole("button", { name: "Vorlage anlegen" }).click();
+  const dialog = page.locator("dialog#template-dialog");
+  await expect(dialog).toBeVisible();
+
+  for (const field of ["Startzeit", "Endzeit"]) {
+    const label = dialog.getByLabel(field).locator("..", { has: page.locator("input") });
+    const input = dialog.getByLabel(field);
+    const layout = await label.evaluate((element) => {
+      const labelRect = element.getBoundingClientRect();
+      const inputRect = element.querySelector("input").getBoundingClientRect();
+      return {
+        labelTop: labelRect.top,
+        inputTop: inputRect.top,
+        labelWidth: labelRect.width,
+        inputWidth: inputRect.width,
+      };
+    });
+    expect(layout.inputTop, `${field} input must follow its label`).toBeGreaterThan(layout.labelTop + 12);
+    expect(layout.inputWidth, `${field} input must fit its cell`).toBeGreaterThan(0);
+    expect(layout.labelWidth, `${field} label must fit its cell`).toBeGreaterThan(0);
+  }
+
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.emulateMedia({ colorScheme: "light" });
+  await assertNoUnexpectedOverflow(page);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+});
+
+test("Kiosk help controls retain touch size and open their real dialog", async ({ page }) => {
+  await setupKioskScenario(page, "Kiosk Hilfe Touch");
+  const helpButton = page.locator(".kiosk-help-button").first();
+
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 844, height: 390 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.emulateMedia({ colorScheme: viewport.width === 390 ? "dark" : "light" });
+    const box = await helpButton.boundingBox();
+    expect(box, `${viewport.width}px help button`).not.toBeNull();
+    expect(box.width, `${viewport.width}px help button width`).toBeGreaterThanOrEqual(44);
+    expect(box.height, `${viewport.width}px help button height`).toBeGreaterThanOrEqual(44);
+    await helpButton.focus();
+    await expect(helpButton).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("dialog#kiosk-help-dialog")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("dialog#kiosk-help-dialog")).toBeHidden();
+    await assertNoUnexpectedOverflow(page);
+  }
+});
+
 async function expectOnlyModal(page, dialogId) {
   await expect.poll(() => page.locator("dialog:modal").evaluateAll((dialogs) => dialogs.map((dialog) => dialog.id))).toEqual([dialogId]);
 }
@@ -1244,6 +1305,23 @@ test("Kiosk quick booking validates targets and supports cancellation", async ({
   const quickDialog = page.locator("dialog#quick-dialog");
   await expect(quickDialog).toBeVisible();
   const quickTargets = quickDialog.locator('[data-quick-target-scope="drink"]');
+  const targetLayout = await quickTargets.first().locator("..").evaluate((label) => {
+    const labelRect = label.getBoundingClientRect();
+    const inputRect = label.querySelector('input[type="checkbox"]').getBoundingClientRect();
+    return {
+      labelWidth: labelRect.width,
+      labelHeight: labelRect.height,
+      inputWidth: inputRect.width,
+      inputHeight: inputRect.height,
+    };
+  });
+  expect(targetLayout.labelWidth).toBeGreaterThanOrEqual(44);
+  expect(targetLayout.labelHeight).toBeGreaterThanOrEqual(44);
+  expect(targetLayout.inputWidth).toBeGreaterThanOrEqual(44);
+  expect(targetLayout.inputHeight).toBeGreaterThanOrEqual(44);
+  await page.setViewportSize({ width: 844, height: 390 });
+  await assertNoUnexpectedOverflow(page);
+  await page.setViewportSize({ width: 390, height: 844 });
   await quickTargets.first().uncheck();
   await quickDialog.getByRole("button", { name: "1x" }).click();
   await expect(quickDialog).toBeVisible();
