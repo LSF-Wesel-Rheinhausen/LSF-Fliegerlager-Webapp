@@ -190,3 +190,19 @@ Beitrags- und Agentenregeln stehen in [`CONTRIBUTING.md`](CONTRIBUTING.md) und [
 - Mehr Tests: zusätzliche Regressionstests für komplexe Settlement-, Dienstplan-, Import- und Export-Randfälle.
 - UI-Ausbau: weitere Bearbeiten-/Löschen-Flows, Druckansichten und zusätzliche Dashboard-Auswertungen.
 - KI-Auslese: Automatisierte KI-Auslese für Rechnungen aus Auslagen implementieren.
+
+## Lizenz
+
+Copyright © 2024–2026 Jan Sellerbeck.
+
+Die LSF-Fliegerlager-Webapp ist unter der
+[PolyForm Noncommercial License 1.0.0](LICENSE.md) source-available.
+
+Nichtkommerzielle Nutzung ist im Rahmen dieser Lizenz gestattet.
+Kommerzielle Nutzung erfordert eine separate Lizenz.
+
+Weitere Informationen:
+[Commercial Licensing](COMMERCIAL-LICENSING.md)
+
+Beiträge zum Projekt unterliegen dem
+[Contributor License Agreement](CLA.md).
