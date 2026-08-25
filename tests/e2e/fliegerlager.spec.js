@@ -57,12 +57,22 @@ async function assertNoUnexpectedOverflow(page) {
       "h1",
     ];
 
+    const isInsideHorizontalScroller = (element) => {
+      for (let node = element.parentElement; node; node = node.parentElement) {
+        const overflowX = window.getComputedStyle(node).overflowX;
+        if ((overflowX === "auto" || overflowX === "scroll") && node.scrollWidth > node.clientWidth) {
+          return true;
+        }
+      }
+      return false;
+    };
+
     for (const element of document.querySelectorAll(selectors.join(","))) {
       const rect = element.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) {
         continue;
       }
-      if (rect.left < -1 || rect.right > viewportWidth + 1) {
+      if ((rect.left < -1 || rect.right > viewportWidth + 1) && !isInsideHorizontalScroller(element)) {
         failures.push(`${element.tagName.toLowerCase()} ${element.textContent.trim().slice(0, 80)}`);
       }
       const display = window.getComputedStyle(element).display;

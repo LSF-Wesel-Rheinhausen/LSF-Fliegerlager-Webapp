@@ -91,6 +91,7 @@ def service_worker(request: HttpRequest, surface: str) -> HttpResponse:
                 static("billing/theme.js"),
                 static("billing/pwa.js"),
                 static("billing/dialog-scroll-lock.js"),
+                static("billing/table_tools.js"),
                 static("billing/logo.jpg"),
                 static(f"billing/icons/{config['icon']}-192.png"),
                 static(f"billing/icons/{config['icon']}-512.png"),

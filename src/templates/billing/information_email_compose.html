@@ -19,14 +19,14 @@
     <section class="panel stack" style="margin-bottom: 1.5rem;">
       <h2>Aktive Kiosk-Ankündigungen</h2>
       <div class="table-responsive">
-        <table class="table responsive-record-table">
+        <table class="table responsive-record-table" data-sortable data-filterable>
           <thead>
             <tr>
-              <th>Datum</th>
+              <th data-sort-type="date">Datum</th>
               <th>Titel</th>
               <th>Inhalt</th>
               <th>Status</th>
-              <th>Aktionen</th>
+              <th data-sort="none">Aktionen</th>
             </tr>
           </thead>
           <tbody>
@@ -102,7 +102,7 @@
       <section class="panel stack" aria-labelledby="email-preview-heading">
         <h2 id="email-preview-heading">Versandvorschau</h2>
         <p>Vorschau der gewählten Empfänger und Kanäle.</p>
-        <table>
+        <table data-sortable data-filterable>
           <thead><tr><th>Adresse</th><th>Ausgewählte Teilnehmer</th></tr></thead>
           <tbody>
             {% for recipient in preview %}

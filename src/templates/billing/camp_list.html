@@ -8,9 +8,9 @@
       <a class="button button-secondary" href="{% url 'preorder-settings' %}">Vorbestellungen</a>
     {% endif %}
   </div>
-  <table>
+  <table data-sortable data-filterable>
     <thead>
-      <tr><th>Name</th><th>Jahr</th><th>Zeitraum</th><th>Status</th></tr>
+      <tr><th>Name</th><th data-sort-type="number">Jahr</th><th data-sort-type="date">Zeitraum</th><th>Status</th></tr>
     </thead>
     <tbody>
       {% for camp in camps %}

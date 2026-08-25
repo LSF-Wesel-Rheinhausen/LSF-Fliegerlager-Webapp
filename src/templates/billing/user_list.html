@@ -8,7 +8,7 @@
     </div>
     <a class="button" href="{% url 'user-create' %}">Nutzer anlegen</a>
   </div>
-  <table>
+  <table data-sortable data-filterable>
     <thead>
       <tr>
         <th>Benutzer</th>
@@ -17,7 +17,7 @@
         <th>Telefon</th>
         <th>Rolle</th>
         <th>Status</th>
-        <th>Aktionen</th>
+        <th data-sort="none">Aktionen</th>
       </tr>
     </thead>
     <tbody>
