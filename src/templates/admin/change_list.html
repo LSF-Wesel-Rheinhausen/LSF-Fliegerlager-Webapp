@@ -4,7 +4,7 @@
 {% block filters %}
   {% if cl.has_filters %}
     <details class="admin-filter-drawer" id="admin-filter-drawer" open data-has-active-filters="{% if cl.has_active_filters %}true{% else %}false{% endif %}">
-      <summary class="admin-filter-toggle" id="admin-filter-toggle" aria-controls="changelist-filter" aria-expanded="{% if cl.has_active_filters %}true{% else %}false{% endif %}">
+      <summary class="admin-filter-toggle" id="admin-filter-toggle" aria-controls="changelist-filter" aria-expanded="true">
         <span>Filter</span>
         <span class="admin-filter-summary" aria-live="polite">{% if cl.has_active_filters %}aktiv{% else %}keine Auswahl{% endif %}</span>
       </summary>

@@ -276,11 +276,11 @@ class PasskeyCredential(TimeStampedModel):
 
 class Camp(TimeStampedModel):
     name = models.CharField(max_length=160)
-    year = models.PositiveIntegerField()
-    starts_on = models.DateField(null=True, blank=True)
-    ends_on = models.DateField(null=True, blank=True)
-    is_active = models.BooleanField(default=True)
-    meal_booking_cutoff_time = models.TimeField(default=time(12, 0))
+    year = models.PositiveIntegerField(verbose_name="Jahr")
+    starts_on = models.DateField(null=True, blank=True, verbose_name="Beginn")
+    ends_on = models.DateField(null=True, blank=True, verbose_name="Ende")
+    is_active = models.BooleanField(default=True, verbose_name="Aktiv")
+    meal_booking_cutoff_time = models.TimeField(default=time(12, 0), verbose_name="Anmeldeschluss für Essen")
     allow_breakfast_prebooking_before_camp = models.BooleanField(
         default=False,
         help_text="Frühstück kann vor Lagerbeginn im Kiosk vorbestellt werden.",

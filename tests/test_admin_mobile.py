@@ -3,7 +3,7 @@ import re
 import pytest
 from django.urls import reverse
 
-from billing.models import MealOrder, Participant, Shift
+from billing.models import Camp, MealOrder, Participant, Shift
 from tests.factories import CampFactory, ParticipantFactory, SuperUserFactory
 
 
@@ -19,6 +19,8 @@ def test_admin_changelists_expose_mobile_navigation_and_filter_controls(client, 
     assert b'aria-controls="admin-nav-drawer"' in response.content
     assert b"admin-filter-toggle" in response.content
     assert b'aria-controls="changelist-filter"' in response.content
+    assert b'<details class="admin-filter-drawer" id="admin-filter-drawer" open' in response.content
+    assert b'aria-expanded="true"' in response.content
     assert b"admin-filter-summary" in response.content
     assert b"admin-empty-state" in response.content
 
@@ -95,3 +97,16 @@ def test_admin_filtered_empty_state_is_not_presented_as_empty_database(client, q
     assert reset_link is not None
     assert b"q=" not in reset_link.group(1)
     assert b"camp__id__exact" not in reset_link.group(1)
+
+
+@pytest.mark.django_db
+def test_camp_admin_fields_have_german_labels():
+    expected_labels = {
+        "year": "Jahr",
+        "meal_booking_cutoff_time": "Anmeldeschluss für Essen",
+        "is_active": "Aktiv",
+        "starts_on": "Beginn",
+        "ends_on": "Ende",
+    }
+
+    assert {name: Camp._meta.get_field(name).verbose_name for name in expected_labels} == expected_labels

@@ -248,6 +248,32 @@ test("mobile changelist results expose a named focusable horizontal scroll regio
   await expect(results).toBeFocused();
 });
 
+test("mobile result and paginator links have 44px touch targets", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signInAdmin(page);
+  await page.goto("/admin/billing/participant/");
+  await page.waitForLoadState("networkidle");
+
+  await page.locator(".admin-results-scroll").evaluate((results) => {
+    results.insertAdjacentHTML(
+      "afterbegin",
+      '<div class="results"><table id="result_list"><tbody><tr><td><a href="/admin/billing/participant/1/change/">Teilnehmer</a></td></tr></tbody></table></div>',
+    );
+  });
+  const resultLink = page.locator(".admin-results-scroll .results a").first();
+  const resultBox = await resultLink.boundingBox();
+  expect(resultBox.width).toBeGreaterThanOrEqual(44);
+  expect(resultBox.height).toBeGreaterThanOrEqual(44);
+
+  await page.locator(".paginator").evaluate((paginator) => {
+    paginator.insertAdjacentHTML("beforeend", '<a href="?p=2">2</a>');
+  });
+  const paginatorLink = page.locator(".paginator a").last();
+  const paginatorBox = await paginatorLink.boundingBox();
+  expect(paginatorBox.width).toBeGreaterThanOrEqual(44);
+  expect(paginatorBox.height).toBeGreaterThanOrEqual(44);
+});
+
 test("desktop shift forms preserve overflow for inline tables", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await signInAdmin(page);

@@ -5,7 +5,12 @@
 Responsive, zugängliche mobile Navigation, Tabellen, Filter und Leerzustände im
 Django-Admin; deutsche Modell- und Feldbezeichnungen bleiben im Admin konsistent.
 
-Die Modell-Metadaten sind auf dem aktuellen Migrationsstand als Migration 0070
+Die Filter-ARIA-Anfangsanzeige entspricht dem serverseitig geöffneten Zustand;
+Ergebnis- und Paginator-Links sind auf mobilen Viewports touch-gerecht. Die
+verbleibenden Camp-Feldbezeichnungen sind auf Deutsch gesetzt. Der E2E-Server
+migriert dieselbe absolute SQLite-Datei, die er anschließend verwendet.
+
+Die Modell-Metadaten sind auf dem aktuellen Migrationsstand als Migration 0071
 integriert. Die alten, nicht mehr passenden Migrationen aus dem ursprünglichen
 #402-Branch wurden nicht übernommen. Die Admin-Mobile-Assets sind nicht Teil des
 PWA-`STATIC_ASSETS`-Vertrags; deshalb wurde `PWA_CACHE_VERSION` nicht erhöht.
@@ -15,7 +20,7 @@ PWA-`STATIC_ASSETS`-Vertrags; deshalb wurde `PWA_CACHE_VERSION` nicht erhöht.
 - `src/templates/admin/base_site.html`
 - `src/templates/admin/change_list.html`
 - `src/static/billing/admin-mobile.css` und `admin-mobile.js`
-- `src/billing/models.py` und `src/billing/migrations/0070_*.py`
+- `src/billing/models.py` und `src/billing/migrations/0070_*.py`, `0071_*.py`
 - fokussierte Admin-Python- und Playwright-Regressionen
 
 Die Review-Nachbesserungen halten den mobilen Menüabstand und 44×44px

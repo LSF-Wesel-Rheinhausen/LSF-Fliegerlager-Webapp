@@ -21,7 +21,7 @@ if [ -n "$existing_pids" ]; then
   fi
 fi
 
-db_path="${DATABASE_URL#sqlite:///}"
+db_path="${DATABASE_URL#sqlite://}"
 mkdir -p "$(dirname "$db_path")"
 rm -f "$db_path"
 

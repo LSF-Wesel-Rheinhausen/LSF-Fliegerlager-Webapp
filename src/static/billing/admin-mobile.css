@@ -191,6 +191,15 @@
     min-height: 44px;
   }
 
+  .admin-results-scroll .results a,
+  .paginator a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
   .admin-filter-drawer {
     margin-bottom: 1rem;
     border: 1px solid var(--hairline-color, #ddd);
