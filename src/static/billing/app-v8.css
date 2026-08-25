@@ -3878,6 +3878,24 @@ code {
     cursor: pointer;
   }
 
+  .stack label:has(> input:is([type="checkbox"], [type="radio"])) {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    min-width: 44px;
+    cursor: pointer;
+  }
+
+  .stack input[type="checkbox"],
+  .stack input[type="radio"] {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    flex: 0 0 44px;
+    margin-right: 8px;
+  }
+
   .form-grid p:has(> input:is([type="checkbox"], [type="radio"])):has(> .helptext) {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -3905,11 +3923,16 @@ code {
 
   .form-grid .checkbox-form-field > .errorlist,
   .form-grid .checkbox-form-field > label,
+  .form-grid .checkbox-form-field > legend,
   .form-grid .checkbox-form-field > div {
     grid-column: 1;
   }
 
   .form-grid .checkbox-form-field > label {
+    order: 1;
+  }
+
+  .form-grid .checkbox-form-field > legend {
     order: 1;
   }
 

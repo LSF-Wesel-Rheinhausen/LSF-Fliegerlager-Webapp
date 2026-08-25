@@ -321,6 +321,13 @@ def test_shared_expense_approval_persists_selected_cost_center(client, editor_us
     )
     client.force_login(editor_user)
 
+    approval_form = client.get(reverse("shared-expense-approve", args=[expense.pk]))
+
+    assert approval_form.status_code == 200
+    assert b'<fieldset class="checkbox-form-field">' in approval_form.content
+    assert b"<legend>Umlage auf</legend>" in approval_form.content
+    assert b'for="id_participant_ids"' not in approval_form.content
+
     response = client.post(
         reverse("shared-expense-approve", args=[expense.pk]),
         {

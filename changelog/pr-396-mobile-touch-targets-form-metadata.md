@@ -18,6 +18,7 @@
 - Synchronized the final kiosk login before navigating to the authenticated meal calendar, preventing WebKit from cancelling the login POST during the subsequent navigation.
 - Kept kiosk self-registration interaction behind the observable modal/focus-ready contract and asserted both entered names before advancing the wizard, preventing Firefox from validating a partially initialized Step 1.
 - Synchronized the kiosk donation dialog before entering the amount and asserted the exact value, preventing native required validation from blocking the donation POST in Firefox.
+- Applied 44px targets to stacked email recipient widgets and rendered shared-expense participants as an accessible fieldset with legend semantics.
 
 ## Scope
 
