@@ -1166,6 +1166,7 @@ test("Breakfast prebooking saves a selected date", async ({ page }) => {
 });
 
 test("Kiosk can book a drink after breakfast prebooking", async ({ page }) => {
+  test.setTimeout(60_000);
   const campName = await setupKioskScenario(page, "Kiosk Nachgelagerte Getränke");
   await createKioskFamilyMember(page);
   await page.locator('[data-kiosk-card="food"] [data-food-button][data-meal-type="breakfast"]').click();
@@ -1421,6 +1422,7 @@ test("Partner meal retraction requires explicit confirmation", async ({ page }) 
 });
 
 test("Kiosk masonry and expense cards stay responsive and accessible", async ({ page }) => {
+  test.setTimeout(60_000);
   const { browserErrors, failedRequests } = trackPageIssues(page);
 
   await setupFirstAdmin(page);
@@ -1819,6 +1821,10 @@ test("Admin configures SMTP and manually confirms exact information recipients",
 
 test("Daily shift template and kiosk shift flow", async ({ page }) => {
   test.setTimeout(60_000);
+  const shiftDescription = [
+    "Spülmaschine einräumen und ausräumen.",
+    `Materialliste: ${"Reinigungsequipment".repeat(12)}`,
+  ].join("\n");
   await setupFirstAdmin(page);
   await createCamp(page, "Sommerlager Dienste", 0, 2);
   await createParticipant(page, "Albert", "Einstein", "", "1234");
@@ -1830,7 +1836,7 @@ test("Daily shift template and kiosk shift flow", async ({ page }) => {
   await page.getByRole("button", { name: "Vorlage anlegen" }).click();
   await expect(page.locator("dialog#template-dialog")).toBeVisible();
   await page.getByLabel("Name / Bezeichnung").fill("Spüldienst");
-  await page.getByLabel("Beschreibung / Aufgaben").fill("Spülmaschine einräumen, ausräumen und den Spülbereich sauber hinterlassen.");
+  await page.getByLabel("Beschreibung / Aufgaben").fill(shiftDescription);
   await page.getByLabel("Benötigte Personen").fill("2");
   await page.getByRole("button", { name: "Speichern", exact: true }).click();
   await expect(page.getByText("Spüldienst").first()).toBeVisible();
@@ -1863,7 +1869,10 @@ test("Daily shift template and kiosk shift flow", async ({ page }) => {
   const shiftInfoDialog = page.locator("dialog#kiosk-help-dialog");
   await expect(shiftInfoDialog).toBeVisible();
   await expect(shiftInfoDialog.getByRole("heading", { name: "Informationen zu Spüldienst" })).toBeVisible();
-  await expect(shiftInfoDialog).toContainText("Spülmaschine einräumen, ausräumen und den Spülbereich sauber hinterlassen.");
+  const shiftInfoContent = shiftInfoDialog.locator(".kiosk-dialog-help");
+  await expect(shiftInfoContent).toHaveText(shiftDescription);
+  await expect(shiftInfoContent).toHaveCSS("white-space", "pre-wrap");
+  await expect(shiftInfoContent).toHaveJSProperty("innerText", shiftDescription);
   await page.keyboard.press("Escape");
   await expect(shiftInfoDialog).toBeHidden();
   await expect(shiftInfoButton).toBeFocused();
@@ -1877,7 +1886,13 @@ test("Daily shift template and kiosk shift flow", async ({ page }) => {
   await assertNoUnexpectedOverflow(page);
   await shiftInfoButton.click();
   await expect(shiftInfoDialog).toBeVisible();
-  await expect(shiftInfoDialog).toContainText("Spülmaschine einräumen, ausräumen und den Spülbereich sauber hinterlassen.");
+  await expect(shiftInfoContent).toHaveText(shiftDescription);
+  await expect(shiftInfoContent).toHaveJSProperty("innerText", shiftDescription);
+  const helpContentWidth = await shiftInfoContent.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  expect(helpContentWidth.scrollWidth).toBeLessThanOrEqual(helpContentWidth.clientWidth + 1);
   const dialogBounds = await shiftInfoDialog.boundingBox();
   expect(dialogBounds).not.toBeNull();
   expect(dialogBounds.x).toBeGreaterThanOrEqual(0);

@@ -1876,6 +1876,8 @@ textarea {
   font-size: 0.95em;
   line-height: 1.5;
   margin-bottom: 1rem;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .quantity-grid {
