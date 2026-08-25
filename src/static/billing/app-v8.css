@@ -3835,6 +3835,14 @@ code {
     min-width: 44px;
   }
 
+  .kiosk-help-button {
+    flex: 0 0 44px;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+  }
+
   .exportbar a {
     min-height: 44px;
     min-width: 44px;
@@ -3864,7 +3872,12 @@ code {
   }
 
   .checkbox-cell label,
-  .form-grid label:not(.meal-booking-day),
+  .form-grid label {
+    min-height: 44px;
+  }
+
+  .form-grid label:has(> input:is([type="checkbox"], [type="radio"])):not(.meal-booking-day),
+  .form-grid p:has(> input:is([type="checkbox"], [type="radio"])) > label:not(.meal-booking-day),
   .shift-selection,
   label.checkbox-label,
   label.radio-label {
@@ -3876,6 +3889,14 @@ code {
     padding-top: 4px;
     padding-bottom: 4px;
     cursor: pointer;
+  }
+
+  #template-dialog .form-grid > div > label {
+    display: block;
+  }
+
+  #template-dialog .form-grid > div > label > input {
+    display: block;
   }
 
   .email-recipient-form label:has(> input:is([type="checkbox"], [type="radio"])) {
@@ -3919,6 +3940,9 @@ code {
   .form-grid .checkbox-form-field {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+    padding: 0;
+    border: 0;
   }
 
   .form-grid .checkbox-form-field > .errorlist,
@@ -3926,6 +3950,7 @@ code {
   .form-grid .checkbox-form-field > legend,
   .form-grid .checkbox-form-field > div {
     grid-column: 1;
+    min-width: 0;
   }
 
   .form-grid .checkbox-form-field > label {
@@ -3949,6 +3974,7 @@ code {
   .form-grid input[type="checkbox"],
   .form-grid input[type="radio"],
   .shift-selection input[type="checkbox"],
+  .mobile-touch-target,
   label.checkbox-label input[type="checkbox"],
   label.radio-label input[type="radio"] {
     width: 44px;
@@ -3957,5 +3983,17 @@ code {
     min-height: 44px;
     margin-right: 8px;
     flex-shrink: 0;
+  }
+
+  .target-row label {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .target-row input[type="checkbox"] {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
   }
 }
