@@ -722,7 +722,8 @@ def test_fetch_image_metadata_keeps_index_digest_for_installation(monkeypatch):
             }
         ],
     }
-    config_digest = image_digest("3")
+    config_raw = manifest_bytes({"config": {"Labels": {}}})
+    config_digest = content_digest(config_raw)
     child = {
         "mediaType": "application/vnd.oci.image.manifest.v1+json",
         "config": {"digest": config_digest},
@@ -736,7 +737,7 @@ def test_fetch_image_metadata_keeps_index_digest_for_installation(monkeypatch):
         [
             (index_raw, {}),
             (child_raw, {}),
-            (manifest_bytes({"config": {"Labels": {}}}), {}),
+            (config_raw, {}),
         ]
     )
     monkeypatch.setattr(deployment_agent, "registry_request", lambda *_args, **_kwargs: next(responses))
@@ -778,14 +779,15 @@ def test_fetch_image_metadata_rejects_child_bytes_not_matching_index_digest(monk
 
 
 def test_fetch_image_metadata_uses_digest_of_exact_manifest_bytes_without_header(monkeypatch):
+    config_raw = manifest_bytes({"config": {"Labels": {}}})
     raw_manifest = (
         b'{"mediaType":"application/vnd.oci.image.manifest.v1+json", '
-        b'"config":{"digest":"' + image_digest("1").encode() + b'"}}'
+        b'"config":{"digest":"' + content_digest(config_raw).encode() + b'"}}'
     )
     responses = iter(
         [
             (raw_manifest, {}),
-            (manifest_bytes({"config": {"Labels": {}}}), {}),
+            (config_raw, {}),
         ]
     )
     monkeypatch.setattr(deployment_agent, "registry_request", lambda *_args, **_kwargs: next(responses))
@@ -796,16 +798,17 @@ def test_fetch_image_metadata_uses_digest_of_exact_manifest_bytes_without_header
 
 
 def test_fetch_image_metadata_accepts_digest_image_when_bytes_match_reference(monkeypatch):
+    config_raw = manifest_bytes({"config": {"Labels": {}}})
     raw_manifest = (
         b'{"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"digest":"'
-        + image_digest("2").encode()
+        + content_digest(config_raw).encode()
         + b'"}}'
     )
     image = target_digest_reference(content_digest(raw_manifest))
     responses = iter(
         [
             (raw_manifest, {}),
-            (manifest_bytes({"config": {"Labels": {}}}), {}),
+            (config_raw, {}),
         ]
     )
     monkeypatch.setattr(deployment_agent, "registry_request", lambda *_args, **_kwargs: next(responses))
@@ -829,12 +832,16 @@ def test_fetch_image_metadata_rejects_digest_image_when_bytes_do_not_match_refer
 
 
 def test_fetch_image_metadata_accepts_case_insensitive_matching_digest_header(monkeypatch):
-    manifest = {"mediaType": "application/vnd.oci.image.manifest.v1+json", "config": {"digest": image_digest("1")}}
+    config_raw = manifest_bytes({"config": {"Labels": {}}})
+    manifest = {
+        "mediaType": "application/vnd.oci.image.manifest.v1+json",
+        "config": {"digest": content_digest(config_raw)},
+    }
     raw_manifest = manifest_bytes(manifest)
     responses = iter(
         [
             (raw_manifest, {"dOcKeR-cOnTeNt-DiGeSt": content_digest(raw_manifest)}),
-            (manifest_bytes({"config": {"Labels": {}}}), {}),
+            (config_raw, {}),
         ]
     )
     monkeypatch.setattr(deployment_agent, "registry_request", lambda *_args, **_kwargs: next(responses))
@@ -1917,6 +1924,111 @@ def test_registry_request_rejects_redirect_without_following_target(monkeypatch)
 
     build_opener.assert_called_once()
     opener.open.assert_called_once()
+
+
+def test_registry_blob_redirect_allows_safe_cross_host_target_without_credentials(monkeypatch):
+    request = urllib.request.Request(
+        "https://ghcr.io/v2/owner/app/blobs/" + image_digest("1"),
+        headers={"Authorization": "Bearer secret-token", "Accept": "application/json"},
+    )
+    handler = deployment_agent.RegistryRedirectHandler(allow_blob_redirect=True)
+
+    redirected = handler.redirect_request(
+        request,
+        None,
+        HTTPStatus.FOUND,
+        "redirect",
+        {"Location": "https://objects.example.test/config/opaque?signature=redacted"},
+        "https://objects.example.test/config/opaque?signature=redacted",
+    )
+
+    assert redirected is not None
+    assert redirected.full_url == "https://objects.example.test/config/opaque?signature=redacted"
+    assert redirected.get_header("Authorization") is None
+    assert redirected.get_header("Accept") == "application/json"
+
+
+@pytest.mark.parametrize(
+    "location",
+    [
+        "http://objects.example.test/config",
+        "https://user@objects.example.test/config",
+        "https://127.0.0.1/config",
+        "https://[::1]/config",
+        "https://169.254.169.254/config",
+        "https://10.0.0.1/config",
+        "https://[ff02::1]/config",
+        "/relative/config",
+        "https://objects.example.test/config#fragment",
+    ],
+)
+def test_registry_blob_redirect_rejects_unsafe_target_forms(location):
+    request = urllib.request.Request(
+        "https://ghcr.io/v2/owner/app/blobs/" + image_digest("1"),
+        headers={"Authorization": "Bearer secret-token"},
+    )
+    handler = deployment_agent.RegistryRedirectHandler(allow_blob_redirect=True)
+
+    with pytest.raises(deployment_agent.RegistryMetadataError, match="Redirect"):
+        handler.redirect_request(request, None, HTTPStatus.FOUND, "redirect", {"Location": location}, location)
+
+
+def test_registry_blob_redirect_rejects_excessive_nested_redirects():
+    request = urllib.request.Request(
+        "https://ghcr.io/v2/owner/app/blobs/" + image_digest("1"),
+        headers={"Authorization": "Bearer secret-token"},
+    )
+    handler = deployment_agent.RegistryRedirectHandler(allow_blob_redirect=True)
+
+    for index in range(deployment_agent.MAX_REGISTRY_REDIRECTS):
+        request = handler.redirect_request(
+            request,
+            None,
+            HTTPStatus.FOUND,
+            "redirect",
+            {"Location": f"https://objects{index}.example.test/config"},
+            f"https://objects{index}.example.test/config",
+        )
+        assert request is not None
+
+    with pytest.raises(deployment_agent.RegistryMetadataError, match="Redirect"):
+        handler.redirect_request(
+            request,
+            None,
+            HTTPStatus.FOUND,
+            "redirect",
+            {"Location": "https://objects-final.example.test/config"},
+            "https://objects-final.example.test/config",
+        )
+
+
+def test_fetch_image_metadata_rejects_config_bytes_not_matching_manifest_digest(monkeypatch):
+    config_digest = image_digest("1")
+    manifest_raw = manifest_bytes(
+        {"mediaType": "application/vnd.oci.image.manifest.v1+json", "config": {"digest": config_digest}}
+    )
+    config_raw = manifest_bytes({"config": {"Labels": {}}})
+    responses = iter([(manifest_raw, {}), (config_raw, {})])
+    monkeypatch.setattr(deployment_agent, "registry_request", lambda *_args, **_kwargs: next(responses))
+
+    with pytest.raises(deployment_agent.RegistryMetadataError, match="Config-Digest"):
+        deployment_agent.fetch_image_metadata(TEST_TARGET_IMAGE)
+
+
+def test_registry_token_request_rejects_redirect():
+    redirect = urllib.error.HTTPError(
+        url="https://ghcr.io/token",
+        code=HTTPStatus.FOUND,
+        msg="redirect",
+        hdrs={"Location": "https://objects.example.test/token"},
+        fp=None,
+    )
+
+    with patch.object(deployment_agent, "registry_urlopen", side_effect=redirect):
+        with pytest.raises(deployment_agent.RegistryMetadataError, match="Redirect"):
+            deployment_agent.fetch_registry_token(
+                'Bearer realm="https://ghcr.io/token",service="ghcr.io"',
+            )
 
 
 def test_check_rejects_untrusted_registry_without_network_or_state_mutation(monkeypatch):

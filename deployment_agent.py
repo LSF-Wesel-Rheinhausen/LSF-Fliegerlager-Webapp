@@ -118,6 +118,8 @@ STATE_FILE = Path(os.getenv("UPDATE_STATE_FILE", "/state/status.json"))
 MAX_AGENT_BODY_BYTES = positive_int_setting("MAX_AGENT_BODY_BYTES", "1048576")
 AGENT_READ_TIMEOUT_SECONDS = positive_float_setting("AGENT_READ_TIMEOUT_SECONDS", "10")
 MAX_AGENT_CONCURRENT_REQUESTS = positive_int_setting("MAX_AGENT_CONCURRENT_REQUESTS", "8")
+MAX_REGISTRY_RESPONSE_BYTES = positive_int_setting("MAX_REGISTRY_RESPONSE_BYTES", "16777216")
+MAX_REGISTRY_REDIRECTS = 3
 BACKUP_STAGING_PATTERN = re.compile(r"^staging/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 BACKUP_ARCHIVE_PREFIX_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$")
 CONTENT_LENGTH_PATTERN = re.compile(r"^[0-9]+$")
@@ -703,17 +705,91 @@ def registry_basic_auth_header(registry_authority: str) -> str | None:
     return f"Basic {encoded}"
 
 
-class RejectRegistryRedirectHandler(urllib.request.HTTPRedirectHandler):
-    """Reject every registry redirect so credentials never cross request authorities."""
+def validate_registry_redirect_target(newurl: str) -> str:
+    """Validate one public HTTPS redirect target without resolving or logging it."""
+    if any(ord(character) < 32 or ord(character) == 127 for character in newurl):
+        raise RegistryMetadataError("Registry-Redirect-Ziel ist ungueltig.")
+    try:
+        parsed = urllib.parse.urlsplit(newurl)
+    except ValueError as error:
+        raise RegistryMetadataError("Registry-Redirect-Ziel ist ungueltig.") from error
+    if (
+        parsed.scheme != "https"
+        or not parsed.netloc
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.fragment
+        or not parsed.path.startswith("/")
+    ):
+        raise RegistryMetadataError("Registry-Redirect-Ziel ist unsicher.")
+    try:
+        return canonical_registry_authority(parsed.netloc)
+    except RegistryMetadataError as error:
+        raise RegistryMetadataError("Registry-Redirect-Ziel ist unsicher.") from error
 
-    def redirect_request(self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str) -> None:
-        raise RegistryMetadataError("Registry-Redirects sind nicht erlaubt.")
+
+class RegistryRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Reject redirects except bounded, safe redirects for digest-addressed blobs."""
+
+    def __init__(self, *, allow_blob_redirect: bool = False) -> None:
+        super().__init__()
+        self.allow_blob_redirect = allow_blob_redirect
+        self.redirect_count = 0
+
+    def redirect_request(self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str) -> Any:
+        if not self.allow_blob_redirect:
+            raise RegistryMetadataError("Registry-Redirects sind nicht erlaubt.")
+        source_url = urllib.parse.urlsplit(req.full_url)
+        if req.get_method() != "GET" or (
+            self.redirect_count == 0 and not IMAGE_DIGEST_PATTERN.fullmatch(source_url.path.rsplit("/", 1)[-1])
+        ):
+            raise RegistryMetadataError("Registry-Redirects sind nur fuer Digest-Blobs erlaubt.")
+        if self.redirect_count >= MAX_REGISTRY_REDIRECTS:
+            raise RegistryMetadataError("Registry-Redirect-Limit ueberschritten.")
+        target_authority = validate_registry_redirect_target(newurl)
+        source_authority = canonical_registry_authority(source_url.netloc)
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected is None:
+            raise RegistryMetadataError("Registry-Redirect-Ziel ist ungueltig.")
+        if target_authority != source_authority:
+            redirected.remove_header("Authorization")
+            redirected.remove_header("Proxy-Authorization")
+        self.redirect_count += 1
+        return redirected
 
 
-def registry_urlopen(request: urllib.request.Request, *, timeout: int) -> Any:
-    """Open one registry URL with redirects disabled."""
-    opener = urllib.request.build_opener(RejectRegistryRedirectHandler())
+class RejectRegistryRedirectHandler(RegistryRedirectHandler):
+    """Reject every registry redirect for manifests and token endpoints."""
+
+    def __init__(self) -> None:
+        super().__init__(allow_blob_redirect=False)
+
+
+def registry_urlopen(
+    request: urllib.request.Request,
+    *,
+    timeout: int,
+    allow_blob_redirect: bool = False,
+) -> Any:
+    """Open one registry URL with redirects disabled except for safe blob downloads."""
+    handler = RegistryRedirectHandler(allow_blob_redirect=allow_blob_redirect)
+    opener = urllib.request.build_opener(handler)
     return opener.open(request, timeout=timeout)
+
+
+def read_registry_body(response: Any) -> bytes:
+    """Read a registry response within the configured response-size bound."""
+    content_length = response.headers.get("Content-Length")
+    if isinstance(content_length, (str, bytes)):
+        try:
+            if int(content_length) > MAX_REGISTRY_RESPONSE_BYTES:
+                raise RegistryMetadataError("Registry-Antwort ist zu gross.")
+        except ValueError as error:
+            raise RegistryMetadataError("Registry-Antwort hat eine ungueltige Groesse.") from error
+    raw = response.read(MAX_REGISTRY_RESPONSE_BYTES + 1)
+    if len(raw) > MAX_REGISTRY_RESPONSE_BYTES:
+        raise RegistryMetadataError("Registry-Antwort ist zu gross.")
+    return raw
 
 
 def registry_request(
@@ -722,9 +798,17 @@ def registry_request(
     accept: str,
     token: str | None = None,
     timeout: int = 30,
+    allow_blob_redirect: bool = False,
+    expected_blob_digest: str | None = None,
 ) -> tuple[bytes, dict[str, str]]:
     """Fetch a registry resource and resolve public GHCR bearer auth challenges."""
     registry_authority = validate_registry_url(url)
+    if allow_blob_redirect:
+        parsed_path = urllib.parse.urlsplit(url).path
+        if expected_blob_digest is None or not IMAGE_DIGEST_PATTERN.fullmatch(expected_blob_digest):
+            raise RegistryMetadataError("Registry-Blob-Digest ist ungueltig.")
+        if parsed_path.rsplit("/", 1)[-1] != expected_blob_digest:
+            raise RegistryMetadataError("Registry-Blob-URL ist ungueltig.")
     headers = {"Accept": accept}
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -734,8 +818,8 @@ def registry_request(
             headers["Authorization"] = authorization
     request = urllib.request.Request(url, headers=headers)
     try:
-        with registry_urlopen(request, timeout=timeout) as response:
-            return response.read(), dict(response.headers)
+        with registry_urlopen(request, timeout=timeout, allow_blob_redirect=allow_blob_redirect) as response:
+            return read_registry_body(response), dict(response.headers)
     except urllib.error.HTTPError as error:
         if HTTPStatus.MULTIPLE_CHOICES <= error.code < HTTPStatus.BAD_REQUEST:
             raise RegistryMetadataError("Registry-Redirects sind nicht erlaubt.") from error
@@ -745,7 +829,14 @@ def registry_request(
             error.headers.get("WWW-Authenticate", ""),
             registry_host=registry_authority,
         )
-        return registry_request(url, accept=accept, token=bearer_token, timeout=timeout)
+        return registry_request(
+            url,
+            accept=accept,
+            token=bearer_token,
+            timeout=timeout,
+            allow_blob_redirect=allow_blob_redirect,
+            expected_blob_digest=expected_blob_digest,
+        )
     except (OSError, TimeoutError) as error:
         raise RuntimeError("Registry ist nicht erreichbar.") from error
 
@@ -791,7 +882,7 @@ def fetch_registry_token(auth_header: str, *, registry_host: str = "ghcr.io") ->
     request = urllib.request.Request(url, headers=headers)
     try:
         with registry_urlopen(request, timeout=30) as response:
-            payload = json.load(response)
+            payload = json.loads(read_registry_body(response))
     except urllib.error.HTTPError as error:
         if HTTPStatus.MULTIPLE_CHOICES <= error.code < HTTPStatus.BAD_REQUEST:
             raise RegistryMetadataError("Registry-Redirects sind nicht erlaubt.") from error
@@ -876,7 +967,11 @@ def fetch_image_metadata(image: str) -> dict[str, Any]:
     raw_config, _headers = registry_request(
         f"https://{registry}/v2/{repository}/blobs/{config_digest}",
         accept="application/vnd.oci.image.config.v1+json, application/vnd.docker.container.image.v1+json",
+        allow_blob_redirect=True,
+        expected_blob_digest=config_digest,
     )
+    if "sha256:" + hashlib.sha256(raw_config).hexdigest() != config_digest:
+        raise RegistryMetadataError("Registry-Config-Digest stimmt nicht mit den Bytes ueberein.")
     config_payload = json.loads(raw_config)
     labels = config_payload.get("config", {}).get("Labels", {})
     if not isinstance(labels, dict):
