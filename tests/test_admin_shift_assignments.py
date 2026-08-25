@@ -4,6 +4,7 @@ from decimal import Decimal
 import pytest
 from django.contrib import admin as django_admin
 from django.core.exceptions import ValidationError
+from django.db.models.deletion import ProtectedError
 from django.db.models.query import QuerySet
 from django.test import Client, RequestFactory
 from django.urls import reverse
@@ -243,6 +244,76 @@ def test_admin_removes_assignment_with_audit_and_revision():
     assert audit_log.identity_name_snapshot == participant.full_name
     assert audit_log.before == {"assignment_revision": 5, "assigned_count": 1}
     assert audit_log.after == {"assignment_revision": 6, "assigned_count": 0}
+
+
+@pytest.mark.django_db
+def test_admin_remove_locks_only_assignment_row_with_nullable_companion_join(monkeypatch):
+    camp = CampFactory()
+    guardian = ParticipantFactory(camp=camp, status=Participant.Status.ACTIVE)
+    companion = ParticipantFamilyMemberFactory(
+        guardian=guardian,
+        role=ParticipantFamilyMember.Role.COMPANION,
+        is_active=True,
+    )
+    shift = Shift.objects.create(
+        camp=camp,
+        name="PostgreSQL-sichere Entfernung",
+        date=timezone.localdate() + datetime.timedelta(days=1),
+    )
+    assignment = ShiftAssignment.objects.create(
+        shift=shift,
+        participant=guardian,
+        family_member=companion,
+    )
+    shift.refresh_from_db()
+    original_fetch_all = QuerySet._fetch_all
+    assignment_lock_targets = []
+
+    def capture_select_for_update(queryset):
+        if queryset.model is ShiftAssignment and queryset.query.select_for_update:
+            assignment_lock_targets.append(queryset.query.select_for_update_of)
+        original_fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", capture_select_for_update)
+
+    services.remove_shift_assignment(
+        shift_id=shift.pk,
+        assignment_id=assignment.pk,
+        expected_revision=shift.assignment_revision,
+        confirm_historical=False,
+        changed_by=SuperUserFactory(),
+    )
+
+    assert ("self",) in assignment_lock_targets
+
+
+@pytest.mark.django_db
+def test_assigned_companion_cannot_be_deleted_without_audited_removal_service():
+    camp = CampFactory()
+    guardian = ParticipantFactory(camp=camp, status=Participant.Status.ACTIVE)
+    companion = ParticipantFamilyMemberFactory(
+        guardian=guardian,
+        role=ParticipantFamilyMember.Role.COMPANION,
+        is_active=True,
+    )
+    shift = Shift.objects.create(
+        camp=camp,
+        name="Geschützte Begleitung",
+        date=timezone.localdate() + datetime.timedelta(days=1),
+    )
+    assignment = ShiftAssignment.objects.create(
+        shift=shift,
+        participant=guardian,
+        family_member=companion,
+    )
+    shift.refresh_from_db()
+
+    with pytest.raises(ProtectedError):
+        companion.delete()
+
+    assert ShiftAssignment.objects.filter(pk=assignment.pk).exists()
+    assert Shift.objects.get(pk=shift.pk).assignment_revision == shift.assignment_revision
+    assert not ShiftAuditLog.objects.exists()
 
 
 @pytest.mark.django_db
@@ -551,6 +622,38 @@ def test_shift_edit_audits_confirmed_capacity_reduction(admin_client):
     assert audit_log.historical_override is False
     assert audit_log.before["required_slots"] == 2
     assert audit_log.after["required_slots"] == 1
+
+
+@pytest.mark.django_db
+def test_shift_form_rejects_capacity_below_existing_assignments_without_side_effects():
+    camp = CampFactory()
+    shift = Shift.objects.create(
+        camp=camp,
+        name="Geschützte Kapazität",
+        date=timezone.localdate() + datetime.timedelta(days=1),
+        required_slots=2,
+    )
+    for index in range(2):
+        ShiftAssignment.objects.create(
+            shift=shift,
+            participant=ParticipantFactory(camp=camp, first_name=f"Besetzt{index}"),
+        )
+
+    form = ShiftForm(
+        data={
+            "name": shift.name,
+            "date": shift.date.isoformat(),
+            "required_slots": 1,
+        },
+        instance=shift,
+    )
+
+    assert not form.is_valid()
+    assert "required_slots" in form.errors or "__all__" in form.errors
+    shift.refresh_from_db()
+    assert shift.required_slots == 2
+    assert shift.assignment_revision == 2
+    assert not ShiftAuditLog.objects.exists()
 
 
 @pytest.mark.django_db

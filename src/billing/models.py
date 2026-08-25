@@ -1891,6 +1891,29 @@ class Shift(TimeStampedModel):
             return self.assignments_count >= self.required_slots
         return self.assignments.count() >= self.required_slots
 
+    def clean(self) -> None:
+        """Reject direct capacity reductions below the current staffing count."""
+        super().clean()
+        if self.pk is not None and not getattr(self, "_allow_capacity_override", False):
+            current_assignment_count = self.assignments.count()
+            if self.required_slots < current_assignment_count:
+                raise ValidationError("Die Kapazität darf nicht unter die bereits eingetragenen Personen sinken.")
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Enforce the capacity invariant again at the persistence boundary."""
+        allow_capacity_override = getattr(self, "_allow_capacity_override", False)
+        if self.pk is not None and not allow_capacity_override:
+            with transaction.atomic():
+                current_shift = type(self).objects.select_for_update().get(pk=self.pk)
+                if self.required_slots < current_shift.required_slots:
+                    assigned_count = ShiftAssignment.objects.filter(shift_id=self.pk).count()
+                    if self.required_slots < assigned_count:
+                        raise ValidationError(
+                            "Die Kapazität darf nicht unter die bereits eingetragenen Personen sinken."
+                        )
+                return super().save(*args, **kwargs)
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.camp}: {self.date} {self.name}"
 
@@ -1971,7 +1994,7 @@ class ShiftAssignment(TimeStampedModel):
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="shift_assignments")
     family_member = models.ForeignKey(
         ParticipantFamilyMember,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
         related_name="shift_assignments",

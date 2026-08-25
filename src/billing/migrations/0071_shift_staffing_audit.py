@@ -15,6 +15,17 @@ class Migration(migrations.Migration):
             name="assignment_revision",
             field=models.PositiveBigIntegerField(default=0, editable=False),
         ),
+        migrations.AlterField(
+            model_name="shiftassignment",
+            name="family_member",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.PROTECT,
+                related_name="shift_assignments",
+                to="billing.participantfamilymember",
+            ),
+        ),
         migrations.CreateModel(
             name="ShiftAuditLog",
             fields=[

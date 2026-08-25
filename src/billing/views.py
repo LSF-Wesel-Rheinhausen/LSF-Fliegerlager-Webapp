@@ -2047,6 +2047,7 @@ def shift_edit(request, shift_id):
         with transaction.atomic():
             locked_shift = Shift.objects.select_for_update().select_related("camp").get(pk=shift.pk)
             old_required_slots = locked_shift.required_slots
+            locked_shift._allow_capacity_override = True
             form = ShiftForm(request.POST, instance=locked_shift)
             if form.is_valid():
                 assigned_count = ShiftAssignment.objects.select_for_update().filter(shift=locked_shift).count()

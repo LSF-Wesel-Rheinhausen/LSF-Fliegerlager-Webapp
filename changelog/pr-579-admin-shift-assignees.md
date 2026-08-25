@@ -15,4 +15,8 @@ behalten auch nach einer Löschung die minimale Dienstreferenz. Admin- und
 Kioskänderungen verwenden dieselbe Sperrreihenfolge, und abgewiesene
 Eintragungen behalten die aktive Personensuche bei.
 
+Direkte Kapazitätsabsenkungen unter die bestehende Besetzung werden an der
+Modellgrenze blockiert; die Vorlagen-Generierung bewahrt diese Kapazität und
+der bestätigte Admin-Override bleibt mit Revision und Audit unverändert.
+
 Closes #578

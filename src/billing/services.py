@@ -165,7 +165,7 @@ def remove_shift_assignment(
     if shift.assignment_revision != expected_revision:
         raise ValidationError("Die Dienstbesetzung wurde zwischenzeitlich geändert. Bitte lade die Seite neu.")
     assignment = (
-        ShiftAssignment.objects.select_for_update()
+        ShiftAssignment.objects.select_for_update(of=("self",))
         .select_related("participant", "family_member")
         .get(pk=assignment_id, shift=shift)
     )
@@ -273,6 +273,18 @@ def generate_shifts_from_templates(templates: Iterable[DailyShiftTemplate]) -> t
                         if exception and exception.custom_end_time is not None
                         else template.end_time
                     )
+                    existing_shift = (
+                        Shift.objects.select_for_update()
+                        .filter(
+                            camp=camp,
+                            date=current_date,
+                            name=template.name,
+                            start_time=start_time,
+                        )
+                        .first()
+                    )
+                    if existing_shift is not None and slots < existing_shift.assignments.count():
+                        slots = existing_shift.required_slots
                     Shift.objects.update_or_create(
                         camp=camp,
                         date=current_date,
