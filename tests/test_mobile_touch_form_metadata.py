@@ -62,10 +62,19 @@ def test_mobile_touch_target_rules_preserve_textarea_minimum_height():
     assert "textarea" not in mobile_touch_rules
 
 
-def test_panel_stack_grid_children_can_shrink_around_enhanced_tables():
+def test_panel_stack_contains_enhanced_tables_in_a_horizontal_scroller():
     css = CSS.read_text(encoding="utf-8")
 
-    assert ".panel.stack > * {\n  min-width: 0;\n}" in css
+    assert ".panel.stack {\n  grid-template-columns: minmax(0, 1fr);\n}" in css
+    assert (
+        ".panel.stack > table[data-sortable],\n"
+        ".panel.stack > table[data-filterable] {\n"
+        "  display: block;\n"
+        "  max-width: 100%;\n"
+        "  overflow-x: auto;\n"
+        "}" in css
+    )
+    assert ".panel.stack > * {\n  min-width: 0;\n}" not in css
 
 
 def test_authentication_form_metadata_does_not_disable_autocomplete():

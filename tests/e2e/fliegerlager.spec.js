@@ -94,23 +94,48 @@ async function assertNoUnexpectedOverflow(page) {
   expect(result.failures, "Elemente laufen aus der Anzeige oder aus ihrem Container").toEqual([]);
 }
 
-async function assertPanelGridChildrenContained(panel) {
+async function assertPanelGridTrackAndTableScrollerContained(panel) {
   const layout = await panel.evaluate((panelElement) => {
-    const oversizedChildren = [...panelElement.children]
-      .filter((child) => child.getClientRects().length > 0 && child.offsetWidth > panelElement.clientWidth)
+    const tolerance = 1;
+    const viewportWidth = document.documentElement.clientWidth;
+    const panelRect = panelElement.getBoundingClientRect();
+    const overflowingContent = [...panelElement.children]
+      .filter((child) => child.tagName !== "TABLE" && child.getClientRects().length > 0)
+      .filter((child) => {
+        const rect = child.getBoundingClientRect();
+        return rect.left < panelRect.left - tolerance || rect.right > panelRect.right + tolerance;
+      })
       .map((child) => `${child.tagName.toLowerCase()}.${child.className || "without-class"}`);
-    const tableTools = panelElement.querySelector(".table-tools");
     const table = panelElement.querySelector("table[data-sortable][data-filterable]");
+    let tableScroller = table;
+    while (tableScroller && tableScroller !== panelElement) {
+      const overflowX = window.getComputedStyle(tableScroller).overflowX;
+      if (overflowX === "auto" || overflowX === "scroll") {
+        break;
+      }
+      tableScroller = tableScroller.parentElement;
+    }
+    const tableIsWide = table ? table.scrollWidth > table.clientWidth + tolerance : false;
+    const tableRect = table ? table.getBoundingClientRect() : null;
+    const tableExceedsPanel = tableRect
+      ? tableRect.left < panelRect.left - tolerance || tableRect.right > panelRect.right + tolerance
+      : false;
+    const scrollerRect = tableScroller && tableScroller !== panelElement ? tableScroller.getBoundingClientRect() : null;
     return {
-      oversizedChildren,
-      tableToolsInsidePanel: tableTools ? tableTools.offsetWidth <= panelElement.clientWidth : false,
-      tableInsidePanel: table ? table.offsetWidth <= panelElement.clientWidth : false,
+      panelInsideViewport: panelRect.left >= -tolerance && panelRect.right <= viewportWidth + tolerance,
+      overflowingContent,
+      wideTableHasScroller:
+        (viewportWidth <= 780 && !tableIsWide && !tableExceedsPanel) || Boolean(scrollerRect),
+      scrollerInsidePanel:
+        !scrollerRect ||
+        (scrollerRect.left >= panelRect.left - tolerance && scrollerRect.right <= panelRect.right + tolerance),
     };
   });
 
-  expect(layout.oversizedChildren, "Direkte Grid-Kinder muessen im Panel schrumpfen koennen").toEqual([]);
-  expect(layout.tableToolsInsidePanel, "Filter-/Sortierleiste muss im Panel bleiben").toBe(true);
-  expect(layout.tableInsidePanel, "Tabelle muss im Panel bleiben").toBe(true);
+  expect(layout.panelInsideViewport, "Der Panel-Grid-Track muss im Viewport bleiben").toBe(true);
+  expect(layout.overflowingContent, "Toolbar und normaler Panel-Inhalt duerfen nicht ueberlaufen").toEqual([]);
+  expect(layout.wideTableHasScroller, "Eine breite Tabelle braucht einen horizontalen Scroller").toBe(true);
+  expect(layout.scrollerInsidePanel, "Der Tabellen-Scroller muss im Panel bleiben").toBe(true);
 }
 
 async function assertKioskProfileLayout(page, expectedViewportWidth) {
@@ -1671,11 +1696,11 @@ test("Kiosk can book a drink after breakfast prebooking", async ({ page }) => {
     }, theme);
     await page.setViewportSize({ width: 1280, height: 800 });
     await expect(sortSelect).toBeHidden();
-    await assertPanelGridChildrenContained(familyMembersSection);
+    await assertPanelGridTrackAndTableScrollerContained(familyMembersSection);
     await assertNoUnexpectedOverflow(page);
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(sortSelect).toBeVisible();
-    await assertPanelGridChildrenContained(familyMembersSection);
+    await assertPanelGridTrackAndTableScrollerContained(familyMembersSection);
     await assertNoUnexpectedOverflow(page);
   }
 });

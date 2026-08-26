@@ -22,7 +22,7 @@
 - Scoped stacked email touch rules to the two recipient forms so breakfast cards and existing checkbox-helptext layouts retain their grid contracts.
 - Preserved stacked shift-template time fields, enlarged kiosk help controls, and covered quick-booking target rows with real mobile dialog regressions.
 - Extended the shared 44px mobile target contract to standalone administrative bulk-selection and registration-confirmation checkboxes.
-- Kept sortable/filterable tables and their toolbars inside grid panels across desktop and mobile Firefox layouts.
+- Kept sortable/filterable tables in dedicated horizontal scrollers while their grid panels, toolbars, and regular content stay within the viewport.
 
 ## Scope
 

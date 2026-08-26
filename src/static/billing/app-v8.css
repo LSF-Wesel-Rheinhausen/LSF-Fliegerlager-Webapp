@@ -702,8 +702,15 @@ pre {
   gap: 14px;
 }
 
-.panel.stack > * {
-  min-width: 0;
+.panel.stack {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.panel.stack > table[data-sortable],
+.panel.stack > table[data-filterable] {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .auth-separator {
