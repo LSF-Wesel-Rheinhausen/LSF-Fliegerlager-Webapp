@@ -291,6 +291,14 @@ def test_updater_stack_contract_accepts_current_compose_shape():
     deployment_agent.validate_updater_stack_contract(VALID_STACK_FILE)
 
 
+@pytest.mark.parametrize("compose_file", ["docker-compose.yml", "deploy/docker-compose.example.yml"])
+def test_updater_waits_for_a_healthy_app_in_compose_contract(compose_file):
+    compose = Path(compose_file).read_text(encoding="utf-8")
+    updater = compose.split("  updater:\n", 1)[1].split("\n  daily-settlement-backup:", 1)[0]
+
+    assert "      app:\n        condition: service_healthy" in updater
+
+
 @pytest.mark.parametrize(
     "stack_file",
     [
@@ -1160,12 +1168,97 @@ def test_startup_reconciliation_attempts_persisted_rollback_when_runtime_is_miss
     monkeypatch.setattr(deployment_agent, "immutable_running_image", running)
     monkeypatch.setattr(deployment_agent, "application_is_healthy", lambda: False)
     monkeypatch.setattr(deployment_agent, "wait_until_healthy", Mock())
+    monkeypatch.setattr(deployment_agent, "RECOVERY_CONVERGENCE_TIMEOUT_SECONDS", 0)
 
     result = deployment_agent.reconcile_interrupted_update()
 
     client.update_stack_image.assert_called_once_with(interrupted["rollback_image"])
     assert result["phase"] == "failed"
     assert result["recovery_outcome"] == "rolled_back"
+
+
+@pytest.mark.parametrize("transient_error", ["no running app container", "expected exactly one running app container"])
+def test_recovery_runtime_waits_for_container_observations_to_converge(transient_error):
+    client = Mock()
+    target_image = target_digest_reference(image_digest("a"))
+    rollback_image = target_digest_reference(image_digest("b"))
+    running = Mock(side_effect=[RuntimeError(transient_error), target_image])
+    now = [0.0]
+    sleeps = []
+
+    def sleep(seconds):
+        sleeps.append(seconds)
+        now[0] += seconds
+
+    runtime_image, healthy = deployment_agent.wait_for_recovery_runtime(
+        client,
+        target_image,
+        rollback_image,
+        timeout_seconds=5,
+        initial_backoff_seconds=1,
+        max_backoff_seconds=2,
+        clock=lambda: now[0],
+        sleep=sleep,
+        inspect_runtime=running,
+        check_health=lambda: True,
+    )
+
+    assert (runtime_image, healthy) == (target_image, True)
+    assert sleeps == [1]
+    assert running.call_count == 2
+
+
+def test_startup_recovery_with_equal_images_requires_manual_recovery_without_runtime_proof(monkeypatch, tmp_path):
+    monkeypatch.setattr(deployment_agent, "STATE_FILE", tmp_path / "status.json")
+    interrupted = interrupted_update_state(rollback_digest=image_digest("a"))
+    deployment_agent.save_state(**interrupted)
+    client = Mock()
+    monkeypatch.setattr(deployment_agent, "PortainerClient", lambda: client)
+    monkeypatch.setattr(deployment_agent, "immutable_running_image", lambda *_args: "")
+    monkeypatch.setattr(deployment_agent, "application_is_healthy", lambda: False)
+    monkeypatch.setattr(deployment_agent, "RECOVERY_CONVERGENCE_TIMEOUT_SECONDS", 0)
+
+    result = deployment_agent.reconcile_interrupted_update()
+
+    assert result["phase"] == "recovery_required"
+    assert result["recovery_outcome"] == "target_unverified"
+    client.update_stack_image.assert_not_called()
+
+
+def test_startup_recovery_with_equal_images_completes_verified_target_without_put(monkeypatch, tmp_path):
+    monkeypatch.setattr(deployment_agent, "STATE_FILE", tmp_path / "status.json")
+    interrupted = interrupted_update_state(rollback_digest=image_digest("a"))
+    deployment_agent.save_state(**interrupted)
+    client = Mock()
+    monkeypatch.setattr(deployment_agent, "PortainerClient", lambda: client)
+    running = Mock(side_effect=[interrupted["target_image"], interrupted["rollback_image"]])
+    monkeypatch.setattr(deployment_agent, "immutable_running_image", running)
+    monkeypatch.setattr(deployment_agent, "application_is_healthy", lambda: True)
+
+    result = deployment_agent.reconcile_interrupted_update()
+
+    assert result["phase"] == "complete"
+    assert result["recovery_outcome"] == "target_verified"
+    client.update_stack_image.assert_not_called()
+
+
+def test_startup_recovery_rolls_back_an_unhealthy_target_with_a_different_rollback_digest(monkeypatch, tmp_path):
+    monkeypatch.setattr(deployment_agent, "STATE_FILE", tmp_path / "status.json")
+    interrupted = interrupted_update_state()
+    deployment_agent.save_state(**interrupted)
+    client = Mock()
+    monkeypatch.setattr(deployment_agent, "PortainerClient", lambda: client)
+    running = Mock(side_effect=[interrupted["target_image"], interrupted["rollback_image"]])
+    monkeypatch.setattr(deployment_agent, "immutable_running_image", running)
+    monkeypatch.setattr(deployment_agent, "application_is_healthy", lambda: False)
+    monkeypatch.setattr(deployment_agent, "RECOVERY_CONVERGENCE_TIMEOUT_SECONDS", 0)
+    monkeypatch.setattr(deployment_agent, "wait_until_healthy", Mock())
+
+    result = deployment_agent.reconcile_interrupted_update()
+
+    assert result["phase"] == "failed"
+    assert result["recovery_outcome"] == "rolled_back"
+    client.update_stack_image.assert_called_once_with(interrupted["rollback_image"])
 
 
 @pytest.mark.parametrize("phase", ["installing", "rollback", "recovery_required"])
@@ -1208,6 +1301,54 @@ def test_agent_reconciles_before_server_accepts_requests(monkeypatch, tmp_path):
     server.serve_forever.assert_called_once_with()
 
 
+def test_portainer_startup_retry_recovers_before_server_bind():
+    client = Mock()
+    client.get_stack.side_effect = [deployment_agent.PortainerTransientError("timeout"), {}]
+    now = [0.0]
+    sleeps = []
+
+    def sleep(seconds):
+        sleeps.append(seconds)
+        now[0] += seconds
+
+    deployment_agent.wait_for_portainer_startup(
+        client,
+        timeout_seconds=5,
+        initial_backoff_seconds=1,
+        max_backoff_seconds=2,
+        clock=lambda: now[0],
+        sleep=sleep,
+    )
+
+    assert client.get_stack.call_count == 2
+    assert sleeps == [1]
+
+
+def test_portainer_startup_retry_stops_at_its_time_budget():
+    client = Mock()
+    timeout = deployment_agent.PortainerTransientError("timeout")
+    client.get_stack.side_effect = timeout
+    now = [0.0]
+    sleeps = []
+
+    def sleep(seconds):
+        sleeps.append(seconds)
+        now[0] += seconds
+
+    with pytest.raises(deployment_agent.PortainerTransientError, match="timeout"):
+        deployment_agent.wait_for_portainer_startup(
+            client,
+            timeout_seconds=3,
+            initial_backoff_seconds=1,
+            max_backoff_seconds=2,
+            clock=lambda: now[0],
+            sleep=sleep,
+        )
+
+    assert client.get_stack.call_count == 3
+    assert sleeps == [1, 2]
+
+
 def test_first_upgrade_runbook_requires_compose_restart_and_health_before_update():
     documentation = Path("deploy/README.md").read_text(encoding="utf-8")
 
@@ -1218,6 +1359,22 @@ def test_first_upgrade_runbook_requires_compose_restart_and_health_before_update
     assert "health" in first_upgrade.casefold()
     assert first_upgrade.index("docker-compose.example.yml") < first_upgrade.index("/check")
     assert first_upgrade.index("health") < first_upgrade.index("/check")
+
+
+def test_updater_runbook_documents_bounded_recovery_and_equal_image_safety():
+    documentation = Path("deploy/README.md").read_text(encoding="utf-8")
+
+    assert "Recovery nach einem Updater-Neustart" in documentation
+    assert "nicht automatisch redeployt" in documentation
+    assert "identisch" in documentation
+
+
+def test_updater_hotfix_changelog_records_recovery_loop_guards():
+    changelog = Path("changelog/fix-updater-startup-recovery.md").read_text(encoding="utf-8")
+
+    assert "Portainer" in changelog
+    assert "Recovery" in changelog
+    assert "identisch" in changelog
 
 
 def test_startup_reconciliation_marks_invalid_or_unrecoverable_state_as_required(monkeypatch, tmp_path):

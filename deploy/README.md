@@ -229,6 +229,17 @@ Vor dem ersten normalen Update mit dieser Version muss die aktive Stack-Definiti
 Ein noch nicht migrierter Altstack wird bewusst vor der Kandidatenerzeugung abgewiesen. Dadurch kann eine Änderung von
 `APP_IMAGE` den laufenden Updater beim ersten Upgrade nicht mehr ersetzen oder mit einer neuen Environment starten.
 
+### Recovery nach einem Updater-Neustart
+
+Der Updater startet erst, wenn der `app`-Service healthy ist, und überbrückt vor dem Server-Bind nur transiente
+Portainer-Verbindungsfehler mit begrenztem Backoff. Nach einem Neustart mit persistiertem Updatezustand wartet die
+Recovery begrenzt auf einen eindeutigen App-Runtime-Digest und den Healthcheck. Ein einmalig fehlender oder mehrfach
+sichtbarer App-Container löst deshalb keinen sofortigen Stack-Redeploy aus.
+
+Sind Ziel- und Rollback-Image identisch, wird der Stack nicht automatisch redeployt: Ein healthy verifiziertes Ziel
+wird als `complete` mit `target_verified` abgeschlossen. Ohne diesen Nachweis bleibt der Zustand
+`recovery_required` und verlangt einen kontrollierten manuellen Eingriff.
+
 Ein Django-Superuser öffnet **Updates**, prüft das bereitgestellte `latest`-Image und bestätigt die Installation. Der
 Updater liest die OCI-Metadaten aus GHCR und speichert den dabei validierten `repo@sha256:...`-Digest als freigegebenen
 Installationskandidaten. `/install` verwendet ausschließlich diesen gespeicherten Digest und fragt das bewegliche Tag
