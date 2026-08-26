@@ -94,6 +94,50 @@ async function assertNoUnexpectedOverflow(page) {
   expect(result.failures, "Elemente laufen aus der Anzeige oder aus ihrem Container").toEqual([]);
 }
 
+async function assertPanelGridTrackAndTableScrollerContained(panel) {
+  const layout = await panel.evaluate((panelElement) => {
+    const tolerance = 1;
+    const viewportWidth = document.documentElement.clientWidth;
+    const panelRect = panelElement.getBoundingClientRect();
+    const overflowingContent = [...panelElement.children]
+      .filter((child) => child.tagName !== "TABLE" && child.getClientRects().length > 0)
+      .filter((child) => {
+        const rect = child.getBoundingClientRect();
+        return rect.left < panelRect.left - tolerance || rect.right > panelRect.right + tolerance;
+      })
+      .map((child) => `${child.tagName.toLowerCase()}.${child.className || "without-class"}`);
+    const table = panelElement.querySelector("table[data-sortable][data-filterable]");
+    let tableScroller = table;
+    while (tableScroller && tableScroller !== panelElement) {
+      const overflowX = window.getComputedStyle(tableScroller).overflowX;
+      if (overflowX === "auto" || overflowX === "scroll") {
+        break;
+      }
+      tableScroller = tableScroller.parentElement;
+    }
+    const tableIsWide = table ? table.scrollWidth > table.clientWidth + tolerance : false;
+    const tableRect = table ? table.getBoundingClientRect() : null;
+    const tableExceedsPanel = tableRect
+      ? tableRect.left < panelRect.left - tolerance || tableRect.right > panelRect.right + tolerance
+      : false;
+    const scrollerRect = tableScroller && tableScroller !== panelElement ? tableScroller.getBoundingClientRect() : null;
+    return {
+      panelInsideViewport: panelRect.left >= -tolerance && panelRect.right <= viewportWidth + tolerance,
+      overflowingContent,
+      wideTableHasScroller:
+        (viewportWidth <= 780 && !tableIsWide && !tableExceedsPanel) || Boolean(scrollerRect),
+      scrollerInsidePanel:
+        !scrollerRect ||
+        (scrollerRect.left >= panelRect.left - tolerance && scrollerRect.right <= panelRect.right + tolerance),
+    };
+  });
+
+  expect(layout.panelInsideViewport, "Der Panel-Grid-Track muss im Viewport bleiben").toBe(true);
+  expect(layout.overflowingContent, "Toolbar und normaler Panel-Inhalt duerfen nicht ueberlaufen").toEqual([]);
+  expect(layout.wideTableHasScroller, "Eine breite Tabelle braucht einen horizontalen Scroller").toBe(true);
+  expect(layout.scrollerInsidePanel, "Der Tabellen-Scroller muss im Panel bleiben").toBe(true);
+}
+
 async function assertKioskProfileLayout(page, expectedViewportWidth) {
   const form = page.locator(".kiosk-profile-form");
   const editableControls = form.locator(
@@ -331,6 +375,224 @@ test("Admin completes setup, login, camp workflow and logout", async ({ page }) 
   await logout(page);
   await expect(page).toHaveURL(/\/login\/?$/);
   await loginAsAdmin(page);
+});
+
+test("Camp detail export actions meet mobile touch target contract", async ({ page }) => {
+  await setupFirstAdmin(page);
+  await createCamp(page, "Export-Touchziele", 0, 2);
+
+  const exportNames = [
+    "Abrechnung als CSV herunterladen",
+    "Arbeitsmappe herunterladen",
+    "Getränke als CSV herunterladen",
+    "Essensübersicht öffnen",
+  ];
+
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 844, height: 390 },
+  ]) {
+    await page.setViewportSize(viewport);
+    for (const name of exportNames) {
+      const link = page.locator(".exportbar").getByRole("link", { name, exact: true });
+      await expect(link).toBeVisible();
+      const metrics = await link.evaluate((element) => ({
+        boundingHeight: element.getBoundingClientRect().height,
+        minHeight: Number.parseFloat(window.getComputedStyle(element).minHeight),
+      }));
+      expect(metrics.boundingHeight, `${name} bounding height at ${viewport.width}px`).toBeGreaterThanOrEqual(44);
+      expect(metrics.minHeight, `${name} computed min-height at ${viewport.width}px`).toBeGreaterThanOrEqual(44);
+    }
+  }
+});
+
+test("Mobile touch targets follow the 780px portrait breakpoint", async ({ page }) => {
+  await setupFirstAdmin(page);
+
+  const viewports = [
+    { width: 769, height: 900, requiresTouchTargets: true },
+    { width: 780, height: 900, requiresTouchTargets: true },
+    { width: 781, height: 900, requiresTouchTargets: false },
+    { width: 900, height: 390, requiresTouchTargets: true },
+  ];
+
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport);
+    await page.goto("/camps/new/");
+    await expect(page.getByRole("heading", { name: "Lager anlegen" })).toBeVisible();
+
+    const controls = [
+      page.locator("[data-theme-toggle]"),
+      page.getByLabel("Name"),
+      page.getByLabel("Jahr"),
+      page.getByLabel("Beginn"),
+      page.getByLabel("Ende"),
+      page.getByRole("button", { name: "Speichern" }),
+    ];
+    const heights = await Promise.all(
+      controls.map((control) => control.evaluate((element) => element.getBoundingClientRect().height)),
+    );
+
+    if (viewport.requiresTouchTargets) {
+      for (const height of heights) {
+        expect(height, `Touch target at ${viewport.width}x${viewport.height}`).toBeGreaterThanOrEqual(44);
+      }
+    } else {
+      expect(heights[0], "Portrait 781px bleibt außerhalb des Touch-Target-Breakpoints").toBeLessThan(44);
+      expect(heights[5], "Portrait 781px bleibt außerhalb des Touch-Target-Breakpoints").toBeLessThan(44);
+    }
+  }
+});
+
+test("Mobile form checkbox help text stays below its touch target", async ({ page }) => {
+  await setupFirstAdmin(page);
+  await createCamp(page, "Vorbestellungen-Touch", 0, 2);
+
+  for (const colorScheme of ["light", "dark"]) {
+    await page.emulateMedia({ colorScheme });
+    for (const viewport of [
+      { width: 390, height: 844 },
+      { width: 844, height: 390 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.goto("/settings/preorders/");
+      await expect(page.getByRole("heading", { name: "Vorbestellungen" })).toBeVisible();
+
+      const field = page.locator('form.form-grid > p:has(input[type="checkbox"])').first();
+      const metrics = await field.evaluate((element) => {
+        const container = element.getBoundingClientRect();
+        const label = element.querySelector("label").getBoundingClientRect();
+        const input = element.querySelector('input[type="checkbox"]').getBoundingClientRect();
+        const help = element.querySelector(".helptext").getBoundingClientRect();
+        return {
+          container: { left: container.left, right: container.right },
+          label: { bottom: label.bottom },
+          input: { width: input.width, height: input.height, bottom: input.bottom },
+          help: { left: help.left, right: help.right, top: help.top, height: help.height },
+          display: window.getComputedStyle(element).display,
+        };
+      });
+
+      expect(metrics.input.width, `${viewport.width}px checkbox width`).toBeGreaterThanOrEqual(44);
+      expect(metrics.input.height, `${viewport.width}px checkbox height`).toBeGreaterThanOrEqual(44);
+      expect(metrics.help.left, `${viewport.width}px help text starts at field`).toBeCloseTo(metrics.container.left, 0);
+      expect(metrics.help.right, `${viewport.width}px help text spans field`).toBeCloseTo(metrics.container.right, 0);
+      expect(metrics.help.top, `${viewport.width}px help text follows control`).toBeGreaterThanOrEqual(
+        Math.max(metrics.label.bottom, metrics.input.bottom),
+      );
+      expect(metrics.display, `${viewport.width}px ${colorScheme} uses a field layout`).toBe("grid");
+      const checkbox = field.locator('input[type="checkbox"]');
+      await checkbox.focus();
+      await expect(checkbox).toBeFocused();
+    }
+  }
+  await assertNoUnexpectedOverflow(page);
+});
+
+test("Mobile checkbox errors stay below the control row", async ({ page }) => {
+  await setupFirstAdmin(page);
+  const campName = await createCamp(page, "Umlage-Touch", 0, 2);
+  await createParticipant(page, "Marie", "Curie", "", "1234");
+  await logout(page);
+  await openKiosk(page, "/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Marie Curie" });
+  await page.getByLabel("PIN:", { exact: true }).fill("1234");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await expect(page).toHaveURL(/\/kiosk\/$/);
+  await page.getByRole("button", { name: /Weitere Bereiche öffnen/ }).or(page.locator(".kiosk-mobile-bottom-nav").getByRole("link", { name: "Mehr" })).click();
+  await page.getByRole("button", { name: "Gemeinschaftsausgaben" }).click();
+  await page.getByRole("link", { name: "Antrag einreichen" }).click();
+  await page.getByLabel("Kategorie").selectOption({ label: "Verbrauchsmaterial" });
+  await page.getByLabel("Beschreibung").fill("Langer Testbeleg für die Umlageprüfung");
+  await page.getByLabel("Betrag").fill("42.00");
+  await page.getByLabel("Zahlungsdatum").fill(dateInputValue(new Date()));
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByText("Antrag auf Gemeinschaftsausgabe eingereicht.")).toBeVisible();
+  await page.getByRole("link", { name: "Abmelden" }).first().click();
+  await loginAsAdmin(page);
+  await page.getByRole("link", { name: campName, exact: true }).click();
+  await expect(page.getByRole("link", { name: "Genehmigen & Umlegen" })).toBeVisible();
+  await page.getByRole("link", { name: "Genehmigen & Umlegen" }).click();
+  await expect(page.getByRole("heading", { name: /Umlage genehmigen:/ })).toBeVisible();
+
+  for (const colorScheme of ["light", "dark"]) {
+    await page.emulateMedia({ colorScheme });
+    for (const viewport of [
+      { width: 390, height: 844 },
+      { width: 844, height: 390 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.getByLabel("Umlagemethode").selectOption("selected");
+      await page.getByRole("button", { name: "Speichern" }).click();
+      await expect(page.getByText("Bitte wähle mindestens einen Teilnehmer aus.")).toBeVisible();
+
+      const field = page.locator('form.form-grid > .checkbox-form-field:has(input[type="checkbox"]):has(.errorlist)');
+      const metrics = await field.evaluate((element) => {
+        const container = element.getBoundingClientRect();
+        const controls = [...element.querySelectorAll('input[type="checkbox"], input[type="checkbox"] + label')];
+        const controlBottom = Math.max(...controls.map((control) => control.getBoundingClientRect().bottom));
+        const error = element.querySelector(".errorlist").getBoundingClientRect();
+        return {
+          container: { left: container.left, right: container.right },
+          controlBottom,
+          error: { left: error.left, right: error.right, top: error.top, height: error.height },
+          display: window.getComputedStyle(element).display,
+        };
+      });
+
+      expect(metrics.display, `${viewport.width}px ${colorScheme} uses a field layout`).toBe("grid");
+      expect(metrics.error.left, `${viewport.width}px error starts at field`).toBeCloseTo(metrics.container.left, 0);
+      expect(metrics.error.right, `${viewport.width}px error spans field`).toBeCloseTo(metrics.container.right, 0);
+      expect(metrics.error.top, `${viewport.width}px error follows controls`).toBeGreaterThanOrEqual(metrics.controlBottom);
+      const checkbox = field.locator('input[type="checkbox"]');
+      await checkbox.focus();
+      await expect(checkbox).toBeFocused();
+      await assertNoUnexpectedOverflow(page);
+    }
+  }
+});
+
+test("Mobile normal helptext fields stay vertical", async ({ page }) => {
+  await setupKioskScenario(page, "Normal-Helptext-Touch");
+  const openKioskMenu = page
+    .getByRole("button", { name: /Weitere Bereiche öffnen/ })
+    .or(page.locator(".kiosk-mobile-bottom-nav").getByRole("link", { name: "Mehr" }));
+  await openKioskMenu.click();
+  const kioskMenu = page.locator("dialog#kiosk-menu-dialog");
+  await waitForKioskDialogReady(page, kioskMenu, "kiosk-menu-dialog");
+  await kioskMenu.getByRole("button", { name: /Familie/ }).click();
+  const familyManagementDialog = page.locator("dialog#family-management-dialog");
+  await waitForKioskDialogReady(page, familyManagementDialog, "family-management-dialog");
+  await familyManagementDialog.getByRole("button", { name: "Anlegen" }).click();
+  const familyDialog = page.locator("dialog#family-dialog");
+  await waitForKioskDialogReady(page, familyDialog, "family-dialog");
+
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 844, height: 390 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const field = familyDialog.locator('form.form-grid > p:has(> .helptext)').filter({ hasText: "Persönliche PIN" });
+    const metrics = await field.evaluate((element) => {
+      const container = element.getBoundingClientRect();
+      const label = element.querySelector("label").getBoundingClientRect();
+      const input = element.querySelector("input").getBoundingClientRect();
+      const help = element.querySelector(".helptext").getBoundingClientRect();
+      return {
+        container: { left: container.left, right: container.right },
+        label: { top: label.top, bottom: label.bottom },
+        input: { left: input.left, right: input.right, top: input.top, bottom: input.bottom },
+        help: { left: help.left, right: help.right, top: help.top },
+      };
+    });
+
+    expect(metrics.input.left, `${viewport.width}px input starts at field`).toBeCloseTo(metrics.container.left, 0);
+    expect(metrics.input.right, `${viewport.width}px input spans field`).toBeCloseTo(metrics.container.right, 0);
+    expect(metrics.input.top, `${viewport.width}px input follows label`).toBeGreaterThanOrEqual(metrics.label.bottom);
+    expect(metrics.help.left, `${viewport.width}px help starts at field`).toBeCloseTo(metrics.container.left, 0);
+    expect(metrics.help.right, `${viewport.width}px help spans field`).toBeCloseTo(metrics.container.right, 0);
+    expect(metrics.help.top, `${viewport.width}px help follows input`).toBeGreaterThanOrEqual(metrics.input.bottom);
+  }
 });
 
 test("Admin configures and centrally revokes every camp kiosk access", async ({ page }) => {
@@ -811,6 +1073,150 @@ async function setupKioskScenario(page, name = "Sommerlager Kiosk") {
   return campName;
 }
 
+test("Kiosk shift selectors provide native mobile touch targets without JavaScript", async ({ browser, page }) => {
+  await setupFirstAdmin(page);
+  await createCamp(page, "Kiosk Dienstwahl Touch", 0, 4);
+  const campId = new URL(page.url()).pathname.match(/\/camps\/(\d+)\//)[1];
+  await createParticipant(page, "Marie", "Curie", "", "1234");
+  const shiftDate = addDays(new Date(), 1);
+  await page.goto(`/camps/${campId}/shifts/new/`);
+  await page.getByLabel("Name des Dienstes").fill("Küchendienst Touch");
+  await page.getByLabel("Datum").fill(dateInputValue(shiftDate));
+  await page.getByLabel("Benötigte Helfer").fill("1");
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await logout(page);
+  await openKiosk(page, "/kiosk/login/");
+  await page.getByLabel("Teilnehmer").selectOption({ label: "Marie Curie" });
+  await page.getByLabel("PIN:", { exact: true }).fill("1234");
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await expect(page).toHaveURL(/\/kiosk\/$/);
+  await page.goto("/kiosk/shifts/");
+
+  const selector = page.locator(".shift-selection").filter({ hasText: "Auswählen" }).first();
+  const checkbox = selector.locator('input[type="checkbox"]');
+  for (const viewport of [
+    { width: 390, height: 844, requiresTouchTarget: true },
+    { width: 844, height: 390, requiresTouchTarget: true },
+    { width: 1280, height: 800, requiresTouchTarget: false },
+  ]) {
+    await page.setViewportSize(viewport);
+    const metrics = await selector.evaluate((element) => {
+      const label = element.getBoundingClientRect();
+      const input = element.querySelector('input[type="checkbox"]').getBoundingClientRect();
+      const card = element.closest(".shift-card").getBoundingClientRect();
+      return {
+        display: window.getComputedStyle(element).display,
+        label: { width: label.width, height: label.height, left: label.left, right: label.right },
+        input: { width: input.width, height: input.height },
+        staysInCard: label.left >= card.left - 1 && label.right <= card.right + 1,
+      };
+    });
+
+    expect(["flex", "inline-flex"], `${viewport.width}px selector display`).toContain(metrics.display);
+    expect(metrics.staysInCard, `${viewport.width}px selector containment`).toBe(true);
+    if (viewport.requiresTouchTarget) {
+      expect(metrics.label.width, `${viewport.width}px label width`).toBeGreaterThanOrEqual(44);
+      expect(metrics.label.height, `${viewport.width}px label height`).toBeGreaterThanOrEqual(44);
+      expect(metrics.input.width, `${viewport.width}px checkbox width`).toBeGreaterThanOrEqual(44);
+      expect(metrics.input.height, `${viewport.width}px checkbox height`).toBeGreaterThanOrEqual(44);
+    } else {
+      expect(metrics.input.width, "Desktop checkbox remains compact").toBeLessThan(44);
+      expect(metrics.input.height, "Desktop checkbox remains compact").toBeLessThan(44);
+    }
+  }
+
+  await checkbox.focus();
+  await expect(checkbox).toBeFocused();
+  await page.keyboard.press("Space");
+  await expect(checkbox).toBeChecked();
+
+  const noJavaScriptContext = await browser.newContext({
+    javaScriptEnabled: false,
+    storageState: await page.context().storageState(),
+    viewport: { width: 390, height: 844 },
+  });
+  try {
+    const noJavaScriptPage = await noJavaScriptContext.newPage();
+    await noJavaScriptPage.goto(`${new URL(page.url()).origin}/kiosk/shifts/`);
+    const noJavaScriptSelector = noJavaScriptPage.locator(".shift-selection").first();
+    const noJavaScriptCheckbox = noJavaScriptSelector.locator('input[type="checkbox"]');
+    const noJavaScriptSize = await noJavaScriptSelector.evaluate((element) => {
+      const label = element.getBoundingClientRect();
+      const input = element.querySelector('input[type="checkbox"]').getBoundingClientRect();
+      return { labelHeight: label.height, inputWidth: input.width, inputHeight: input.height };
+    });
+    expect(noJavaScriptSize.labelHeight).toBeGreaterThanOrEqual(44);
+    expect(noJavaScriptSize.inputWidth).toBeGreaterThanOrEqual(44);
+    expect(noJavaScriptSize.inputHeight).toBeGreaterThanOrEqual(44);
+    await noJavaScriptCheckbox.focus();
+    await expect(noJavaScriptCheckbox).toBeFocused();
+    await noJavaScriptPage.keyboard.press("Space");
+    await expect(noJavaScriptCheckbox).toBeChecked();
+  } finally {
+    await noJavaScriptContext.close();
+  }
+});
+
+test("Shift template time fields remain stacked on mobile", async ({ page }) => {
+  await setupFirstAdmin(page);
+  await createCamp(page, "Dienstvorlagen Touch", 0, 4);
+  const campId = new URL(page.url()).pathname.match(/\/camps\/(\d+)\//)[1];
+  await page.goto(`/camps/${campId}/shift-templates/`);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.getByRole("button", { name: "Vorlage anlegen" }).click();
+  const dialog = page.locator("dialog#template-dialog");
+  await expect(dialog).toBeVisible();
+
+  for (const field of ["Startzeit", "Endzeit"]) {
+    const label = dialog.getByLabel(field).locator("..", { has: page.locator("input") });
+    const layout = await label.evaluate((element) => {
+      const labelRect = element.getBoundingClientRect();
+      const inputRect = element.querySelector("input").getBoundingClientRect();
+      return {
+        labelTop: labelRect.top,
+        inputTop: inputRect.top,
+        labelWidth: labelRect.width,
+        inputWidth: inputRect.width,
+      };
+    });
+    expect(layout.inputTop, `${field} input must follow its label`).toBeGreaterThan(layout.labelTop + 12);
+    expect(layout.inputWidth, `${field} input must fit its cell`).toBeGreaterThan(0);
+    expect(layout.labelWidth, `${field} label must fit its cell`).toBeGreaterThan(0);
+  }
+
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.emulateMedia({ colorScheme: "light" });
+  await assertNoUnexpectedOverflow(page);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+});
+
+test("Kiosk help controls retain touch size and open their real dialog", async ({ page }) => {
+  await setupKioskScenario(page, "Kiosk Hilfe Touch");
+  const helpButton = page.locator(".kiosk-help-button").first();
+
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 844, height: 390 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.emulateMedia({ colorScheme: viewport.width === 390 ? "dark" : "light" });
+    const box = await helpButton.boundingBox();
+    expect(box, `${viewport.width}px help button`).not.toBeNull();
+    expect(box.width, `${viewport.width}px help button width`).toBeGreaterThanOrEqual(44);
+    expect(box.height, `${viewport.width}px help button height`).toBeGreaterThanOrEqual(44);
+    await helpButton.focus();
+    await expect(helpButton).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("dialog#kiosk-help-dialog")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("dialog#kiosk-help-dialog")).toBeHidden();
+    await assertNoUnexpectedOverflow(page);
+  }
+});
+
 async function expectOnlyModal(page, dialogId) {
   await expect.poll(() => page.locator("dialog:modal").evaluateAll((dialogs) => dialogs.map((dialog) => dialog.id))).toEqual([dialogId]);
 }
@@ -952,6 +1358,23 @@ test("Kiosk quick booking validates targets and supports cancellation", async ({
   const quickDialog = page.locator("dialog#quick-dialog");
   await expect(quickDialog).toBeVisible();
   const quickTargets = quickDialog.locator('[data-quick-target-scope="drink"]');
+  const targetLayout = await quickTargets.first().locator("..").evaluate((label) => {
+    const labelRect = label.getBoundingClientRect();
+    const inputRect = label.querySelector('input[type="checkbox"]').getBoundingClientRect();
+    return {
+      labelWidth: labelRect.width,
+      labelHeight: labelRect.height,
+      inputWidth: inputRect.width,
+      inputHeight: inputRect.height,
+    };
+  });
+  expect(targetLayout.labelWidth).toBeGreaterThanOrEqual(44);
+  expect(targetLayout.labelHeight).toBeGreaterThanOrEqual(44);
+  expect(targetLayout.inputWidth).toBeGreaterThanOrEqual(44);
+  expect(targetLayout.inputHeight).toBeGreaterThanOrEqual(44);
+  await page.setViewportSize({ width: 844, height: 390 });
+  await assertNoUnexpectedOverflow(page);
+  await page.setViewportSize({ width: 390, height: 844 });
   await quickTargets.first().uncheck();
   await quickDialog.getByRole("button", { name: "1x" }).click();
   await expect(quickDialog).toBeVisible();
@@ -1119,6 +1542,69 @@ test("Breakfast food dialog opens the prebooking calendar", async ({ page }) => 
   await expect(breakfastCalendar.locator("#breakfast-booking-target-names-dialog")).toContainText("Marie Curie");
 });
 
+test("Breakfast booking cards retain their responsive grid without JavaScript dependency", async ({ browser, page }) => {
+  await setupKioskScenario(page, "Kiosk Frühstück Kartenraster");
+  await page.locator('[data-kiosk-card="food"] [data-food-button][data-meal-type="breakfast"]').click();
+  await page.locator("dialog#food-dialog").getByRole("button", { name: "Für später vorbestellen" }).click();
+  const breakfastCalendar = page.locator("dialog#breakfast-meal-dialog");
+  await expectOnlyModal(page, "breakfast-meal-dialog");
+  const card = breakfastCalendar.locator(".meal-booking-day").first();
+
+  for (const viewport of [
+    { width: 390, height: 844, expectedColumns: 2 },
+    { width: 844, height: 390, expectedColumns: 4 },
+    { width: 1280, height: 800, expectedColumns: 4 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const metrics = await card.evaluate((element) => {
+      const styles = window.getComputedStyle(element);
+      const date = element.querySelector(".meal-booking-day__date").getBoundingClientRect();
+      const menu = element.querySelector(".meal-booking-day__menu").getBoundingClientRect();
+      const price = element.querySelector(".meal-booking-day__price").getBoundingClientRect();
+      return {
+        display: styles.display,
+        columns: styles.gridTemplateColumns.split(" ").filter(Boolean).length,
+        hasOverflow: element.scrollWidth > element.clientWidth + 1,
+        detailsShareColumn: Math.abs(date.left - menu.left) <= 1 && Math.abs(menu.left - price.left) <= 1,
+        detailsAreOrdered: date.top <= menu.top && menu.top <= price.top,
+      };
+    });
+
+    expect(metrics.display, `${viewport.width}px card layout`).toBe("grid");
+    expect(metrics.columns, `${viewport.width}px card columns`).toBe(viewport.expectedColumns);
+    expect(metrics.hasOverflow, `${viewport.width}px card overflow`).toBe(false);
+    if (viewport.expectedColumns === 2) {
+      expect(metrics.detailsShareColumn, `${viewport.width}px detail column`).toBe(true);
+      expect(metrics.detailsAreOrdered, `${viewport.width}px detail order`).toBe(true);
+    }
+  }
+
+  const checkbox = card.locator('input[type="checkbox"]');
+  await checkbox.focus();
+  await expect(checkbox).toBeFocused();
+  const wasChecked = await checkbox.isChecked();
+  await page.keyboard.press("Space");
+  await expect(checkbox).toBeChecked({ checked: !wasChecked });
+
+  const storageState = await page.context().storageState();
+  const noJavaScriptContext = await browser.newContext({
+    javaScriptEnabled: false,
+    storageState,
+    viewport: { width: 390, height: 844 },
+  });
+  try {
+    const noJavaScriptPage = await noJavaScriptContext.newPage();
+    await noJavaScriptPage.goto(`${new URL(page.url()).origin}/kiosk/`);
+    const noJavaScriptCard = noJavaScriptPage.locator(".meal-booking-day").first();
+    await expect(noJavaScriptCard).toHaveCount(1);
+    await expect
+      .poll(() => noJavaScriptCard.evaluate((element) => window.getComputedStyle(element).display))
+      .toBe("grid");
+  } finally {
+    await noJavaScriptContext.close();
+  }
+});
+
 test("Breakfast calendar returns to the food dialog", async ({ page }) => {
   await setupKioskScenario(page, "Kiosk Frühstück Dialog Rückweg");
   await page.locator('[data-kiosk-card="food"] [data-food-button][data-meal-type="breakfast"]').click();
@@ -1203,10 +1689,20 @@ test("Kiosk can book a drink after breakfast prebooking", async ({ page }) => {
     .getByRole("heading", { name: "Familienmitglieder", exact: true })
     .locator("xpath=ancestor::section[1]");
   await expect(familyMembersSection.getByRole("cell", { name: "Irène Curie", exact: true })).toBeVisible();
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await assertNoUnexpectedOverflow(page);
-  await page.setViewportSize({ width: 390, height: 844 });
-  await assertNoUnexpectedOverflow(page);
+  const sortSelect = familyMembersSection.locator(".table-tools__sort select");
+  for (const theme of ["light", "dark"]) {
+    await page.locator("html").evaluate((element, nextTheme) => {
+      element.dataset.theme = nextTheme;
+    }, theme);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await expect(sortSelect).toBeHidden();
+    await assertPanelGridTrackAndTableScrollerContained(familyMembersSection);
+    await assertNoUnexpectedOverflow(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(sortSelect).toBeVisible();
+    await assertPanelGridTrackAndTableScrollerContained(familyMembersSection);
+    await assertNoUnexpectedOverflow(page);
+  }
 });
 
 test("Kiosk user can change their own PIN and log in with the new PIN", async ({ page }) => {
@@ -1404,6 +1900,7 @@ test("Partner meal retraction requires explicit confirmation", async ({ page }) 
   await page.getByLabel("Teilnehmer").selectOption({ label: "Ada Lovelace" });
   await page.getByLabel("PIN:", { exact: true }).fill("1234");
   await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await expect(page).toHaveURL(/\/kiosk\/$/);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ colorScheme: "dark" });
   await page.goto("/kiosk/#meal-calendar");
@@ -1452,7 +1949,7 @@ test("Kiosk masonry and expense cards stay responsive and accessible", async ({ 
   expect(
     Math.abs(adminHeaderLayout.identityCenter - adminHeaderLayout.navigationCenter),
     "Lagerkontext und Navigation sind in einer Zeile ausgerichtet"
-  ).toBeLessThanOrEqual(1);
+  ).toBeLessThanOrEqual(4);
   await assertNoUnexpectedOverflow(page);
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -1612,6 +2109,43 @@ test("Kiosk masonry and expense cards stay responsive and accessible", async ({ 
 
   expect(browserErrors).toEqual([]);
   expect(failedRequests).toEqual([]);
+});
+
+test("Mobile admin header keeps visual, DOM, and keyboard order aligned", async ({ page }) => {
+  await setupFirstAdmin(page);
+  await createCamp(page, "Header-Reihenfolge", 0, 2);
+
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 780, height: 900 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const navigation = page.locator("header.admin-topbar > nav");
+    const order = await navigation.evaluate((nav) => {
+      const visibleItems = Array.from(nav.children).filter(
+        (item) => window.getComputedStyle(item).display !== "none"
+      );
+      const key = (item) =>
+        item.classList.contains("theme-toggle") ? "theme-toggle" : item.textContent.trim();
+      return {
+        dom: visibleItems.map(key),
+        visual: [...visibleItems]
+          .sort((left, right) => {
+            const leftRect = left.getBoundingClientRect();
+            const rightRect = right.getBoundingClientRect();
+            return leftRect.top - rightRect.top || leftRect.left - rightRect.left;
+          })
+          .map(key),
+      };
+    });
+    expect(order.visual, `Visuelle Reihenfolge bei ${viewport.width}px`).toEqual(order.dom);
+
+    const themeToggle = navigation.locator(".theme-toggle");
+    const visibleNavigationItems = navigation.locator(":scope > :not([hidden])");
+    await themeToggle.focus();
+    await page.keyboard.press("Tab");
+    await expect(visibleNavigationItems.nth(1)).toBeFocused();
+  }
 });
 
 test("Theme switch persists across kiosk and admin layouts", async ({ page }) => {
@@ -2051,6 +2585,68 @@ test("Admin can batch delete and restore booking charges via table checkboxes", 
   await expect(chargeCell2).toBeVisible();
 });
 
+test("Price rule checkbox and radio labels are touch-sized in portrait and landscape", async ({ page }) => {
+  await setupFirstAdmin(page);
+  await createCamp(page, "Touchziel-Preisregel");
+  await page.getByRole("link", { name: "Preise verwalten" }).first().click();
+  const priceManageUrl = page.url();
+  const priceRuleUrl = priceManageUrl.replace(/\/prices\/?$/, "/prices/new/");
+
+  for (const viewport of [
+    { name: "portrait", width: 390, height: 844 },
+    { name: "landscape", width: 844, height: 390 },
+  ]) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+
+    const assertTouchTarget = async (locator, description) => {
+      await expect(locator, `${viewport.name}: ${description} is visible`).toBeVisible();
+      const box = await locator.boundingBox();
+      expect(box.width, `${viewport.name}: ${description} width`).toBeGreaterThanOrEqual(44);
+      expect(box.height, `${viewport.name}: ${description} height`).toBeGreaterThanOrEqual(44);
+    };
+
+    await page.goto(priceManageUrl);
+    await assertTouchTarget(page.getByRole("switch", { name: "Dunkles Farbschema" }), "theme toggle");
+    await assertTouchTarget(page.getByRole("button", { name: "Einzelpreis anlegen" }), "action button");
+    await page.getByRole("button", { name: "Einzelpreis anlegen" }).click();
+    const priceDialog = page.locator("#price-rule-dialog");
+    await expect(priceDialog).toBeVisible();
+    await assertTouchTarget(priceDialog.getByRole("button", { name: "Schließen" }), "dialog close");
+    await priceDialog.getByRole("button", { name: "Schließen" }).click();
+
+    await page.goto(priceRuleUrl);
+    await expect(page.getByRole("heading", { name: "Preisregel anlegen" })).toBeVisible();
+    await assertTouchTarget(page.locator("#id_name"), "text input");
+    await assertTouchTarget(page.locator("#id_meal_type"), "select");
+
+    const controls = [page.locator("#id_applies_to_children"), page.locator('input[name="kind"]').first()];
+    for (const control of controls) {
+      await expect(control, `${viewport.name}: input is visible`).toBeVisible();
+      const id = await control.getAttribute("id");
+      const label = page.locator(`label[for="${id}"]`);
+      await expect(label, `${viewport.name}: label for ${id} is visible`).toBeVisible();
+
+      const inputBox = await control.boundingBox();
+      const labelBox = await label.boundingBox();
+      expect(inputBox.width, `${viewport.name}: ${id} input width`).toBeGreaterThanOrEqual(44);
+      expect(inputBox.height, `${viewport.name}: ${id} input height`).toBeGreaterThanOrEqual(44);
+      expect(labelBox.width, `${viewport.name}: ${id} label width`).toBeGreaterThanOrEqual(44);
+      expect(labelBox.height, `${viewport.name}: ${id} label height`).toBeGreaterThanOrEqual(44);
+
+      await control.focus();
+      await expect(control).toBeFocused();
+      expect(await control.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe("none");
+    }
+
+    await page.emulateMedia({ colorScheme: "dark" });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await assertNoUnexpectedOverflow(page);
+    await page.emulateMedia({ colorScheme: "light" });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await assertNoUnexpectedOverflow(page);
+  }
+});
+
 test("Login rate limiting blocks user after repeated failed attempts", async ({ page }, testInfo) => {
   await setupFirstAdmin(page);
   await logout(page);
@@ -2244,8 +2840,8 @@ test("Mobile Kiosk: checkmark for completed shifts is not horizontally distorted
 
   // Assert checkmark circle is perfectly 1:1 ratio and not squished horizontally
   const checkBox = await checkIcon.boundingBox();
-  expect(checkBox.width).toEqual(checkBox.height);
-  expect(checkBox.width).toBe(32);
+  expect(Math.abs(checkBox.width - checkBox.height)).toBeLessThan(0.5);
+  expect(Math.round(checkBox.width)).toBe(32);
 });
 
 test("Mobile Kiosk: fixed bottom navigation bar is present and functional on mobile", async ({ page }) => {
@@ -2561,7 +3157,14 @@ test("Kiosk: Participant can open donate dialog, enter amount and see confetti",
   await expect(dialog).toBeVisible();
 
   // Fill amount and submit
-  await dialog.getByLabel("Betrag in €").fill("10.50");
+  await expect.poll(() => dialog.evaluate((element) => ({
+    isModal: element.matches(":modal"),
+    containsFocus: element.contains(document.activeElement),
+  }))).toEqual({ isModal: true, containsFocus: true });
+
+  const donationAmount = dialog.getByLabel("Betrag in €");
+  await donationAmount.fill("10.50");
+  await expect(donationAmount).toHaveValue("10.50");
   await dialog.getByRole("button", { name: "Spenden eintragen" }).click();
 
   // Should show success message

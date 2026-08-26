@@ -702,6 +702,17 @@ pre {
   gap: 14px;
 }
 
+.panel.stack {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.panel.stack > table[data-sortable],
+.panel.stack > table[data-filterable] {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 .auth-separator {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -2657,8 +2668,8 @@ input[placeholder="DD.MM.YYYY"] {
   }
 
   .admin-topbar > nav > .theme-toggle {
-    grid-column: 2;
-    justify-self: end;
+    grid-column: 1;
+    justify-self: start;
   }
 
   .admin-topbar .nav-user-group {
@@ -3818,6 +3829,185 @@ code {
 
 @media (max-width: 560px) {
   .meal-day-card-grid { grid-template-columns: 1fr; }
+}
+
+/* Mobile Touch Target Standards (Issues #346 & #349) */
+@media (max-width: 780px), (max-width: 900px) and (orientation: landscape) {
+  .theme-toggle {
+    flex: 0 0 44px;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+  }
+
+  button,
+  .button,
+  a.button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .kiosk-help-button {
+    flex: 0 0 44px;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+  }
+
+  .exportbar a {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]),
+  select {
+    min-height: 44px;
+  }
+
+  select {
+    height: 44px;
+  }
+
+  .dialog-close,
+  [data-dialog-close],
+  button.close,
+  .dialog-heading .button,
+  dialog form[method="dialog"] .button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  dialog form[method="dialog"] .button {
+    min-height: 44px !important;
+  }
+
+  .checkbox-cell label,
+  .form-grid label {
+    min-height: 44px;
+  }
+
+  .form-grid label:has(> input:is([type="checkbox"], [type="radio"])):not(.meal-booking-day),
+  .form-grid p:has(> input:is([type="checkbox"], [type="radio"])) > label:not(.meal-booking-day),
+  .shift-selection,
+  label.checkbox-label,
+  label.radio-label {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 44px;
+    min-width: 44px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    cursor: pointer;
+  }
+
+  #template-dialog .form-grid > div > label {
+    display: block;
+  }
+
+  #template-dialog .form-grid > div > label > input {
+    display: block;
+  }
+
+  .email-recipient-form label:has(> input:is([type="checkbox"], [type="radio"])) {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    min-width: 44px;
+    cursor: pointer;
+  }
+
+  .email-recipient-form input[type="checkbox"],
+  .email-recipient-form input[type="radio"] {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    flex: 0 0 44px;
+    margin-right: 8px;
+  }
+
+  .form-grid p:has(> input:is([type="checkbox"], [type="radio"])):has(> .helptext) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .form-grid p:has(> input:is([type="checkbox"], [type="radio"])):has(> .helptext) > label {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .form-grid p:has(> input:is([type="checkbox"], [type="radio"])):has(> .helptext) > input:is([type="checkbox"], [type="radio"]) {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .form-grid p:has(> input:is([type="checkbox"], [type="radio"])):has(> .helptext) > .helptext {
+    grid-column: 1 / -1;
+  }
+
+  .form-grid .checkbox-form-field {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .form-grid .checkbox-form-field > .errorlist,
+  .form-grid .checkbox-form-field > label,
+  .form-grid .checkbox-form-field > legend,
+  .form-grid .checkbox-form-field > div {
+    grid-column: 1;
+    min-width: 0;
+  }
+
+  .form-grid .checkbox-form-field > label {
+    order: 1;
+  }
+
+  .form-grid .checkbox-form-field > legend {
+    order: 1;
+  }
+
+  .form-grid .checkbox-form-field > div {
+    order: 2;
+  }
+
+  .form-grid .checkbox-form-field > .errorlist {
+    order: 3;
+  }
+
+  .checkbox-cell label input[type="checkbox"],
+  .checkbox-cell label input[type="radio"],
+  .form-grid input[type="checkbox"],
+  .form-grid input[type="radio"],
+  .shift-selection input[type="checkbox"],
+  .mobile-touch-target,
+  label.checkbox-label input[type="checkbox"],
+  label.radio-label input[type="radio"] {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+
+  .target-row label {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .target-row input[type="checkbox"] {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 
 /* Table tools: client-side sorting and filtering (table_tools.js) */

@@ -25,8 +25,17 @@ test("Kiosk self-registration wizard manages step focus and announcements", asyn
   const dialog = page.locator("#self-registration-dialog");
   await expect(dialog).toBeVisible();
 
-  await page.locator("#id_enrollment_first_name").fill("Max");
-  await page.locator("#id_enrollment_last_name").fill("Mustermann");
+  await expect.poll(() => dialog.evaluate((element) => ({
+    isModal: element.matches(":modal"),
+    containsFocus: element.contains(document.activeElement),
+  }))).toEqual({ isModal: true, containsFocus: true });
+
+  const firstName = page.locator("#id_enrollment_first_name");
+  const lastName = page.locator("#id_enrollment_last_name");
+  await firstName.fill("Max");
+  await lastName.fill("Mustermann");
+  await expect(firstName).toHaveValue("Max");
+  await expect(lastName).toHaveValue("Mustermann");
 
   const nextButton = dialog.locator(".button-step-next");
   await nextButton.click();

@@ -171,7 +171,7 @@
           <tr>
             {% if user|can_manage_users %}
               <th style="width: 36px; text-align: center;">
-                <input type="checkbox" id="select-all-charges" aria-label="Alle Buchungen auswählen">
+                <input type="checkbox" id="select-all-charges" class="mobile-touch-target" aria-label="Alle Buchungen auswählen">
               </th>
             {% endif %}
             <th>Nr.</th><th>Art</th><th>Ziel</th><th>Beschreibung</th><th data-sort-type="number">Menge</th><th data-sort-type="number">Einzelpreis</th><th data-sort-type="number">Fördersatz</th><th data-sort-type="number">Summe</th><th data-sort-type="date">Datum</th><th></th>
@@ -182,7 +182,7 @@
             <tr>
               {% if user|can_manage_users %}
                 <td data-label="Auswahl" style="text-align: center;">
-                  <input type="checkbox" name="selected_charges" value="{{ charge.pk }}" class="charge-checkbox" aria-label="Buchung {{ charge.booking_reference }} auswählen">
+                  <input type="checkbox" name="selected_charges" value="{{ charge.pk }}" class="charge-checkbox mobile-touch-target" aria-label="Buchung {{ charge.booking_reference }} auswählen">
                 </td>
               {% endif %}
               <td data-label="Nr.">{{ charge.booking_reference }}</td>
@@ -443,7 +443,7 @@
           <tr>
             {% if user|can_manage_users %}
               <th style="width: 36px; text-align: center;">
-                <input type="checkbox" id="select-all-audit-logs" aria-label="Alle gelöschten Buchungen auswählen">
+                <input type="checkbox" id="select-all-audit-logs" class="mobile-touch-target" aria-label="Alle gelöschten Buchungen auswählen">
               </th>
             {% endif %}
             <th data-sort-type="date">Zeitpunkt</th><th>Bearbeiter</th><th>Buchung</th><th>Vorher</th><th>Nachher</th><th data-sort="none">Aktion</th>
@@ -455,7 +455,7 @@
               {% if user|can_manage_users %}
                 <td data-label="Auswahl" style="text-align: center;">
                   {% if log.action == "deleted" and log.charge.deleted_at and log.participant %}
-                    <input type="checkbox" name="selected_audit_logs" value="{{ log.pk }}" class="audit-log-checkbox" aria-label="Gelöschte Buchung {{ log.charge.description }} auswählen">
+                    <input type="checkbox" name="selected_audit_logs" value="{{ log.pk }}" class="audit-log-checkbox mobile-touch-target" aria-label="Gelöschte Buchung {{ log.charge.description }} auswählen">
                   {% endif %}
                 </td>
               {% endif %}

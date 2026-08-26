@@ -26,7 +26,7 @@
         <thead>
           <tr>
             <th style="width: 40px; text-align: center;">
-              <input type="checkbox" id="select-all-shifts" aria-label="Alle Dienste auswählen">
+              <input type="checkbox" id="select-all-shifts" class="mobile-touch-target" aria-label="Alle Dienste auswählen">
             </th>
             <th data-sort-type="date">Datum</th>
             <th>Zeit</th>
@@ -40,7 +40,7 @@
           {% for shift in shifts %}
             <tr>
               <td style="text-align: center;">
-                <input type="checkbox" name="shift_ids" value="{{ shift.pk }}" class="shift-checkbox" aria-label="Dienst {{ shift.name }} auswählen">
+                <input type="checkbox" name="shift_ids" value="{{ shift.pk }}" class="shift-checkbox mobile-touch-target" aria-label="Dienst {{ shift.name }} auswählen">
               </td>
               <td>{{ shift.date|date:"d.m.Y" }}</td>
               <td>

@@ -205,7 +205,7 @@ def test_docker_publish_is_bound_to_successful_trusted_main_sha_and_checks_race(
     assert "needs.docker-test.result == 'success'" in publish["if"]
     assert "git ls-remote" in verify["run"]
     assert "refs/heads/main" in verify["run"]
-    assert sum("git ls-remote" in dict(step).get("run", "") for step in steps) == 2
+    assert sum("git ls-remote" in dict(step).get("run", "") for step in steps) == 4
     assert "workflow_run.head_sha" in publish_text
     assert "github.sha" not in publish_text
 

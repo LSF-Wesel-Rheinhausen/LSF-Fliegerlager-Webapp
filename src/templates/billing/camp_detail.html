@@ -115,14 +115,14 @@
                   <fieldset>
                     <legend>Preismerkmale</legend>
                     <label for="approval-{{ p.pk }}-is-child">
-                      <input id="approval-{{ p.pk }}-is-child" type="checkbox" name="is_child"{% if approval_form.is_child.value %} checked{% endif %}>
+                      <input id="approval-{{ p.pk }}-is-child" type="checkbox" name="is_child" class="mobile-touch-target"{% if approval_form.is_child.value %} checked{% endif %}>
                       Kind
                     </label>
                     <label for="approval-{{ p.pk }}-is-youth-group">
                       <input
                         id="approval-{{ p.pk }}-is-youth-group"
                         type="checkbox"
-                        name="is_youth_group"
+                        name="is_youth_group" class="mobile-touch-target"
                         data-youth-group-toggle="approval-{{ p.pk }}-rates"
                         aria-controls="approval-{{ p.pk }}-rates"
                         {% if approval_form.is_youth_group.value %}checked{% endif %}
@@ -130,7 +130,7 @@
                       Jugendgruppe
                     </label>
                     <label for="approval-{{ p.pk }}-is-companion">
-                      <input id="approval-{{ p.pk }}-is-companion" type="checkbox" name="is_companion"{% if approval_form.is_companion.value %} checked{% endif %}>
+                      <input id="approval-{{ p.pk }}-is-companion" type="checkbox" name="is_companion" class="mobile-touch-target"{% if approval_form.is_companion.value %} checked{% endif %}>
                       Begleitperson
                     </label>
                   </fieldset>
@@ -160,7 +160,7 @@
                     · <a href="{% url 'participant-detail' p.pk %}">Profil und PIN öffnen</a>
                   </p>
                   <label for="approval-{{ p.pk }}-confirmed">
-                    <input id="approval-{{ p.pk }}-confirmed" type="checkbox" name="price_attributes_confirmed" required>
+                    <input id="approval-{{ p.pk }}-confirmed" type="checkbox" name="price_attributes_confirmed" class="mobile-touch-target" required>
                     Preisrelevante Angaben geprüft
                   </label>
                   <div class="inline-actions">
