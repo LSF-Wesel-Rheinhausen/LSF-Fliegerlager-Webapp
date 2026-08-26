@@ -2674,7 +2674,7 @@ test("Login rate limiting blocks user after repeated failed attempts", async ({ 
   const pythonBin = fs.existsSync(".venv/bin/python") ? ".venv/bin/python" : "python";
   require("child_process").execSync(
     `${pythonBin} src/manage.py shell -c "from billing.models import LoginAttempt; LoginAttempt.objects.all().delete()"`,
-    { env: { ...process.env, DATABASE_URL: `sqlite:///tmp/e2e_${testInfo.workerIndex}.sqlite3` } }
+    { env: { ...process.env, DATABASE_URL: `sqlite:////tmp/e2e_${testInfo.workerIndex}.sqlite3` } }
   );
 });
 

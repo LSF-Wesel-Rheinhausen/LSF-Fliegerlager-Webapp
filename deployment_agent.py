@@ -21,6 +21,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from datetime import UTC, datetime
 from enum import Enum
 from http import HTTPStatus
@@ -38,6 +39,10 @@ class AgentConfigError(RuntimeError):
 
 class PortainerAPIError(RuntimeError):
     """Raised when Portainer rejects a stack operation."""
+
+
+class PortainerTransientError(PortainerAPIError):
+    """Raised when Portainer cannot be reached and a bounded retry is safe."""
 
 
 class RegistryMetadataError(RuntimeError):
@@ -118,6 +123,14 @@ STATE_FILE = Path(os.getenv("UPDATE_STATE_FILE", "/state/status.json"))
 MAX_AGENT_BODY_BYTES = positive_int_setting("MAX_AGENT_BODY_BYTES", "1048576")
 AGENT_READ_TIMEOUT_SECONDS = positive_float_setting("AGENT_READ_TIMEOUT_SECONDS", "10")
 MAX_AGENT_CONCURRENT_REQUESTS = positive_int_setting("MAX_AGENT_CONCURRENT_REQUESTS", "8")
+PORTAINER_STARTUP_TIMEOUT_SECONDS = positive_float_setting("PORTAINER_STARTUP_TIMEOUT_SECONDS", "30")
+PORTAINER_STARTUP_INITIAL_BACKOFF_SECONDS = positive_float_setting("PORTAINER_STARTUP_INITIAL_BACKOFF_SECONDS", "1")
+PORTAINER_STARTUP_MAX_BACKOFF_SECONDS = positive_float_setting("PORTAINER_STARTUP_MAX_BACKOFF_SECONDS", "5")
+RECOVERY_CONVERGENCE_TIMEOUT_SECONDS = positive_float_setting("RECOVERY_CONVERGENCE_TIMEOUT_SECONDS", "30")
+RECOVERY_CONVERGENCE_INITIAL_BACKOFF_SECONDS = positive_float_setting(
+    "RECOVERY_CONVERGENCE_INITIAL_BACKOFF_SECONDS", "1"
+)
+RECOVERY_CONVERGENCE_MAX_BACKOFF_SECONDS = positive_float_setting("RECOVERY_CONVERGENCE_MAX_BACKOFF_SECONDS", "5")
 MAX_REGISTRY_RESPONSE_BYTES = positive_int_setting("MAX_REGISTRY_RESPONSE_BYTES", "16777216")
 MAX_REGISTRY_REDIRECTS = 3
 BACKUP_STAGING_PATTERN = re.compile(r"^staging/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -277,7 +290,7 @@ class PortainerClient:
         except urllib.error.HTTPError as error:
             raise PortainerAPIError(self._format_http_error(error)) from error
         except (OSError, TimeoutError) as error:
-            raise PortainerAPIError("Portainer API ist nicht erreichbar.") from error
+            raise PortainerTransientError("Portainer API ist nicht erreichbar.") from error
         if not raw:
             return {}
         try:
@@ -1441,6 +1454,73 @@ def application_is_healthy() -> bool:
         return False
 
 
+def wait_for_portainer_startup(
+    client: PortainerClient,
+    *,
+    timeout_seconds: float = PORTAINER_STARTUP_TIMEOUT_SECONDS,
+    initial_backoff_seconds: float = PORTAINER_STARTUP_INITIAL_BACKOFF_SECONDS,
+    max_backoff_seconds: float = PORTAINER_STARTUP_MAX_BACKOFF_SECONDS,
+    clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+) -> None:
+    """Wait a bounded time for transient Portainer startup errors before serving requests."""
+    deadline = clock() + timeout_seconds
+    backoff_seconds = initial_backoff_seconds
+    while True:
+        try:
+            client.get_stack()
+            return
+        except PortainerTransientError:
+            remaining_seconds = deadline - clock()
+            if remaining_seconds <= 0:
+                raise
+            sleep(min(backoff_seconds, remaining_seconds))
+            backoff_seconds = min(backoff_seconds * 2, max_backoff_seconds)
+
+
+def wait_for_recovery_runtime(
+    client: PortainerClient,
+    target_image: str,
+    rollback_image: str,
+    *,
+    timeout_seconds: float | None = None,
+    initial_backoff_seconds: float | None = None,
+    max_backoff_seconds: float | None = None,
+    clock: Callable[[], float] | None = None,
+    sleep: Callable[[float], None] | None = None,
+    inspect_runtime: Callable[[PortainerClient, str], str] | None = None,
+    check_health: Callable[[], bool] | None = None,
+) -> tuple[str, bool]:
+    """Wait a bounded time for an interrupted deployment runtime to converge."""
+    timeout = timeout_seconds if timeout_seconds is not None else RECOVERY_CONVERGENCE_TIMEOUT_SECONDS
+    initial_backoff = (
+        initial_backoff_seconds if initial_backoff_seconds is not None else RECOVERY_CONVERGENCE_INITIAL_BACKOFF_SECONDS
+    )
+    max_backoff = max_backoff_seconds if max_backoff_seconds is not None else RECOVERY_CONVERGENCE_MAX_BACKOFF_SECONDS
+    monotonic_clock = clock or time.monotonic
+    sleeper = sleep or time.sleep
+    runtime_inspector = inspect_runtime or immutable_running_image
+    health_checker = check_health or application_is_healthy
+    deadline = monotonic_clock() + timeout
+    backoff = initial_backoff
+    while True:
+        try:
+            running_image = runtime_inspector(client, target_image)
+        except (PortainerAPIError, OSError, RuntimeError) as inspection_error:
+            logger.info("Warte auf konvergierenden App-Runtime-Digest: %s", inspection_error)
+            running_image = ""
+        if running_image in {target_image, rollback_image}:
+            if health_checker():
+                return running_image, True
+        elif running_image:
+            return running_image, False
+        remaining_seconds = deadline - monotonic_clock()
+        if remaining_seconds <= 0:
+            return running_image, False
+        sleeper(min(backoff, remaining_seconds))
+        backoff = min(backoff * 2, max_backoff)
+
+
 def _recovery_images(state: dict[str, Any]) -> tuple[str, str, str]:
     """Validate and return target image, target digest and rollback image."""
     if state.get("recovery_contract") != RECOVERY_CONTRACT_VERSION:
@@ -1486,16 +1566,7 @@ def reconcile_interrupted_update() -> dict[str, Any]:
     client = PortainerClient()
     operation_id = state["operation_id"]
     try:
-        try:
-            running_image = immutable_running_image(client, target_image)
-        except (PortainerAPIError, OSError, RuntimeError) as inspection_error:
-            logger.warning(
-                "Laufender Digest fuer Update-Recovery nicht lesbar, Operation %s: %s",
-                operation_id,
-                inspection_error,
-            )
-            running_image = ""
-        healthy = application_is_healthy()
+        running_image, healthy = wait_for_recovery_runtime(client, target_image, rollback_image)
         if running_image == target_image and healthy:
             raw_latest = state.get("latest")
             latest: dict[str, Any] = raw_latest if isinstance(raw_latest, dict) else {}
@@ -1512,6 +1583,12 @@ def reconcile_interrupted_update() -> dict[str, Any]:
                 candidate_digest="",
                 update_available=False,
                 completed_at=utc_now(),
+            )
+        if target_image == rollback_image:
+            logger.warning("Recovery-Ziel ist unbestaetigt und identisch mit Rollback, Operation %s", operation_id)
+            return _recovery_required(
+                error="Ziel- und Rollback-Image sind identisch, das Ziel ist aber nicht healthy verifiziert.",
+                outcome="target_unverified",
             )
         if running_image == rollback_image and healthy:
             logger.info("Update-Recovery bestaetigt vorhandenen Rollback, Operation %s", operation_id)
@@ -1895,7 +1972,7 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
 
 def run_agent() -> None:
     """Reconcile persisted update work before accepting mutating agent requests."""
-    PortainerClient().get_stack()
+    wait_for_portainer_startup(PortainerClient())
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     reconcile_interrupted_update()

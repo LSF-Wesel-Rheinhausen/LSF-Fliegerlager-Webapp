@@ -54,7 +54,7 @@ const test = base.extend({
     const env = {
       ...process.env,
       PLAYWRIGHT_PORT: String(port),
-      DATABASE_URL: `sqlite://${dbPath}`,
+      DATABASE_URL: `sqlite:////${dbPath.slice(1)}`,
       DJANGO_ALLOWED_HOSTS: 'localhost',
       DJANGO_DEBUG: '1',
       DJANGO_SECRET_KEY: 'test_sk_playwright_local_only',

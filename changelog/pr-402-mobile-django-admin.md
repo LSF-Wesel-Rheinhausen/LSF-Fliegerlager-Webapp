@@ -8,7 +8,8 @@ Django-Admin; deutsche Modell- und Feldbezeichnungen bleiben im Admin konsistent
 Die Filter-ARIA-Anfangsanzeige entspricht dem serverseitig geöffneten Zustand;
 Ergebnis- und Paginator-Links sind auf mobilen Viewports touch-gerecht. Die
 verbleibenden Camp-Feldbezeichnungen sind auf Deutsch gesetzt. Der E2E-Server
-migriert dieselbe absolute SQLite-Datei, die er anschließend verwendet.
+verwendet einen absoluten SQLite-Temp-Pfad, sodass Migration und Cleanup exakt
+dieselbe Datenbank treffen und keine Altbestandsdubletten zwischen Läufen bleiben.
 
 Die Modell-Metadaten sind auf dem aktuellen Migrationsstand als Migration 0071
 integriert. Die alten, nicht mehr passenden Migrationen aus dem ursprünglichen
