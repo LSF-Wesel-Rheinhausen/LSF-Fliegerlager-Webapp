@@ -1,0 +1,36 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | Fliegerlager-Administration{% endblock %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'billing/admin-mobile.css' %}">
+{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+  <script src="{% static 'billing/admin-mobile.js' %}" defer></script>
+{% endblock %}
+
+{% block responsive %}
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <link rel="stylesheet" href="{% static 'admin/css/responsive.css' %}">
+{% endblock %}
+
+{% block branding %}
+  <div id="site-name"><a href="{% url 'admin:index' %}">Fliegerlager-Administration</a></div>
+{% endblock %}
+
+{% block nav-sidebar %}
+  <button class="admin-mobile-menu-toggle" type="button" aria-expanded="false" aria-controls="admin-nav-drawer">
+    <span aria-hidden="true">☰</span> Menü
+  </button>
+  <div id="admin-nav-drawer" class="admin-nav-drawer" role="navigation" aria-label="Admin-Menü" aria-hidden="false">
+    <div class="admin-nav-drawer__header">
+      <strong id="admin-nav-title">Admin-Menü</strong>
+      <button class="admin-nav-drawer__close" type="button" aria-label="Menü schließen">×</button>
+    </div>
+    {% include "admin/nav_sidebar.html" %}
+  </div>
+{% endblock %}

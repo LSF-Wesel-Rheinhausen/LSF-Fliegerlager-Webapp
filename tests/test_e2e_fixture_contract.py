@@ -16,3 +16,9 @@ def test_start_e2e_keeps_minimal_prerequisites_before_optional_demo_seed():
     assert "CampKioskAccess" in minimal_setup
     assert 'access.set_pin("864208")' in minimal_setup
     assert "src/db.sqlite3" not in script
+
+
+def test_start_e2e_resolves_absolute_sqlite_database_paths():
+    script = START_E2E.read_text()
+
+    assert 'db_path="${DATABASE_URL#sqlite://}"' in script
