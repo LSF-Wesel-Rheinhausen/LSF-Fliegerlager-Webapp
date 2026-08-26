@@ -94,6 +94,25 @@ async function assertNoUnexpectedOverflow(page) {
   expect(result.failures, "Elemente laufen aus der Anzeige oder aus ihrem Container").toEqual([]);
 }
 
+async function assertPanelGridChildrenContained(panel) {
+  const layout = await panel.evaluate((panelElement) => {
+    const oversizedChildren = [...panelElement.children]
+      .filter((child) => child.getClientRects().length > 0 && child.offsetWidth > panelElement.clientWidth)
+      .map((child) => `${child.tagName.toLowerCase()}.${child.className || "without-class"}`);
+    const tableTools = panelElement.querySelector(".table-tools");
+    const table = panelElement.querySelector("table[data-sortable][data-filterable]");
+    return {
+      oversizedChildren,
+      tableToolsInsidePanel: tableTools ? tableTools.offsetWidth <= panelElement.clientWidth : false,
+      tableInsidePanel: table ? table.offsetWidth <= panelElement.clientWidth : false,
+    };
+  });
+
+  expect(layout.oversizedChildren, "Direkte Grid-Kinder muessen im Panel schrumpfen koennen").toEqual([]);
+  expect(layout.tableToolsInsidePanel, "Filter-/Sortierleiste muss im Panel bleiben").toBe(true);
+  expect(layout.tableInsidePanel, "Tabelle muss im Panel bleiben").toBe(true);
+}
+
 async function assertKioskProfileLayout(page, expectedViewportWidth) {
   const form = page.locator(".kiosk-profile-form");
   const editableControls = form.locator(
@@ -1645,10 +1664,20 @@ test("Kiosk can book a drink after breakfast prebooking", async ({ page }) => {
     .getByRole("heading", { name: "Familienmitglieder", exact: true })
     .locator("xpath=ancestor::section[1]");
   await expect(familyMembersSection.getByRole("cell", { name: "Irène Curie", exact: true })).toBeVisible();
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await assertNoUnexpectedOverflow(page);
-  await page.setViewportSize({ width: 390, height: 844 });
-  await assertNoUnexpectedOverflow(page);
+  const sortSelect = familyMembersSection.locator(".table-tools__sort select");
+  for (const theme of ["light", "dark"]) {
+    await page.locator("html").evaluate((element, nextTheme) => {
+      element.dataset.theme = nextTheme;
+    }, theme);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await expect(sortSelect).toBeHidden();
+    await assertPanelGridChildrenContained(familyMembersSection);
+    await assertNoUnexpectedOverflow(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(sortSelect).toBeVisible();
+    await assertPanelGridChildrenContained(familyMembersSection);
+    await assertNoUnexpectedOverflow(page);
+  }
 });
 
 test("Kiosk user can change their own PIN and log in with the new PIN", async ({ page }) => {

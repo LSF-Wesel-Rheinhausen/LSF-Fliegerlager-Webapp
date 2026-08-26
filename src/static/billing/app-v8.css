@@ -702,6 +702,10 @@ pre {
   gap: 14px;
 }
 
+.panel.stack > * {
+  min-width: 0;
+}
+
 .auth-separator {
   display: grid;
   grid-template-columns: 1fr auto 1fr;

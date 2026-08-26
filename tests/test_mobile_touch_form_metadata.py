@@ -62,6 +62,12 @@ def test_mobile_touch_target_rules_preserve_textarea_minimum_height():
     assert "textarea" not in mobile_touch_rules
 
 
+def test_panel_stack_grid_children_can_shrink_around_enhanced_tables():
+    css = CSS.read_text(encoding="utf-8")
+
+    assert ".panel.stack > * {\n  min-width: 0;\n}" in css
+
+
 def test_authentication_form_metadata_does_not_disable_autocomplete():
     form = EmailOrUsernameAuthenticationForm()
     username_widget = form.fields["username"].widget
