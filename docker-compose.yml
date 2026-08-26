@@ -111,6 +111,8 @@ services:
     depends_on:
       storage-migrate:
         condition: service_completed_successfully
+      app:
+        condition: service_healthy
     volumes:
       - ${PERSISTENCE_DIR:-./data}/backups:/backups
       - ${PERSISTENCE_DIR:-./data}/updater-state:/state
