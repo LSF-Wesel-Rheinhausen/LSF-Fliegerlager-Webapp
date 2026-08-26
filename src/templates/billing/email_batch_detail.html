@@ -17,8 +17,8 @@
 
   <section class="panel stack">
     <h2>Empfänger</h2>
-    <table>
-      <thead><tr><th>Adresse</th><th>Teilnehmer</th><th>Inhalt</th><th>Status</th><th>Versendet</th><th></th></tr></thead>
+    <table data-sortable data-filterable>
+      <thead><tr><th>Adresse</th><th>Teilnehmer</th><th>Inhalt</th><th>Status</th><th data-sort-type="date">Versendet</th><th></th></tr></thead>
       <tbody>
         {% for delivery in deliveries %}
           <tr>
@@ -32,7 +32,7 @@
               {% endif %}
             </td>
             <td>{{ delivery.get_status_display }}</td>
-            <td>{{ delivery.sent_at|default:"-" }}</td>
+            <td data-sort-value="{{ delivery.sent_at|date:'YmdHis' }}">{{ delivery.sent_at|default:"-" }}</td>
             <td>
               {% if delivery.status == "failed" %}
                 <form method="post" action="{% url 'email-delivery-retry' delivery.pk %}">

@@ -44,6 +44,39 @@ def test_mobile_touch_target_class_covers_standalone_admin_checkboxes():
     assert 'name="price_attributes_confirmed" class="mobile-touch-target"' in camp_detail
 
 
+def test_mobile_touch_target_class_covers_all_registration_approval_checkboxes():
+    camp_detail = (TEMPLATES / "camp_detail.html").read_text(encoding="utf-8")
+
+    for name in ("is_child", "is_youth_group", "is_companion", "price_attributes_confirmed"):
+        assert f'name="{name}"' in camp_detail
+        assert f'name="{name}" class="mobile-touch-target"' in camp_detail
+
+
+def test_mobile_touch_target_rules_preserve_textarea_minimum_height():
+    css = CSS.read_text(encoding="utf-8")
+    mobile_touch_rules = css.split("/* Mobile Touch Target Standards", maxsplit=1)[1].split(
+        "/* Table tools:", maxsplit=1
+    )[0]
+
+    assert "textarea {\n  min-height: 90px;\n}" in css
+    assert "textarea" not in mobile_touch_rules
+
+
+def test_panel_stack_contains_enhanced_tables_in_a_horizontal_scroller():
+    css = CSS.read_text(encoding="utf-8")
+
+    assert ".panel.stack {\n  grid-template-columns: minmax(0, 1fr);\n}" in css
+    assert (
+        ".panel.stack > table[data-sortable],\n"
+        ".panel.stack > table[data-filterable] {\n"
+        "  display: block;\n"
+        "  max-width: 100%;\n"
+        "  overflow-x: auto;\n"
+        "}" in css
+    )
+    assert ".panel.stack > * {\n  min-width: 0;\n}" not in css
+
+
 def test_authentication_form_metadata_does_not_disable_autocomplete():
     form = EmailOrUsernameAuthenticationForm()
     username_widget = form.fields["username"].widget

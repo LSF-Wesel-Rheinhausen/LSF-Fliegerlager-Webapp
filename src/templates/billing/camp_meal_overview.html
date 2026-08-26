@@ -124,18 +124,18 @@
         <button type="submit">Speiseplan speichern</button>
       </div>
       <div class="kiosk-table__wrapper">
-        <table>
+        <table data-sortable>
         <thead>
           <tr>
-            <th>Datum</th>
+            <th data-sort-type="date">Datum</th>
             <th>Mahlzeit</th>
-            <th>Speiseplan</th>
-            <th>Mit Fleisch</th>
-            <th>Vegan</th>
-            <th>Mit Fleisch Kind</th>
-            <th>Vegan Kind</th>
-            <th>Aktiv</th>
-            <th>Zurückgenommen</th>
+            <th data-sort="none">Speiseplan</th>
+            <th data-sort-type="number">Mit Fleisch</th>
+            <th data-sort-type="number">Vegan</th>
+            <th data-sort-type="number">Mit Fleisch Kind</th>
+            <th data-sort-type="number">Vegan Kind</th>
+            <th data-sort-type="number">Aktiv</th>
+            <th data-sort-type="number">Zurückgenommen</th>
             <th>Status / Steuerung</th>
           </tr>
         </thead>
@@ -203,7 +203,7 @@
         </p>
         {% if row.day.dinner.bookings %}
           <div class="kiosk-table__wrapper">
-            <table>
+            <table data-sortable data-filterable>
               <thead><tr><th>Zielperson</th><th>Zahlungskonto / Guardian</th><th>Variante</th><th>Status</th></tr></thead>
               <tbody>
                 {% for booking in row.day.dinner.bookings %}
@@ -232,16 +232,16 @@
       </div>
     </div>
     <div class="kiosk-table__wrapper">
-      <table>
+      <table data-sortable>
       <thead>
         <tr>
-          <th>Datum</th>
-          <th>Mit Fleisch</th>
-          <th>Vegan</th>
-          <th>Mit Fleisch Kind</th>
-          <th>Vegan Kind</th>
-          <th>Aktiv</th>
-          <th>Zurückgenommen</th>
+          <th data-sort-type="date">Datum</th>
+          <th data-sort-type="number">Mit Fleisch</th>
+          <th data-sort-type="number">Vegan</th>
+          <th data-sort-type="number">Mit Fleisch Kind</th>
+          <th data-sort-type="number">Vegan Kind</th>
+          <th data-sort-type="number">Aktiv</th>
+          <th data-sort-type="number">Zurückgenommen</th>
           <th>Status / Steuerung</th>
         </tr>
       </thead>
@@ -293,7 +293,7 @@
         </p>
         {% if day.breakfast.bookings %}
           <div class="kiosk-table__wrapper">
-            <table>
+            <table data-sortable data-filterable>
               <thead><tr><th>Zielperson</th><th>Zahlungskonto / Guardian</th><th>Variante</th><th>Status</th></tr></thead>
               <tbody>
                 {% for booking in day.breakfast.bookings %}

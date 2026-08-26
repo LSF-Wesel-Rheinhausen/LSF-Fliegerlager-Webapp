@@ -55,14 +55,14 @@
     <div class="info-callout info-callout--compact">
       <strong>Kurzhilfe:</strong> Ein <em>Abrechnungslauf</em> friert den aktuellen Stand (Auslagen, Getränke, Dienste) dauerhaft ein. Erstelle ihn erst, wenn das Lager vorbei ist oder eine finale Zwischenabrechnung benötigt wird. Nach dem Fixieren können für diesen Lauf keine Änderungen mehr vorgenommen werden.
     </div>
-    <table>
-      <thead><tr><th>Version</th><th>Typ</th><th>Zeitpunkt</th><th>Bearbeiter</th><th>Teilnehmer</th><th>Offen</th></tr></thead>
+    <table data-sortable>
+      <thead><tr><th>Version</th><th>Typ</th><th data-sort-type="date">Zeitpunkt</th><th>Bearbeiter</th><th data-sort-type="number">Teilnehmer</th><th data-sort-type="number">Offen</th></tr></thead>
       <tbody>
         {% for run in settlement_runs %}
           <tr>
             <td><a href="{% url 'settlement-run-detail' run.pk %}">V{{ run.version }}</a></td>
             <td>{{ run.get_run_type_display }}</td>
-            <td>{{ run.created_at }}</td>
+            <td data-sort-value="{{ run.created_at|date:'YmdHis' }}">{{ run.created_at }}</td>
             <td>
               {% if run.calculated_by %}
                 {{ run.calculated_by.email|default:run.calculated_by.username }}
@@ -84,15 +84,15 @@
     <section id="pending-registrations" class="panel" style="margin-bottom: 1.5rem; border-left: 4px solid var(--accent);">
       <h2 style="font-size: 1.25rem; margin-bottom: 0.5rem;">⏳ Offene Registrierungsanfragen ({{ pending_registration_rows|length }})</h2>
       <p style="color: var(--muted); font-size: 0.9rem;">Prüfe vor der Freigabe die PIN-Einrichtung und alle preisrelevanten Merkmale.</p>
-      <table class="responsive-record-table pending-registration-table">
+      <table class="responsive-record-table pending-registration-table" data-sortable data-filterable>
         <thead>
           <tr>
             <th>Name</th>
             <th>E-Mail</th>
             <th>Telefon</th>
-            <th>Anreise / Abreise</th>
-            <th>Eingereicht am</th>
-            <th>Prüfung und Aktionen</th>
+            <th data-sort-type="date">Anreise / Abreise</th>
+            <th data-sort-type="date">Eingereicht am</th>
+            <th data-sort="none">Prüfung und Aktionen</th>
           </tr>
         </thead>
         <tbody>
@@ -115,14 +115,14 @@
                   <fieldset>
                     <legend>Preismerkmale</legend>
                     <label for="approval-{{ p.pk }}-is-child">
-                      <input id="approval-{{ p.pk }}-is-child" type="checkbox" name="is_child"{% if approval_form.is_child.value %} checked{% endif %}>
+                      <input id="approval-{{ p.pk }}-is-child" type="checkbox" name="is_child" class="mobile-touch-target"{% if approval_form.is_child.value %} checked{% endif %}>
                       Kind
                     </label>
                     <label for="approval-{{ p.pk }}-is-youth-group">
                       <input
                         id="approval-{{ p.pk }}-is-youth-group"
                         type="checkbox"
-                        name="is_youth_group"
+                        name="is_youth_group" class="mobile-touch-target"
                         data-youth-group-toggle="approval-{{ p.pk }}-rates"
                         aria-controls="approval-{{ p.pk }}-rates"
                         {% if approval_form.is_youth_group.value %}checked{% endif %}
@@ -130,7 +130,7 @@
                       Jugendgruppe
                     </label>
                     <label for="approval-{{ p.pk }}-is-companion">
-                      <input id="approval-{{ p.pk }}-is-companion" type="checkbox" name="is_companion"{% if approval_form.is_companion.value %} checked{% endif %}>
+                      <input id="approval-{{ p.pk }}-is-companion" type="checkbox" name="is_companion" class="mobile-touch-target"{% if approval_form.is_companion.value %} checked{% endif %}>
                       Begleitperson
                     </label>
                   </fieldset>
@@ -184,8 +184,8 @@
   {% if pending_expenses %}
   <section class="panel stack">
     <h2>Ausstehende Gemeinschaftsausgaben</h2>
-    <table>
-      <thead><tr><th>Datum</th><th>Person</th><th>Beschreibung</th><th>Betrag</th><th>Beleg</th><th></th></tr></thead>
+    <table data-sortable data-filterable>
+      <thead><tr><th data-sort-type="date">Datum</th><th>Person</th><th>Beschreibung</th><th data-sort-type="number">Betrag</th><th data-sort="none">Beleg</th><th></th></tr></thead>
       <tbody>
         {% for expense in pending_expenses %}
           <tr>
@@ -219,17 +219,17 @@
 
   <section class="panel stack">
     <h2>Genehmigte Gemeinschaftsausgaben</h2>
-    <table class="responsive-record-table">
+    <table class="responsive-record-table" data-sortable data-filterable>
       <thead>
         <tr>
-          <th>Genehmigt am</th>
+          <th data-sort-type="date">Genehmigt am</th>
           <th>Person</th>
           <th>Beschreibung</th>
           <th>Kategorie</th>
-          <th>Betrag</th>
+          <th data-sort-type="number">Betrag</th>
           <th>Umlage</th>
           <th>Genehmiger</th>
-          <th>Beleg</th>
+          <th data-sort="none">Beleg</th>
         </tr>
       </thead>
       <tbody>
@@ -268,14 +268,14 @@
   <section class="panel stack">
     <h2>Kostenstellenauswertung</h2>
     {% if cost_centers %}
-      <table>
+      <table data-sortable>
         <thead>
           <tr>
             <th>Kostenstelle</th>
-            <th class="number">Einnahmen</th>
-            <th class="number">Ausgaben</th>
-            <th class="number">Ergebnis</th>
-            <th class="number">Details</th>
+            <th class="number" data-sort-type="number">Einnahmen</th>
+            <th class="number" data-sort-type="number">Ausgaben</th>
+            <th class="number" data-sort-type="number">Ergebnis</th>
+            <th class="number" data-sort="none">Details</th>
           </tr>
         </thead>
         <tbody>
@@ -312,13 +312,13 @@
           <section class="stack">
             <h3>Einnahmen</h3>
             {% if data.income_details %}
-              <table>
+              <table data-sortable>
                 <thead>
                   <tr>
-                    <th>Datum</th>
+                    <th data-sort-type="date">Datum</th>
                     <th>Teilnehmer</th>
                     <th>Beschreibung</th>
-                    <th class="number">Betrag</th>
+                    <th class="number" data-sort-type="number">Betrag</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -350,13 +350,13 @@
           <section class="stack">
             <h3>Ausgaben</h3>
             {% if data.expense_details %}
-              <table>
+              <table data-sortable>
                 <thead>
                   <tr>
-                    <th>Datum</th>
+                    <th data-sort-type="date">Datum</th>
                     <th>Antragsteller</th>
                     <th>Beschreibung</th>
-                    <th class="number">Betrag</th>
+                    <th class="number" data-sort-type="number">Betrag</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -399,10 +399,10 @@
       </div>
       <a class="button" href="{% url 'price-rules-manage' camp.pk %}">Preise verwalten</a>
     </div>
-    <table>
+    <table data-sortable>
       <thead>
         <tr>
-          <th>Art</th><th>Name</th><th>Preis</th><th>Lagerpauschale</th><th>Fördersatz</th><th>Standard</th><th></th>
+          <th>Art</th><th>Name</th><th data-sort-type="number">Preis</th><th>Lagerpauschale</th><th data-sort-type="number">Fördersatz</th><th>Standard</th><th></th>
         </tr>
       </thead>
       <tbody>
@@ -432,10 +432,10 @@
   <section class="panel stack participant-settlements">
     <h2>Teilnehmerabrechnungen</h2>
     <div class="table-responsive">
-      <table>
+      <table data-sortable data-filterable>
         <thead>
           <tr>
-            <th>Teilnehmer</th><th>Status</th><th>Nächte</th><th>Soll</th><th>Gezahlt</th><th>Vorgestreckt</th><th>Offen</th>
+            <th>Teilnehmer</th><th>Status</th><th data-sort-type="number">Nächte</th><th data-sort-type="number">Soll</th><th data-sort-type="number">Gezahlt</th><th data-sort-type="number">Vorgestreckt</th><th data-sort-type="number">Offen</th>
           </tr>
         </thead>
         <tbody>
@@ -460,13 +460,13 @@
   {% if archived_participants %}
     <section class="panel stack">
       <h2>Archivierte Teilnehmer</h2>
-      <table>
-        <thead><tr><th>Teilnehmer</th><th>Archiviert am</th><th></th></tr></thead>
+      <table data-sortable>
+        <thead><tr><th>Teilnehmer</th><th data-sort-type="date">Archiviert am</th><th></th></tr></thead>
         <tbody>
           {% for participant in archived_participants %}
             <tr>
               <td><a href="{% url 'participant-detail' participant.pk %}">{{ participant.full_name }}</a></td>
-              <td>{{ participant.archived_at }}</td>
+              <td data-sort-value="{{ participant.archived_at|date:'YmdHis' }}">{{ participant.archived_at }}</td>
               <td>
                 {% if user|can_manage_users %}
                   <form method="post" action="{% url 'participant-restore' participant.pk %}">

@@ -702,6 +702,17 @@ pre {
   gap: 14px;
 }
 
+.panel.stack {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.panel.stack > table[data-sortable],
+.panel.stack > table[data-filterable] {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 .auth-separator {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -1876,6 +1887,8 @@ textarea {
   font-size: 0.95em;
   line-height: 1.5;
   margin-bottom: 1rem;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .quantity-grid {
@@ -3849,8 +3862,7 @@ code {
   }
 
   input:not([type="checkbox"]):not([type="radio"]),
-  select,
-  textarea {
+  select {
     min-height: 44px;
   }
 
@@ -3995,5 +4007,91 @@ code {
     height: 44px;
     min-width: 44px;
     min-height: 44px;
+  }
+}
+
+/* Table tools: client-side sorting and filtering (table_tools.js) */
+
+.table-sort-button,
+.table-sort-button:hover {
+  display: inline-flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.table-sort-button:hover {
+  color: var(--accent);
+}
+
+.table-sort-button::after {
+  content: "\2195";
+  opacity: 0.45;
+}
+
+th[aria-sort="ascending"] .table-sort-button::after {
+  content: "\2191";
+  opacity: 1;
+}
+
+th[aria-sort="descending"] .table-sort-button::after {
+  content: "\2193";
+  opacity: 1;
+}
+
+.table-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.table-tools label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.table-tools input[type="search"] {
+  min-width: 220px;
+}
+
+.table-tools__count {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.table-tools label.table-tools__sort {
+  display: none;
+}
+
+@media (max-width: 780px) {
+  .table-tools label.table-tools__sort {
+    display: inline-flex;
+  }
+
+  .table-tools input[type="search"] {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .table-tools__filter {
+    flex: 1;
   }
 }

@@ -83,8 +83,8 @@
         <p>Positionen, die durch automatische Preisregeln oder Förderungen entstanden sind.</p>
       </div>
     </div>
-    <table>
-      <thead><tr><th>Position</th><th>Ziel</th><th>Menge</th><th>Einzelpreis</th><th>Förderung</th><th>Summe</th></tr></thead>
+    <table data-sortable>
+      <thead><tr><th>Position</th><th>Ziel</th><th data-sort-type="number">Menge</th><th data-sort-type="number">Einzelpreis</th><th data-sort-type="number">Förderung</th><th data-sort-type="number">Summe</th></tr></thead>
       <tbody>
         {% for line in settlement.automatic_lines %}
           <tr><td>{{ line.label }}</td><td>{{ line.target_name|default:"Zahlungskonto" }}</td><td>{{ line.quantity }}</td><td>{{ line.unit_price|money_eur }}</td><td>{{ line.subsidy_amount|money_eur }}</td><td>{{ line.total|money_eur }}</td></tr>
@@ -103,8 +103,8 @@
       </div>
     </div>
     {% if credit_payouts %}
-      <table class="responsive-record-table">
-        <thead><tr><th>Datum</th><th>Betrag</th><th>Art</th><th>Erfasst von</th>{% if can_view_payout_metadata %}<th>Referenz</th><th>Notiz</th>{% endif %}</tr></thead>
+      <table class="responsive-record-table" data-sortable>
+        <thead><tr><th data-sort-type="date">Datum</th><th data-sort-type="number">Betrag</th><th>Art</th><th>Erfasst von</th>{% if can_view_payout_metadata %}<th>Referenz</th><th>Notiz</th>{% endif %}</tr></thead>
         <tbody>
           {% for payout in credit_payouts %}
             <tr>
@@ -166,7 +166,7 @@
           {% endif %}
         </div>
       </div>
-      <table class="responsive-record-table">
+      <table class="responsive-record-table" data-sortable data-filterable>
         <thead>
           <tr>
             {% if user|can_manage_users %}
@@ -174,7 +174,7 @@
                 <input type="checkbox" id="select-all-charges" class="mobile-touch-target" aria-label="Alle Buchungen auswählen">
               </th>
             {% endif %}
-            <th>Nr.</th><th>Art</th><th>Ziel</th><th>Beschreibung</th><th>Menge</th><th>Einzelpreis</th><th>Fördersatz</th><th>Summe</th><th>Datum</th><th></th>
+            <th>Nr.</th><th>Art</th><th>Ziel</th><th>Beschreibung</th><th data-sort-type="number">Menge</th><th data-sort-type="number">Einzelpreis</th><th data-sort-type="number">Fördersatz</th><th data-sort-type="number">Summe</th><th data-sort-type="date">Datum</th><th></th>
           </tr>
         </thead>
         <tbody>
@@ -193,7 +193,7 @@
               <td data-label="Einzelpreis">{{ charge.unit_price|money_eur }}</td>
               <td data-label="Fördersatz">{{ charge.foerdersatz|percent }}</td>
               <td data-label="Summe">{{ charge.total|money_eur }}</td>
-              <td data-label="Datum">{{ charge.occurred_on|default:"-" }}</td>
+              <td data-label="Datum" data-sort-value="{{ charge.occurred_on|date:'Ymd' }}">{{ charge.occurred_on|default:"-" }}</td>
               <td data-label="Aktionen">
                 {% if user|can_manage_users %}
                   <div class="row-actions">
@@ -227,17 +227,17 @@
         <p>Erfasste Zahlungseingänge dieses Zahlungskontos.</p>
       </div>
     </div>
-    <table class="responsive-record-table">
+    <table class="responsive-record-table" data-sortable data-filterable>
       <thead>
         <tr>
-          <th>Nr.</th><th>Datum</th><th>Betrag</th><th>Zahlungsart</th><th>Notiz</th><th></th>
+          <th>Nr.</th><th data-sort-type="date">Datum</th><th data-sort-type="number">Betrag</th><th>Zahlungsart</th><th>Notiz</th><th></th>
         </tr>
       </thead>
       <tbody>
         {% for payment in payments %}
           <tr>
             <td data-label="Nr.">{{ payment.payment_reference }}</td>
-            <td data-label="Datum">{{ payment.paid_on }}</td>
+            <td data-label="Datum" data-sort-value="{{ payment.paid_on|date:'Ymd' }}">{{ payment.paid_on }}</td>
             <td data-label="Betrag">{{ payment.amount|money_eur }}</td>
             <td data-label="Zahlungsart">{{ payment.method|default:"-" }}</td>
             <td data-label="Notiz">{{ payment.note|default:"-" }}</td>
@@ -272,16 +272,16 @@
         <p>Protokoll gelöschter Zahlungen und deren Wiederherstellung.</p>
       </div>
     </div>
-    <table class="responsive-record-table">
+    <table class="responsive-record-table" data-sortable>
       <thead>
         <tr>
-          <th>Zeitpunkt</th><th>Bearbeiter</th><th>Zahlung</th><th>Vorher</th><th>Nachher</th><th>Aktion</th>
+          <th data-sort-type="date">Zeitpunkt</th><th>Bearbeiter</th><th>Zahlung</th><th>Vorher</th><th>Nachher</th><th data-sort="none">Aktion</th>
         </tr>
       </thead>
       <tbody>
         {% for log in payment_audit_logs %}
           <tr>
-            <td data-label="Zeitpunkt">{{ log.created_at }}</td>
+            <td data-label="Zeitpunkt" data-sort-value="{{ log.created_at|date:'YmdHis' }}">{{ log.created_at }}</td>
             <td data-label="Bearbeiter">{{ log.changed_by.email|default:log.changed_by.username|default:"System" }}</td>
             <td data-label="Zahlung">{{ log.before.payment_reference|default:"-" }}</td>
             <td data-label="Vorher">
@@ -330,8 +330,8 @@
         <p>Aktive und historische Mitglieder, deren Buchungen dem Zahlungskonto zugeordnet bleiben.</p>
       </div>
     </div>
-    <table class="responsive-record-table">
-      <thead><tr><th>Name</th><th>Rolle</th>{% if can_view_profile_pii %}<th>E-Mail</th><th>Telefon</th><th>Geburtsdatum</th><th>Alter bei Lagerbeginn</th>{% endif %}<th>Jugendgruppe</th><th>Anreise</th><th>Abreise</th><th>Status</th><th></th></tr></thead>
+    <table class="responsive-record-table" data-sortable data-filterable>
+      <thead><tr><th>Name</th><th>Rolle</th>{% if can_view_profile_pii %}<th>E-Mail</th><th>Telefon</th><th data-sort-type="date">Geburtsdatum</th><th data-sort-type="number">Alter bei Lagerbeginn</th>{% endif %}<th>Jugendgruppe</th><th data-sort-type="date">Anreise</th><th data-sort-type="date">Abreise</th><th>Status</th><th></th></tr></thead>
       <tbody>
         {% for member in family_members %}
           <tr>
@@ -344,8 +344,8 @@
               <td data-label="Alter bei Lagerbeginn">{{ member.age_at_camp_start|default_if_none:"-" }}</td>
             {% endif %}
             <td data-label="Jugendgruppe">{% if member.is_youth_group %}Ja{% else %}Nein{% endif %}</td>
-            <td data-label="Anreise">{{ member.arrival_date|default:"-" }}</td>
-            <td data-label="Abreise">{{ member.departure_date|default:"-" }}</td>
+            <td data-label="Anreise" data-sort-value="{{ member.arrival_date|date:'Ymd' }}">{{ member.arrival_date|default:"-" }}</td>
+            <td data-label="Abreise" data-sort-value="{{ member.departure_date|date:'Ymd' }}">{{ member.departure_date|default:"-" }}</td>
             <td data-label="Status">{% if member.is_active %}Aktiv{% else %}Inaktiv{% endif %}</td>
             <td data-label="Aktionen">{% if user|can_manage_users %}<a href="{% url 'participant-family-member-edit' participant.pk member.pk %}">Bearbeiten</a>{% else %}-{% endif %}</td>
           </tr>
@@ -371,7 +371,7 @@
       <h2 id="attendance-title">Tägliche Anwesenheit</h2>
       <p id="participant-attendance-help" class="helptext">Auf kleinen Bildschirmen kannst du die Matrix horizontal scrollen. Status werden zusätzlich als Text angezeigt.</p>
       <div class="kiosk-table__wrapper attendance-matrix-scroll" tabindex="0" role="region" aria-label="Anwesenheitsmatrix" aria-describedby="participant-attendance-help">
-        <table>
+        <table data-filterable>
           <thead><tr><th id="participant-attendance-person-heading" scope="col">Person</th>{% for day in attendance_people.0.calendar %}<th id="participant-attendance-day-{{ day.date|date:'Ymd' }}" scope="col">{{ day.date|date:"d.m.Y" }}</th>{% endfor %}</tr></thead>
           <tbody>
             {% for person in attendance_people %}
@@ -399,14 +399,14 @@
 
   <section class="panel stack">
     <h2>Gespeicherte Abrechnungen</h2>
-    <table>
-      <thead><tr><th>Version</th><th>Typ</th><th>Zeitpunkt</th><th>Soll</th><th>Offen</th><th></th></tr></thead>
+    <table data-sortable>
+      <thead><tr><th>Version</th><th>Typ</th><th data-sort-type="date">Zeitpunkt</th><th data-sort-type="number">Soll</th><th data-sort-type="number">Offen</th><th></th></tr></thead>
       <tbody>
         {% for snapshot in settlement_snapshots %}
           <tr>
             <td><a href="{% url 'settlement-run-detail' snapshot.run.pk %}">V{{ snapshot.run.version }}</a></td>
             <td>{{ snapshot.run.get_run_type_display }}</td>
-            <td>{{ snapshot.run.created_at }}</td>
+            <td data-sort-value="{{ snapshot.run.created_at|date:'YmdHis' }}">{{ snapshot.run.created_at }}</td>
             <td>{{ snapshot.total_due|money_eur }}</td>
             <td>{{ snapshot.balance|money_eur }}</td>
             <td><a href="{% url 'settlement-snapshot-pdf' snapshot.pk %}" target="_blank" rel="noopener" data-pdf-preview="true">PDF</a></td>
@@ -438,7 +438,7 @@
           </button>
         {% endif %}
       </div>
-      <table class="responsive-record-table">
+      <table class="responsive-record-table" data-sortable data-filterable>
         <thead>
           <tr>
             {% if user|can_manage_users %}
@@ -446,7 +446,7 @@
                 <input type="checkbox" id="select-all-audit-logs" class="mobile-touch-target" aria-label="Alle gelöschten Buchungen auswählen">
               </th>
             {% endif %}
-            <th>Zeitpunkt</th><th>Bearbeiter</th><th>Buchung</th><th>Vorher</th><th>Nachher</th><th>Aktion</th>
+            <th data-sort-type="date">Zeitpunkt</th><th>Bearbeiter</th><th>Buchung</th><th>Vorher</th><th>Nachher</th><th data-sort="none">Aktion</th>
           </tr>
         </thead>
         <tbody>
@@ -459,7 +459,7 @@
                   {% endif %}
                 </td>
               {% endif %}
-              <td data-label="Zeitpunkt">{{ log.created_at }}</td>
+              <td data-label="Zeitpunkt" data-sort-value="{{ log.created_at|date:'YmdHis' }}">{{ log.created_at }}</td>
               <td data-label="Bearbeiter">{{ log.changed_by.email|default:log.changed_by.username|default:"System" }}</td>
               <td data-label="Buchung">
                 {% if log.charge %}

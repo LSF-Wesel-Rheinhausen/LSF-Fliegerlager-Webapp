@@ -57,12 +57,22 @@ async function assertNoUnexpectedOverflow(page) {
       "h1",
     ];
 
+    const isInsideHorizontalScroller = (element) => {
+      for (let node = element.parentElement; node; node = node.parentElement) {
+        const overflowX = window.getComputedStyle(node).overflowX;
+        if ((overflowX === "auto" || overflowX === "scroll") && node.scrollWidth > node.clientWidth) {
+          return true;
+        }
+      }
+      return false;
+    };
+
     for (const element of document.querySelectorAll(selectors.join(","))) {
       const rect = element.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) {
         continue;
       }
-      if (rect.left < -1 || rect.right > viewportWidth + 1) {
+      if ((rect.left < -1 || rect.right > viewportWidth + 1) && !isInsideHorizontalScroller(element)) {
         failures.push(`${element.tagName.toLowerCase()} ${element.textContent.trim().slice(0, 80)}`);
       }
       const display = window.getComputedStyle(element).display;
@@ -82,6 +92,50 @@ async function assertNoUnexpectedOverflow(page) {
 
   expect(result.bodyOverflow, "Unerwarteter horizontaler Seiten-Overflow").toBeLessThanOrEqual(1);
   expect(result.failures, "Elemente laufen aus der Anzeige oder aus ihrem Container").toEqual([]);
+}
+
+async function assertPanelGridTrackAndTableScrollerContained(panel) {
+  const layout = await panel.evaluate((panelElement) => {
+    const tolerance = 1;
+    const viewportWidth = document.documentElement.clientWidth;
+    const panelRect = panelElement.getBoundingClientRect();
+    const overflowingContent = [...panelElement.children]
+      .filter((child) => child.tagName !== "TABLE" && child.getClientRects().length > 0)
+      .filter((child) => {
+        const rect = child.getBoundingClientRect();
+        return rect.left < panelRect.left - tolerance || rect.right > panelRect.right + tolerance;
+      })
+      .map((child) => `${child.tagName.toLowerCase()}.${child.className || "without-class"}`);
+    const table = panelElement.querySelector("table[data-sortable][data-filterable]");
+    let tableScroller = table;
+    while (tableScroller && tableScroller !== panelElement) {
+      const overflowX = window.getComputedStyle(tableScroller).overflowX;
+      if (overflowX === "auto" || overflowX === "scroll") {
+        break;
+      }
+      tableScroller = tableScroller.parentElement;
+    }
+    const tableIsWide = table ? table.scrollWidth > table.clientWidth + tolerance : false;
+    const tableRect = table ? table.getBoundingClientRect() : null;
+    const tableExceedsPanel = tableRect
+      ? tableRect.left < panelRect.left - tolerance || tableRect.right > panelRect.right + tolerance
+      : false;
+    const scrollerRect = tableScroller && tableScroller !== panelElement ? tableScroller.getBoundingClientRect() : null;
+    return {
+      panelInsideViewport: panelRect.left >= -tolerance && panelRect.right <= viewportWidth + tolerance,
+      overflowingContent,
+      wideTableHasScroller:
+        (viewportWidth <= 780 && !tableIsWide && !tableExceedsPanel) || Boolean(scrollerRect),
+      scrollerInsidePanel:
+        !scrollerRect ||
+        (scrollerRect.left >= panelRect.left - tolerance && scrollerRect.right <= panelRect.right + tolerance),
+    };
+  });
+
+  expect(layout.panelInsideViewport, "Der Panel-Grid-Track muss im Viewport bleiben").toBe(true);
+  expect(layout.overflowingContent, "Toolbar und normaler Panel-Inhalt duerfen nicht ueberlaufen").toEqual([]);
+  expect(layout.wideTableHasScroller, "Eine breite Tabelle braucht einen horizontalen Scroller").toBe(true);
+  expect(layout.scrollerInsidePanel, "Der Tabellen-Scroller muss im Panel bleiben").toBe(true);
 }
 
 async function assertKioskProfileLayout(page, expectedViewportWidth) {
@@ -1608,6 +1662,7 @@ test("Breakfast prebooking saves a selected date", async ({ page }) => {
 });
 
 test("Kiosk can book a drink after breakfast prebooking", async ({ page }) => {
+  test.setTimeout(60_000);
   const campName = await setupKioskScenario(page, "Kiosk Nachgelagerte Getränke");
   await createKioskFamilyMember(page);
   await page.locator('[data-kiosk-card="food"] [data-food-button][data-meal-type="breakfast"]').click();
@@ -1634,10 +1689,20 @@ test("Kiosk can book a drink after breakfast prebooking", async ({ page }) => {
     .getByRole("heading", { name: "Familienmitglieder", exact: true })
     .locator("xpath=ancestor::section[1]");
   await expect(familyMembersSection.getByRole("cell", { name: "Irène Curie", exact: true })).toBeVisible();
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await assertNoUnexpectedOverflow(page);
-  await page.setViewportSize({ width: 390, height: 844 });
-  await assertNoUnexpectedOverflow(page);
+  const sortSelect = familyMembersSection.locator(".table-tools__sort select");
+  for (const theme of ["light", "dark"]) {
+    await page.locator("html").evaluate((element, nextTheme) => {
+      element.dataset.theme = nextTheme;
+    }, theme);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await expect(sortSelect).toBeHidden();
+    await assertPanelGridTrackAndTableScrollerContained(familyMembersSection);
+    await assertNoUnexpectedOverflow(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(sortSelect).toBeVisible();
+    await assertPanelGridTrackAndTableScrollerContained(familyMembersSection);
+    await assertNoUnexpectedOverflow(page);
+  }
 });
 
 test("Kiosk user can change their own PIN and log in with the new PIN", async ({ page }) => {
@@ -1864,6 +1929,7 @@ test("Partner meal retraction requires explicit confirmation", async ({ page }) 
 });
 
 test("Kiosk masonry and expense cards stay responsive and accessible", async ({ page }) => {
+  test.setTimeout(60_000);
   const { browserErrors, failedRequests } = trackPageIssues(page);
 
   await setupFirstAdmin(page);
@@ -2299,6 +2365,10 @@ test("Admin configures SMTP and manually confirms exact information recipients",
 
 test("Daily shift template and kiosk shift flow", async ({ page }) => {
   test.setTimeout(60_000);
+  const shiftDescription = [
+    "Spülmaschine einräumen und ausräumen.",
+    `Materialliste: ${"Reinigungsequipment".repeat(12)}`,
+  ].join("\n");
   await setupFirstAdmin(page);
   await createCamp(page, "Sommerlager Dienste", 0, 2);
   await createParticipant(page, "Albert", "Einstein", "", "1234");
@@ -2310,7 +2380,7 @@ test("Daily shift template and kiosk shift flow", async ({ page }) => {
   await page.getByRole("button", { name: "Vorlage anlegen" }).click();
   await expect(page.locator("dialog#template-dialog")).toBeVisible();
   await page.getByLabel("Name / Bezeichnung").fill("Spüldienst");
-  await page.getByLabel("Beschreibung / Aufgaben").fill("Spülmaschine einräumen, ausräumen und den Spülbereich sauber hinterlassen.");
+  await page.getByLabel("Beschreibung / Aufgaben").fill(shiftDescription);
   await page.getByLabel("Benötigte Personen").fill("2");
   await page.getByRole("button", { name: "Speichern", exact: true }).click();
   await expect(page.getByText("Spüldienst").first()).toBeVisible();
@@ -2343,7 +2413,10 @@ test("Daily shift template and kiosk shift flow", async ({ page }) => {
   const shiftInfoDialog = page.locator("dialog#kiosk-help-dialog");
   await expect(shiftInfoDialog).toBeVisible();
   await expect(shiftInfoDialog.getByRole("heading", { name: "Informationen zu Spüldienst" })).toBeVisible();
-  await expect(shiftInfoDialog).toContainText("Spülmaschine einräumen, ausräumen und den Spülbereich sauber hinterlassen.");
+  const shiftInfoContent = shiftInfoDialog.locator(".kiosk-dialog-help");
+  await expect(shiftInfoContent).toHaveText(shiftDescription);
+  await expect(shiftInfoContent).toHaveCSS("white-space", "pre-wrap");
+  await expect(shiftInfoContent).toHaveJSProperty("innerText", shiftDescription);
   await page.keyboard.press("Escape");
   await expect(shiftInfoDialog).toBeHidden();
   await expect(shiftInfoButton).toBeFocused();
@@ -2357,7 +2430,13 @@ test("Daily shift template and kiosk shift flow", async ({ page }) => {
   await assertNoUnexpectedOverflow(page);
   await shiftInfoButton.click();
   await expect(shiftInfoDialog).toBeVisible();
-  await expect(shiftInfoDialog).toContainText("Spülmaschine einräumen, ausräumen und den Spülbereich sauber hinterlassen.");
+  await expect(shiftInfoContent).toHaveText(shiftDescription);
+  await expect(shiftInfoContent).toHaveJSProperty("innerText", shiftDescription);
+  const helpContentWidth = await shiftInfoContent.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  expect(helpContentWidth.scrollWidth).toBeLessThanOrEqual(helpContentWidth.clientWidth + 1);
   const dialogBounds = await shiftInfoDialog.boundingBox();
   expect(dialogBounds).not.toBeNull();
   expect(dialogBounds.x).toBeGreaterThanOrEqual(0);

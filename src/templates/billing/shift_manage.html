@@ -22,18 +22,18 @@
           <button type="submit" class="button button-danger" id="bulk-delete-btn" disabled>Markierte Dienste löschen</button>
         </div>
       </div>
-      <table>
+      <table data-sortable data-filterable>
         <thead>
           <tr>
             <th style="width: 40px; text-align: center;">
               <input type="checkbox" id="select-all-shifts" class="mobile-touch-target" aria-label="Alle Dienste auswählen">
             </th>
-            <th>Datum</th>
+            <th data-sort-type="date">Datum</th>
             <th>Zeit</th>
             <th>Name</th>
-            <th>Benötigt</th>
+            <th data-sort-type="number">Benötigt</th>
             <th>Eingetragen</th>
-            <th>Aktionen</th>
+            <th data-sort="none">Aktionen</th>
           </tr>
         </thead>
         <tbody>
