@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("billing", "0070_alter_camp_options_alter_dailyshifttemplate_options_and_more"),
+        ("billing", "0071_alter_camp_field_verbose_names"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

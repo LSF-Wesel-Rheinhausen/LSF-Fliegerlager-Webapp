@@ -122,7 +122,6 @@ from .models import (
     SettlementRun,
     Shift,
     ShiftAssignment,
-    ShiftAuditLog,
 )
 from .notifications import (
     notify_booking_link,
@@ -191,6 +190,7 @@ from .services import (
     restore_payment_from_audit_log,
     save_expense,
     sync_meal_signup_charges_for_camp,
+    update_shift_capacity,
 )
 
 logger = logging.getLogger(__name__)
@@ -2046,56 +2046,26 @@ def shift_edit(request, shift_id):
     if request.method == "POST":
         with transaction.atomic():
             locked_shift = Shift.objects.select_for_update().select_related("camp").get(pk=shift.pk)
-            old_required_slots = locked_shift.required_slots
             locked_shift._allow_capacity_override = True
             form = ShiftForm(request.POST, instance=locked_shift)
             if form.is_valid():
-                assigned_count = ShiftAssignment.objects.select_for_update().filter(shift=locked_shift).count()
                 new_required_slots = form.cleaned_data["required_slots"]
-                lowers_below_staffing = new_required_slots < old_required_slots and new_required_slots < assigned_count
-                historical_capacity_override = lowers_below_staffing and locked_shift.date < timezone.localdate()
-                if lowers_below_staffing:
-                    expected_revision = form.cleaned_data.get("assignment_revision")
-                    if expected_revision != locked_shift.assignment_revision:
-                        form.add_error(
-                            None,
-                            "Die Dienstbesetzung wurde zwischenzeitlich geändert. Bitte lade die Seite neu.",
-                        )
-                    else:
-                        if not form.cleaned_data["confirm_over_capacity"]:
-                            form.add_error(
-                                "confirm_over_capacity",
-                                "Bitte die Unterbesetzung ausdrücklich bestätigen.",
-                            )
-                        if historical_capacity_override and not form.cleaned_data["confirm_historical"]:
-                            form.add_error(
-                                "confirm_historical",
-                                "Bitte die historische Änderung ausdrücklich bestätigen.",
-                            )
-                if not form.errors:
-                    before_revision = locked_shift.assignment_revision
-                    saved_shift = form.save()
-                    if lowers_below_staffing:
-                        saved_shift.assignment_revision += 1
-                        saved_shift.save(update_fields=["assignment_revision", "updated_at"])
-                        ShiftAuditLog.objects.create(
-                            shift=saved_shift,
-                            camp=saved_shift.camp,
-                            changed_by=request.user,
-                            action=ShiftAuditLog.Action.CAPACITY_OVERRIDE,
-                            before={
-                                "assignment_revision": before_revision,
-                                "assigned_count": assigned_count,
-                                "required_slots": old_required_slots,
-                            },
-                            after={
-                                "assignment_revision": saved_shift.assignment_revision,
-                                "assigned_count": assigned_count,
-                                "required_slots": new_required_slots,
-                            },
-                            capacity_override=True,
-                            historical_override=historical_capacity_override,
-                        )
+                try:
+                    updated_shift = update_shift_capacity(
+                        shift_id=locked_shift.pk,
+                        required_slots=new_required_slots,
+                        expected_revision=form.cleaned_data.get("assignment_revision"),
+                        allow_over_capacity=form.cleaned_data["confirm_over_capacity"],
+                        confirm_historical=form.cleaned_data["confirm_historical"],
+                        changed_by=request.user,
+                        effective_date=form.cleaned_data["date"],
+                    )
+                except ValidationError as error:
+                    form.add_error(None, error)
+                else:
+                    form.instance.required_slots = updated_shift.required_slots
+                    form.instance.assignment_revision = updated_shift.assignment_revision
+                    form.save()
                     messages.success(request, "Dienst wurde gespeichert.")
                     return redirect("shift-manage", camp_id=locked_shift.camp.pk)
         shift = Shift.objects.select_related("camp").get(pk=shift_id)

@@ -4,6 +4,7 @@ from decimal import Decimal
 import pytest
 from django.contrib import admin as django_admin
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.db.models.deletion import ProtectedError
 from django.db.models.query import QuerySet
 from django.test import Client, RequestFactory
@@ -654,6 +655,290 @@ def test_shift_form_rejects_capacity_below_existing_assignments_without_side_eff
     assert shift.required_slots == 2
     assert shift.assignment_revision == 2
     assert not ShiftAuditLog.objects.exists()
+
+
+@pytest.mark.django_db
+def test_shift_queryset_update_rejects_capacity_below_existing_assignments():
+    camp = CampFactory()
+    shift = Shift.objects.create(
+        camp=camp,
+        name="ORM-Kapazität",
+        date=timezone.localdate() + datetime.timedelta(days=1),
+        required_slots=2,
+    )
+    for index in range(2):
+        ShiftAssignment.objects.create(
+            shift=shift,
+            participant=ParticipantFactory(camp=camp, first_name=f"ORM{index}"),
+        )
+
+    with pytest.raises(ValidationError, match="Kapazität darf nicht"):
+        Shift.objects.filter(pk=shift.pk).update(required_slots=1)
+
+    shift.refresh_from_db()
+    assert shift.required_slots == 2
+    assert shift.assignment_revision == 2
+    assert not ShiftAuditLog.objects.exists()
+
+
+@pytest.mark.django_db
+def test_shift_model_save_rejects_capacity_below_existing_assignments():
+    camp = CampFactory()
+    shift = Shift.objects.create(
+        camp=camp,
+        name="Model-Kapazität",
+        date=timezone.localdate() + datetime.timedelta(days=1),
+        required_slots=2,
+    )
+    for index in range(2):
+        ShiftAssignment.objects.create(
+            shift=shift,
+            participant=ParticipantFactory(camp=camp, first_name=f"Model{index}"),
+        )
+
+    shift.required_slots = 1
+    with pytest.raises(ValidationError, match="Kapazität darf nicht"):
+        shift.save(update_fields=["required_slots"])
+
+    shift.refresh_from_db()
+    assert shift.required_slots == 2
+    assert not ShiftAuditLog.objects.exists()
+
+
+@pytest.mark.django_db
+def test_shift_bulk_update_rejects_capacity_below_existing_assignments():
+    camp = CampFactory()
+    shift = Shift.objects.create(
+        camp=camp,
+        name="Bulk-Kapazität",
+        date=timezone.localdate() + datetime.timedelta(days=1),
+        required_slots=2,
+    )
+    for index in range(2):
+        ShiftAssignment.objects.create(
+            shift=shift,
+            participant=ParticipantFactory(camp=camp, first_name=f"Bulk{index}"),
+        )
+
+    shift.required_slots = 1
+    with pytest.raises(ValidationError, match="Kapazitätsänderungen müssen"):
+        with transaction.atomic():
+            Shift.objects.bulk_update([shift], ["required_slots"])
+
+    shift.refresh_from_db()
+    assert shift.required_slots == 2
+    assert not ShiftAuditLog.objects.exists()
+
+
+@pytest.mark.django_db
+def test_django_shift_admin_requires_capacity_override_confirmation(admin_client):
+    camp = CampFactory()
+    shift = Shift.objects.create(
+        camp=camp,
+        name="Admin-Kapazität",
+        date=timezone.localdate() + datetime.timedelta(days=1),
+        required_slots=2,
+    )
+    for index in range(2):
+        ShiftAssignment.objects.create(
+            shift=shift,
+            participant=ParticipantFactory(camp=camp, first_name=f"Admin{index}"),
+        )
+    shift.refresh_from_db()
+    url = f"/admin/billing/shift/{shift.pk}/change/"
+    change_form = admin_client.get(url)
+
+    assert change_form.status_code == 200
+    assert b'name="confirm_over_capacity"' in change_form.content
+    assert b'name="confirm_historical"' in change_form.content
+    assert b'name="expected_assignment_revision"' in change_form.content
+
+    payload = {
+        "camp": camp.pk,
+        "name": shift.name,
+        "description": shift.description,
+        "date": shift.date.isoformat(),
+        "start_time": "",
+        "end_time": "",
+        "required_slots": 1,
+        "confirm_over_capacity": "",
+        "confirm_historical": "",
+        "expected_assignment_revision": shift.assignment_revision,
+        "assignments-TOTAL_FORMS": 0,
+        "assignments-INITIAL_FORMS": 0,
+        "assignments-MIN_NUM_FORMS": 0,
+        "assignments-MAX_NUM_FORMS": 1000,
+        "_save": "Speichern",
+    }
+
+    response = admin_client.post(url, payload)
+
+    shift.refresh_from_db()
+    assert response.status_code == 200
+    assert shift.required_slots == 2
+    assert shift.assignment_revision == 2
+    assert not ShiftAuditLog.objects.exists()
+
+    response = admin_client.post(url, {**payload, "confirm_over_capacity": "on"})
+
+    shift.refresh_from_db()
+    assert response.status_code == 302
+    assert shift.required_slots == 1
+    assert shift.assignment_revision == 3
+    audit_log = ShiftAuditLog.objects.get(action=ShiftAuditLog.Action.CAPACITY_OVERRIDE)
+    assert audit_log.changed_by_id is not None
+    assert audit_log.capacity_override is True
+    assert audit_log.historical_override is False
+
+    add_form = admin_client.get("/admin/billing/shift/add/")
+    assert add_form.status_code == 200
+    assert b'name="confirm_over_capacity"' not in add_form.content
+    assert b'name="confirm_historical"' not in add_form.content
+    assert b'name="expected_assignment_revision"' not in add_form.content
+
+
+@pytest.mark.django_db
+def test_django_shift_admin_rejects_missing_or_stale_capacity_revision(admin_client):
+    camp = CampFactory()
+    shift = Shift.objects.create(
+        camp=camp,
+        name="Revision-Dienst",
+        date=timezone.localdate() + datetime.timedelta(days=1),
+        required_slots=2,
+    )
+    url = f"/admin/billing/shift/{shift.pk}/change/"
+    payload = {
+        "camp": camp.pk,
+        "name": "Geändert",
+        "description": shift.description,
+        "date": shift.date.isoformat(),
+        "start_time": "",
+        "end_time": "",
+        "required_slots": 2,
+        "assignments-TOTAL_FORMS": 0,
+        "assignments-INITIAL_FORMS": 0,
+        "assignments-MIN_NUM_FORMS": 0,
+        "assignments-MAX_NUM_FORMS": 1000,
+        "_save": "Speichern",
+    }
+
+    response = admin_client.post(url, payload)
+    shift.refresh_from_db()
+    assert response.status_code == 200
+    assert shift.name == "Revision-Dienst"
+
+    response = admin_client.post(url, {**payload, "expected_assignment_revision": 99})
+    shift.refresh_from_db()
+    assert response.status_code == 200
+    assert shift.name == "Revision-Dienst"
+
+
+@pytest.mark.django_db
+def test_django_shift_admin_capacity_reduction_with_invalid_date_returns_form_error(admin_client):
+    camp = CampFactory()
+    shift = Shift.objects.create(
+        camp=camp,
+        name="Ungültiges Datum",
+        date=timezone.localdate() + datetime.timedelta(days=1),
+        required_slots=2,
+    )
+    for index in range(2):
+        ShiftAssignment.objects.create(
+            shift=shift,
+            participant=ParticipantFactory(camp=camp, first_name=f"Datum{index}"),
+        )
+    shift.refresh_from_db()
+
+    response = admin_client.post(
+        f"/admin/billing/shift/{shift.pk}/change/",
+        {
+            "camp": camp.pk,
+            "name": shift.name,
+            "description": shift.description,
+            "date": "kein-datum",
+            "start_time": "",
+            "end_time": "",
+            "required_slots": 1,
+            "confirm_over_capacity": "on",
+            "expected_assignment_revision": shift.assignment_revision,
+            "assignments-TOTAL_FORMS": 0,
+            "assignments-INITIAL_FORMS": 0,
+            "assignments-MIN_NUM_FORMS": 0,
+            "assignments-MAX_NUM_FORMS": 1000,
+            "_save": "Speichern",
+        },
+    )
+
+    shift.refresh_from_db()
+    assert response.status_code == 200
+    assert "date" in response.context["adminform"].form.errors
+    assert shift.required_slots == 2
+
+
+@pytest.mark.django_db
+def test_shift_edit_uses_new_date_for_historical_capacity_confirmation(admin_client):
+    camp = CampFactory()
+    shift = Shift.objects.create(
+        camp=camp,
+        name="Datumsdienst",
+        date=timezone.localdate() + datetime.timedelta(days=1),
+        required_slots=2,
+    )
+    for index in range(2):
+        ShiftAssignment.objects.create(
+            shift=shift,
+            participant=ParticipantFactory(camp=camp, first_name=f"Datum{index}"),
+        )
+    shift.refresh_from_db()
+
+    response = admin_client.post(
+        reverse("shift-edit", args=[shift.pk]),
+        {
+            "name": shift.name,
+            "date": (timezone.localdate() - datetime.timedelta(days=1)).isoformat(),
+            "required_slots": 1,
+            "assignment_revision": shift.assignment_revision,
+            "confirm_over_capacity": "on",
+        },
+    )
+
+    shift.refresh_from_db()
+    assert response.status_code == 200
+    assert "Historische Änderung ausdrücklich bestätigen" in response.content.decode()
+    assert shift.date == timezone.localdate() + datetime.timedelta(days=1)
+    assert shift.required_slots == 2
+
+
+@pytest.mark.django_db
+def test_moving_assignment_advances_source_and_destination_revisions():
+    source = Shift.objects.create(camp=CampFactory(), name="Quelle", date=timezone.localdate())
+    destination = Shift.objects.create(camp=source.camp, name="Ziel", date=timezone.localdate())
+    assignment = ShiftAssignment.objects.create(shift=source, participant=ParticipantFactory(camp=source.camp))
+    source.refresh_from_db()
+    destination.refresh_from_db()
+    source_revision = source.assignment_revision
+    destination_revision = destination.assignment_revision
+
+    assignment.shift = destination
+    assignment.save()
+
+    source.refresh_from_db()
+    destination.refresh_from_db()
+    assert source.assignment_revision == source_revision + 1
+    assert destination.assignment_revision == destination_revision + 1
+
+
+@pytest.mark.django_db
+def test_queryset_update_rejects_assignment_shift_moves():
+    camp = CampFactory()
+    source = Shift.objects.create(camp=camp, name="Quelle", date=timezone.localdate())
+    destination = Shift.objects.create(camp=camp, name="Ziel", date=timezone.localdate())
+    assignment = ShiftAssignment.objects.create(shift=source, participant=ParticipantFactory(camp=camp))
+
+    with pytest.raises(ValidationError, match="Identitätsänderungen"):
+        ShiftAssignment.objects.filter(pk=assignment.pk).update(shift=destination)
+    with pytest.raises(ValidationError, match="Identitätsänderungen"):
+        ShiftAssignment.objects.filter(pk=assignment.pk).update(shift_id=destination.pk)
 
 
 @pytest.mark.django_db

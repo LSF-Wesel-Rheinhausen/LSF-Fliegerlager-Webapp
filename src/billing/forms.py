@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import UploadedFile
 from django.core.validators import FileExtensionValidator, RegexValidator
 from django.db import models, transaction
+from django.utils import timezone
 from django.utils.formats import number_format
 
 from .models import (
@@ -1792,12 +1793,12 @@ class ShiftForm(forms.ModelForm):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        if self.instance.pk:
+        if self.instance.pk and "assignment_revision" in self.fields:
             self.fields["assignment_revision"].initial = self.instance.assignment_revision
-        else:
-            self.fields.pop("assignment_revision")
-            self.fields.pop("confirm_over_capacity")
-            self.fields.pop("confirm_historical")
+        elif not self.instance.pk:
+            self.fields.pop("assignment_revision", None)
+            self.fields.pop("confirm_over_capacity", None)
+            self.fields.pop("confirm_historical", None)
 
     class Meta:
         model = Shift
@@ -1816,6 +1817,51 @@ class ShiftForm(forms.ModelForm):
             "start_time": forms.TimeInput(attrs={"type": "time"}),
             "end_time": forms.TimeInput(attrs={"type": "time"}),
         }
+
+
+class ShiftAdminForm(ShiftForm):
+    """Add confirmation validation to Django's raw shift editor."""
+
+    expected_assignment_revision = forms.IntegerField(required=False, min_value=0, widget=forms.HiddenInput)
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.fields.pop("assignment_revision", None)
+        if self.instance.pk:
+            self.fields["expected_assignment_revision"].required = True
+            self.fields["expected_assignment_revision"].initial = self.instance.assignment_revision
+        else:
+            self.fields.pop("expected_assignment_revision", None)
+
+    def _post_clean(self) -> None:
+        self.instance._allow_capacity_override = True
+        try:
+            cast(Any, forms.ModelForm)._post_clean(self)
+        finally:
+            del self.instance._allow_capacity_override
+
+    def clean(self) -> dict[str, Any]:
+        cleaned_data = cast(dict[str, Any], super().clean())
+        if not self.instance.pk or "required_slots" not in cleaned_data:
+            return cleaned_data
+        if cleaned_data.get("expected_assignment_revision") != self.instance.assignment_revision:
+            self.add_error(
+                "expected_assignment_revision",
+                "Die Dienstbesetzung wurde zwischenzeitlich geändert. Bitte lade die Seite neu.",
+            )
+        assigned_count = self.instance.assignments.count()
+        lowers_below_staffing = cleaned_data["required_slots"] < self.instance.required_slots
+        if lowers_below_staffing and cleaned_data["required_slots"] < assigned_count:
+            if not cleaned_data.get("confirm_over_capacity"):
+                self.add_error("confirm_over_capacity", "Bitte die Unterbesetzung ausdrücklich bestätigen.")
+            effective_date = cleaned_data.get("date")
+            if (
+                effective_date is not None
+                and effective_date < timezone.localdate()
+                and not cleaned_data.get("confirm_historical")
+            ):
+                self.add_error("confirm_historical", "Bitte die historische Änderung ausdrücklich bestätigen.")
+        return cleaned_data
 
 
 class ShiftAssignmentAddForm(forms.Form):

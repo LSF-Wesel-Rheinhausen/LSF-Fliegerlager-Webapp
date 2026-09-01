@@ -1870,6 +1870,27 @@ class Settlement(TimeStampedModel):
         return f"{self.participant}: {self.balance}"
 
 
+class ShiftQuerySet(models.QuerySet):
+    """Guard bulk capacity updates that cannot create audit records."""
+
+    def update(self, **kwargs: Any) -> int:
+        if "required_slots" not in kwargs:
+            return super().update(**kwargs)
+        if not isinstance(kwargs["required_slots"], int):
+            raise ValidationError("Kapazitätsänderungen müssen über den Dienst gespeichert werden.")
+        with transaction.atomic():
+            shift_ids = self.select_for_update().order_by("pk").values_list("pk", flat=True)
+            for shift_id in shift_ids:
+                assigned_count = ShiftAssignment.objects.filter(shift_id=shift_id).count()
+                if kwargs["required_slots"] < assigned_count:
+                    raise ValidationError("Die Kapazität darf nicht unter die bereits eingetragenen Personen sinken.")
+            return super().update(**kwargs)
+
+    def _update_capacity(self, required_slots: int) -> int:
+        """Persist a value selected by the audited capacity-change service."""
+        return super().update(required_slots=required_slots)
+
+
 class Shift(TimeStampedModel):
     camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="shifts", verbose_name="Lager")
     name = models.CharField(max_length=120, verbose_name="Bezeichnung")
@@ -1879,6 +1900,7 @@ class Shift(TimeStampedModel):
     end_time = models.TimeField(null=True, blank=True, verbose_name="Ende")
     required_slots = models.PositiveIntegerField(default=1, verbose_name="Benötigte Plätze")
     assignment_revision = models.PositiveBigIntegerField(default=0, editable=False)
+    objects = ShiftQuerySet.as_manager()
 
     class Meta:
         verbose_name = "Dienst"
@@ -1904,13 +1926,10 @@ class Shift(TimeStampedModel):
         allow_capacity_override = getattr(self, "_allow_capacity_override", False)
         if self.pk is not None and not allow_capacity_override:
             with transaction.atomic():
-                current_shift = type(self).objects.select_for_update().get(pk=self.pk)
-                if self.required_slots < current_shift.required_slots:
-                    assigned_count = ShiftAssignment.objects.filter(shift_id=self.pk).count()
-                    if self.required_slots < assigned_count:
-                        raise ValidationError(
-                            "Die Kapazität darf nicht unter die bereits eingetragenen Personen sinken."
-                        )
+                type(self).objects.select_for_update().get(pk=self.pk)
+                assigned_count = ShiftAssignment.objects.filter(shift_id=self.pk).count()
+                if self.required_slots < assigned_count:
+                    raise ValidationError("Die Kapazität darf nicht unter die bereits eingetragenen Personen sinken.")
                 return super().save(*args, **kwargs)
         super().save(*args, **kwargs)
 
@@ -1955,7 +1974,7 @@ class ShiftAssignmentQuerySet(models.QuerySet):
     """Keep identity-changing writes on validated model/service paths."""
 
     def update(self, **kwargs: Any) -> int:
-        if {"participant", "participant_id", "family_member", "family_member_id"} & kwargs.keys():
+        if {"shift", "shift_id", "participant", "participant_id", "family_member", "family_member_id"} & kwargs.keys():
             raise ValidationError("Identitätsänderungen an Diensten müssen über save() erfolgen.")
         return super().update(**kwargs)
 
@@ -2043,7 +2062,11 @@ class ShiftAssignment(TimeStampedModel):
         super().save(*args, **kwargs)
         current_identity = (self.shift_id, self.participant_id, self.family_member_id)
         if previous_identity != current_identity:
-            Shift.objects.filter(pk=self.shift_id).update(assignment_revision=F("assignment_revision") + 1)
+            changed_shift_ids = {current_identity[0]}
+            if previous_identity is not None:
+                changed_shift_ids.add(previous_identity[0])
+            for shift_id in changed_shift_ids:
+                Shift.objects.filter(pk=shift_id).update(assignment_revision=F("assignment_revision") + 1)
 
     def delete(self, *args: Any, **kwargs: Any):
         """Advance the staffing revision when one assignment is removed."""

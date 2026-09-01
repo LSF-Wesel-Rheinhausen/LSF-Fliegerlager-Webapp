@@ -22,7 +22,7 @@ CREDIT_PAYOUT_NEW_TARGET = [("billing", "0067_positive_credit_payout_amount")]
 POSITION_REPORT_OLD_TARGET = CREDIT_PAYOUT_NEW_TARGET
 POSITION_REPORT_NEW_TARGET = [("billing", "0068_charge_position_report_description")]
 SHIFT_STAFFING_OLD_TARGET = [("billing", "0070_alter_camp_options_alter_dailyshifttemplate_options_and_more")]
-SHIFT_STAFFING_NEW_TARGET = [("billing", "0071_shift_staffing_audit")]
+SHIFT_STAFFING_NEW_TARGET = [("billing", "0072_shift_staffing_audit")]
 
 
 def _create_historical_credit_payouts(historical_apps, amounts: list[Decimal]):

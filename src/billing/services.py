@@ -9,7 +9,7 @@ from uuid import UUID
 
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import IntegrityError, connection, transaction
-from django.db.models import Max, Prefetch, Q, Sum
+from django.db.models import F, Max, Prefetch, Q, Sum
 from django.utils import timezone
 
 from .models import (
@@ -194,6 +194,66 @@ def remove_shift_assignment(
     )
 
 
+@transaction.atomic
+def update_shift_capacity(
+    *,
+    shift_id: int,
+    required_slots: int,
+    expected_revision: int | None,
+    allow_over_capacity: bool,
+    confirm_historical: bool,
+    changed_by: Any,
+    preserve_overstaffed: bool = False,
+    effective_date: date | None = None,
+) -> Shift:
+    """Update one shift capacity with shared override and audit semantics."""
+    shift = Shift.objects.select_for_update().select_related("camp").get(pk=shift_id)
+    if expected_revision is not None and shift.assignment_revision != expected_revision:
+        raise ValidationError("Die Dienstbesetzung wurde zwischenzeitlich geändert. Bitte lade die Seite neu.")
+    assignments = ShiftAssignment.objects.select_for_update().filter(shift_id=shift.pk)
+    assigned_count = assignments.count()
+    old_required_slots = shift.required_slots
+    if required_slots == old_required_slots:
+        return shift
+    lowers_below_staffing = required_slots < assigned_count
+    if lowers_below_staffing and preserve_overstaffed:
+        return shift
+    historical_override = lowers_below_staffing and (effective_date or shift.date) < timezone.localdate()
+    if lowers_below_staffing:
+        if not allow_over_capacity:
+            raise ValidationError("Bitte die Unterbesetzung ausdrücklich bestätigen.")
+        if historical_override and not confirm_historical:
+            raise ValidationError("Bitte die historische Änderung ausdrücklich bestätigen.")
+
+    before_revision = shift.assignment_revision
+    Shift.objects.filter(pk=shift.pk)._update_capacity(required_slots)
+    if not lowers_below_staffing:
+        shift.refresh_from_db()
+        return shift
+
+    Shift.objects.filter(pk=shift.pk).update(assignment_revision=F("assignment_revision") + 1)
+    shift.refresh_from_db()
+    ShiftAuditLog.objects.create(
+        shift=shift,
+        camp=shift.camp,
+        changed_by=changed_by,
+        action=ShiftAuditLog.Action.CAPACITY_OVERRIDE,
+        before={
+            "assignment_revision": before_revision,
+            "assigned_count": assigned_count,
+            "required_slots": old_required_slots,
+        },
+        after={
+            "assignment_revision": shift.assignment_revision,
+            "assigned_count": assigned_count,
+            "required_slots": required_slots,
+        },
+        capacity_override=True,
+        historical_override=historical_override,
+    )
+    return shift
+
+
 class ExpenseReceiptStorageError(RuntimeError):
     """Report a receipt storage failure without exposing backend details to users."""
 
@@ -273,17 +333,22 @@ def generate_shifts_from_templates(templates: Iterable[DailyShiftTemplate]) -> t
                         if exception and exception.custom_end_time is not None
                         else template.end_time
                     )
-                    existing_shift = (
-                        Shift.objects.select_for_update()
-                        .filter(
-                            camp=camp,
-                            date=current_date,
-                            name=template.name,
-                            start_time=start_time,
+                    existing_shift = Shift.objects.filter(
+                        camp=camp,
+                        date=current_date,
+                        name=template.name,
+                        start_time=start_time,
+                    ).first()
+                    if existing_shift is not None:
+                        existing_shift = update_shift_capacity(
+                            shift_id=existing_shift.pk,
+                            required_slots=slots,
+                            expected_revision=None,
+                            allow_over_capacity=False,
+                            confirm_historical=False,
+                            changed_by=None,
+                            preserve_overstaffed=True,
                         )
-                        .first()
-                    )
-                    if existing_shift is not None and slots < existing_shift.assignments.count():
                         slots = existing_shift.required_slots
                     Shift.objects.update_or_create(
                         camp=camp,

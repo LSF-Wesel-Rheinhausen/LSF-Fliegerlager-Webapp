@@ -8,7 +8,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import models, transaction
 from django.utils import timezone
 
-from .forms import ExpenseAdminForm
+from .forms import ExpenseAdminForm, ShiftAdminForm
 from .models import (
     BookingAuditLog,
     Camp,
@@ -47,6 +47,7 @@ from .services import (
     payment_audit_snapshot,
     restore_booking_from_audit_log,
     restore_payment_from_audit_log,
+    update_shift_capacity,
 )
 
 admin.site.unregister(User)
@@ -702,9 +703,55 @@ class ShiftAssignmentInline(admin.TabularInline):
 
 @admin.register(Shift)
 class ShiftAdmin(admin.ModelAdmin):
+    form = ShiftAdminForm
+    _change_fields = (
+        "camp",
+        "name",
+        "description",
+        "date",
+        "start_time",
+        "end_time",
+        "required_slots",
+        "expected_assignment_revision",
+        "confirm_over_capacity",
+        "confirm_historical",
+    )
+    _base_fields = ("camp", "name", "description", "date", "start_time", "end_time", "required_slots")
     list_display = ("name", "camp", "date", "start_time", "end_time", "required_slots", "is_full")
     list_filter = ("camp", "date")
     inlines = [ShiftAssignmentInline]
+
+    def get_fields(self, request, obj=None):
+        return self._change_fields if obj is not None else self._base_fields
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        if (
+            request.method == "POST"
+            and request.resolver_match
+            and request.resolver_match.url_name == "billing_shift_change"
+        ):
+            return queryset.select_for_update()
+        return queryset
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            super().save_model(request, obj, form, change)
+            return
+
+        updated_shift = update_shift_capacity(
+            shift_id=obj.pk,
+            required_slots=form.cleaned_data["required_slots"],
+            expected_revision=form.cleaned_data["expected_assignment_revision"],
+            allow_over_capacity=form.cleaned_data.get("confirm_over_capacity", False),
+            confirm_historical=form.cleaned_data.get("confirm_historical", False),
+            changed_by=request.user,
+            effective_date=form.cleaned_data["date"],
+        )
+        obj.required_slots = updated_shift.required_slots
+        obj.assignment_revision = updated_shift.assignment_revision
+        obj._allow_capacity_override = True
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(ShiftAuditLog)
