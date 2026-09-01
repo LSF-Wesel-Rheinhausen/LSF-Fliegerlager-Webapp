@@ -1930,7 +1930,6 @@ class Shift(TimeStampedModel):
                 assigned_count = ShiftAssignment.objects.filter(shift_id=self.pk).count()
                 if self.required_slots < assigned_count:
                     raise ValidationError("Die Kapazität darf nicht unter die bereits eingetragenen Personen sinken.")
-                return super().save(*args, **kwargs)
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -2162,6 +2161,8 @@ class ShiftAuditLog(models.Model):
             raise ValidationError("Dienst-Audit-Einträge dürfen nicht verändert werden.")
         if self.shift_id is not None:
             shift = cast(Shift, self.shift)
+            if self.camp_id != shift.camp_id:
+                raise ValidationError("Das Audit-Lager muss dem Lager des Dienstes entsprechen.")
             self.shift_id_snapshot = self.shift_id
             self.shift_name_snapshot = shift.name
             self.shift_date_snapshot = shift.date

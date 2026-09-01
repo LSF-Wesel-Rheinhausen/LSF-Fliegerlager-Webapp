@@ -161,20 +161,32 @@ def remove_shift_assignment(
     if not is_admin(changed_by):
         raise ValidationError("Nur Administratoren dürfen Dienstbesetzungen verändern.")
 
+    participant_id, family_member_id = (
+        ShiftAssignment.objects.filter(pk=assignment_id, shift_id=shift_id)
+        .values_list("participant_id", "family_member_id")
+        .get()
+    )
+    participant = Participant.objects.select_for_update().get(pk=participant_id)
+    family_member = None
+    if family_member_id is not None:
+        family_member = ParticipantFamilyMember.objects.select_for_update().get(
+            pk=family_member_id,
+            guardian_id=participant.pk,
+        )
     shift = Shift.objects.select_for_update().select_related("camp").get(pk=shift_id)
-    if shift.assignment_revision != expected_revision:
-        raise ValidationError("Die Dienstbesetzung wurde zwischenzeitlich geändert. Bitte lade die Seite neu.")
     assignment = (
         ShiftAssignment.objects.select_for_update(of=("self",))
         .select_related("participant", "family_member")
         .get(pk=assignment_id, shift=shift)
     )
-    is_historical = shift.date < timezone.localdate() or assignment.participant.status == Participant.Status.SETTLED
+    if (assignment.participant_id, assignment.family_member_id) != (participant_id, family_member_id):
+        raise ValidationError("Die Zuordnung wurde zwischenzeitlich geändert. Bitte lade die Seite neu.")
+    if shift.assignment_revision != expected_revision:
+        raise ValidationError("Die Dienstbesetzung wurde zwischenzeitlich geändert. Bitte lade die Seite neu.")
+    is_historical = shift.date < timezone.localdate() or participant.status == Participant.Status.SETTLED
     if is_historical and not confirm_historical:
         raise ValidationError("Diese Zuordnung kann nur mit historischer Bestätigung entfernt werden.")
 
-    participant = assignment.participant
-    family_member = assignment.family_member
     identity_name = assignment.operational_display_name
     assigned_count = ShiftAssignment.objects.select_for_update().filter(shift=shift).count()
     before_revision = shift.assignment_revision
@@ -205,6 +217,7 @@ def update_shift_capacity(
     changed_by: Any,
     preserve_overstaffed: bool = False,
     effective_date: date | None = None,
+    audit_shift: Shift | None = None,
 ) -> Shift:
     """Update one shift capacity with shared override and audit semantics."""
     shift = Shift.objects.select_for_update().select_related("camp").get(pk=shift_id)
@@ -213,6 +226,11 @@ def update_shift_capacity(
     assignments = ShiftAssignment.objects.select_for_update().filter(shift_id=shift.pk)
     assigned_count = assignments.count()
     old_required_slots = shift.required_slots
+    if audit_shift is not None:
+        if audit_shift.pk != shift.pk:
+            raise ValidationError("Der Audit-Shift stimmt nicht mit der Kapazitätsänderung überein.")
+        if assigned_count and audit_shift.camp_id != shift.camp_id:
+            raise ValidationError("Ein Lagerwechsel ist bei vorhandenen Dienstzuordnungen nicht zulässig.")
     if required_slots == old_required_slots:
         return shift
     lowers_below_staffing = required_slots < assigned_count
@@ -234,8 +252,8 @@ def update_shift_capacity(
     Shift.objects.filter(pk=shift.pk).update(assignment_revision=F("assignment_revision") + 1)
     shift.refresh_from_db()
     ShiftAuditLog.objects.create(
-        shift=shift,
-        camp=shift.camp,
+        shift=audit_shift or shift,
+        camp=(audit_shift or shift).camp,
         changed_by=changed_by,
         action=ShiftAuditLog.Action.CAPACITY_OVERRIDE,
         before={

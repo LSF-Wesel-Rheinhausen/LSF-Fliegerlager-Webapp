@@ -747,6 +747,7 @@ class ShiftAdmin(admin.ModelAdmin):
             confirm_historical=form.cleaned_data.get("confirm_historical", False),
             changed_by=request.user,
             effective_date=form.cleaned_data["date"],
+            audit_shift=obj,
         )
         obj.required_slots = updated_shift.required_slots
         obj.assignment_revision = updated_shift.assignment_revision

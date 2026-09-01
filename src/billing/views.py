@@ -2059,6 +2059,7 @@ def shift_edit(request, shift_id):
                         confirm_historical=form.cleaned_data["confirm_historical"],
                         changed_by=request.user,
                         effective_date=form.cleaned_data["date"],
+                        audit_shift=form.instance,
                     )
                 except ValidationError as error:
                     form.add_error(None, error)

@@ -1850,8 +1850,7 @@ class ShiftAdminForm(ShiftForm):
                 "Die Dienstbesetzung wurde zwischenzeitlich geändert. Bitte lade die Seite neu.",
             )
         assigned_count = self.instance.assignments.count()
-        lowers_below_staffing = cleaned_data["required_slots"] < self.instance.required_slots
-        if lowers_below_staffing and cleaned_data["required_slots"] < assigned_count:
+        if cleaned_data["required_slots"] < assigned_count:
             if not cleaned_data.get("confirm_over_capacity"):
                 self.add_error("confirm_over_capacity", "Bitte die Unterbesetzung ausdrücklich bestätigen.")
             effective_date = cleaned_data.get("date")
@@ -1861,6 +1860,9 @@ class ShiftAdminForm(ShiftForm):
                 and not cleaned_data.get("confirm_historical")
             ):
                 self.add_error("confirm_historical", "Bitte die historische Änderung ausdrücklich bestätigen.")
+        submitted_camp = cleaned_data.get("camp")
+        if submitted_camp is not None and submitted_camp.pk != self.instance.camp_id and assigned_count:
+            self.add_error("camp", "Ein Lagerwechsel ist bei vorhandenen Dienstzuordnungen nicht zulässig.")
         return cleaned_data
 
 
