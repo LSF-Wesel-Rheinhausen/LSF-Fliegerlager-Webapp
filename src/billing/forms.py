@@ -1794,6 +1794,7 @@ class ShiftForm(forms.ModelForm):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         if self.instance.pk and "assignment_revision" in self.fields:
+            self.fields["assignment_revision"].required = True
             self.fields["assignment_revision"].initial = self.instance.assignment_revision
         elif not self.instance.pk:
             self.fields.pop("assignment_revision", None)

@@ -41,7 +41,7 @@ class Migration(migrations.Migration):
                         max_length=32,
                     ),
                 ),
-                ("identity_name_snapshot", models.CharField(blank=True, max_length=241)),
+                ("identity_reference_snapshot", models.CharField(blank=True, max_length=241)),
                 ("shift_id_snapshot", models.PositiveBigIntegerField(editable=False)),
                 ("shift_name_snapshot", models.CharField(editable=False, max_length=120)),
                 ("shift_date_snapshot", models.DateField(editable=False)),

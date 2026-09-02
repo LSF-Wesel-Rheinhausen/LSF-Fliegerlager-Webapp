@@ -41,16 +41,16 @@ def test_shift_assignment_audit_is_append_only_and_revisioned():
         camp=camp,
         changed_by=admin,
         action=ShiftAuditLog.Action.ADDED,
-        identity_name_snapshot="Ada Lovelace",
+        identity_reference_snapshot="participant:1",
         before={"assignment_revision": 0, "assigned_count": 0},
         after={"assignment_revision": 1, "assigned_count": 1},
     )
 
-    audit_log.identity_name_snapshot = "Manipuliert"
+    audit_log.identity_reference_snapshot = "Manipuliert"
     with pytest.raises(ValidationError, match="Audit-Einträge dürfen nicht verändert werden"):
         audit_log.save()
     with pytest.raises(ValidationError, match="Audit-Einträge dürfen nicht verändert werden"):
-        ShiftAuditLog.objects.filter(pk=audit_log.pk).update(identity_name_snapshot="Manipuliert")
+        ShiftAuditLog.objects.filter(pk=audit_log.pk).update(identity_reference_snapshot="Manipuliert")
     with pytest.raises(ValidationError, match="Audit-Einträge dürfen nicht gelöscht werden"):
         ShiftAuditLog.objects.filter(pk=audit_log.pk).delete()
 
@@ -77,6 +77,56 @@ def test_shift_assignment_audit_keeps_shift_snapshot_after_shift_deletion():
     assert audit_log.shift_name_snapshot == "Frühstücksdienst"
     assert audit_log.shift_date_snapshot == datetime.date(2026, 8, 24)
     assert audit_log.shift_reference == f"Frühstücksdienst am 24.08.2026 (#{shift_id})"
+
+
+@pytest.mark.django_db
+def test_shift_audit_stores_operational_reference_without_name_pii():
+    camp = CampFactory()
+    shift = Shift.objects.create(camp=camp, name="Küchendienst", date="2026-08-24")
+    participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
+
+    services.add_shift_assignment(
+        shift_id=shift.pk,
+        identity_token=f"participant-{participant.pk}",
+        expected_revision=0,
+        allow_over_capacity=False,
+        confirm_historical=True,
+        changed_by=SuperUserFactory(),
+    )
+
+    audit_log = ShiftAuditLog.objects.get()
+    assert audit_log.identity_reference_snapshot == f"participant:{participant.pk}"
+    assert "Ada Lovelace" not in str(audit_log.__dict__)
+    assert "Ada Lovelace" not in str(audit_log.before)
+    assert "Ada Lovelace" not in str(audit_log.after)
+
+
+@pytest.mark.django_db
+def test_shift_form_requires_assignment_revision_for_existing_shift_but_not_add():
+    camp = CampFactory()
+    shift = Shift.objects.create(camp=camp, name="Dienst", date="2026-08-24")
+    form = ShiftForm(
+        data={"name": "Geändert", "description": "", "date": "2026-08-24", "required_slots": 1},
+        instance=shift,
+    )
+    assert form.is_valid() is False
+    assert "assignment_revision" in form.errors
+    assert ShiftForm(instance=Shift()).fields.get("assignment_revision") is None
+
+
+@pytest.mark.django_db
+def test_shift_save_holds_capacity_row_lock_during_persistence(monkeypatch):
+    shift = Shift.objects.create(camp=CampFactory(), name="Lock", date="2026-08-24")
+    save_in_atomic_block = []
+
+    def capture_save(self, *args, **kwargs):
+        save_in_atomic_block.append(connection.in_atomic_block)
+
+    monkeypatch.setattr(models.TimeStampedModel, "save", capture_save)
+    shift.description = "Geändert"
+    shift.save()
+
+    assert save_in_atomic_block == [True]
 
 
 def test_shift_audit_admin_lists_immutable_shift_reference():
@@ -111,7 +161,7 @@ def test_admin_adds_registered_participant_atomically_with_audit_and_revision():
     audit_log = ShiftAuditLog.objects.get()
     assert audit_log.action == ShiftAuditLog.Action.ADDED
     assert audit_log.changed_by == admin
-    assert audit_log.identity_name_snapshot == participant.full_name
+    assert audit_log.identity_reference_snapshot == f"participant:{participant.pk}"
     assert audit_log.before == {"assignment_revision": 0, "assigned_count": 0}
     assert audit_log.after == {"assignment_revision": 1, "assigned_count": 1}
     assert audit_log.capacity_override is False
@@ -213,7 +263,7 @@ def test_admin_adds_active_companion_as_operational_identity():
     assert assignment.participant == guardian
     assert assignment.family_member == companion
     assert assignment.operational_display_name == companion.full_name
-    assert ShiftAuditLog.objects.get().identity_name_snapshot == companion.full_name
+    assert ShiftAuditLog.objects.get().identity_reference_snapshot == f"family-member:{companion.pk}"
 
 
 @pytest.mark.django_db
@@ -243,7 +293,7 @@ def test_admin_removes_assignment_with_audit_and_revision():
     assert shift.assignment_revision == 6
     audit_log = ShiftAuditLog.objects.get()
     assert audit_log.action == ShiftAuditLog.Action.REMOVED
-    assert audit_log.identity_name_snapshot == participant.full_name
+    assert audit_log.identity_reference_snapshot == f"participant:{participant.pk}"
     assert audit_log.before == {"assignment_revision": 5, "assigned_count": 1}
     assert audit_log.after == {"assignment_revision": 6, "assigned_count": 0}
 
@@ -1441,7 +1491,7 @@ def test_assignment_audit_keeps_minimal_identity_snapshot_after_profile_changes(
     audit_log = ShiftAuditLog.objects.get()
     serialized_audit = f"{audit_log.before} {audit_log.after}"
 
-    assert audit_log.identity_name_snapshot == "Ada Alt"
+    assert audit_log.identity_reference_snapshot == f"participant:{participant.pk}"
     assert "private@example.test" not in serialized_audit
     assert "+49 123 456" not in serialized_audit
 

@@ -36,8 +36,10 @@ APP_ADMIN_PERMISSION_MODELS = frozenset(
         "shift",
         "shiftassignment",
         "userprofile",
+        "shiftauditlog",
     }
 )
+VIEW_ONLY_PERMISSION_MODELS = frozenset({"shiftauditlog"})
 PARTNER_LINK_MUTATION_PERMISSION_CODENAMES = frozenset(
     {
         "add_participantbookinglink",
@@ -52,17 +54,30 @@ def bootstrap_default_roles():
     editor_group, _ = Group.objects.get_or_create(name=EDITOR_GROUP)
     huebers_group, _ = Group.objects.get_or_create(name=HUEBERS_GROUP)
 
-    admin_permissions = Permission.objects.filter(
+    admin_permissions = (
+        Permission.objects.filter(
+            content_type__app_label="billing",
+            content_type__model__in=APP_ADMIN_PERMISSION_MODELS,
+        )
+        .exclude(
+            content_type__model__in=VIEW_ONLY_PERMISSION_MODELS,
+        )
+        .exclude(codename__in=PARTNER_LINK_MUTATION_PERMISSION_CODENAMES)
+    )
+    view_only_permissions = Permission.objects.filter(
         content_type__app_label="billing",
-        content_type__model__in=APP_ADMIN_PERMISSION_MODELS,
-    ).exclude(codename__in=PARTNER_LINK_MUTATION_PERMISSION_CODENAMES)
+        content_type__model__in=VIEW_ONLY_PERMISSION_MODELS,
+        codename__startswith="view_",
+    )
+    admin_permissions = admin_permissions | view_only_permissions
     admin_group.permissions.set(admin_permissions)
     editable = (
         Permission.objects.filter(content_type__app_label="billing")
         .filter(Q(codename__startswith="add_") | Q(codename__startswith="change_") | Q(codename__startswith="view_"))
+        .exclude(content_type__model__in=VIEW_ONLY_PERMISSION_MODELS)
         .exclude(codename__in=PARTNER_LINK_MUTATION_PERMISSION_CODENAMES)
     )
-    editor_group.permissions.set(editable)
+    editor_group.permissions.set(editable | view_only_permissions)
     huebers_group.permissions.set(Permission.objects.none())
 
     return admin_group, editor_group, huebers_group

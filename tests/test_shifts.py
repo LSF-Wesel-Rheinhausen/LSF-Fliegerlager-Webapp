@@ -219,6 +219,7 @@ def test_admin_can_edit_shift_description(admin_client, active_camp):
             "date": active_camp.starts_on.isoformat(),
             "description": "Neue Beschreibung",
             "required_slots": 2,
+            "assignment_revision": shift.assignment_revision,
         },
     )
     assert response.status_code == 302

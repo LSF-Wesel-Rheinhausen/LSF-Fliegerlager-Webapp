@@ -1918,19 +1918,32 @@ class Shift(TimeStampedModel):
         super().clean()
         if self.pk is not None and not getattr(self, "_allow_capacity_override", False):
             current_assignment_count = self.assignments.count()
-            if self.required_slots < current_assignment_count:
+            persisted_required_slots = (
+                type(self).objects.filter(pk=self.pk).values_list("required_slots", flat=True).first()
+            )
+            if (
+                persisted_required_slots is not None
+                and self.required_slots != persisted_required_slots
+                and self.required_slots < current_assignment_count
+            ):
                 raise ValidationError("Die Kapazität darf nicht unter die bereits eingetragenen Personen sinken.")
 
     def save(self, *args: Any, **kwargs: Any) -> None:
         """Enforce the capacity invariant again at the persistence boundary."""
         allow_capacity_override = getattr(self, "_allow_capacity_override", False)
-        if self.pk is not None and not allow_capacity_override:
-            with transaction.atomic():
-                type(self).objects.select_for_update().get(pk=self.pk)
-                assigned_count = ShiftAssignment.objects.filter(shift_id=self.pk).count()
-                if self.required_slots < assigned_count:
-                    raise ValidationError("Die Kapazität darf nicht unter die bereits eingetragenen Personen sinken.")
-        super().save(*args, **kwargs)
+        if self._state.adding:
+            super().save(*args, **kwargs)
+            return
+        with transaction.atomic():
+            persisted_shift = type(self).objects.select_for_update().get(pk=self.pk)
+            assigned_count = ShiftAssignment.objects.filter(shift_id=self.pk).count()
+            if (
+                not allow_capacity_override
+                and self.required_slots != persisted_shift.required_slots
+                and self.required_slots < assigned_count
+            ):
+                raise ValidationError("Die Kapazität darf nicht unter die bereits eingetragenen Personen sinken.")
+            super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.camp}: {self.date} {self.name}"
@@ -2137,7 +2150,7 @@ class ShiftAuditLog(models.Model):
         related_name="shift_audit_logs",
     )
     action = models.CharField(max_length=32, choices=Action.choices)
-    identity_name_snapshot = models.CharField(max_length=241, blank=True)
+    identity_reference_snapshot = models.CharField(max_length=241, blank=True)
     shift_id_snapshot = models.PositiveBigIntegerField(editable=False)
     shift_name_snapshot = models.CharField(max_length=120, editable=False)
     shift_date_snapshot = models.DateField(editable=False)
@@ -2166,6 +2179,12 @@ class ShiftAuditLog(models.Model):
             self.shift_id_snapshot = self.shift_id
             self.shift_name_snapshot = shift.name
             self.shift_date_snapshot = shift.date
+        if self.family_member_id is not None:
+            self.identity_reference_snapshot = f"family-member:{self.family_member_id}"
+        elif self.participant_id is not None:
+            self.identity_reference_snapshot = f"participant:{self.participant_id}"
+        else:
+            self.identity_reference_snapshot = ""
         super().save(*args, **kwargs)
 
     def delete(self, *args: Any, **kwargs: Any):
@@ -2178,7 +2197,7 @@ class ShiftAuditLog(models.Model):
         return f"{self.shift_name_snapshot} am {self.shift_date_snapshot:%d.%m.%Y} (#{self.shift_id_snapshot})"
 
     def __str__(self) -> str:
-        return f"{self.get_action_display()}: {self.identity_name_snapshot or self.shift_reference}"
+        return f"{self.get_action_display()}: {self.identity_reference_snapshot or self.shift_reference}"
 
 
 class PushSubscription(TimeStampedModel):

@@ -52,7 +52,7 @@ _SHIFT_IDENTITY_TOKEN = re.compile(r"^(participant|family)-([1-9][0-9]*)$")
 
 def _lock_shift_assignment_identity(
     identity_token: str,
-) -> tuple[Participant, ParticipantFamilyMember | None, str]:
+) -> tuple[Participant, ParticipantFamilyMember | None]:
     """Lock one eligible operational identity in kiosk-compatible order."""
     token_match = _SHIFT_IDENTITY_TOKEN.fullmatch(identity_token)
     if token_match is None:
@@ -67,7 +67,6 @@ def _lock_shift_assignment_identity(
                 status__in=[Participant.Status.ACTIVE, Participant.Status.REGISTERED],
                 is_child=False,
             )
-            identity_name = participant.full_name
         else:
             guardian_id = (
                 ParticipantFamilyMember.objects.filter(pk=identity_id).values_list("guardian_id", flat=True).first()
@@ -85,10 +84,9 @@ def _lock_shift_assignment_identity(
                 is_active=True,
                 role=ParticipantFamilyMember.Role.COMPANION,
             )
-            identity_name = family_member.full_name
     except (Participant.DoesNotExist, ParticipantFamilyMember.DoesNotExist) as error:
         raise ValidationError("Die ausgewählte Person ist ungültig.") from error
-    return participant, family_member, identity_name
+    return participant, family_member
 
 
 @transaction.atomic
@@ -105,7 +103,7 @@ def add_shift_assignment(
     if not is_admin(changed_by):
         raise ValidationError("Nur Administratoren dürfen Dienstbesetzungen verändern.")
 
-    participant, family_member, identity_name = _lock_shift_assignment_identity(identity_token)
+    participant, family_member = _lock_shift_assignment_identity(identity_token)
     shift = Shift.objects.select_for_update().select_related("camp").get(pk=shift_id)
     if shift.assignment_revision != expected_revision:
         raise ValidationError("Die Dienstbesetzung wurde zwischenzeitlich geändert. Bitte lade die Seite neu.")
@@ -139,7 +137,9 @@ def add_shift_assignment(
         participant=participant,
         family_member=family_member,
         action=ShiftAuditLog.Action.ADDED,
-        identity_name_snapshot=identity_name,
+        identity_reference_snapshot=(
+            f"family-member:{family_member.pk}" if family_member is not None else f"participant:{participant.pk}"
+        ),
         before={"assignment_revision": before_revision, "assigned_count": assigned_count},
         after={"assignment_revision": shift.assignment_revision, "assigned_count": assigned_count + 1},
         capacity_override=capacity_override,
@@ -187,7 +187,6 @@ def remove_shift_assignment(
     if is_historical and not confirm_historical:
         raise ValidationError("Diese Zuordnung kann nur mit historischer Bestätigung entfernt werden.")
 
-    identity_name = assignment.operational_display_name
     assigned_count = ShiftAssignment.objects.select_for_update().filter(shift=shift).count()
     before_revision = shift.assignment_revision
     assignment.delete()
@@ -199,7 +198,9 @@ def remove_shift_assignment(
         participant=participant,
         family_member=family_member,
         action=ShiftAuditLog.Action.REMOVED,
-        identity_name_snapshot=identity_name,
+        identity_reference_snapshot=(
+            f"family-member:{family_member.pk}" if family_member is not None else f"participant:{participant.pk}"
+        ),
         before={"assignment_revision": before_revision, "assigned_count": assigned_count},
         after={"assignment_revision": shift.assignment_revision, "assigned_count": assigned_count - 1},
         historical_override=is_historical,
