@@ -5,6 +5,10 @@
     <div>
       <h1>Essensübersicht</h1>
       <p>{{ camp }} · unverbindliche Richtzeit {{ camp.meal_booking_cutoff_time|time:"H:i" }} Uhr</p>
+      <p>
+        Teilnehmer-Erinnerungen: {% if camp.meal_participant_reminders_enabled %}aktiv{% else %}inaktiv{% endif %}
+        · Bestellhinweise für das Essensteam: {% if camp.meal_order_reminders_enabled %}aktiv{% else %}inaktiv{% endif %}
+      </p>
     </div>
     <div class="actions">
       {% if user|is_huebers_user %}
@@ -13,7 +17,7 @@
       {% else %}
         <a class="button button-secondary" href="{% url 'camp-detail' camp.pk %}">Zur Übersicht</a>
       {% endif %}
-      <a class="button" href="{% url 'meal-cutoff-edit' camp.pk %}">Richtzeit ändern</a>
+      <a class="button" href="{% url 'meal-cutoff-edit' camp.pk %}">Essenseinstellungen ändern</a>
     </div>
   </div>
 

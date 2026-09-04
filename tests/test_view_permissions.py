@@ -625,16 +625,24 @@ def test_huebers_cannot_access_billing_management_views(
 
 
 @pytest.mark.django_db
-def test_huebers_can_update_meal_cutoff_only(client, huebers_user, permission_dataset):
+def test_huebers_can_update_meal_settings(client, huebers_user, permission_dataset):
     camp = permission_dataset["camp"]
     client.force_login(huebers_user)
 
-    response = client.post(reverse("meal-cutoff-edit", args=[camp.pk]), {"meal_booking_cutoff_time": "18:00"})
+    response = client.post(
+        reverse("meal-cutoff-edit", args=[camp.pk]),
+        {
+            "meal_booking_cutoff_time": "18:00",
+            "meal_order_reminders_enabled": "on",
+        },
+    )
 
     camp.refresh_from_db()
     assert response.status_code == 302
     assert response["Location"] == reverse("camp-meal-overview", args=[camp.pk])
     assert camp.meal_booking_cutoff_time == time(18, 0)
+    assert camp.meal_participant_reminders_enabled is False
+    assert camp.meal_order_reminders_enabled is True
 
 
 @pytest.mark.django_db
