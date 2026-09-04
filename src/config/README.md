@@ -39,7 +39,7 @@ Unterstuetzte Umgebungsvariablen:
 WhiteNoise liefert die durch `collectstatic` erzeugten Dateien direkt über Gunicorn aus. Der Update-Agent bleibt ein
 separater Container; der Django-Prozess erhält keinen Zugriff auf Portainer-Zugangsdaten.
 
-Die Produktionskonfiguration lädt `config.gunicorn_config`. Sie pinnt den Python-HTTP-Parser an Gunicorn 26.0.0 und
+Die Produktionskonfiguration lädt `config.gunicorn_config`. Sie pinnt den Python-HTTP-Parser an Gunicorn 26.2.0 und
 begrenzt fragmentierte Chunk-Metadatenzeilen auf 8 KiB. Bei einer abweichenden Gunicorn-Version startet der Prozess
 nicht, damit der versionsgebundene Parser-Guard nicht unbemerkt umgangen wird. Das gilt auch für einen abweichenden
 `http_parser`-Wert aus `GUNICORN_CMD_ARGS`; der Prozess beendet sich dann vor dem Worker-Start.

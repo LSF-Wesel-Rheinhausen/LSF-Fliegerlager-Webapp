@@ -15,6 +15,10 @@ from gunicorn.http.errors import LimitRequestLine
 from config import gunicorn_config, gunicorn_parser_guard
 
 
+def test_guard_targets_gunicorn_26_2_0() -> None:
+    assert gunicorn_parser_guard.SUPPORTED_GUNICORN_VERSION == "26.2.0"
+
+
 class FragmentedUnreader:
     def __init__(self, fragments: list[bytes]) -> None:
         self.fragments = iter(fragments)
@@ -36,8 +40,7 @@ def parse_chunk_size(fragments: list[bytes], data: bytes | None = None) -> tuple
 
 
 @pytest.fixture(autouse=True)
-def install_guard(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(gunicorn_parser_guard, "SUPPORTED_GUNICORN_VERSION", "26.0.0")
+def install_guard() -> None:
     gunicorn_parser_guard.install()
 
 
@@ -94,10 +97,9 @@ def test_chunk_metadata_crlf_split_across_reads_is_valid() -> None:
 
 
 def test_install_fails_closed_for_unsupported_gunicorn_version(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(gunicorn_parser_guard, "SUPPORTED_GUNICORN_VERSION", "26.0.0")
     monkeypatch.setattr(gunicorn_parser_guard.gunicorn, "__version__", "26.0.1")
 
-    with pytest.raises(RuntimeError, match="26.0.0"):
+    with pytest.raises(RuntimeError, match="26.2.0"):
         gunicorn_parser_guard.install()
 
 
