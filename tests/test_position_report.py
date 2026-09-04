@@ -477,13 +477,75 @@ def test_active_family_member_of_archived_guardian_is_excluded(camp):
 
 
 @pytest.mark.django_db
-def test_person_nights_prefer_actual_and_fall_back_to_booked(camp):
-    ParticipantFactory(camp=camp, booked_nights=5, actual_nights=3)
-    ParticipantFactory(camp=camp, booked_nights=4, actual_nights=0)
+def test_untracked_person_nights_prefer_actual_and_fall_back_to_booked(camp):
+    ParticipantFactory(camp=camp, booked_nights=5, actual_nights=3, attendance_tracking_enabled=False)
+    ParticipantFactory(camp=camp, booked_nights=4, actual_nights=0, attendance_tracking_enabled=False)
 
     report = calculate_position_report(camp)
 
     assert report.participant_nights == 7
+
+
+@pytest.mark.django_db
+def test_tracked_participant_nights_use_present_attendance_days(camp):
+    participant = ParticipantFactory(
+        camp=camp,
+        arrival_date=CAMP_START,
+        departure_date=CAMP_END,
+        booked_nights=9,
+        actual_nights=8,
+        attendance_tracking_enabled=True,
+    )
+    AttendanceDay.objects.create(participant=participant, date=CAMP_START, is_present=True)
+    AttendanceDay.objects.create(participant=participant, date=date(2026, 7, 2), is_present=True)
+    AttendanceDay.objects.create(participant=participant, date=date(2026, 7, 3), is_present=False)
+
+    report = calculate_position_report(camp)
+
+    assert report.participant_nights == 2
+
+
+@pytest.mark.django_db
+def test_tracked_participant_nights_ignore_family_attendance_rows(camp):
+    participant = ParticipantFactory(
+        camp=camp,
+        arrival_date=CAMP_START,
+        departure_date=CAMP_END,
+        attendance_tracking_enabled=True,
+    )
+    family_member = ParticipantFamilyMemberFactory(guardian=participant)
+    AttendanceDay.objects.create(participant=participant, date=CAMP_START, is_present=True)
+    AttendanceDay.objects.create(
+        participant=participant,
+        family_member=family_member,
+        date=date(2026, 7, 2),
+        is_present=True,
+    )
+
+    report = calculate_position_report(camp)
+
+    assert report.participant_nights == 1
+
+
+@pytest.mark.django_db
+def test_tracked_participant_nights_ignore_days_outside_the_stay_window(camp):
+    participant = ParticipantFactory(
+        camp=camp,
+        arrival_date=date(2026, 7, 2),
+        departure_date=CAMP_END,
+        attendance_tracking_enabled=True,
+    )
+    AttendanceDay.objects.bulk_create(
+        [
+            AttendanceDay(participant=participant, date=CAMP_START, is_present=True),
+            AttendanceDay(participant=participant, date=date(2026, 7, 2), is_present=True),
+            AttendanceDay(participant=participant, date=CAMP_END, is_present=True),
+        ]
+    )
+
+    report = calculate_position_report(camp)
+
+    assert report.participant_nights == 1
 
 
 @pytest.mark.django_db
@@ -604,6 +666,12 @@ def test_position_report_query_budget_is_bounded_as_camp_size_grows(camp):
                 first_name=f"Teilnehmer{index}",
                 arrival_date=CAMP_START,
                 departure_date=CAMP_END,
+                attendance_tracking_enabled=True,
+            )
+            AttendanceDay.objects.create(
+                participant=participant,
+                date=CAMP_START,
+                is_present=True,
             )
             member = ParticipantFamilyMemberFactory(
                 guardian=participant,

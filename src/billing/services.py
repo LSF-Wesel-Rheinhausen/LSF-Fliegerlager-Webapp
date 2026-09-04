@@ -1432,7 +1432,17 @@ def calculate_position_report(camp: Camp) -> PositionReport:
         for meal in (MealSignup.Meal.DINNER, MealSignup.Meal.BREAKFAST)
     ]
 
-    participants = list(Participant.objects.filter(camp=camp, archived_at__isnull=True))
+    participants = list(
+        Participant.objects.filter(camp=camp, archived_at__isnull=True)
+        .select_related("camp")
+        .prefetch_related(
+            Prefetch(
+                "attendance_days",
+                queryset=AttendanceDay.objects.filter(family_member__isnull=True, is_present=True),
+                to_attr=_ATTENDANCE_PREFETCH_ATTRIBUTE,
+            )
+        )
+    )
     family_members = list(
         ParticipantFamilyMember.objects.filter(
             guardian__camp=camp,
@@ -1470,7 +1480,12 @@ def calculate_position_report(camp: Camp) -> PositionReport:
     ]
 
     participant_nights = sum(
-        participant.actual_nights or participant.booked_nights or 0 for participant in participants
+        (
+            participant.effective_attendance_nights
+            if participant.attendance_tracking_enabled
+            else participant.actual_nights or participant.booked_nights or 0
+        )
+        for participant in participants
     )
     family_member_nights = sum(
         member.effective_attendance_nights if member.attendance_tracking_enabled else member.booked_nights or 0
