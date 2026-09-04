@@ -1,7 +1,7 @@
 import pytest
 from django.contrib.auth.models import Permission
 
-from billing.permissions import ADMIN_GROUP
+from billing.permissions import ADMIN_GROUP, EDITOR_GROUP
 from billing.roles import bootstrap_default_roles
 
 APP_ADMIN_PERMISSION_MODELS = {
@@ -25,6 +25,7 @@ APP_ADMIN_PERMISSION_MODELS = {
     "shift",
     "shiftassignment",
     "userprofile",
+    "shiftauditlog",
 }
 
 
@@ -62,3 +63,16 @@ def test_bootstrap_default_roles_removes_previously_granted_auth_permissions():
     admin_group.refresh_from_db()
     assert admin_group.name == ADMIN_GROUP
     assert admin_group.permissions.filter(pk=change_user.pk).exists() is False
+
+
+@pytest.mark.django_db
+def test_bootstrap_default_roles_grants_shift_audit_view_only():
+    admin_group, editor_group, _huebers_group = bootstrap_default_roles()
+
+    assert set(
+        admin_group.permissions.filter(content_type__model="shiftauditlog").values_list("codename", flat=True)
+    ) == {"view_shiftauditlog"}
+    assert set(
+        editor_group.permissions.filter(content_type__model="shiftauditlog").values_list("codename", flat=True)
+    ) == {"view_shiftauditlog"}
+    assert editor_group.name == EDITOR_GROUP

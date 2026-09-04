@@ -21,6 +21,8 @@ CREDIT_PAYOUT_OLD_TARGET = [("billing", "0066_credit_payout")]
 CREDIT_PAYOUT_NEW_TARGET = [("billing", "0067_positive_credit_payout_amount")]
 POSITION_REPORT_OLD_TARGET = CREDIT_PAYOUT_NEW_TARGET
 POSITION_REPORT_NEW_TARGET = [("billing", "0068_charge_position_report_description")]
+SHIFT_STAFFING_OLD_TARGET = [("billing", "0070_alter_camp_options_alter_dailyshifttemplate_options_and_more")]
+SHIFT_STAFFING_NEW_TARGET = [("billing", "0072_shift_staffing_audit")]
 
 
 def _create_historical_credit_payouts(historical_apps, amounts: list[Decimal]):
@@ -46,6 +48,40 @@ def _create_historical_credit_payouts(historical_apps, amounts: list[Decimal]):
 def _restore_current_migration_state() -> None:
     executor = MigrationExecutor(connection)
     executor.migrate(executor.loader.graph.leaf_nodes())
+
+
+@pytest.mark.django_db(transaction=True)
+def test_shift_staffing_migration_preserves_assignments_and_initializes_revision() -> None:
+    try:
+        executor = MigrationExecutor(connection)
+        executor.migrate(SHIFT_STAFFING_OLD_TARGET)
+        old_apps = executor.loader.project_state(SHIFT_STAFFING_OLD_TARGET).apps
+        Camp = old_apps.get_model("billing", "Camp")
+        Participant = old_apps.get_model("billing", "Participant")
+        Shift = old_apps.get_model("billing", "Shift")
+        ShiftAssignment = old_apps.get_model("billing", "ShiftAssignment")
+        camp = Camp.objects.create(name="Dienstmigration", year=2042)
+        participant = Participant.objects.create(camp=camp, first_name="Ada", last_name="Alt")
+        shift = Shift.objects.create(camp=camp, name="Bestand", date="2042-07-01")
+        assignment = ShiftAssignment.objects.create(shift=shift, participant=participant)
+
+        executor = MigrationExecutor(connection)
+        executor.migrate(SHIFT_STAFFING_NEW_TARGET)
+        new_apps = executor.loader.project_state(SHIFT_STAFFING_NEW_TARGET).apps
+        NewShift = new_apps.get_model("billing", "Shift")
+        NewAssignment = new_apps.get_model("billing", "ShiftAssignment")
+        NewAuditLog = new_apps.get_model("billing", "ShiftAuditLog")
+
+        assert NewShift.objects.get(pk=shift.pk).assignment_revision == 0
+        assert NewAssignment.objects.filter(pk=assignment.pk, shift_id=shift.pk).exists()
+        assert {
+            "shift_id_snapshot",
+            "shift_name_snapshot",
+            "shift_date_snapshot",
+        } <= {field.name for field in NewAuditLog._meta.fields}
+        assert NewAuditLog.objects.count() == 0
+    finally:
+        _restore_current_migration_state()
 
 
 def charge_columns() -> set[str]:

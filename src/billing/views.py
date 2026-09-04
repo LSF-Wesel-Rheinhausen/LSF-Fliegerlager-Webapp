@@ -77,6 +77,8 @@ from .forms import (
     QuickBookingForm,
     SharedExpenseApprovalForm,
     SharedExpenseRequestForm,
+    ShiftAssignmentAddForm,
+    ShiftAssignmentRemoveForm,
     ShiftForm,
     UserCreateForm,
     UserEditForm,
@@ -152,6 +154,7 @@ from .roles import (
 )
 from .services import (
     ExpenseReceiptStorageError,
+    add_shift_assignment,
     admin_interface_contacts,
     calculate_camp_settlements,
     calculate_meal_overview,
@@ -179,6 +182,7 @@ from .services import (
     participant_kiosk_summary,
     payment_audit_snapshot,
     preload_meal_booking_state_inputs,
+    remove_shift_assignment,
     replace_attendance_days,
     resolve_meal_price_rule,
     resolve_quick_booking_price_rule,
@@ -186,6 +190,7 @@ from .services import (
     restore_payment_from_audit_log,
     save_expense,
     sync_meal_signup_charges_for_camp,
+    update_shift_capacity,
 )
 
 logger = logging.getLogger(__name__)
@@ -1960,16 +1965,170 @@ def shift_create(request, camp_id):
     return render(request, "billing/form.html", {"form": form, "title": "Dienst anlegen", "camp": camp})
 
 
+def _shift_edit_context(request: HttpRequest, shift: Shift, form: ShiftForm) -> dict[str, Any]:
+    """Build bounded, camp-scoped staffing data for the shift edit page."""
+    assignments = list(
+        shift.assignments.select_related("participant", "family_member").order_by(
+            "participant__last_name",
+            "participant__first_name",
+            "family_member__last_name",
+            "family_member__first_name",
+            "pk",
+        )
+    )
+    shift_is_historical = shift.date < timezone.localdate()
+    for assignment in assignments:
+        assignment.requires_historical_confirmation = (  # type: ignore[attr-defined]
+            shift_is_historical or assignment.participant.status == Participant.Status.SETTLED
+        )
+
+    query = request.GET.get("q", "").strip()[:120]
+    candidates: list[dict[str, Any]] = []
+    can_manage_assignments = is_admin(request.user)
+    if can_manage_assignments and query:
+        name_filter = Q(first_name__icontains=query) | Q(last_name__icontains=query)
+        assigned_tokens = {
+            f"family-{assignment.family_member_id}"
+            if assignment.family_member_id is not None
+            else f"participant-{assignment.participant_id}"
+            for assignment in assignments
+        }
+        participants = Participant.objects.filter(
+            name_filter,
+            camp=shift.camp,
+            archived_at__isnull=True,
+            status__in=[Participant.Status.ACTIVE, Participant.Status.REGISTERED],
+            is_child=False,
+        ).order_by("last_name", "first_name", "pk")[:50]
+        family_members = (
+            ParticipantFamilyMember.objects.filter(
+                name_filter,
+                guardian__camp=shift.camp,
+                guardian__archived_at__isnull=True,
+                guardian__status__in=[Participant.Status.ACTIVE, Participant.Status.REGISTERED],
+                is_active=True,
+                role=ParticipantFamilyMember.Role.COMPANION,
+            )
+            .select_related("guardian")
+            .order_by("last_name", "first_name", "pk")[:50]
+        )
+        candidates.extend(
+            {"token": f"participant-{participant.pk}", "name": participant.full_name, "kind": "Teilnehmer"}
+            for participant in participants
+            if f"participant-{participant.pk}" not in assigned_tokens
+        )
+        candidates.extend(
+            {"token": f"family-{family_member.pk}", "name": family_member.full_name, "kind": "Begleitperson"}
+            for family_member in family_members
+            if f"family-{family_member.pk}" not in assigned_tokens
+        )
+        candidates.sort(key=lambda candidate: (candidate["name"].casefold(), candidate["token"]))
+        candidates = candidates[:50]
+
+    return {
+        "form": form,
+        "title": "Dienst bearbeiten",
+        "camp": shift.camp,
+        "shift": shift,
+        "assignments": assignments,
+        "assigned_count": len(assignments),
+        "assignment_candidates": candidates,
+        "assignment_query": query,
+        "can_manage_assignments": can_manage_assignments,
+        "shift_is_historical": shift_is_historical,
+    }
+
+
 @editor_required
 def shift_edit(request, shift_id):
     shift = get_object_or_404(Shift.objects.select_related("camp"), pk=shift_id)
     form = ShiftForm(request.POST or None, instance=shift)
-    if request.method == "POST" and form.is_valid():
+    if request.method == "POST":
         with transaction.atomic():
-            form.save()
-        messages.success(request, "Dienst wurde gespeichert.")
-        return redirect("shift-manage", camp_id=shift.camp.pk)
-    return render(request, "billing/form.html", {"form": form, "title": "Dienst bearbeiten", "camp": shift.camp})
+            locked_shift = Shift.objects.select_for_update().select_related("camp").get(pk=shift.pk)
+            locked_shift._allow_capacity_override = True
+            form = ShiftForm(request.POST, instance=locked_shift)
+            if form.is_valid():
+                new_required_slots = form.cleaned_data["required_slots"]
+                try:
+                    updated_shift = update_shift_capacity(
+                        shift_id=locked_shift.pk,
+                        required_slots=new_required_slots,
+                        expected_revision=form.cleaned_data.get("assignment_revision"),
+                        allow_over_capacity=form.cleaned_data["confirm_over_capacity"],
+                        confirm_historical=form.cleaned_data["confirm_historical"],
+                        changed_by=request.user,
+                        effective_date=form.cleaned_data["date"],
+                        audit_shift=form.instance,
+                    )
+                except ValidationError as error:
+                    form.add_error(None, error)
+                else:
+                    form.instance.required_slots = updated_shift.required_slots
+                    form.instance.assignment_revision = updated_shift.assignment_revision
+                    form.save()
+                    messages.success(request, "Dienst wurde gespeichert.")
+                    return redirect("shift-manage", camp_id=locked_shift.camp.pk)
+        shift = Shift.objects.select_related("camp").get(pk=shift_id)
+    return render(request, "billing/shift_edit.html", _shift_edit_context(request, shift, form))
+
+
+@admin_required
+@require_POST
+def shift_assignment_add(request, shift_id):
+    """Add one explicitly selected identity to a shift."""
+    shift = get_object_or_404(Shift, pk=shift_id)
+    form = ShiftAssignmentAddForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "Die Besetzungsanfrage ist ungültig.")
+        return redirect("shift-edit", shift_id=shift.pk)
+    try:
+        add_shift_assignment(
+            shift_id=shift.pk,
+            identity_token=form.cleaned_data["identity_token"],
+            expected_revision=form.cleaned_data["expected_revision"],
+            allow_over_capacity=form.cleaned_data["allow_over_capacity"],
+            confirm_historical=form.cleaned_data["confirm_historical"],
+            changed_by=request.user,
+        )
+    except (ObjectDoesNotExist, ValidationError) as error:
+        messages.error(
+            request, "; ".join(error.messages) if isinstance(error, ValidationError) else "Ungültiger Dienst."
+        )
+    else:
+        messages.success(request, "Ausführende Person wurde eingetragen.")
+    target = reverse("shift-edit", args=[shift.pk])
+    query = form.cleaned_data["q"].strip()
+    return redirect(f"{target}?{urlencode({'q': query})}" if query else target)
+
+
+@admin_required
+@require_POST
+def shift_assignment_remove(request, shift_id, assignment_id):
+    """Remove one exact assignment from a shift."""
+    shift = get_object_or_404(Shift, pk=shift_id)
+    form = ShiftAssignmentRemoveForm(request.POST)
+    if not form.is_valid():
+        if "confirm_removal" in form.errors:
+            messages.error(request, "Bitte die Entfernung ausdrücklich bestätigen.")
+        else:
+            messages.error(request, "Die Besetzungsanfrage ist ungültig.")
+        return redirect("shift-edit", shift_id=shift.pk)
+    try:
+        remove_shift_assignment(
+            shift_id=shift.pk,
+            assignment_id=assignment_id,
+            expected_revision=form.cleaned_data["expected_revision"],
+            confirm_historical=form.cleaned_data["confirm_historical"],
+            changed_by=request.user,
+        )
+    except (ObjectDoesNotExist, ValidationError) as error:
+        messages.error(
+            request, "; ".join(error.messages) if isinstance(error, ValidationError) else "Ungültige Zuordnung."
+        )
+    else:
+        messages.success(request, "Ausführende Person wurde ausgetragen.")
+    return redirect("shift-edit", shift_id=shift.pk)
 
 
 @editor_required

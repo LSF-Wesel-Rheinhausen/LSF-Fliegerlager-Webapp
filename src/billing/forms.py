@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import UploadedFile
 from django.core.validators import FileExtensionValidator, RegexValidator
 from django.db import models, transaction
+from django.utils import timezone
 from django.utils.formats import number_format
 
 from .models import (
@@ -1778,6 +1779,28 @@ class MealStandardPricesForm(forms.Form):
 
 
 class ShiftForm(forms.ModelForm):
+    assignment_revision = forms.IntegerField(required=False, min_value=0, widget=forms.HiddenInput)
+    confirm_over_capacity = forms.BooleanField(
+        required=False,
+        label="Unterbesetzung ausdrücklich bestätigen",
+        help_text="Erforderlich, wenn weniger Plätze als bereits eingetragene Personen gespeichert werden.",
+    )
+    confirm_historical = forms.BooleanField(
+        required=False,
+        label="Historische Änderung ausdrücklich bestätigen",
+        help_text="Zusätzlich erforderlich, wenn ein vergangener Dienst unter die Ist-Besetzung gesetzt wird.",
+    )
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        if self.instance.pk and "assignment_revision" in self.fields:
+            self.fields["assignment_revision"].required = True
+            self.fields["assignment_revision"].initial = self.instance.assignment_revision
+        elif not self.instance.pk:
+            self.fields.pop("assignment_revision", None)
+            self.fields.pop("confirm_over_capacity", None)
+            self.fields.pop("confirm_historical", None)
+
     class Meta:
         model = Shift
         fields = ["name", "description", "date", "start_time", "end_time", "required_slots"]
@@ -1795,6 +1818,71 @@ class ShiftForm(forms.ModelForm):
             "start_time": forms.TimeInput(attrs={"type": "time"}),
             "end_time": forms.TimeInput(attrs={"type": "time"}),
         }
+
+
+class ShiftAdminForm(ShiftForm):
+    """Add confirmation validation to Django's raw shift editor."""
+
+    expected_assignment_revision = forms.IntegerField(required=False, min_value=0, widget=forms.HiddenInput)
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.fields.pop("assignment_revision", None)
+        if self.instance.pk:
+            self.fields["expected_assignment_revision"].required = True
+            self.fields["expected_assignment_revision"].initial = self.instance.assignment_revision
+        else:
+            self.fields.pop("expected_assignment_revision", None)
+
+    def _post_clean(self) -> None:
+        self.instance._allow_capacity_override = True
+        try:
+            cast(Any, forms.ModelForm)._post_clean(self)
+        finally:
+            del self.instance._allow_capacity_override
+
+    def clean(self) -> dict[str, Any]:
+        cleaned_data = cast(dict[str, Any], super().clean())
+        if not self.instance.pk or "required_slots" not in cleaned_data:
+            return cleaned_data
+        if cleaned_data.get("expected_assignment_revision") != self.instance.assignment_revision:
+            self.add_error(
+                "expected_assignment_revision",
+                "Die Dienstbesetzung wurde zwischenzeitlich geändert. Bitte lade die Seite neu.",
+            )
+        assigned_count = self.instance.assignments.count()
+        if cleaned_data["required_slots"] < assigned_count:
+            if not cleaned_data.get("confirm_over_capacity"):
+                self.add_error("confirm_over_capacity", "Bitte die Unterbesetzung ausdrücklich bestätigen.")
+            effective_date = cleaned_data.get("date")
+            if (
+                effective_date is not None
+                and effective_date < timezone.localdate()
+                and not cleaned_data.get("confirm_historical")
+            ):
+                self.add_error("confirm_historical", "Bitte die historische Änderung ausdrücklich bestätigen.")
+        submitted_camp = cleaned_data.get("camp")
+        if submitted_camp is not None and submitted_camp.pk != self.instance.camp_id and assigned_count:
+            self.add_error("camp", "Ein Lagerwechsel ist bei vorhandenen Dienstzuordnungen nicht zulässig.")
+        return cleaned_data
+
+
+class ShiftAssignmentAddForm(forms.Form):
+    """Validate one administrative add-assignment action."""
+
+    identity_token = forms.RegexField(regex=r"^(participant|family)-[1-9][0-9]*$", max_length=40)
+    expected_revision = forms.IntegerField(min_value=0)
+    allow_over_capacity = forms.BooleanField(required=False)
+    confirm_historical = forms.BooleanField(required=False)
+    q = forms.CharField(required=False, max_length=120)
+
+
+class ShiftAssignmentRemoveForm(forms.Form):
+    """Validate one administrative remove-assignment action."""
+
+    expected_revision = forms.IntegerField(min_value=0)
+    confirm_removal = forms.BooleanField(required=True)
+    confirm_historical = forms.BooleanField(required=False)
 
 
 class DailyShiftTemplateForm(forms.ModelForm):

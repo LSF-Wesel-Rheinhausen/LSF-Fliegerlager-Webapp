@@ -51,6 +51,10 @@ const test = base.extend({
     const dbPath = `/tmp/e2e_${workerInfo.workerIndex}.sqlite3`;
     const baseURL = `http://localhost:${port}`;
 
+    if (fs.existsSync(dbPath)) {
+      fs.unlinkSync(dbPath);
+    }
+
     const env = {
       ...process.env,
       PLAYWRIGHT_PORT: String(port),

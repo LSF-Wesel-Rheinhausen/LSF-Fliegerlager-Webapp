@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block content %}
+  <nav class="breadcrumbs" aria-label="Breadcrumbs">
+    <a href="{% url 'camp-list' %}">Lager</a> ›
+    <a href="{% url 'camp-detail' camp.pk %}">{{ camp.name }}</a> ›
+    <a href="{% url 'shift-manage' camp.pk %}">Dienste</a> ›
+    <span>Dienst bearbeiten</span>
+  </nav>
+
+  <section class="panel stack" aria-labelledby="shift-details-heading">
+    <h1 id="shift-details-heading">Dienst bearbeiten</h1>
+    <form method="post" class="form-grid">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="form-actions">
+        <button type="submit">Dienst speichern</button>
+      </div>
+    </form>
+  </section>
+
+  {% if can_manage_assignments %}
+    <section class="panel stack" aria-labelledby="shift-assignments-heading">
+      <div class="toolbar compact-toolbar">
+        <h2 id="shift-assignments-heading">Ausführende Personen</h2>
+        <strong>{{ assigned_count }} von {{ shift.required_slots }}</strong>
+      </div>
+
+      {% if assignments %}
+        <ul class="stack" aria-label="Aktuelle Dienstbesetzung">
+          {% for assignment in assignments %}
+            <li>
+              <strong>{{ assignment.operational_display_name }}</strong>
+              {% if assignment.family_member_id %}<span>Begleitperson</span>{% endif %}
+              <form method="post" action="{% url 'shift-assignment-remove' shift.pk assignment.pk %}" class="form-grid">
+                {% csrf_token %}
+                <input type="hidden" name="expected_revision" value="{{ shift.assignment_revision }}">
+                <label>
+                  <input type="checkbox" name="confirm_removal" required>
+                  Entfernung ausdrücklich bestätigen
+                </label>
+                {% if assignment.requires_historical_confirmation %}
+                  <label>
+                    <input type="checkbox" name="confirm_historical">
+                    Historische Änderung ausdrücklich bestätigen
+                  </label>
+                {% endif %}
+                <button type="submit" class="button button-danger">Austragen</button>
+              </form>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p><em>Noch niemand eingetragen.</em></p>
+      {% endif %}
+
+      <form method="get" class="form-grid" role="search">
+        <label for="assignment-search">Teilnehmende oder Begleitpersonen suchen</label>
+        <input id="assignment-search" name="q" type="search" maxlength="120" value="{{ assignment_query }}">
+        <button type="submit">Suchen</button>
+      </form>
+
+      {% if assignment_query %}
+        <h3>Suchergebnisse</h3>
+        {% if assignment_candidates %}
+          <ul class="stack">
+            {% for candidate in assignment_candidates %}
+              <li>
+                <strong>{{ candidate.name }}</strong> <span>{{ candidate.kind }}</span>
+                <form method="post" action="{% url 'shift-assignment-add' shift.pk %}" class="form-grid">
+                  {% csrf_token %}
+                  <input type="hidden" name="identity_token" value="{{ candidate.token }}">
+                  <input type="hidden" name="expected_revision" value="{{ shift.assignment_revision }}">
+                  <input type="hidden" name="q" value="{{ assignment_query }}">
+                  <label>
+                    <input type="checkbox" name="allow_over_capacity">
+                    Überbelegung ausdrücklich bestätigen
+                  </label>
+                  {% if shift_is_historical %}
+                    <label>
+                      <input type="checkbox" name="confirm_historical">
+                      Historische Änderung ausdrücklich bestätigen
+                    </label>
+                  {% endif %}
+                  <button type="submit">Eintragen</button>
+                </form>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p>Keine geeigneten Personen gefunden.</p>
+        {% endif %}
+      {% endif %}
+    </section>
+  {% endif %}
+{% endblock %}

@@ -1,9 +1,11 @@
 import datetime
 
 import pytest
+from django.core.exceptions import ValidationError
 from django.urls import reverse
 
-from billing.models import Camp, DailyShiftTemplate, Shift
+from billing.models import Camp, DailyShiftTemplate, Shift, ShiftAssignment
+from tests.factories import ParticipantFactory
 
 
 @pytest.fixture
@@ -120,3 +122,69 @@ def test_shift_templates_generate_preserves_individual_description(admin_client,
     existing_shift.refresh_from_db()
     assert existing_shift.description == "Individuelle Beschreibung"
     assert existing_shift.required_slots == 2
+
+
+@pytest.mark.django_db
+def test_shift_templates_generation_does_not_reduce_staffed_shift_capacity(admin_client, active_camp):
+    template = DailyShiftTemplate.objects.create(
+        camp=active_camp,
+        name="Besetzter Dienst",
+        required_slots=1,
+    )
+    existing_shift = Shift.objects.create(
+        camp=active_camp,
+        date=active_camp.starts_on,
+        name=template.name,
+        required_slots=2,
+    )
+    for index in range(2):
+        ShiftAssignment.objects.create(
+            shift=existing_shift,
+            participant=ParticipantFactory(camp=active_camp, first_name=f"Eingeteilt{index}"),
+        )
+    existing_shift.refresh_from_db()
+    revision_before = existing_shift.assignment_revision
+
+    response = admin_client.post(reverse("shift-templates-generate", args=[active_camp.pk]))
+
+    assert response.status_code == 302
+    existing_shift.refresh_from_db()
+    assert existing_shift.required_slots == 2
+    assert existing_shift.assignment_revision == revision_before
+
+
+@pytest.mark.django_db
+def test_shift_save_allows_unchanged_persisted_overstaffed_capacity(active_camp):
+    shift = Shift.objects.create(
+        camp=active_camp,
+        date=active_camp.starts_on,
+        name="Bereits überbesetzt",
+        required_slots=1,
+    )
+    for index in range(2):
+        ShiftAssignment.objects.create(
+            shift=shift,
+            participant=ParticipantFactory(camp=active_camp, first_name=f"Überbesetzt{index}"),
+        )
+
+    shift.description = "Unabhängige Änderung"
+    shift.save()
+
+    shift.refresh_from_db()
+    assert shift.required_slots == 1
+    assert shift.description == "Unabhängige Änderung"
+
+
+@pytest.mark.django_db
+def test_shift_save_rejects_changed_capacity_below_existing_staffing(active_camp):
+    shift = Shift.objects.create(
+        camp=active_camp,
+        date=active_camp.starts_on,
+        name="Besetzter Dienst",
+        required_slots=2,
+    )
+    ShiftAssignment.objects.create(shift=shift, participant=ParticipantFactory(camp=active_camp))
+
+    shift.required_slots = 0
+    with pytest.raises(ValidationError, match="Kapazität"):
+        shift.save()
