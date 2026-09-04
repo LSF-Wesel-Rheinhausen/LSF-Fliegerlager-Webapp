@@ -71,7 +71,7 @@ async function createMealScenario(page) {
   const campName = `Detail-Lager ${Date.now()}`;
   await page.getByRole("link", { name: "Lager anlegen" }).click();
   await page.getByLabel("Name").fill(campName);
-  await page.getByLabel("Jahr").fill(String(startDate.getFullYear()));
+  await page.getByLabel("Jahr").fill(dateInputValue(startDate).slice(0, 4));
   await page.getByLabel("Beginn").fill(dateInputValue(startDate));
   await page.getByLabel("Ende").fill(dateInputValue(endDate));
   await page.getByRole("button", { name: "Speichern" }).click();
@@ -137,7 +137,7 @@ test("Admin meal overview locks a dynamic dinner day without breakfast controls"
   const campName = `Dynamisches Essenslager ${Date.now()}`;
   await page.getByRole("link", { name: "Lager anlegen" }).click();
   await page.getByLabel("Name").fill(campName);
-  await page.getByLabel("Jahr").fill(String(startDate.getFullYear()));
+  await page.getByLabel("Jahr").fill(dateInputValue(startDate).slice(0, 4));
   await page.getByLabel("Beginn").fill(dateInputValue(startDate));
   await page.getByLabel("Ende").fill(dateInputValue(endDate));
   await page.getByRole("button", { name: "Speichern" }).click();

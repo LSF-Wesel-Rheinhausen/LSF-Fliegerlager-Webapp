@@ -58,17 +58,30 @@ def test_participant_profile_form_whitelists_and_normalizes_contact_fields():
     [
         ({"first_name": "   ", "last_name": "Valid"}, "first_name"),
         ({"first_name": "Valid", "last_name": "   "}, "last_name"),
-        (
-            {"first_name": "Future", "last_name": "Date", "birth_date": str(date.today() + timedelta(days=1))},
-            "birth_date",
-        ),
     ],
 )
-def test_profile_form_rejects_blank_names_and_future_birth_date(data, field):
+def test_profile_form_rejects_blank_names(data, field):
     form = profile_forms.ParticipantProfileForm(data, instance=ParticipantFactory())
 
     assert not form.is_valid()
     assert field in form.errors
+
+
+@pytest.mark.django_db
+def test_profile_form_rejects_birth_date_after_configured_local_date(monkeypatch):
+    local_today = date(2026, 7, 2)
+    monkeypatch.setattr(profile_forms.timezone, "localdate", lambda: local_today)
+    form = profile_forms.ParticipantProfileForm(
+        {
+            "first_name": "Future",
+            "last_name": "Date",
+            "birth_date": str(local_today + timedelta(days=1)),
+        },
+        instance=ParticipantFactory(),
+    )
+
+    assert not form.is_valid()
+    assert "birth_date" in form.errors
 
 
 @pytest.mark.django_db

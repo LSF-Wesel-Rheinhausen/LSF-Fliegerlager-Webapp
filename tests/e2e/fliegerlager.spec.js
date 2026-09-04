@@ -257,26 +257,57 @@ async function assertReadableContrast(locator, minimumRatio = 4.5) {
   expect(ratio, `Kontrast ${colors.foreground} auf ${colors.background}`).toBeGreaterThanOrEqual(minimumRatio);
 }
 
+const berlinDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/Berlin",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+function berlinDateParts(date) {
+  return Object.fromEntries(
+    berlinDateFormatter
+      .formatToParts(date)
+      .filter(({ type }) => type !== "literal")
+      .map(({ type, value }) => [type, value]),
+  );
+}
+
 function addDays(date, days) {
-  const copy = new Date(date);
-  copy.setDate(copy.getDate() + days);
-  return copy;
+  const { year, month, day } = berlinDateParts(date);
+  return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day) + days, 12));
 }
 
 function dateInputValue(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+  const { year, month, day } = berlinDateParts(date);
   return `${year}-${month}-${day}`;
 }
 
-function germanDate(date) {
-  return new Intl.DateTimeFormat("de-DE", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(date);
+function campYear(date) {
+  return berlinDateParts(date).year;
 }
+
+function germanDate(date) {
+  const { year, month, day } = berlinDateParts(date);
+  return `${day}.${month}.${year}`;
+}
+
+test("date helpers keep the Europe/Berlin calendar date across DST boundaries", () => {
+  const cases = [
+    ["2026-03-28T23:30:00Z", "2026-03-29", "29.03.2026"],
+    ["2026-03-29T22:30:00Z", "2026-03-30", "30.03.2026"],
+    ["2026-10-24T22:30:00Z", "2026-10-25", "25.10.2026"],
+    ["2026-10-25T23:30:00Z", "2026-10-26", "26.10.2026"],
+    ["2026-12-31T23:30:00Z", "2027-01-01", "01.01.2027"],
+  ];
+
+  for (const [instant, expectedInput, expectedGerman] of cases) {
+    const date = new Date(instant);
+    expect(dateInputValue(date)).toBe(expectedInput);
+    expect(germanDate(date)).toBe(expectedGerman);
+    expect(campYear(date)).toBe(expectedInput.slice(0, 4));
+  }
+});
 
 async function setupFirstAdmin(page) {
   await page.goto("/setup/");
@@ -319,7 +350,7 @@ async function createCamp(page, name = "Sommerlager", startOffsetDays = 2, durat
   const startDate = addDays(new Date(), startOffsetDays);
   const endDate = addDays(startDate, durationDays);
   await page.getByLabel("Name").fill(campName);
-  await page.getByLabel("Jahr").fill(String(startDate.getFullYear()));
+  await page.getByLabel("Jahr").fill(campYear(startDate));
   await page.getByLabel("Beginn").fill(dateInputValue(startDate));
   await page.getByLabel("Ende").fill(dateInputValue(endDate));
   await page.getByRole("button", { name: "Speichern" }).click();
