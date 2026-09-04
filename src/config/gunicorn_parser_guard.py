@@ -11,7 +11,7 @@ from gunicorn.http.errors import (
     NoMoreData,
 )
 
-SUPPORTED_GUNICORN_VERSION = "26.0.0"
+SUPPORTED_GUNICORN_VERSION = "26.2.0"
 MAX_CHUNK_METADATA_SIZE = 8192
 
 
