@@ -25,6 +25,8 @@ Start Django with `.venv/bin/python src/manage.py runserver`. For containers, co
 4. Run the verification commands below.
 5. Submit a Conventional Commit and a pull request with rationale and verification evidence.
 
+`npm run test:local` uses four portable pytest worker processes by default and keeps migration tests serial. Set `PYTEST_WORKERS=2` on a constrained system or `PYTEST_WORKERS=0` for the previous fully serial behavior when diagnosing failures.
+
 Do not commit `.env`, credentials, participant data, payment details, PINs, generated test artifacts, or local databases.
 
 ## Verification

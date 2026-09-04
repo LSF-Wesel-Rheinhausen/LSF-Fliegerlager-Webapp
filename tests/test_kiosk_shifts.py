@@ -232,7 +232,9 @@ def test_companion_bulk_signup_keeps_companion_identity(kiosk_client, active_cam
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(("age_seconds", "should_retract"), [(14 * 60, True), (15 * 60 - 1, True), (16 * 60, False)])
-def test_companion_retract_boundary_uses_companion_assignment(kiosk_client, active_camp, age_seconds, should_retract):
+def test_companion_retract_boundary_uses_companion_assignment(
+    kiosk_client, active_camp, age_seconds, should_retract, monkeypatch
+):
     guardian = Participant.objects.create(camp=active_camp, first_name="Guardian", last_name="User")
     companion = ParticipantFamilyMember.objects.create(
         guardian=guardian,
@@ -246,9 +248,11 @@ def test_companion_retract_boundary_uses_companion_assignment(kiosk_client, acti
         date=datetime.date.today() + datetime.timedelta(days=1),
     )
     assignment = ShiftAssignment.objects.create(shift=shift, participant=guardian, family_member=companion)
+    fixed_now = timezone.now()
     ShiftAssignment.objects.filter(pk=assignment.pk).update(
-        created_at=timezone.now() - datetime.timedelta(seconds=age_seconds)
+        created_at=fixed_now - datetime.timedelta(seconds=age_seconds)
     )
+    monkeypatch.setattr("billing.views.timezone.now", lambda: fixed_now)
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = guardian.pk
     session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
