@@ -221,6 +221,26 @@ def test_camp_meal_overview_renders_counts_for_admin(client):
 
 
 @pytest.mark.django_db
+def test_camp_meal_overview_shows_both_notification_settings(client):
+    camp = CampFactory(
+        starts_on=date(2026, 7, 1),
+        ends_on=date(2026, 7, 1),
+        meal_participant_reminders_enabled=False,
+        meal_order_reminders_enabled=True,
+    )
+    client.force_login(SuperUserFactory())
+
+    response = client.get(reverse("camp-meal-overview", args=[camp.pk]))
+    content = response.content.decode()
+
+    assert response.status_code == 200
+    assert "Teilnehmer-Erinnerungen" in content
+    assert "Teilnehmer-Erinnerungen: inaktiv" in content
+    assert "Bestellhinweise für das Essensteam: aktiv" in content
+    assert "Essenseinstellungen ändern" in content
+
+
+@pytest.mark.django_db
 def test_camp_meal_overview_exposes_dinner_calendar_states_without_breakfast_locks(client, monkeypatch):
     today = date(2026, 7, 1)
     fixed_now = timezone.make_aware(datetime(2026, 7, 1, 10, 0))

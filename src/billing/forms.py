@@ -421,12 +421,20 @@ class MealPreorderSettingsForm(forms.ModelForm):
 
 
 class MealCutoffForm(forms.ModelForm):
-    """Edit the camp's non-binding meal reminder time."""
+    """Edit a camp's meal reminder time and notification switches."""
 
     class Meta:
         model = Camp
-        fields = ["meal_booking_cutoff_time"]
-        labels = {"meal_booking_cutoff_time": "Richtzeit"}
+        fields = [
+            "meal_booking_cutoff_time",
+            "meal_participant_reminders_enabled",
+            "meal_order_reminders_enabled",
+        ]
+        labels = {
+            "meal_booking_cutoff_time": "Richtzeit",
+            "meal_participant_reminders_enabled": "Teilnehmer-Erinnerungen senden",
+            "meal_order_reminders_enabled": "Bestellhinweise an das Essensteam senden",
+        }
         widgets = {"meal_booking_cutoff_time": forms.TimeInput(attrs={"type": "time"})}
 
     def clean_meal_booking_cutoff_time(self):

@@ -4142,14 +4142,14 @@ def _group_kiosk_meal_calendar(days):
 
 @meal_manager_required
 def meal_cutoff_edit(request, camp_id):
-    """Edit only the non-binding meal reminder time for a camp."""
+    """Edit the non-binding meal reminder time and notification switches."""
     camp = get_object_or_404(Camp, pk=camp_id)
     form = MealCutoffForm(request.POST or None, instance=camp)
     if request.method == "POST" and form.is_valid():
         form.save()
-        messages.success(request, "Essens-Richtzeit wurde gespeichert.")
+        messages.success(request, "Essenseinstellungen wurden gespeichert.")
         return redirect("camp-meal-overview", camp_id=camp.pk)
-    return render(request, "billing/form.html", {"form": form, "title": "Essens-Richtzeit bearbeiten", "camp": camp})
+    return render(request, "billing/form.html", {"form": form, "title": "Essenseinstellungen bearbeiten", "camp": camp})
 
 
 @admin_required

@@ -1023,8 +1023,10 @@ def test_scheduled_meal_deadline_skips_existing_signup():
     now = timezone.make_aware(timezone.datetime(2026, 7, 20, 11, 0))
     camp = ParticipantFactory().camp
     camp.meal_booking_cutoff_time = time(12, 0)
+    camp.starts_on = now.date()
+    camp.ends_on = now.date() + timedelta(days=1)
     camp.is_active = True
-    camp.save(update_fields=["meal_booking_cutoff_time", "is_active"])
+    camp.save(update_fields=["meal_booking_cutoff_time", "starts_on", "ends_on", "is_active"])
     missing = ParticipantFactory(camp=camp)
     booked = ParticipantFactory(camp=camp)
     for index, participant in enumerate((missing, booked), start=1):
@@ -1050,6 +1052,139 @@ def test_scheduled_meal_deadline_skips_existing_signup():
     assert "12:00" in message.body
     assert "manuellen Sperre" in message.body
     assert "Essensfrist endet" not in message.title
+
+
+@pytest.mark.django_db
+def test_meal_notification_settings_default_to_enabled():
+    camp = CampFactory()
+
+    assert camp.meal_participant_reminders_enabled is True
+    assert camp.meal_order_reminders_enabled is True
+
+
+def _subscribe_for_both_meal_reminders(camp, now):
+    participant = ParticipantFactory(camp=camp)
+    PushSubscription.objects.create(
+        participant=participant,
+        endpoint="https://push.example.test/meal-participant",
+        p256dh="key",
+        auth="secret",
+        categories=["meal_deadlines"],
+    )
+    administrator = UserFactory(is_superuser=True, is_staff=True)
+    PushSubscription.objects.create(
+        user=administrator,
+        endpoint="https://push.example.test/meal-administrator",
+        p256dh="key",
+        auth="secret",
+        categories=["meal_orders_admin"],
+    )
+    generate_scheduled_notifications(now=now)
+    return list(PushMessage.objects.order_by("category"))
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("participant_reminders_enabled", "order_reminders_enabled", "expected_categories"),
+    [
+        (False, True, ["meal_orders_admin"]),
+        (True, False, ["meal_deadlines"]),
+        (False, False, []),
+    ],
+)
+def test_meal_notification_settings_independently_prevent_new_messages(
+    participant_reminders_enabled,
+    order_reminders_enabled,
+    expected_categories,
+):
+    now = timezone.make_aware(timezone.datetime(2026, 7, 20, 11, 0))
+    camp = CampFactory(
+        starts_on=now.date(),
+        ends_on=now.date() + timedelta(days=1),
+        meal_booking_cutoff_time=time(12, 0),
+        meal_participant_reminders_enabled=participant_reminders_enabled,
+        meal_order_reminders_enabled=order_reminders_enabled,
+    )
+
+    messages = _subscribe_for_both_meal_reminders(camp, now)
+
+    assert [message.category for message in messages] == expected_categories
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("starts_on", "ends_on", "expected_count"),
+    [
+        (date(2026, 7, 21), date(2026, 7, 24), 2),
+        (date(2026, 7, 18), date(2026, 7, 21), 2),
+        (date(2026, 7, 18), date(2026, 7, 20), 0),
+        (date(2026, 7, 22), date(2026, 7, 24), 0),
+        (None, date(2026, 7, 24), 0),
+        (date(2026, 7, 18), None, 0),
+        (date(2026, 7, 24), date(2026, 7, 18), 0),
+    ],
+)
+def test_meal_notifications_require_tomorrow_inside_a_valid_camp_period(starts_on, ends_on, expected_count):
+    now = timezone.make_aware(timezone.datetime(2026, 7, 20, 11, 0))
+    camp = CampFactory(
+        starts_on=starts_on,
+        ends_on=ends_on,
+        meal_booking_cutoff_time=time(12, 0),
+    )
+
+    messages = _subscribe_for_both_meal_reminders(camp, now)
+
+    assert len(messages) == expected_count
+
+
+@pytest.mark.django_db
+def test_disabling_meal_notifications_preserves_existing_outbox_messages():
+    now = timezone.make_aware(timezone.datetime(2026, 7, 20, 11, 0))
+    camp = CampFactory(
+        starts_on=now.date(),
+        ends_on=now.date() + timedelta(days=1),
+        meal_booking_cutoff_time=time(12, 0),
+    )
+    existing_messages = _subscribe_for_both_meal_reminders(camp, now)
+    existing_snapshots = [(message.pk, message.category, message.body) for message in existing_messages]
+    camp.meal_participant_reminders_enabled = False
+    camp.meal_order_reminders_enabled = False
+    camp.save(update_fields=["meal_participant_reminders_enabled", "meal_order_reminders_enabled"])
+
+    generate_scheduled_notifications(now=now + timedelta(minutes=5))
+
+    assert list(PushMessage.objects.order_by("category").values_list("pk", "category", "body")) == existing_snapshots
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("closed", "sent", "expected_categories"),
+    [
+        (True, False, ["meal_orders_admin"]),
+        (False, True, []),
+    ],
+)
+def test_meal_day_lock_and_order_state_keep_their_existing_notification_behavior(
+    closed,
+    sent,
+    expected_categories,
+):
+    now = timezone.make_aware(timezone.datetime(2026, 7, 20, 11, 0))
+    meal_date = now.date() + timedelta(days=1)
+    camp = CampFactory(starts_on=now.date(), ends_on=meal_date, meal_booking_cutoff_time=time(12, 0))
+    if closed:
+        MealBookingOverride.objects.create(
+            camp=camp,
+            meal_date=meal_date,
+            meal=MealSignup.Meal.DINNER,
+            state=MealBookingOverride.State.CLOSED,
+        )
+    if sent:
+        MealOrder.objects.create(camp=camp, meal_date=meal_date, is_sent=True)
+
+    messages = _subscribe_for_both_meal_reminders(camp, now)
+
+    assert [message.category for message in messages] == expected_categories
 
 
 @pytest.mark.django_db

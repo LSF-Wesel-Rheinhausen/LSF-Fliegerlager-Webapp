@@ -282,6 +282,16 @@ class Camp(TimeStampedModel):
     ends_on = models.DateField(null=True, blank=True, verbose_name="Ende")
     is_active = models.BooleanField(default=True, verbose_name="Aktiv")
     meal_booking_cutoff_time = models.TimeField(default=time(12, 0), verbose_name="Anmeldeschluss für Essen")
+    meal_participant_reminders_enabled = models.BooleanField(
+        default=True,
+        verbose_name="Teilnehmer-Erinnerungen zur Essensbuchung",
+        help_text="Erinnert Teilnehmer vor der Richtzeit daran, das Abendessen für morgen zu prüfen.",
+    )
+    meal_order_reminders_enabled = models.BooleanField(
+        default=True,
+        verbose_name="Bestellhinweise für das Essensteam",
+        help_text="Erinnert Admins, Bearbeiter und Hübers an die offene Caterer-Bestellung.",
+    )
     allow_breakfast_prebooking_before_camp = models.BooleanField(
         default=False,
         help_text="Frühstück kann vor Lagerbeginn im Kiosk vorbestellt werden.",
