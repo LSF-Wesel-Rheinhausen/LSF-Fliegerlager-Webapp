@@ -222,6 +222,35 @@ def queue_information_email_batch(
 
 
 @transaction.atomic
+def queue_account_recovery_email(
+    *,
+    recipient_email: str,
+    recipient_name: str,
+    subject: str,
+    body: str,
+    camp: Camp | None = None,
+) -> EmailDelivery:
+    """Queue one system-generated credential-recovery email."""
+    normalized_email = normalize_recipient_email(recipient_email)
+    clean_subject, clean_body = _validate_message(subject, body)
+    batch = EmailBatch.objects.create(
+        camp=camp,
+        kind=EmailBatch.Kind.ACCOUNT_RECOVERY,
+        subject=clean_subject,
+        body=clean_body,
+        created_by=None,
+    )
+    return EmailDelivery.objects.create(
+        batch=batch,
+        recipient_email=normalized_email,
+        recipient_names=[recipient_name],
+        dedupe_key=f"account-recovery:{hashlib.sha256(clean_body.encode()).hexdigest()}",
+        subject=clean_subject,
+        body_text=clean_body,
+    )
+
+
+@transaction.atomic
 def queue_settlement_email_batch(
     *,
     run: SettlementRun,

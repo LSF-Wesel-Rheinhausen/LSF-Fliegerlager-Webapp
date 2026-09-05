@@ -1,6 +1,7 @@
 from django.urls import path
 
 from . import (
+    account_recovery,
     attendance_views,
     email_views,
     kiosk_access_views,
@@ -12,6 +13,13 @@ from . import (
 )
 
 urlpatterns = [
+    path("account/recovery/", account_recovery.account_recovery_request, name="account-recovery-request"),
+    path("account/recovery/sent/", account_recovery.account_recovery_sent, name="account-recovery-sent"),
+    path(
+        "account/recovery/confirm/<str:token>/",
+        account_recovery.account_recovery_confirm,
+        name="account-recovery-confirm",
+    ),
     path("settings/email/", email_views.email_settings, name="email-settings"),
     path(
         "camps/<int:camp_id>/emails/information/",
@@ -252,6 +260,11 @@ urlpatterns = [
         name="kiosk-access",
     ),
     path("kiosk/notifications/", notification_views.kiosk_notification_settings, name="kiosk-notification-settings"),
+    path(
+        "kiosk/pin/recovery/",
+        account_recovery.kiosk_pin_recovery_request,
+        name="kiosk-pin-recovery-request",
+    ),
     path(
         "kiosk/notifications/subscriptions/",
         notification_views.kiosk_notification_subscribe,

@@ -45,6 +45,7 @@ ADMIN_CATEGORIES: dict[str, str] = {
     "meal_orders_admin": "Offene Essensbestellungen",
 }
 ALL_CATEGORIES = {**PARTICIPANT_CATEGORIES, **ADMIN_CATEGORIES}
+SECURITY_CATEGORY = "account_security"
 RETRY_DELAYS = (60, 300, 1800, 7200, 21600)
 PUSH_DELIVERY_TIMEOUT_SECONDS = 5
 User = get_user_model()
@@ -139,7 +140,7 @@ def _queue_for_subscriptions(
 ) -> int:
     if not settings.WEB_PUSH_ENABLED:
         return 0
-    if category not in ALL_CATEGORIES:
+    if category not in {*ALL_CATEGORIES, SECURITY_CATEGORY}:
         raise ValueError("Unsupported push category")
     if not target_url.startswith("/") or target_url.startswith("//"):
         raise ValueError("Push target URL must be a same-origin relative path")
@@ -160,6 +161,29 @@ def _queue_for_subscriptions(
         )
         created += int(was_created)
     return created
+
+
+def queue_account_recovery_push(
+    owner: Any,
+    *,
+    participant_owner: bool,
+    title: str,
+    body: str,
+    target_url: str,
+    dedupe_key: str,
+) -> int:
+    """Queue a mandatory security message for every active device owned by one account."""
+    owner_filter = {"participant": owner} if participant_owner else {"user": owner}
+    subscriptions = PushSubscription.objects.filter(is_active=True, **owner_filter)
+    return _queue_for_subscriptions(
+        subscriptions,
+        category=SECURITY_CATEGORY,
+        title=title,
+        body=body,
+        target_url=target_url,
+        dedupe_key=dedupe_key,
+        scheduled_for=None,
+    )
 
 
 def _administrative_users(*, include_meal_managers: bool = False) -> Any:

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+  <section class="panel narrow">
+    <h1>{{ title }}</h1>
+    <p class="hint">Wir senden einen zeitlich begrenzten Einmal-Link an die hinterlegte E-Mail-Adresse und an aktive Push-Geräte.</p>
+    <form method="post" class="stack">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="form-actions"><button type="submit" class="button">Link anfordern</button></div>
+    </form>
+  </section>
+{% endblock %}
