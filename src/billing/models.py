@@ -132,13 +132,14 @@ class EmailTestLog(TimeStampedModel):
 
 
 class EmailBatch(TimeStampedModel):
-    """Record one manually confirmed information or invoice delivery batch."""
+    """Record one manual message batch or system-generated recovery delivery."""
 
     class Kind(models.TextChoices):
         INFORMATION = "information", "Information"
         SETTLEMENT = "settlement", "Rechnung"
+        ACCOUNT_RECOVERY = "account_recovery", "Kontowiederherstellung"
 
-    camp = models.ForeignKey("Camp", on_delete=models.RESTRICT, related_name="email_batches")
+    camp = models.ForeignKey("Camp", on_delete=models.RESTRICT, related_name="email_batches", null=True, blank=True)
     settlement_run = models.ForeignKey(
         "SettlementRun",
         on_delete=models.RESTRICT,
@@ -161,8 +162,9 @@ class EmailBatch(TimeStampedModel):
         constraints = [
             models.CheckConstraint(
                 condition=(
-                    models.Q(kind="information", settlement_run__isnull=True)
-                    | models.Q(kind="settlement", settlement_run__isnull=False)
+                    models.Q(kind="information", settlement_run__isnull=True, camp__isnull=False)
+                    | models.Q(kind="settlement", settlement_run__isnull=False, camp__isnull=False)
+                    | models.Q(kind="account_recovery", settlement_run__isnull=True)
                 ),
                 name="email_batch_run_matches_kind",
             )
@@ -234,6 +236,63 @@ class LoginAttempt(TimeStampedModel):
 
     def __str__(self):
         return f"Login Attempts (Client {self.client_key[:8]})"
+
+
+class AccountRecoveryToken(TimeStampedModel):
+    """Store a hashed, expiring and single-use credential-recovery token."""
+
+    class Kind(models.TextChoices):
+        USER_PASSWORD = "user_password", "Admin-Passwort"
+        PARTICIPANT_PIN = "participant_pin", "Teilnehmer-PIN"
+
+    kind = models.CharField(max_length=24, choices=Kind.choices)
+    token_digest = models.CharField(max_length=64, unique=True, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="account_recovery_tokens",
+        null=True,
+        blank=True,
+    )
+    participant = models.ForeignKey(
+        "Participant",
+        on_delete=models.CASCADE,
+        related_name="account_recovery_tokens",
+        null=True,
+        blank=True,
+    )
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(kind="user_password", user__isnull=False, participant__isnull=True)
+                    | models.Q(kind="participant_pin", user__isnull=True, participant__isnull=False)
+                ),
+                name="recovery_token_owner_matches_kind",
+            )
+        ]
+        indexes = [models.Index(fields=["token_digest", "expires_at"], name="recovery_token_lookup_idx")]
+
+    def __str__(self) -> str:
+        return f"{self.get_kind_display()} ({self.pk})"
+
+
+class AccountRecoveryAttempt(TimeStampedModel):
+    """Persist a privacy-preserving sliding-window limit for recovery requests."""
+
+    client_key = models.CharField(max_length=64, unique=True)
+    request_timestamps = models.JSONField(default=list)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        indexes = [models.Index(fields=["updated_at"], name="recovery_attempt_updated_idx")]
+
+    def __str__(self) -> str:
+        return f"Recovery requests ({self.client_key[:8]})"
 
 
 class UserProfile(TimeStampedModel):
