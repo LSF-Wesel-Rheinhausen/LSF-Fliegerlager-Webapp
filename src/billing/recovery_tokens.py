@@ -10,6 +10,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.utils import timezone
+from django.utils.crypto import salted_hmac
 
 from .models import AccountRecoveryToken, Participant, ParticipantFamilyMember
 
@@ -47,7 +48,12 @@ def _pin_hash(owner: Any) -> str:
 def credential_fingerprint(kind: str, owner: Any) -> str:
     """Snapshot the current credential without duplicating its reusable hash."""
     credential_hash = str(owner.password) if kind == AccountRecoveryToken.Kind.USER_PASSWORD else _pin_hash(owner)
-    return hashlib.sha256(credential_hash.encode()).hexdigest()
+    return salted_hmac(
+        "billing.account-recovery-credential",
+        credential_hash,
+        secret=settings.SECRET_KEY,
+        algorithm="sha256",
+    ).hexdigest()
 
 
 def recovery_owner_is_active(kind: str, owner: Any) -> bool:
