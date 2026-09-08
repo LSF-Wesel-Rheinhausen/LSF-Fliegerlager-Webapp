@@ -13,6 +13,7 @@ from django.utils import timezone
 from pywebpush import WebPushException, webpush
 
 from .models import (
+    AccountRecoveryToken,
     Camp,
     Charge,
     Expense,
@@ -29,6 +30,7 @@ from .models import (
 )
 from .permissions import ADMIN_GROUP, EDITOR_GROUP, HUEBERS_GROUP
 from .push_endpoints import is_allowed_push_endpoint
+from .recovery_tokens import RECOVERY_TOKEN_PLACEHOLDER, activate_account_recovery_token, create_account_recovery_token
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +139,7 @@ def _queue_for_subscriptions(
     target_url: str,
     dedupe_key: str,
     scheduled_for: Any | None,
+    account_recovery: AccountRecoveryToken | None = None,
 ) -> int:
     if not settings.WEB_PUSH_ENABLED:
         return 0
@@ -157,6 +160,7 @@ def _queue_for_subscriptions(
                 "target_url": target_url[:500],
                 "scheduled_for": due_at,
                 "next_attempt_at": due_at,
+                "account_recovery": account_recovery,
             },
         )
         created += int(was_created)
@@ -166,24 +170,35 @@ def _queue_for_subscriptions(
 def queue_account_recovery_push(
     owner: Any,
     *,
-    participant_owner: bool,
+    kind: str,
     title: str,
     body: str,
     target_url: str,
-    dedupe_key: str,
 ) -> int:
     """Queue a mandatory security message for every active device owned by one account."""
-    owner_filter = {"participant": owner} if participant_owner else {"user": owner}
+    if kind == AccountRecoveryToken.Kind.USER_PASSWORD:
+        owner_filter = {"user": owner}
+    else:
+        participant = owner.guardian if kind == AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN else owner
+        owner_filter = {"participant": participant}
     subscriptions = PushSubscription.objects.filter(is_active=True, **owner_filter)
-    return _queue_for_subscriptions(
-        subscriptions,
-        category=SECURITY_CATEGORY,
-        title=title,
-        body=body,
-        target_url=target_url,
-        dedupe_key=dedupe_key,
-        scheduled_for=None,
-    )
+    created = 0
+    for subscription in subscriptions:
+        recovery = create_account_recovery_token(kind=kind, owner=owner)
+        queued = _queue_for_subscriptions(
+            [subscription],
+            category=SECURITY_CATEGORY,
+            title=title,
+            body=body,
+            target_url=target_url,
+            dedupe_key=f"account-recovery:{recovery.pk}",
+            scheduled_for=None,
+            account_recovery=recovery,
+        )
+        if not queued:
+            recovery.delete()
+        created += queued
+    return created
 
 
 def _administrative_users(*, include_meal_managers: bool = False) -> Any:
@@ -478,7 +493,7 @@ def send_due_push_messages(*, batch_size: int = 50) -> PushDeliveryResult:
     """Deliver one bounded outbox batch without exposing push capabilities in logs."""
     now = timezone.now()
     messages = list(
-        PushMessage.objects.select_related("subscription")
+        PushMessage.objects.select_related("subscription", "account_recovery")
         .filter(status=PushMessage.Status.PENDING, next_attempt_at__lte=now)
         .order_by("next_attempt_at", "pk")[:batch_size]
     )
@@ -486,6 +501,7 @@ def send_due_push_messages(*, batch_size: int = 50) -> PushDeliveryResult:
     with _NoRedirectSession() as requests_session:
         for message in messages:
             subscription = message.subscription
+            target_url = message.target_url
             if not is_allowed_push_endpoint(subscription.endpoint):
                 PushSubscription.objects.filter(pk=subscription.pk).update(is_active=False, updated_at=now)
                 message.status = PushMessage.Status.FAILED
@@ -493,6 +509,16 @@ def send_due_push_messages(*, batch_size: int = 50) -> PushDeliveryResult:
                 message.save(update_fields=["status", "last_error_code", "updated_at"])
                 failed += 1
                 continue
+            if message.account_recovery_id is not None:
+                raw_token = activate_account_recovery_token(message.account_recovery_id)
+                if raw_token is None or RECOVERY_TOKEN_PLACEHOLDER not in target_url:
+                    message.status = PushMessage.Status.FAILED
+                    message.last_error_code = "recovery_unavailable"
+                    message.attempts += 1
+                    message.save(update_fields=["status", "last_error_code", "attempts", "updated_at"])
+                    failed += 1
+                    continue
+                target_url = target_url.replace(RECOVERY_TOKEN_PLACEHOLDER, raw_token)
             try:
                 response = webpush(
                     subscription_info={
@@ -503,7 +529,7 @@ def send_due_push_messages(*, batch_size: int = 50) -> PushDeliveryResult:
                         {
                             "title": message.title,
                             "body": message.body,
-                            "url": message.target_url,
+                            "url": target_url,
                             "tag": message.dedupe_key,
                         },
                         ensure_ascii=False,

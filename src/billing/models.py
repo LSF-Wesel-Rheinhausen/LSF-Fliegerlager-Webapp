@@ -191,6 +191,13 @@ class EmailDelivery(TimeStampedModel):
         blank=True,
         related_name="email_deliveries",
     )
+    account_recovery = models.ForeignKey(
+        "AccountRecoveryToken",
+        on_delete=models.SET_NULL,
+        related_name="email_deliveries",
+        null=True,
+        blank=True,
+    )
     recipient_email = models.EmailField()
     recipient_names = models.JSONField(default=list)
     dedupe_key = models.CharField(max_length=180)
@@ -239,14 +246,16 @@ class LoginAttempt(TimeStampedModel):
 
 
 class AccountRecoveryToken(TimeStampedModel):
-    """Store a hashed, expiring and single-use credential-recovery token."""
+    """Store a delivery-activated, credential-bound recovery capability."""
 
     class Kind(models.TextChoices):
         USER_PASSWORD = "user_password", "Admin-Passwort"
         PARTICIPANT_PIN = "participant_pin", "Teilnehmer-PIN"
+        FAMILY_MEMBER_PIN = "family_member_pin", "Begleitpersonen-PIN"
 
     kind = models.CharField(max_length=24, choices=Kind.choices)
-    token_digest = models.CharField(max_length=64, unique=True, editable=False)
+    token_digest = models.CharField(max_length=64, unique=True, editable=False, null=True, blank=True)
+    credential_fingerprint = models.CharField(max_length=64, editable=False)
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -261,7 +270,14 @@ class AccountRecoveryToken(TimeStampedModel):
         null=True,
         blank=True,
     )
-    expires_at = models.DateTimeField()
+    family_member = models.ForeignKey(
+        "ParticipantFamilyMember",
+        on_delete=models.CASCADE,
+        related_name="account_recovery_tokens",
+        null=True,
+        blank=True,
+    )
+    expires_at = models.DateTimeField(null=True, blank=True)
     used_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
@@ -269,8 +285,24 @@ class AccountRecoveryToken(TimeStampedModel):
         constraints = [
             models.CheckConstraint(
                 condition=(
-                    models.Q(kind="user_password", user__isnull=False, participant__isnull=True)
-                    | models.Q(kind="participant_pin", user__isnull=True, participant__isnull=False)
+                    models.Q(
+                        kind="user_password",
+                        user__isnull=False,
+                        participant__isnull=True,
+                        family_member__isnull=True,
+                    )
+                    | models.Q(
+                        kind="participant_pin",
+                        user__isnull=True,
+                        participant__isnull=False,
+                        family_member__isnull=True,
+                    )
+                    | models.Q(
+                        kind="family_member_pin",
+                        user__isnull=True,
+                        participant__isnull=True,
+                        family_member__isnull=False,
+                    )
                 ),
                 name="recovery_token_owner_matches_kind",
             )
@@ -2333,6 +2365,13 @@ class PushMessage(TimeStampedModel):
         FAILED = "failed", "Fehlgeschlagen"
 
     subscription = models.ForeignKey(PushSubscription, on_delete=models.CASCADE, related_name="messages")
+    account_recovery = models.ForeignKey(
+        AccountRecoveryToken,
+        on_delete=models.SET_NULL,
+        related_name="push_messages",
+        null=True,
+        blank=True,
+    )
     category = models.CharField(max_length=40)
     title = models.CharField(max_length=120)
     body = models.CharField(max_length=300)

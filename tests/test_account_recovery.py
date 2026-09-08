@@ -1,14 +1,41 @@
+import hashlib
+import json
+import smtplib
+from unittest.mock import Mock, patch
 from urllib.parse import urlsplit
 
 import pytest
 from django.contrib.auth import authenticate
+from django.core import mail
+from django.core.mail import get_connection
 from django.test import RequestFactory
 from django.urls import reverse
 from django.utils import timezone
 
-from billing.kiosk_security import consume_login_failure, is_login_locked_out
-from billing.models import AccountRecoveryToken, EmailDelivery, PushMessage, PushSubscription
-from tests.factories import ParticipantFactory, SuperUserFactory, UserFactory
+from billing.email_delivery import send_due_email_deliveries
+from billing.kiosk_security import check_login_rate_limit, consume_login_failure, is_login_locked_out
+from billing.models import (
+    AccountRecoveryToken,
+    EmailBatch,
+    EmailConfiguration,
+    EmailDelivery,
+    ParticipantFamilyMember,
+    PushMessage,
+    PushSubscription,
+)
+from billing.notifications import send_due_push_messages
+from tests.factories import ParticipantFactory, ParticipantFamilyMemberFactory, SuperUserFactory, UserFactory
+
+
+def _send_recovery_emails() -> None:
+    configuration = EmailConfiguration.load()
+    configuration.enabled = True
+    configuration.host = "smtp.example.test"
+    configuration.from_name = "Fliegerlager"
+    configuration.from_email = "lager@example.test"
+    configuration.save()
+    result = send_due_email_deliveries(connection=get_connection("django.core.mail.backends.locmem.EmailBackend"))
+    assert result.failed == 0
 
 
 @pytest.mark.django_db
@@ -49,12 +76,28 @@ def test_admin_recovery_queues_email_and_push_without_disclosing_account(client,
     delivery = EmailDelivery.objects.get()
     assert delivery.recipient_email == "ada@example.test"
     assert delivery.subject == "Passwort zurücksetzen"
-    assert "/account/recovery/confirm/" in delivery.body_text
     message = PushMessage.objects.get(subscription=subscription)
     assert message.category == "account_security"
     assert message.title == "Passwort zurücksetzen"
-    assert message.target_url.startswith("/account/recovery/confirm/")
-    assert "password" not in message.target_url.casefold()
+    recovery_tokens = list(AccountRecoveryToken.objects.order_by("pk"))
+    assert len(recovery_tokens) == 2
+    assert all(recovery.expires_at is None for recovery in recovery_tokens)
+
+    _send_recovery_emails()
+    with patch("billing.notifications.webpush") as webpush:
+        assert send_due_push_messages().sent == 1
+    email_path = urlsplit(mail.outbox[0].body.splitlines()[-1]).path
+    push_path = json.loads(webpush.call_args.kwargs["data"])["url"]
+    email_secret = email_path.rstrip("/").rsplit("/", maxsplit=1)[-1]
+    push_secret = push_path.rstrip("/").rsplit("/", maxsplit=1)[-1]
+    html_body = mail.outbox[0].alternatives[0].content
+    delivery.refresh_from_db()
+    message.refresh_from_db()
+    assert email_secret in html_body
+    assert email_secret not in delivery.body_text
+    assert email_secret not in delivery.batch.body
+    assert push_secret not in message.target_url
+    assert email_secret != push_secret
 
     unknown_response = client.post(
         reverse("account-recovery-request"),
@@ -75,8 +118,15 @@ def test_admin_recovery_token_is_single_use_and_clears_login_lockout(client):
     for _ in range(5):
         consume_login_failure(request, username=user.username)
     assert is_login_locked_out(user.username) is True
-    client.post(reverse("account-recovery-request"), {"identifier": user.username}, follow=True)
-    path = urlsplit(EmailDelivery.objects.get().body_text.splitlines()[-1]).path
+    assert check_login_rate_limit(request, username=user.username) is False
+    client.post(
+        reverse("account-recovery-request"),
+        {"identifier": user.username},
+        REMOTE_ADDR="192.0.2.10",
+        follow=True,
+    )
+    _send_recovery_emails()
+    path = urlsplit(mail.outbox[0].body.splitlines()[-1]).path
 
     reset_page = client.get(path)
     assert reset_page.status_code == 200
@@ -86,6 +136,7 @@ def test_admin_recovery_token_is_single_use_and_clears_login_lockout(client):
     reset_response = client.post(
         path,
         {"new_password1": "A-secure-new-password-601", "new_password2": "A-secure-new-password-601"},
+        REMOTE_ADDR="192.0.2.10",
         follow=True,
     )
 
@@ -93,6 +144,7 @@ def test_admin_recovery_token_is_single_use_and_clears_login_lockout(client):
     assert "Passwort wurde geändert" in reset_response.content.decode()
     assert authenticate(username=user.username, password="A-secure-new-password-601") == user
     assert is_login_locked_out(user.username) is False
+    assert check_login_rate_limit(request, username=user.username) is True
     assert client.get(path).status_code == 400
 
 
@@ -118,11 +170,10 @@ def test_kiosk_recovery_queues_both_channels_and_sets_a_new_pin(kiosk_client, se
 
     assert response.status_code == 200
     assert "Falls ein aktives Konto passt" in response.content.decode()
-    delivery = EmailDelivery.objects.get()
-    path = urlsplit(delivery.body_text.splitlines()[-1]).path
     message = PushMessage.objects.get(subscription=subscription)
     assert message.title == "PIN zurücksetzen"
-    assert message.target_url == path
+    _send_recovery_emails()
+    path = urlsplit(mail.outbox[0].body.splitlines()[-1]).path
 
     reset_response = kiosk_client.post(path, {"pin": "8642", "pin_repeat": "8642"}, follow=True)
 
@@ -141,12 +192,18 @@ def test_recovery_rejects_expired_tokens_without_changing_credentials(client, se
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.setattr("billing.account_recovery.timezone.now", lambda: requested_at)
         client.post(reverse("account-recovery-request"), {"identifier": user.email})
-    path = urlsplit(EmailDelivery.objects.get().body_text.splitlines()[-1]).path
+    delivered_at = requested_at + timezone.timedelta(hours=2)
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr("billing.recovery_tokens.timezone.now", lambda: delivered_at)
+        _send_recovery_emails()
+    path = urlsplit(mail.outbox[0].body.splitlines()[-1]).path
+    recovery = AccountRecoveryToken.objects.get()
+    assert recovery.expires_at == delivered_at + timezone.timedelta(seconds=60)
 
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.setattr(
             "billing.account_recovery.timezone.now",
-            lambda: requested_at + timezone.timedelta(seconds=61),
+            lambda: delivered_at + timezone.timedelta(seconds=61),
         )
         response = client.post(
             path,
@@ -155,6 +212,41 @@ def test_recovery_rejects_expired_tokens_without_changing_credentials(client, se
 
     assert response.status_code == 400
     assert authenticate(username=user.username, password="old-password") == user
+
+
+@pytest.mark.django_db
+def test_recovery_email_retry_rotates_token_and_restarts_expiry(client, settings):
+    settings.ACCOUNT_RECOVERY_TIMEOUT_SECONDS = 60
+    user = UserFactory(email="retry@example.test")
+    client.post(reverse("account-recovery-request"), {"identifier": user.email})
+    configuration = EmailConfiguration.load()
+    configuration.enabled = True
+    configuration.host = "smtp.example.test"
+    configuration.from_name = "Fliegerlager"
+    configuration.from_email = "lager@example.test"
+    configuration.save()
+    connection = Mock()
+    connection.send_messages.side_effect = [smtplib.SMTPException("temporarily unavailable"), 1]
+    first_attempt_at = timezone.now()
+
+    with (
+        patch("billing.email_delivery.timezone.now", return_value=first_attempt_at),
+        patch("billing.recovery_tokens.timezone.now", return_value=first_attempt_at),
+    ):
+        assert send_due_email_deliveries(connection=connection).retried == 1
+    recovery = AccountRecoveryToken.objects.get()
+    first_digest = recovery.token_digest
+    assert recovery.expires_at == first_attempt_at + timezone.timedelta(seconds=60)
+
+    second_attempt_at = first_attempt_at + timezone.timedelta(seconds=61)
+    with (
+        patch("billing.email_delivery.timezone.now", return_value=second_attempt_at),
+        patch("billing.recovery_tokens.timezone.now", return_value=second_attempt_at),
+    ):
+        assert send_due_email_deliveries(connection=connection).sent == 1
+    recovery.refresh_from_db()
+    assert recovery.token_digest != first_digest
+    assert recovery.expires_at == second_attempt_at + timezone.timedelta(seconds=60)
 
 
 @pytest.mark.django_db
@@ -209,20 +301,109 @@ def test_push_only_account_can_recover_without_email(client, settings):
 
     recovery = AccountRecoveryToken.objects.get()
     message = PushMessage.objects.get()
-    raw_token = message.target_url.rstrip("/").rsplit("/", maxsplit=1)[-1]
-    assert recovery.token_digest != raw_token
+    assert recovery.expires_at is None
+    with patch("billing.notifications.webpush") as webpush:
+        assert send_due_push_messages().sent == 1
+    raw_token = json.loads(webpush.call_args.kwargs["data"])["url"].rstrip("/").rsplit("/", maxsplit=1)[-1]
+    recovery.refresh_from_db()
+    message.refresh_from_db()
+    assert recovery.token_digest == hashlib.sha256(raw_token.encode()).hexdigest()
+    assert raw_token not in message.target_url
     assert EmailDelivery.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_invalid_push_endpoint_does_not_activate_recovery_token(client, settings):
+    settings.WEB_PUSH_ENABLED = True
+    user = UserFactory(username="invalid-push", email="")
+    subscription = PushSubscription.objects.create(
+        user=user,
+        endpoint="https://push.example.test/initially-valid",
+        p256dh="key",
+        auth="auth",
+        categories=[],
+    )
+    PushSubscription.objects.filter(pk=subscription.pk).update(endpoint="http://push.example.test/insecure")
+    client.post(reverse("account-recovery-request"), {"identifier": user.username})
+
+    result = send_due_push_messages()
+
+    recovery = AccountRecoveryToken.objects.get()
+    assert result.failed == 1
+    assert recovery.token_digest is None
+    assert recovery.expires_at is None
 
 
 @pytest.mark.django_db
 def test_requesting_a_new_link_invalidates_the_previous_link(client):
     user = UserFactory(email="renew@example.test")
     client.post(reverse("account-recovery-request"), {"identifier": user.email})
-    first_path = urlsplit(EmailDelivery.objects.get().body_text.splitlines()[-1]).path
+    _send_recovery_emails()
+    first_path = urlsplit(mail.outbox[-1].body.splitlines()[-1]).path
 
     client.post(reverse("account-recovery-request"), {"identifier": user.email})
-    second_path = urlsplit(EmailDelivery.objects.latest("pk").body_text.splitlines()[-1]).path
+    _send_recovery_emails()
+    second_path = urlsplit(mail.outbox[-1].body.splitlines()[-1]).path
 
     assert first_path != second_path
     assert client.get(first_path).status_code == 400
     assert client.get(second_path).status_code == 200
+
+
+@pytest.mark.django_db
+def test_recovery_link_is_invalid_after_the_credential_changes(client):
+    user = UserFactory(email="changed@example.test", password="old-password")
+    client.post(reverse("account-recovery-request"), {"identifier": user.email})
+    _send_recovery_emails()
+    path = urlsplit(mail.outbox[-1].body.splitlines()[-1]).path
+
+    user.set_password("changed-outside-recovery")
+    user.save(update_fields=["password"])
+
+    assert client.get(path).status_code == 400
+
+
+@pytest.mark.django_db
+def test_companion_can_recover_own_pin_and_message_identifies_account(kiosk_client):
+    guardian = ParticipantFactory(email="shared@example.test")
+    companion = ParticipantFamilyMemberFactory(
+        guardian=guardian,
+        first_name="Grace",
+        last_name="Hopper",
+        email="shared@example.test",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    companion.pin.set_pin("2468")
+    companion.pin.save()
+
+    kiosk_client.post(reverse("kiosk-pin-recovery-request"), {"email": companion.email})
+
+    assert EmailDelivery.objects.count() == 2
+    queued_bodies = " ".join(EmailDelivery.objects.values_list("body_text", flat=True))
+    assert all(name in queued_bodies for name in [guardian.full_name, companion.full_name])
+    _send_recovery_emails()
+    companion_message = next(message for message in mail.outbox if companion.full_name in message.body)
+    path = urlsplit(companion_message.body.splitlines()[-1]).path
+    response = kiosk_client.post(path, {"pin": "8642", "pin_repeat": "8642"}, follow=True)
+
+    assert response.status_code == 200
+    companion.pin.refresh_from_db()
+    assert companion.pin.check_pin("8642") is True
+    guardian.pin.refresh_from_db()
+    assert guardian.pin.check_pin("8642") is False
+
+
+@pytest.mark.django_db
+def test_email_settings_excludes_system_recovery_batches(client):
+    admin = SuperUserFactory(email="admin@example.test")
+    client.post(reverse("account-recovery-request"), {"identifier": admin.email})
+    recovery_batch = EmailBatch.objects.get(kind=EmailBatch.Kind.ACCOUNT_RECOVERY)
+    client.force_login(admin)
+
+    response = client.get(reverse("email-settings"))
+
+    assert response.status_code == 200
+    assert recovery_batch not in list(response.context["recent_batches"])
+    assert client.get(reverse("email-batch-detail", args=[recovery_batch.pk])).status_code == 404
+    delivery = recovery_batch.deliveries.get()
+    assert client.post(reverse("email-delivery-retry", args=[delivery.pk])).status_code == 404

@@ -1,7 +1,5 @@
 """Secure self-service recovery for administrative passwords and participant PINs."""
 
-import hashlib
-import secrets
 from datetime import timedelta
 from typing import Any
 
@@ -20,8 +18,16 @@ from django.utils import timezone
 from .email_delivery import has_valid_recipient_email, queue_account_recovery_email
 from .forms import _is_trivial_personal_pin, validate_personal_kiosk_pin
 from .kiosk_security import _recent_attempts, clear_login_rate_limit, kiosk_client_key
-from .models import AccountRecoveryAttempt, AccountRecoveryToken, Participant
+from .models import AccountRecoveryAttempt, AccountRecoveryToken, Participant, ParticipantFamilyMember
 from .notifications import queue_account_recovery_push
+from .recovery_tokens import (
+    RECOVERY_TOKEN_PLACEHOLDER,
+    create_account_recovery_token,
+    find_valid_account_recovery,
+    invalidate_account_recovery_tokens,
+    lock_valid_account_recovery,
+    recovery_owner_is_active,
+)
 
 User = get_user_model()
 GENERIC_RECOVERY_MESSAGE = (
@@ -72,15 +78,6 @@ class RecoveryPinForm(forms.Form):
         return cleaned_data
 
 
-def _token_digest(raw_token: str) -> str:
-    return hashlib.sha256(raw_token.encode()).hexdigest()
-
-
-def _token_timeout() -> timedelta:
-    timeout_seconds = max(1, int(getattr(settings, "ACCOUNT_RECOVERY_TIMEOUT_SECONDS", 3600)))
-    return timedelta(seconds=timeout_seconds)
-
-
 def _consume_recovery_attempt(request: HttpRequest) -> bool:
     """Consume one request from a persistent per-client sliding window."""
     now = timezone.now()
@@ -112,26 +109,11 @@ def _rate_limited_response(request: HttpRequest) -> HttpResponse:
     return response
 
 
-@transaction.atomic
-def _issue_token(*, kind: str, owner: Any) -> tuple[AccountRecoveryToken, str]:
-    """Invalidate earlier links and return a newly persisted hashed token plus its raw secret."""
-    now = timezone.now()
-    owner_filter = {"participant": owner} if kind == AccountRecoveryToken.Kind.PARTICIPANT_PIN else {"user": owner}
-    AccountRecoveryToken.objects.filter(kind=kind, used_at__isnull=True, **owner_filter).update(used_at=now)
-    raw_token = secrets.token_urlsafe(32)
-    recovery = AccountRecoveryToken.objects.create(
-        kind=kind,
-        token_digest=_token_digest(raw_token),
-        expires_at=now + _token_timeout(),
-        **owner_filter,
-    )
-    return recovery, raw_token
-
-
 def _has_delivery_channel(owner: Any) -> bool:
     email = getattr(owner, "email", "")
+    push_owner = owner.guardian if isinstance(owner, ParticipantFamilyMember) else owner
     return bool(email and has_valid_recipient_email(email)) or (
-        settings.WEB_PUSH_ENABLED and owner.push_subscriptions.filter(is_active=True).exists()
+        settings.WEB_PUSH_ENABLED and push_owner.push_subscriptions.filter(is_active=True).exists()
     )
 
 
@@ -140,22 +122,36 @@ def _deliver_recovery(
     request: HttpRequest,
     *,
     owner: Any,
-    participant_owner: bool,
+    kind: str,
     subject: str,
     body_intro: str,
 ) -> None:
-    kind = AccountRecoveryToken.Kind.PARTICIPANT_PIN if participant_owner else AccountRecoveryToken.Kind.USER_PASSWORD
     if not _has_delivery_channel(owner):
         return
-    if participant_owner:
+    if kind == AccountRecoveryToken.Kind.PARTICIPANT_PIN:
         owner = Participant.objects.select_for_update().get(pk=owner.pk)
-    else:
+    elif kind == AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN:
+        owner = (
+            ParticipantFamilyMember.objects.select_related("guardian", "guardian__camp")
+            .select_for_update()
+            .get(pk=owner.pk)
+        )
+    elif kind == AccountRecoveryToken.Kind.USER_PASSWORD:
         owner = User.objects.select_for_update().get(pk=owner.pk)
-    recovery, raw_token = _issue_token(kind=kind, owner=owner)
-    target_path = reverse("account-recovery-confirm", kwargs={"token": raw_token})
-    name = owner.full_name if participant_owner else owner.get_full_name() or owner.get_username()
+    else:
+        raise ValueError("Unsupported account-recovery kind")
+    if not recovery_owner_is_active(kind, owner):
+        return
+    invalidate_account_recovery_tokens(kind=kind, owner=owner)
+    target_path = reverse("account-recovery-confirm", kwargs={"token": RECOVERY_TOKEN_PLACEHOLDER})
+    if kind == AccountRecoveryToken.Kind.USER_PASSWORD:
+        name = owner.get_full_name() or owner.get_username()
+    else:
+        name = owner.full_name
+    camp = owner.guardian.camp if kind == AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN else getattr(owner, "camp", None)
     email = getattr(owner, "email", "")
     if email and has_valid_recipient_email(email):
+        recovery = create_account_recovery_token(kind=kind, owner=owner)
         queue_account_recovery_email(
             recipient_email=email,
             recipient_name=name,
@@ -164,15 +160,15 @@ def _deliver_recovery(
                 f"{body_intro}\n\nDer Link ist zeitlich begrenzt und kann einmal verwendet werden.\n"
                 f"{request.build_absolute_uri(target_path)}"
             ),
-            camp=owner.camp if participant_owner else None,
+            camp=camp,
+            account_recovery=recovery,
         )
     queue_account_recovery_push(
         owner,
-        participant_owner=participant_owner,
+        kind=kind,
         title=subject,
         body="Öffne diesen zeitlich begrenzten Link, um neue Zugangsdaten festzulegen.",
         target_url=target_path,
-        dedupe_key=f"account-recovery:{recovery.pk}",
     )
 
 
@@ -196,9 +192,11 @@ def account_recovery_request(request: HttpRequest) -> HttpResponse:
         _deliver_recovery(
             request,
             owner=user,
-            participant_owner=False,
+            kind=AccountRecoveryToken.Kind.USER_PASSWORD,
             subject="Passwort zurücksetzen",
-            body_intro="Für dein Fliegerlager-Administrationskonto wurde ein neues Passwort angefordert.",
+            body_intro=(
+                f"Für das Fliegerlager-Administrationskonto {user.get_username()} wurde ein neues Passwort angefordert."
+            ),
         )
     return redirect("account-recovery-sent")
 
@@ -225,9 +223,35 @@ def kiosk_pin_recovery_request(request: HttpRequest) -> HttpResponse:
         _deliver_recovery(
             request,
             owner=participant,
-            participant_owner=True,
+            kind=AccountRecoveryToken.Kind.PARTICIPANT_PIN,
             subject="PIN zurücksetzen",
-            body_intro=f"Für dein Kiosk-Konto im Fliegerlager {participant.camp.name} wurde eine neue PIN angefordert.",
+            body_intro=(
+                f"Für das Kiosk-Konto {participant.full_name} im Fliegerlager {participant.camp.name} "
+                "wurde eine neue PIN angefordert."
+            ),
+        )
+    family_members = (
+        ParticipantFamilyMember.objects.filter(
+            email__iexact=form.cleaned_data["email"],
+            guardian__camp__is_active=True,
+            guardian__archived_at__isnull=True,
+            role=ParticipantFamilyMember.Role.COMPANION,
+            is_active=True,
+        )
+        .exclude(guardian__status=Participant.Status.PENDING_APPROVAL)
+        .select_related("guardian", "guardian__camp")
+        .order_by("pk")[:10]
+    )
+    for family_member in family_members:
+        _deliver_recovery(
+            request,
+            owner=family_member,
+            kind=AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN,
+            subject="PIN zurücksetzen",
+            body_intro=(
+                f"Für das Kiosk-Konto {family_member.full_name} im Fliegerlager "
+                f"{family_member.guardian.camp.name} wurde eine neue PIN angefordert."
+            ),
         )
     return redirect("account-recovery-sent")
 
@@ -235,25 +259,6 @@ def kiosk_pin_recovery_request(request: HttpRequest) -> HttpResponse:
 def account_recovery_sent(request: HttpRequest) -> HttpResponse:
     """Render the same completion response for matching and unknown identifiers."""
     return render(request, "billing/account_recovery_sent.html", {"message": GENERIC_RECOVERY_MESSAGE})
-
-
-def _valid_recovery(raw_token: str, *, lock: bool = False) -> AccountRecoveryToken | None:
-    if lock:
-        queryset = AccountRecoveryToken.objects.select_for_update(of=("self",))
-    else:
-        queryset = AccountRecoveryToken.objects.select_related("user", "participant", "participant__camp")
-    recovery = queryset.filter(token_digest=_token_digest(raw_token), used_at__isnull=True).first()
-    if recovery is None or recovery.expires_at <= timezone.now():
-        return None
-    if recovery.user_id is not None:
-        user = recovery.user
-        if user is None or not user.is_active:
-            return None
-    if recovery.participant_id is not None:
-        participant = recovery.participant
-        if participant is None or participant.archived_at is not None or not participant.camp.is_active:
-            return None
-    return recovery
 
 
 def _invalid_token_response(request: HttpRequest) -> HttpResponse:
@@ -269,7 +274,7 @@ def _protect_token_response(response: HttpResponse) -> HttpResponse:
 
 def account_recovery_confirm(request: HttpRequest, token: str) -> HttpResponse:
     """Consume one valid recovery token after a replacement credential passes validation."""
-    recovery = _valid_recovery(token)
+    recovery = find_valid_account_recovery(token)
     if recovery is None:
         return _invalid_token_response(request)
     if recovery.kind == AccountRecoveryToken.Kind.USER_PASSWORD:
@@ -287,24 +292,26 @@ def account_recovery_confirm(request: HttpRequest, token: str) -> HttpResponse:
         )
 
     with transaction.atomic():
-        locked_recovery = _valid_recovery(token, lock=True)
-        if locked_recovery is None:
+        locked_result = lock_valid_account_recovery(recovery.pk, token)
+        if locked_result is None:
             return _invalid_token_response(request)
+        locked_recovery, owner = locked_result
         if locked_recovery.kind == AccountRecoveryToken.Kind.USER_PASSWORD:
-            user = locked_recovery.user
-            if user is None:
-                return _invalid_token_response(request)
             assert isinstance(form, SetPasswordForm)
-            form.save()
-            clear_login_rate_limit(user.get_username())
+            user = owner
+            user.set_password(form.cleaned_data["new_password1"])
+            user.save(update_fields=["password"])
+            clear_login_rate_limit(user.get_username(), request=request)
             success_message = "Passwort wurde geändert. Du kannst dich jetzt anmelden."
             destination = "login"
+        elif locked_recovery.kind == AccountRecoveryToken.Kind.PARTICIPANT_PIN:
+            owner.pin.set_pin(form.cleaned_data["pin"])
+            owner.pin.save()
+            success_message = "PIN wurde geändert. Du kannst dich jetzt anmelden."
+            destination = "kiosk-login"
         else:
-            participant = locked_recovery.participant
-            if participant is None:
-                return _invalid_token_response(request)
-            participant.pin.set_pin(form.cleaned_data["pin"])
-            participant.pin.save()
+            owner.pin.set_pin(form.cleaned_data["pin"])
+            owner.pin.save()
             success_message = "PIN wurde geändert. Du kannst dich jetzt anmelden."
             destination = "kiosk-login"
         locked_recovery.used_at = timezone.now()

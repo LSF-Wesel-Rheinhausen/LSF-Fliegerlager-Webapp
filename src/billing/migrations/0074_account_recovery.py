@@ -54,13 +54,28 @@ class Migration(migrations.Migration):
                 (
                     "kind",
                     models.CharField(
-                        choices=[("user_password", "Admin-Passwort"), ("participant_pin", "Teilnehmer-PIN")],
+                        choices=[
+                            ("user_password", "Admin-Passwort"),
+                            ("participant_pin", "Teilnehmer-PIN"),
+                            ("family_member_pin", "Begleitpersonen-PIN"),
+                        ],
                         max_length=24,
                     ),
                 ),
-                ("token_digest", models.CharField(editable=False, max_length=64, unique=True)),
-                ("expires_at", models.DateTimeField()),
+                ("token_digest", models.CharField(blank=True, editable=False, max_length=64, null=True, unique=True)),
+                ("credential_fingerprint", models.CharField(editable=False, max_length=64)),
+                ("expires_at", models.DateTimeField(blank=True, null=True)),
                 ("used_at", models.DateTimeField(blank=True, null=True)),
+                (
+                    "family_member",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="account_recovery_tokens",
+                        to="billing.participantfamilymember",
+                    ),
+                ),
                 (
                     "participant",
                     models.ForeignKey(
@@ -88,10 +103,22 @@ class Migration(migrations.Migration):
                 "constraints": [
                     models.CheckConstraint(
                         condition=(
-                            models.Q(("kind", "user_password"), ("participant__isnull", True), ("user__isnull", False))
+                            models.Q(
+                                ("family_member__isnull", True),
+                                ("kind", "user_password"),
+                                ("participant__isnull", True),
+                                ("user__isnull", False),
+                            )
                             | models.Q(
+                                ("family_member__isnull", True),
                                 ("kind", "participant_pin"),
                                 ("participant__isnull", False),
+                                ("user__isnull", True),
+                            )
+                            | models.Q(
+                                ("family_member__isnull", False),
+                                ("kind", "family_member_pin"),
+                                ("participant__isnull", True),
                                 ("user__isnull", True),
                             )
                         ),
@@ -113,5 +140,27 @@ class Migration(migrations.Migration):
                 "ordering": ["-updated_at"],
                 "indexes": [models.Index(fields=["updated_at"], name="recovery_attempt_updated_idx")],
             },
+        ),
+        migrations.AddField(
+            model_name="emaildelivery",
+            name="account_recovery",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="email_deliveries",
+                to="billing.accountrecoverytoken",
+            ),
+        ),
+        migrations.AddField(
+            model_name="pushmessage",
+            name="account_recovery",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="push_messages",
+                to="billing.accountrecoverytoken",
+            ),
         ),
     ]
