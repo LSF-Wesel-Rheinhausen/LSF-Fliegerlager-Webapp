@@ -25,10 +25,38 @@ from billing.email_delivery import (
     send_due_email_deliveries,
     settlement_recipient_mapping,
 )
-from billing.models import EmailBatch, EmailConfiguration, EmailDelivery, EmailTestLog
+from billing.models import AccountRecoveryToken, EmailBatch, EmailConfiguration, EmailDelivery, EmailTestLog
 from billing.permissions import EDITOR_GROUP, HUEBERS_GROUP
 from billing.services import create_settlement_run
 from tests.factories import CampFactory, ChargeFactory, GroupFactory, ParticipantFactory, SuperUserFactory, UserFactory
+
+
+@pytest.mark.django_db
+def test_deleting_recovery_token_cascades_queued_email_delivery():
+    user = UserFactory()
+    token = AccountRecoveryToken.objects.create(
+        kind=AccountRecoveryToken.Kind.USER_PASSWORD,
+        user=user,
+        credential_fingerprint="f" * 64,
+    )
+    batch = EmailBatch.objects.create(
+        kind=EmailBatch.Kind.ACCOUNT_RECOVERY,
+        subject="Passwort zurücksetzen",
+        body="Link",
+    )
+    delivery = EmailDelivery.objects.create(
+        batch=batch,
+        account_recovery=token,
+        recipient_email="user@example.test",
+        recipient_names=[],
+        dedupe_key="account-recovery:1",
+        subject=batch.subject,
+        body_text=batch.body,
+    )
+
+    token.delete()
+
+    assert not EmailDelivery.objects.filter(pk=delivery.pk).exists()
 
 
 @pytest.mark.django_db

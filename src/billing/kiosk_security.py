@@ -10,6 +10,13 @@ from django.utils.crypto import salted_hmac
 
 from .models import CampKioskAccess, CampKioskRegistrationAttempt
 
+KIOSK_PIN_FINGERPRINT_SESSION_KEY = "kiosk_pin_fingerprint"
+
+
+def kiosk_pin_fingerprint(pin_hash: str) -> str:
+    """Return a non-reversible, stable fingerprint for a stored personal PIN hash."""
+    return salted_hmac("billing.kiosk-pin-session.v1", pin_hash, algorithm="sha256").hexdigest()
+
 
 def kiosk_client_address(request: HttpRequest) -> str:
     """Resolve one client address across an explicitly trusted reverse proxy."""

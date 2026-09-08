@@ -147,7 +147,7 @@ class Migration(migrations.Migration):
             field=models.ForeignKey(
                 blank=True,
                 null=True,
-                on_delete=django.db.models.deletion.SET_NULL,
+                on_delete=django.db.models.deletion.CASCADE,
                 related_name="email_deliveries",
                 to="billing.accountrecoverytoken",
             ),
@@ -158,7 +158,7 @@ class Migration(migrations.Migration):
             field=models.ForeignKey(
                 blank=True,
                 null=True,
-                on_delete=django.db.models.deletion.SET_NULL,
+                on_delete=django.db.models.deletion.CASCADE,
                 related_name="push_messages",
                 to="billing.accountrecoverytoken",
             ),

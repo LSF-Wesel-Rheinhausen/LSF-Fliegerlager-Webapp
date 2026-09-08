@@ -15,6 +15,7 @@ from pywebpush import WebPushException
 from requests import Response
 
 from billing.models import (
+    AccountRecoveryToken,
     Charge,
     Expense,
     MealBookingOverride,
@@ -40,6 +41,36 @@ from billing.notifications import (
 from billing.services import approve_shared_expense
 from billing.views import KIOSK_MODE_SESSION_KEY, KIOSK_PARTICIPANT_SESSION_KEY
 from tests.factories import CampFactory, ParticipantFactory, UserFactory
+
+
+@pytest.mark.django_db
+def test_deleting_recovery_token_cascades_queued_push_message():
+    user = UserFactory()
+    token = AccountRecoveryToken.objects.create(
+        kind=AccountRecoveryToken.Kind.USER_PASSWORD,
+        user=user,
+        credential_fingerprint="f" * 64,
+    )
+    subscription = PushSubscription.objects.create(
+        user=user,
+        endpoint="https://push.example.test/recovery",
+        p256dh="key",
+        auth="secret",
+        categories=["security"],
+    )
+    message = PushMessage.objects.create(
+        subscription=subscription,
+        account_recovery=token,
+        category="security",
+        title="Passwort zurücksetzen",
+        body="Link",
+        target_url="/account-recovery/PLACEHOLDER/",
+        dedupe_key="account-recovery:1",
+    )
+
+    token.delete()
+
+    assert not PushMessage.objects.filter(pk=message.pk).exists()
 
 
 @pytest.fixture(autouse=True)

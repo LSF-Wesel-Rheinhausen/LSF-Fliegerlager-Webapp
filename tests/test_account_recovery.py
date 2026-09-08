@@ -12,7 +12,8 @@ from django.test import RequestFactory
 from django.urls import reverse
 from django.utils import timezone
 
-from billing.email_delivery import send_due_email_deliveries
+from billing.email_delivery import queue_account_recovery_email, send_due_email_deliveries
+from billing.kiosk_access import KIOSK_PARTICIPANT_SESSION_KEY
 from billing.kiosk_security import check_login_rate_limit, consume_login_failure, is_login_locked_out
 from billing.models import (
     AccountRecoveryToken,
@@ -24,10 +25,11 @@ from billing.models import (
     PushSubscription,
 )
 from billing.notifications import send_due_push_messages
+from billing.recovery_tokens import create_account_recovery_token
 from tests.factories import ParticipantFactory, ParticipantFamilyMemberFactory, SuperUserFactory, UserFactory
 
 
-def _send_recovery_emails() -> None:
+def _send_recovery_emails(*, expected_failed: int = 0):
     configuration = EmailConfiguration.load()
     configuration.enabled = True
     configuration.host = "smtp.example.test"
@@ -35,7 +37,8 @@ def _send_recovery_emails() -> None:
     configuration.from_email = "lager@example.test"
     configuration.save()
     result = send_due_email_deliveries(connection=get_connection("django.core.mail.backends.locmem.EmailBackend"))
-    assert result.failed == 0
+    assert result.failed == expected_failed
+    return result
 
 
 @pytest.mark.django_db
@@ -182,6 +185,39 @@ def test_kiosk_recovery_queues_both_channels_and_sets_a_new_pin(kiosk_client, se
     participant.pin.refresh_from_db()
     assert participant.pin.check_pin("8642") is True
     assert kiosk_client.get(path).status_code == 400
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("owner_kind", ["participant", "companion"])
+def test_kiosk_recovery_revokes_existing_kiosk_session(kiosk_client, owner_kind):
+    participant = ParticipantFactory(email="owner@example.test")
+    participant.pin.set_pin("2468")
+    participant.pin.save()
+    if owner_kind == "participant":
+        owner = participant
+        login_token = f"participant-{participant.pk}"
+    else:
+        owner = ParticipantFamilyMemberFactory(
+            guardian=participant,
+            email="companion@example.test",
+            role=ParticipantFamilyMember.Role.COMPANION,
+        )
+        owner.pin.set_pin("2468")
+        owner.pin.save()
+        login_token = f"family-{owner.pk}"
+
+    login_response = kiosk_client.post(reverse("kiosk-login"), {"participant": login_token, "pin": "2468"})
+    assert login_response.status_code == 302
+
+    kiosk_client.post(reverse("kiosk-pin-recovery-request"), {"email": owner.email})
+    _send_recovery_emails()
+    path = urlsplit(mail.outbox[0].body.splitlines()[-1]).path
+    kiosk_client.post(path, {"pin": "8642", "pin_repeat": "8642"})
+
+    home_response = kiosk_client.get(reverse("kiosk-home"))
+    assert home_response.status_code == 302
+    assert home_response.url == reverse("kiosk-login")
+    assert KIOSK_PARTICIPANT_SESSION_KEY not in kiosk_client.session
 
 
 @pytest.mark.django_db
@@ -361,6 +397,46 @@ def test_recovery_link_is_invalid_after_the_credential_changes(client):
     user.save(update_fields=["password"])
 
     assert client.get(path).status_code == 400
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("owner_kind", ["admin", "participant", "companion"])
+def test_recovery_email_is_suppressed_when_owner_address_changes_before_delivery(owner_kind):
+    if owner_kind == "admin":
+        owner = SuperUserFactory(email="initial@example.test")
+        kind = AccountRecoveryToken.Kind.USER_PASSWORD
+    elif owner_kind == "participant":
+        owner = ParticipantFactory(email="initial@example.test")
+        kind = AccountRecoveryToken.Kind.PARTICIPANT_PIN
+    else:
+        owner = ParticipantFamilyMemberFactory(
+            guardian=ParticipantFactory(email="guardian@example.test"),
+            email="initial@example.test",
+            role=ParticipantFamilyMember.Role.COMPANION,
+        )
+        kind = AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN
+
+    recovery = create_account_recovery_token(kind=kind, owner=owner)
+    queue_account_recovery_email(
+        recipient_email=owner.email,
+        recipient_name=owner.full_name if hasattr(owner, "full_name") else owner.get_full_name(),
+        subject="Passwort zurücksetzen",
+        body="ACCOUNT_RECOVERY_TOKEN",
+        account_recovery=recovery,
+    )
+    owner.email = "changed@example.test"
+    owner.save(update_fields=["email"])
+
+    result = _send_recovery_emails(expected_failed=1)
+
+    delivery = EmailDelivery.objects.get()
+    recovery.refresh_from_db()
+    assert result.failed == 1
+    assert delivery.status == EmailDelivery.Status.FAILED
+    assert delivery.last_error_code == "recovery_unavailable"
+    assert recovery.token_digest is None
+    assert recovery.expires_at is None
+    assert mail.outbox == []
 
 
 @pytest.mark.django_db

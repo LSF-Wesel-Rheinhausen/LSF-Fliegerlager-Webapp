@@ -439,7 +439,10 @@ def _send_delivery(
 ) -> str:
     body_text = delivery.body_text
     if delivery.account_recovery_id is not None:
-        raw_token = activate_account_recovery_token(delivery.account_recovery_id)
+        raw_token = activate_account_recovery_token(
+            delivery.account_recovery_id,
+            recipient_email=delivery.recipient_email,
+        )
         if raw_token is None or RECOVERY_TOKEN_PLACEHOLDER not in body_text:
             raise AccountRecoveryDeliveryError("Account recovery is no longer deliverable")
         body_text = body_text.replace(RECOVERY_TOKEN_PLACEHOLDER, raw_token)

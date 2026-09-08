@@ -7,7 +7,8 @@ from typing import Any
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
+from django.core.validators import validate_email
 from django.db import transaction
 from django.utils import timezone
 from django.utils.crypto import salted_hmac
@@ -133,6 +134,26 @@ def _matches_owner(recovery: AccountRecoveryToken, owner: Any) -> bool:
     return False
 
 
+def _normalized_email(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().casefold()
+    try:
+        validate_email(normalized)
+    except ValidationError:
+        return None
+    return normalized
+
+
+def _matches_delivery_address(owner: Any, recipient_email: str | None) -> bool:
+    """Return whether a queued email still targets the owner's current address."""
+    if recipient_email is None:
+        return True
+    queued_email = _normalized_email(recipient_email)
+    owner_email = _normalized_email(getattr(owner, "email", None))
+    return queued_email is not None and queued_email == owner_email
+
+
 def recovery_matches_current_credential(recovery: AccountRecoveryToken, owner: Any) -> bool:
     """Return whether account state still matches the token's issuance snapshot."""
     return bool(
@@ -143,7 +164,7 @@ def recovery_matches_current_credential(recovery: AccountRecoveryToken, owner: A
 
 
 @transaction.atomic
-def activate_account_recovery_token(recovery_id: int) -> str | None:
+def activate_account_recovery_token(recovery_id: int, *, recipient_email: str | None = None) -> str | None:
     """Create a fresh in-memory bearer secret immediately before one delivery attempt."""
     initial = _initial_recovery(recovery_id)
     if initial is None:
@@ -152,7 +173,12 @@ def activate_account_recovery_token(recovery_id: int) -> str | None:
     if owner is None:
         return None
     recovery = AccountRecoveryToken.objects.select_for_update().filter(pk=recovery_id).first()
-    if recovery is None or recovery.used_at is not None or not recovery_matches_current_credential(recovery, owner):
+    if (
+        recovery is None
+        or recovery.used_at is not None
+        or not _matches_delivery_address(owner, recipient_email)
+        or not recovery_matches_current_credential(recovery, owner)
+    ):
         return None
     raw_token = secrets.token_urlsafe(32)
     now = timezone.now()

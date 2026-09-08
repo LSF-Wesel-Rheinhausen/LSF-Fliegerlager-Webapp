@@ -193,7 +193,7 @@ class EmailDelivery(TimeStampedModel):
     )
     account_recovery = models.ForeignKey(
         "AccountRecoveryToken",
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         related_name="email_deliveries",
         null=True,
         blank=True,
@@ -2367,7 +2367,7 @@ class PushMessage(TimeStampedModel):
     subscription = models.ForeignKey(PushSubscription, on_delete=models.CASCADE, related_name="messages")
     account_recovery = models.ForeignKey(
         AccountRecoveryToken,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         related_name="push_messages",
         null=True,
         blank=True,

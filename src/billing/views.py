@@ -92,9 +92,11 @@ from .kiosk_access import (
     clear_kiosk_identity_session,
 )
 from .kiosk_security import (
+    KIOSK_PIN_FINGERPRINT_SESSION_KEY,
     clear_login_rate_limit,
     consume_kiosk_registration_attempt,
     is_login_locked_out,
+    kiosk_pin_fingerprint,
 )
 from .models import (
     AttendanceDay,
@@ -638,6 +640,7 @@ def _kiosk_operation_redirect(request: HttpRequest, participant: Participant, ki
 def _clear_kiosk_session(request: HttpRequest) -> None:
     """Remove every participant identity and setup value from a kiosk session."""
     clear_kiosk_identity_session(request)
+    request.session.pop(KIOSK_PIN_FINGERPRINT_SESSION_KEY, None)
 
 
 def _activate_kiosk_mode(request: HttpRequest, kiosk_mode: str) -> None:
@@ -2369,8 +2372,8 @@ def _kiosk_participant_from_session(request, session_key):
     participant_id = request.session.get(session_key)
     if not participant_id:
         return None
-    return (
-        Participant.objects.select_related("camp")
+    participant = (
+        Participant.objects.select_related("camp", "pin")
         .prefetch_related(
             Prefetch(
                 "attendance_days",
@@ -2381,6 +2384,12 @@ def _kiosk_participant_from_session(request, session_key):
         .filter(pk=participant_id, camp__is_active=True, archived_at__isnull=True)
         .first()
     )
+    if participant is not None and not request.session.get(KIOSK_FAMILY_MEMBER_SESSION_KEY):
+        fingerprint = request.session.get(KIOSK_PIN_FINGERPRINT_SESSION_KEY)
+        if fingerprint and fingerprint != kiosk_pin_fingerprint(participant.pin.pin_hash):
+            _clear_kiosk_session(request)
+            return None
+    return participant
 
 
 def _kiosk_family_member_from_session(request, participant):
@@ -2388,7 +2397,7 @@ def _kiosk_family_member_from_session(request, participant):
     if not family_member_id or participant is None:
         return None
     family_member = (
-        ParticipantFamilyMember.objects.select_related("guardian", "guardian__camp")
+        ParticipantFamilyMember.objects.select_related("guardian", "guardian__camp", "pin")
         .filter(
             pk=family_member_id,
             guardian=participant,
@@ -2401,6 +2410,11 @@ def _kiosk_family_member_from_session(request, participant):
     )
     if family_member is None:
         request.session.pop(KIOSK_FAMILY_MEMBER_SESSION_KEY, None)
+    else:
+        fingerprint = request.session.get(KIOSK_PIN_FINGERPRINT_SESSION_KEY)
+        if fingerprint and fingerprint != kiosk_pin_fingerprint(family_member.pin.pin_hash):
+            _clear_kiosk_session(request)
+            return None
     return family_member
 
 
@@ -2536,8 +2550,12 @@ def kiosk_login(request, kiosk_mode="private"):
         family_member = form.cleaned_data.get("family_member")
         if family_member is not None:
             request.session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = family_member.pk
+            request.session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(family_member.pin.pin_hash)
         else:
             request.session.pop(KIOSK_FAMILY_MEMBER_SESSION_KEY, None)
+            request.session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(
+                form.cleaned_data["participant"].pin.pin_hash
+            )
         if kiosk_mode == "private":
             request.session.set_expiry(None)
         messages.success(request, "Du bist im Kiosk angemeldet.")
