@@ -19,9 +19,11 @@ PDF_CONTENT_BOTTOM = 55
 PDF_LINE_HEIGHT = 18
 PDF_META_LINE_HEIGHT = 11
 PDF_BOOKING_REFERENCES_PER_LINE = 6
+PDF_FIRST_PAGE_TABLE_TOP_OFFSET = 235
+PDF_TABLE_HEADER_SPACING = 22
 PDF_SUMMARY_TOP_SPACING = 10
 PDF_SUMMARY_FINAL_SPACING = 4
-PDF_PAYMENT_TOP_SPACING = 30
+PDF_PAYMENT_TOP_SPACING = 14
 PDF_PAYMENT_DEBIT_BOX_HEIGHT = 65
 PDF_PAYMENT_CREDIT_BOX_HEIGHT = 70
 PDF_PREVIEW_CONTENT_SECURITY_POLICY = "default-src 'none'; frame-ancestors 'self'"
@@ -544,7 +546,7 @@ def _draw_invoice_table_header(pdf, y: float) -> float:
     pdf.drawRightString(width - 120, y, "MENGE")
     pdf.drawRightString(width - 58, y, "SUMME")
     pdf.setFillColorRGB(*PDF_TEXT_DARK)
-    return y - 18
+    return y - PDF_TABLE_HEADER_SPACING
 
 
 def _draw_invoice_footer(pdf) -> None:
@@ -661,7 +663,7 @@ def _draw_page_framework(pdf, document_context, subtitle, participant_name, *, c
             pdf.setFont("Helvetica", 8)
             pdf.drawRightString(width - 50, height - 219, subtitle)
         pdf.setFillColorRGB(*PDF_TEXT_DARK)
-        y = height - 255
+        y = height - PDF_FIRST_PAGE_TABLE_TOP_OFFSET
 
     y = _draw_invoice_table_header(pdf, y)
     _draw_invoice_footer(pdf)

@@ -523,6 +523,34 @@ def test_invoice_pdf_uses_structured_letterhead(invoice_source, recording_pdf_ca
 
 
 @pytest.mark.django_db
+def test_invoice_pdf_uses_a_readable_vertical_rhythm(recording_pdf_canvases):
+    participant = ParticipantFactory(
+        camp=CampFactory(name="Sommerlager", year=2026, iban="DE02120300000000202051"),
+        first_name="Ada",
+        last_name="Lovelace",
+    )
+    ChargeFactory(participant=participant, description="Lagerpauschale", unit_price=Decimal("145.00"))
+    PaymentFactory(participant=participant, amount=Decimal("50.00"))
+
+    participant_pdf_response(participant)
+
+    text_positions = recording_pdf_canvases[0].text_positions
+
+    def y_position(text):
+        return next(y for page, y, rendered_text in text_positions if page == 1 and rendered_text == text)
+
+    recipient_y = y_position("Ada Lovelace")
+    table_header_y = y_position("POSITION")
+    first_position_y = y_position("Lagerpauschale")
+    balance_y = y_position("Kontostand:")
+    payment_heading_y = y_position("Zahlungsinformationen")
+
+    assert 24 <= recipient_y - table_header_y <= 36
+    assert table_header_y - first_position_y >= 21
+    assert 44 <= balance_y - payment_heading_y <= 52
+
+
+@pytest.mark.django_db
 def test_invoice_pdf_shortens_letterhead_values_that_exceed_their_columns(recording_pdf_canvases):
     participant = ParticipantFactory(
         camp=CampFactory(name="L" * 160, year=2026),
