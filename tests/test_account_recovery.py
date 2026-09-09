@@ -64,6 +64,17 @@ def test_kiosk_login_links_to_pin_recovery(kiosk_client):
 
 
 @pytest.mark.django_db
+def test_kiosk_recovery_reuses_public_login_identity_choices(kiosk_client):
+    participant = ParticipantFactory(first_name="Visible", last_name="Pilot")
+
+    response = kiosk_client.get(reverse("kiosk-pin-recovery-request"))
+
+    assert response.status_code == 200
+    assert f'value="participant-{participant.pk}"' in response.content.decode()
+    assert participant.full_name in response.content.decode()
+
+
+@pytest.mark.django_db
 def test_admin_recovery_queues_email_and_push_without_disclosing_account(client, settings):
     settings.WEB_PUSH_ENABLED = True
     user = UserFactory(username="ada", email="Ada@example.test", password="old-password")
@@ -368,6 +379,82 @@ def test_push_only_account_can_recover_without_email(client, settings):
     assert recovery.token_digest == hashlib.sha256(raw_token.encode()).hexdigest()
     assert raw_token not in message.target_url
     assert EmailDelivery.objects.count() == 0
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("owner_kind", ["participant", "companion"])
+def test_kiosk_push_only_account_can_start_recovery_with_kiosk_identifier(kiosk_client, settings, owner_kind):
+    settings.WEB_PUSH_ENABLED = True
+    participant = ParticipantFactory(email="")
+    if owner_kind == "participant":
+        owner = participant
+        identifier = f"participant-{owner.pk}"
+    else:
+        owner = ParticipantFamilyMemberFactory(
+            guardian=participant,
+            email="",
+            role=ParticipantFamilyMember.Role.COMPANION,
+        )
+        identifier = f"family-{owner.pk}"
+    PushSubscription.objects.create(
+        participant=participant,
+        endpoint=f"https://push.example.test/{owner_kind}-recovery",
+        p256dh="key",
+        auth="auth",
+        categories=[],
+    )
+
+    response = kiosk_client.post(reverse("kiosk-pin-recovery-request"), {"participant": identifier})
+
+    assert response.status_code == 302
+    assert response.url == reverse("account-recovery-sent")
+    assert AccountRecoveryToken.objects.filter(
+        **({"participant": owner.pk} if owner_kind == "participant" else {"family_member": owner.pk})
+    ).exists()
+    assert PushMessage.objects.count() == 1
+    assert EmailDelivery.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_kiosk_recovery_unknown_identifier_does_not_disclose_or_deliver(kiosk_client, settings):
+    settings.WEB_PUSH_ENABLED = True
+
+    response = kiosk_client.post(
+        reverse("kiosk-pin-recovery-request"),
+        {"participant": "participant-999999"},
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    assert "Falls ein aktives Konto passt" in response.content.decode()
+    assert AccountRecoveryToken.objects.count() == 0
+    assert PushMessage.objects.count() == 0
+    assert EmailDelivery.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_kiosk_recovery_identifier_prefix_prevents_participant_family_collision(kiosk_client, settings):
+    settings.WEB_PUSH_ENABLED = True
+    participant = ParticipantFactory(email="")
+    companion = ParticipantFamilyMemberFactory(
+        guardian=participant,
+        email="",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    PushSubscription.objects.create(
+        participant=participant,
+        endpoint="https://push.example.test/prefix-recovery",
+        p256dh="key",
+        auth="auth",
+        categories=[],
+    )
+
+    kiosk_client.post(reverse("kiosk-pin-recovery-request"), {"participant": f"family-{participant.pk}"})
+
+    recovery = AccountRecoveryToken.objects.get()
+    assert recovery.family_member_id == companion.pk
+    assert recovery.participant_id is None
+    assert PushMessage.objects.count() == 1
 
 
 @pytest.mark.django_db

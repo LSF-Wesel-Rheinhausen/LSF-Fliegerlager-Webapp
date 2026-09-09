@@ -1,7 +1,7 @@
 """Secure self-service recovery for administrative passwords and participant PINs."""
 
 from datetime import timedelta
-from typing import Any
+from typing import Any, cast
 
 from django import forms
 from django.conf import settings
@@ -17,7 +17,7 @@ from django.utils import timezone
 from django.views.decorators.debug import sensitive_post_parameters
 
 from .email_delivery import has_valid_recipient_email, queue_account_recovery_email
-from .forms import _is_trivial_personal_pin, validate_personal_kiosk_pin
+from .forms import KioskLoginForm, _is_trivial_personal_pin, validate_personal_kiosk_pin
 from .kiosk_security import _recent_attempts, clear_login_rate_limit, kiosk_client_key
 from .models import AccountRecoveryAttempt, AccountRecoveryToken, Participant, ParticipantFamilyMember
 from .notifications import queue_account_recovery_push
@@ -43,9 +43,28 @@ class AccountRecoveryRequestForm(forms.Form):
 
 
 class KioskPinRecoveryRequestForm(forms.Form):
-    """Collect the address associated with a participant kiosk account."""
+    """Collect a visible kiosk identity or an email address for PIN recovery."""
 
-    email = forms.EmailField(label="E-Mail-Adresse", max_length=254)
+    participant = forms.ChoiceField(label="Teilnehmer auswählen", required=False)
+    email = forms.EmailField(label="Oder E-Mail-Adresse", required=False, max_length=254)
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        login_form = KioskLoginForm()
+        cast(forms.ChoiceField, self.fields["participant"]).choices = cast(
+            forms.ChoiceField, login_form.fields["participant"]
+        ).choices
+
+    def clean(self) -> dict[str, Any]:
+        cleaned_data = super().clean() or {}
+        participant = cleaned_data.get("participant")
+        email = cleaned_data.get("email")
+        if participant and email:
+            raise forms.ValidationError("Bitte wähle entweder einen Teilnehmer oder gib eine E-Mail-Adresse ein.")
+        if not participant and not email:
+            raise forms.ValidationError("Bitte wähle einen Teilnehmer aus oder gib eine E-Mail-Adresse ein.")
+        cleaned_data["identifier"] = participant or email
+        return cleaned_data
 
 
 class RecoveryPinForm(forms.Form):
@@ -203,23 +222,66 @@ def account_recovery_request(request: HttpRequest) -> HttpResponse:
 
 
 def kiosk_pin_recovery_request(request: HttpRequest) -> HttpResponse:
-    """Accept a participant email address while returning a non-enumerating response."""
+    """Accept a visible kiosk identity or email while returning a non-enumerating response."""
     form = KioskPinRecoveryRequestForm(request.POST or None)
-    if request.method != "POST" or not form.is_valid():
+    if request.method != "POST":
+        return _render_request_form(request, form=form, title="PIN zurücksetzen")
+    if not form.is_valid():
+        invalid_participant = form.errors.as_data().get("participant", [])
+        if any(error.code == "invalid_choice" for error in invalid_participant):
+            return redirect("account-recovery-sent")
         return _render_request_form(request, form=form, title="PIN zurücksetzen")
     if not _consume_recovery_attempt(request):
         return _rate_limited_response(request)
 
-    participants = (
-        Participant.objects.filter(
-            email__iexact=form.cleaned_data["email"],
-            camp__is_active=True,
-            archived_at__isnull=True,
+    identifier = form.cleaned_data["identifier"]
+    if identifier.startswith("participant-"):
+        participants = (
+            Participant.objects.filter(
+                pk=int(identifier.removeprefix("participant-")),
+                camp__is_active=True,
+                archived_at__isnull=True,
+            )
+            .exclude(status=Participant.Status.PENDING_APPROVAL)
+            .select_related("camp")
         )
-        .exclude(status=Participant.Status.PENDING_APPROVAL)
-        .select_related("camp")
-        .order_by("pk")
-    )
+        family_members = ParticipantFamilyMember.objects.none()
+    elif identifier.startswith("family-"):
+        participants = Participant.objects.none()
+        family_members = (
+            ParticipantFamilyMember.objects.filter(
+                pk=int(identifier.removeprefix("family-")),
+                guardian__camp__is_active=True,
+                guardian__archived_at__isnull=True,
+                role=ParticipantFamilyMember.Role.COMPANION,
+                is_active=True,
+            )
+            .exclude(guardian__status=Participant.Status.PENDING_APPROVAL)
+            .select_related("guardian", "guardian__camp")
+        )
+    else:
+        participants = (
+            Participant.objects.filter(
+                email__iexact=identifier,
+                camp__is_active=True,
+                archived_at__isnull=True,
+            )
+            .exclude(status=Participant.Status.PENDING_APPROVAL)
+            .select_related("camp")
+            .order_by("pk")
+        )
+        family_members = (
+            ParticipantFamilyMember.objects.filter(
+                email__iexact=identifier,
+                guardian__camp__is_active=True,
+                guardian__archived_at__isnull=True,
+                role=ParticipantFamilyMember.Role.COMPANION,
+                is_active=True,
+            )
+            .exclude(guardian__status=Participant.Status.PENDING_APPROVAL)
+            .select_related("guardian", "guardian__camp")
+            .order_by("pk")
+        )
     for participant in participants:
         _deliver_recovery(
             request,
@@ -231,18 +293,6 @@ def kiosk_pin_recovery_request(request: HttpRequest) -> HttpResponse:
                 "wurde eine neue PIN angefordert."
             ),
         )
-    family_members = (
-        ParticipantFamilyMember.objects.filter(
-            email__iexact=form.cleaned_data["email"],
-            guardian__camp__is_active=True,
-            guardian__archived_at__isnull=True,
-            role=ParticipantFamilyMember.Role.COMPANION,
-            is_active=True,
-        )
-        .exclude(guardian__status=Participant.Status.PENDING_APPROVAL)
-        .select_related("guardian", "guardian__camp")
-        .order_by("pk")
-    )
     for family_member in family_members:
         _deliver_recovery(
             request,

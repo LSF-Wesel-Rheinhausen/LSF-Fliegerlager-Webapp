@@ -2390,7 +2390,7 @@ def _kiosk_participant_from_session(request, session_key):
             _clear_kiosk_session(request)
             return None
         fingerprint = request.session.get(KIOSK_PIN_FINGERPRINT_SESSION_KEY)
-        if not family_member_id and fingerprint and fingerprint != kiosk_pin_fingerprint(participant.pin.pin_hash):
+        if not family_member_id and (not fingerprint or fingerprint != kiosk_pin_fingerprint(participant.pin.pin_hash)):
             _clear_kiosk_session(request)
             return None
     return participant
@@ -2416,7 +2416,7 @@ def _kiosk_family_member_from_session(request, participant):
         request.session.pop(KIOSK_FAMILY_MEMBER_SESSION_KEY, None)
     else:
         fingerprint = request.session.get(KIOSK_PIN_FINGERPRINT_SESSION_KEY)
-        if fingerprint and fingerprint != kiosk_pin_fingerprint(family_member.pin.pin_hash):
+        if not fingerprint or fingerprint != kiosk_pin_fingerprint(family_member.pin.pin_hash):
             _clear_kiosk_session(request)
             return None
     return family_member

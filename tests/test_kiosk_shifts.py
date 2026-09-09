@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from billing.models import Camp, Participant, ParticipantFamilyMember, Shift, ShiftAssignment
-from billing.views import KIOSK_FAMILY_MEMBER_SESSION_KEY, KIOSK_PARTICIPANT_SESSION_KEY
+from tests.kiosk_helpers import authenticate_kiosk_session
 
 
 @pytest.fixture
@@ -25,7 +25,7 @@ def active_camp(db):
 def logged_in_kiosk_client(kiosk_client, active_camp):
     p = Participant.objects.create(camp=active_camp, first_name="Kiosk", last_name="User")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = p.pk
+    authenticate_kiosk_session(session, p)
     session.save()
     kiosk_client.kiosk_user = p
     return kiosk_client
@@ -42,7 +42,7 @@ def pre_camp_kiosk_client(kiosk_client):
     )
     participant = Participant.objects.create(camp=camp, first_name="Kiosk", last_name="User")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     kiosk_client.kiosk_user = participant
     return kiosk_client
@@ -176,8 +176,7 @@ def test_companion_can_book_own_shift_without_replacing_guardian_assignment(kios
     )
     guardian_assignment = ShiftAssignment.objects.create(shift=shift, participant=guardian)
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = guardian.pk
-    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    authenticate_kiosk_session(session, guardian, family_member=companion)
     session.save()
 
     response = kiosk_client.post(reverse("kiosk-shifts"), {"action": "signup", "shift_id": shift.pk})
@@ -213,8 +212,7 @@ def test_companion_bulk_signup_keeps_companion_identity(kiosk_client, active_cam
         for index in range(2)
     ]
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = guardian.pk
-    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    authenticate_kiosk_session(session, guardian, family_member=companion)
     session.save()
 
     response = kiosk_client.post(
@@ -254,8 +252,7 @@ def test_companion_retract_boundary_uses_companion_assignment(
     )
     monkeypatch.setattr("billing.views.timezone.now", lambda: fixed_now)
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = guardian.pk
-    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    authenticate_kiosk_session(session, guardian, family_member=companion)
     session.save()
 
     response = kiosk_client.post(reverse("kiosk-shifts"), {"action": "retract", "shift_id": shift.pk})
@@ -279,8 +276,7 @@ def test_companion_can_offer_revoke_and_take_without_guardian_self_exchange(kios
     offered_shift = Shift.objects.create(camp=active_camp, name="Take Exchange", date=datetime.date.today())
     ShiftAssignment.objects.create(shift=offered_shift, participant=other, offered_for_exchange=True)
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = guardian.pk
-    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    authenticate_kiosk_session(session, guardian, family_member=companion)
     session.save()
 
     assert kiosk_client.post(reverse("kiosk-shifts"), {"action": "offer", "shift_id": own_shift.pk}).status_code == 302
@@ -329,8 +325,7 @@ def test_companion_can_take_sibling_companion_offer_but_not_own_identity(kiosk_c
         offered_for_exchange=True,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = guardian.pk
-    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = taking_companion.pk
+    authenticate_kiosk_session(session, guardian, family_member=taking_companion)
     session.save()
 
     response = kiosk_client.post(reverse("kiosk-shifts"), {"action": "signup", "shift_id": shift.pk})
@@ -430,8 +425,7 @@ def test_companion_shift_progress_uses_companion_stay_target(kiosk_client, activ
         departure_date=datetime.date.today() + datetime.timedelta(days=5),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = guardian.pk
-    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    authenticate_kiosk_session(session, guardian, family_member=companion)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-shifts"))
@@ -455,8 +449,7 @@ def test_shift_mutation_rejects_deactivated_companion_session(kiosk_client, acti
         date=datetime.date.today() + datetime.timedelta(days=2),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = guardian.pk
-    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    authenticate_kiosk_session(session, guardian, family_member=companion)
     session.save()
     ParticipantFamilyMember.objects.filter(pk=companion.pk).update(is_active=False)
 

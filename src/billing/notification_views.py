@@ -8,7 +8,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.http import require_POST
 
-from .kiosk_access import KIOSK_MODE_SESSION_KEY, KIOSK_PARTICIPANT_SESSION_KEY
+from .kiosk_access import KIOSK_MODE_SESSION_KEY
 from .models import Participant, PushSubscription
 from .notifications import (
     _queue_for_subscriptions,
@@ -16,7 +16,7 @@ from .notifications import (
 )
 from .push_endpoints import PUSH_ENDPOINT_ERROR, is_allowed_push_endpoint
 from .pwa_views import pwa_template_context
-from .views import _kiosk_context
+from .views import _kiosk_context, _kiosk_participant
 
 
 def _json_payload(request: HttpRequest) -> dict[str, Any] | None:
@@ -30,14 +30,7 @@ def _json_payload(request: HttpRequest) -> dict[str, Any] | None:
 def _private_participant(request: HttpRequest) -> Participant | None:
     if request.session.get(KIOSK_MODE_SESSION_KEY) != "private":
         return None
-    participant_id = request.session.get(KIOSK_PARTICIPANT_SESSION_KEY)
-    if not isinstance(participant_id, int):
-        return None
-    return Participant.objects.filter(
-        pk=participant_id,
-        archived_at__isnull=True,
-        camp__is_active=True,
-    ).first()
+    return _kiosk_participant(request)
 
 
 def _owner_filter(owner: Any, participant_owner: bool) -> dict[str, Any]:

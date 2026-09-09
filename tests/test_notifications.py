@@ -14,6 +14,8 @@ from django.utils import timezone
 from pywebpush import WebPushException
 from requests import Response
 
+from billing.kiosk_access import KIOSK_FAMILY_MEMBER_SESSION_KEY, KIOSK_MODE_SESSION_KEY, KIOSK_PARTICIPANT_SESSION_KEY
+from billing.kiosk_security import KIOSK_PIN_FINGERPRINT_SESSION_KEY, kiosk_pin_fingerprint
 from billing.models import (
     AccountRecoveryToken,
     Charge,
@@ -41,7 +43,6 @@ from billing.notifications import (
 )
 from billing.recovery_tokens import create_account_recovery_token
 from billing.services import approve_shared_expense
-from billing.views import KIOSK_MODE_SESSION_KEY, KIOSK_PARTICIPANT_SESSION_KEY
 from tests.factories import CampFactory, ParticipantFactory, UserFactory
 
 
@@ -225,6 +226,7 @@ def test_private_participant_can_subscribe_but_central_endpoint_does_not_exist(k
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session[KIOSK_MODE_SESSION_KEY] = "private"
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(participant.pin.pin_hash)
     session.save()
 
     response = kiosk_client.post(
@@ -236,6 +238,100 @@ def test_private_participant_can_subscribe_but_central_endpoint_does_not_exist(k
     assert response.status_code == 201
     assert PushSubscription.objects.filter(participant=participant, user__isnull=True).exists()
     assert kiosk_client.get("/central/kiosk/notifications/").status_code == 404
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("method", "route", "payload"),
+    [
+        ("get", "kiosk-notification-settings", None),
+        ("post", "kiosk-notification-subscribe", subscription_payload()),
+    ],
+)
+@pytest.mark.parametrize("family_member_session", [False, True])
+def test_kiosk_notification_endpoints_reject_session_without_pin_fingerprint(
+    kiosk_client, method, route, payload, family_member_session
+):
+    participant = ParticipantFactory()
+    family_member = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Grace",
+        last_name="Hopper",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_MODE_SESSION_KEY] = "private"
+    if family_member_session:
+        session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = family_member.pk
+    session.save()
+
+    request = getattr(kiosk_client, method)
+    response = request(
+        reverse(route),
+        data=json.dumps(payload) if payload is not None else None,
+        content_type="application/json" if payload is not None else None,
+    )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("family_member_session", [False, True])
+def test_kiosk_notification_settings_reject_stale_pin_fingerprint(kiosk_client, family_member_session):
+    participant = ParticipantFactory()
+    family_member = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Grace",
+        last_name="Hopper",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    identity = family_member if family_member_session else participant
+    identity.pin.set_pin("2468")
+    identity.pin.save()
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_MODE_SESSION_KEY] = "private"
+    if family_member_session:
+        session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = family_member.pk
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(identity.pin.pin_hash)
+    session.save()
+
+    identity.pin.set_pin("1357")
+    identity.pin.save()
+
+    response = kiosk_client.get(reverse("kiosk-notification-settings"))
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_kiosk_notification_mutations_reject_stale_pin_fingerprint(kiosk_client):
+    participant = ParticipantFactory()
+    subscription = PushSubscription.objects.create(
+        participant=participant,
+        endpoint="https://push.example.test/stale-kiosk-session",
+        p256dh="key",
+        auth="secret",
+        categories=["shifts"],
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_MODE_SESSION_KEY] = "private"
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(participant.pin.pin_hash)
+    session.save()
+    participant.pin.set_pin("1357")
+    participant.pin.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-notification-preferences", kwargs={"subscription_id": subscription.pk}),
+        data=json.dumps({"categories": ["meal_deadlines"]}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 403
+    subscription.refresh_from_db()
+    assert subscription.categories == ["shifts"]
 
 
 @pytest.mark.django_db
@@ -766,6 +862,7 @@ def test_private_participant_can_rename_own_push_subscription(kiosk_client):
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session[KIOSK_MODE_SESSION_KEY] = "private"
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(participant.pin.pin_hash)
     session.save()
 
     response = kiosk_client.post(
@@ -827,6 +924,7 @@ def test_private_participant_can_update_own_push_subscription_categories(kiosk_c
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session[KIOSK_MODE_SESSION_KEY] = "private"
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(participant.pin.pin_hash)
     session.save()
 
     response = kiosk_client.post(
@@ -952,6 +1050,7 @@ def test_private_participant_cannot_rename_foreign_push_subscription(kiosk_clien
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session[KIOSK_MODE_SESSION_KEY] = "private"
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(participant.pin.pin_hash)
     session.save()
 
     response = kiosk_client.post(
@@ -1439,6 +1538,7 @@ def test_linked_participant_quick_cancellation_passes_current_actor(
     )
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = cancelling_participant.pk
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(cancelling_participant.pin.pin_hash)
     session.save()
 
     with django_capture_on_commit_callbacks(execute=True):
@@ -1488,6 +1588,7 @@ def test_linked_participant_meal_retraction_passes_current_actor(
     )
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = cancelling_participant.pk
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(cancelling_participant.pin.pin_hash)
     session.save()
 
     with django_capture_on_commit_callbacks(execute=True):
@@ -1543,6 +1644,7 @@ def test_booking_invitation_view_queues_after_commit(kiosk_client, django_captur
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = inviter.pk
     session[KIOSK_MODE_SESSION_KEY] = "private"
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(inviter.pin.pin_hash)
     session.save()
 
     with django_capture_on_commit_callbacks(execute=True):
@@ -1583,6 +1685,7 @@ def test_linked_checkin_change_notifies_affected_partner(
     )
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = actor.pk
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(actor.pin.pin_hash)
     session.save()
     page_response = kiosk_client.get(reverse("kiosk-home"))
     partner_token = f"participant-{partner.pk}"

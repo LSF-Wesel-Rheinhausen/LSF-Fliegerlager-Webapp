@@ -16,7 +16,7 @@ from django.urls import resolve, reverse
 from django.utils import timezone
 
 from billing.forms import KioskBookingLinkInviteForm
-from billing.kiosk_access import KIOSK_FAMILY_MEMBER_SESSION_KEY, KIOSK_PARTICIPANT_SESSION_KEY
+from billing.kiosk_access import KIOSK_FAMILY_MEMBER_SESSION_KEY
 from billing.models import (
     Camp,
     Charge,
@@ -43,6 +43,7 @@ from billing.views import (
     _sign_kiosk_meal_retraction,
 )
 from tests.factories import CampFactory, ParticipantFactory, PriceRuleFactory, SuperUserFactory
+from tests.kiosk_helpers import authenticate_kiosk_session
 
 
 def _freeze_meal_booking_time(monkeypatch):
@@ -230,7 +231,7 @@ def test_quick_booking_snapshots_names_from_freshly_locked_identities(kiosk_clie
         applies_to_children=True,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     original_fetch_all = QuerySet._fetch_all
     identities_renamed = False
@@ -289,7 +290,7 @@ def test_quick_booking_rejects_camp_deactivated_before_dependency_lock(kiosk_cli
     participant = ParticipantFactory(camp=camp)
     rule = PriceRuleFactory(camp=camp, kind=PriceRule.Kind.DRINK)
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     original_fetch_all = QuerySet._fetch_all
     camp_deactivated = False
@@ -342,7 +343,7 @@ def test_quick_booking_rejects_participant_state_changed_before_dependency_lock(
         applies_to_companions=False,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     original_fetch_all = QuerySet._fetch_all
     state_changed = False
@@ -422,7 +423,7 @@ def test_quick_booking_rejects_effective_rule_changed_before_rule_lock(
         applies_to_companions=False,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     original_fetch_all = QuerySet._fetch_all
     rule_changed = False
@@ -485,7 +486,7 @@ def test_meal_booking_rejects_effective_rule_changed_before_rule_lock(
         applies_to_companions=False,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     original_fetch_all = QuerySet._fetch_all
     rule_changed = False
@@ -546,7 +547,7 @@ def test_quick_booking_notification_uses_locked_actor_name_snapshot(
     )
     rule = PriceRuleFactory(camp=camp, kind=PriceRule.Kind.DRINK, name="Wasser")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     with django_capture_on_commit_callbacks() as callbacks:
@@ -601,8 +602,7 @@ def test_companion_quick_booking_notification_attributes_actual_actor(
     )
     rule = PriceRuleFactory(camp=camp, kind=PriceRule.Kind.DRINK, name="Wasser")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
-    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    authenticate_kiosk_session(session, participant, family_member=companion)
     session.save()
 
     with django_capture_on_commit_callbacks(execute=True):
@@ -666,7 +666,7 @@ def test_quick_cancellation_notification_uses_locked_actor_name_snapshot(
         categories=["booking_links"],
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     original_fetch_all = QuerySet._fetch_all
     actor_renamed = False
@@ -731,7 +731,7 @@ def test_partner_invitation_notification_uses_locked_actor_name_snapshot(
         categories=["booking_links"],
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = inviter.pk
+    authenticate_kiosk_session(session, inviter)
     session.save()
 
     with django_capture_on_commit_callbacks() as callbacks:
@@ -787,7 +787,7 @@ def test_partner_response_notification_uses_locked_actor_name_snapshot(
         categories=["booking_links"],
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = actor.pk
+    authenticate_kiosk_session(session, actor)
     session.save()
 
     with django_capture_on_commit_callbacks() as callbacks:
@@ -820,7 +820,7 @@ def test_partner_activity_page_explains_scope_and_lists_link(kiosk_client):
         status=ParticipantBookingLink.Status.ACCEPTED,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-partner-activity"))
@@ -981,7 +981,7 @@ def test_target_builders_only_include_active_own_family_members():
 def test_kiosk_home_links_to_partner_activity_page(kiosk_client):
     participant = ParticipantFactory()
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -998,7 +998,7 @@ def test_kiosk_home_discloses_full_partner_scope_before_invitation_acceptance(ki
     invitee = ParticipantFactory(camp=camp)
     ParticipantBookingLink.objects.create(inviter=inviter, invitee=invitee)
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = invitee.pk
+    authenticate_kiosk_session(session, invitee)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -1035,7 +1035,7 @@ def test_quick_drink_dialog_lists_the_accepted_partner_household(kiosk_client):
         status=ParticipantBookingLink.Status.ACCEPTED,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -1059,7 +1059,7 @@ def test_partner_activity_page_contains_invite_and_revoke_controls(kiosk_client)
         status=ParticipantBookingLink.Status.ACCEPTED,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-partner-activity"))
@@ -1087,8 +1087,7 @@ def test_companion_cannot_manage_partner_authorizations(kiosk_client):
     invitee = ParticipantFactory(camp=camp)
     invitation = ParticipantBookingLink.objects.create(inviter=invitee, invitee=participant)
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
-    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    authenticate_kiosk_session(session, participant, family_member=companion)
     session.save()
 
     home_response = kiosk_client.get(reverse("kiosk-home"))
@@ -1114,7 +1113,7 @@ def test_pending_partner_invitation_cannot_be_accepted_after_inviter_is_archived
     inviter.archived_at = timezone.now()
     inviter.save(update_fields=["archived_at", "updated_at"])
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = invitee.pk
+    authenticate_kiosk_session(session, invitee)
     session.save()
 
     response = kiosk_client.post(
@@ -1142,7 +1141,7 @@ def test_pending_partner_invitation_cannot_be_accepted_after_invitee_is_archived
     invitee = ParticipantFactory(camp=camp)
     invitation = ParticipantBookingLink.objects.create(inviter=inviter, invitee=invitee)
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = invitee.pk
+    authenticate_kiosk_session(session, invitee)
     session.save()
     original_fetch_all = QuerySet._fetch_all
     invitee_archived = False
@@ -1186,7 +1185,7 @@ def test_partner_invitation_cannot_be_created_after_invitee_is_archived_before_p
     inviter = ParticipantFactory(camp=camp)
     invitee = ParticipantFactory(camp=camp)
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = inviter.pk
+    authenticate_kiosk_session(session, inviter)
     session.save()
     original_fetch_all = QuerySet._fetch_all
     invitee_archived = False
@@ -1229,7 +1228,7 @@ def test_partner_invitation_locks_and_revalidates_camp_before_participant_pair(
     inviter = ParticipantFactory(camp=camp)
     invitee = ParticipantFactory(camp=camp)
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = inviter.pk
+    authenticate_kiosk_session(session, inviter)
     session.save()
     original_fetch_all = QuerySet._fetch_all
     camp_deactivated = False
@@ -1276,7 +1275,7 @@ def test_partner_invitation_rechecks_duplicates_after_locking_the_pair(kiosk_cli
     invitee = ParticipantFactory(camp=camp)
     inviter = ParticipantFactory(camp=camp)
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = inviter.pk
+    authenticate_kiosk_session(session, inviter)
     session.save()
     original_is_valid = KioskBookingLinkInviteForm.is_valid
     original_fetch_all = QuerySet._fetch_all
@@ -1322,7 +1321,7 @@ def test_accepting_partner_invitation_closes_duplicate_pending_invitations(kiosk
     selected_link = ParticipantBookingLink.objects.create(inviter=inviter, invitee=invitee)
     duplicate_link = ParticipantBookingLink.objects.create(inviter=invitee, invitee=inviter)
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = invitee.pk
+    authenticate_kiosk_session(session, invitee)
     session.save()
 
     response = kiosk_client.post(
@@ -1360,7 +1359,7 @@ def test_accepted_partner_can_download_live_and_current_camp_snapshot(kiosk_clie
         balance=Decimal("42.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     live_response = kiosk_client.get(reverse("kiosk-participant-current-settlement-pdf", args=[partner.pk]))
@@ -1398,7 +1397,7 @@ def test_partner_authorization_never_exposes_snapshot_from_another_camp(kiosk_cl
         balance=Decimal("42.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     pdf_response = kiosk_client.get(reverse("kiosk-settlement-pdf", args=[foreign_snapshot.pk]))
@@ -1420,7 +1419,7 @@ def test_non_accepted_partner_cannot_download_live_invoice(kiosk_client, link_st
         status=link_status,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-participant-current-settlement-pdf", args=[partner.pk]))
@@ -1445,7 +1444,7 @@ def test_cross_camp_partner_link_never_authorizes_invoice(kiosk_client):
         status=ParticipantBookingLink.Status.ACCEPTED,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-participant-current-settlement-pdf", args=[partner.pk]))
@@ -1480,7 +1479,7 @@ def test_partner_activity_page_shows_full_partner_invoice_and_pdf_links(kiosk_cl
         balance=Decimal("8.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-partner-activity"))
@@ -1520,8 +1519,7 @@ def test_linked_household_checkin_records_actual_actor_and_before_after(kiosk_cl
         status=ParticipantBookingLink.Status.ACCEPTED,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
-    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    authenticate_kiosk_session(session, participant, family_member=companion)
     session.save()
     page_response = kiosk_client.get(reverse("kiosk-home"))
     partner_child_token = f"family-{partner_child.pk}"
@@ -1567,7 +1565,7 @@ def test_linked_household_checkin_records_actual_actor_and_before_after(kiosk_cl
     assert partner_child.full_name not in str(audit_log.after)
 
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = partner.pk
+    authenticate_kiosk_session(session, partner)
     session.pop(KIOSK_FAMILY_MEMBER_SESSION_KEY, None)
     session.save()
     activity_response = kiosk_client.get(reverse("kiosk-partner-activity"))
@@ -1595,7 +1593,7 @@ def test_checkin_rejects_family_member_deactivated_before_dependency_lock(kiosk_
         role=ParticipantFamilyMember.Role.CHILD,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     page_response = kiosk_client.get(reverse("kiosk-home"))
     child_token = f"family-{child.pk}"
@@ -1663,7 +1661,7 @@ def test_multi_partner_checkin_locks_authorizations_in_canonical_order(kiosk_cli
         status=ParticipantBookingLink.Status.ACCEPTED,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     page_response = kiosk_client.get(reverse("kiosk-home"))
     checkin_targets = {target["token"]: target for target in page_response.context["checkin_participants"]}
@@ -1726,7 +1724,7 @@ def test_stale_checkin_form_does_not_overwrite_unchanged_partner_row(kiosk_clien
         status=ParticipantBookingLink.Status.ACCEPTED,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     page_response = kiosk_client.get(reverse("kiosk-home"))
     checkin_targets = {target["token"]: target for target in page_response.context["checkin_participants"]}
@@ -1789,7 +1787,7 @@ def test_stale_dirty_checkin_row_rejects_entire_update(kiosk_client, monkeypatch
         status=ParticipantBookingLink.Status.ACCEPTED,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     page_response = kiosk_client.get(reverse("kiosk-home"))
     checkin_targets = {target["token"]: target for target in page_response.context["checkin_participants"]}
@@ -1850,7 +1848,7 @@ def test_linked_family_quick_booking_and_cancellation_are_audited(kiosk_client):
         unit_price=Decimal("1.50"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     booking_response = kiosk_client.post(
@@ -1879,7 +1877,7 @@ def test_linked_family_quick_booking_and_cancellation_are_audited(kiosk_client):
     assert partner_child.full_name not in str(created_log.after)
 
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = partner.pk
+    authenticate_kiosk_session(session, partner)
     session.save()
     cancellation_response = kiosk_client.post(
         reverse("kiosk-home"),
@@ -1902,7 +1900,7 @@ def test_linked_family_quick_booking_and_cancellation_are_audited(kiosk_client):
     assert partner_child.full_name not in str(cancelled_log.after)
 
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     activity_response = kiosk_client.get(reverse("kiosk-partner-activity"))
     assert "storniert" in activity_response.content.decode("utf-8")
@@ -1933,7 +1931,7 @@ def test_linked_family_quick_booking_keeps_fuer_inside_target_name_out_of_report
         applies_to_adults=False,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = actor.pk
+    authenticate_kiosk_session(session, actor)
     session.save()
 
     response = kiosk_client.post(
@@ -1976,7 +1974,7 @@ def test_partner_cancellation_retains_target_of_own_family_quick_booking(kiosk_c
         applies_to_children=True,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     booking_response = kiosk_client.post(
@@ -2004,7 +2002,7 @@ def test_partner_cancellation_retains_target_of_own_family_quick_booking(kiosk_c
         status=ParticipantBookingLink.Status.ACCEPTED,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = partner.pk
+    authenticate_kiosk_session(session, partner)
     session.save()
 
     cancellation_response = kiosk_client.post(
@@ -2048,7 +2046,7 @@ def test_quick_booking_rejects_family_role_changed_before_dependency_lock(kiosk_
         applies_to_companions=False,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     original_fetch_all = QuerySet._fetch_all
     role_changed = False
@@ -2118,7 +2116,7 @@ def test_partner_can_cancel_partners_own_recent_quick_booking(
         categories=["booking_links"],
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     page_response = kiosk_client.get(reverse("kiosk-home"))
@@ -2184,7 +2182,7 @@ def test_linked_family_meal_booking_and_retraction_are_audited(kiosk_client, mon
         unit_price=Decimal("5.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     booking_response = kiosk_client.post(
@@ -2210,7 +2208,7 @@ def test_linked_family_meal_booking_and_retraction_are_audited(kiosk_client, mon
     assert partner_child.full_name not in str(created_log.after)
 
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = partner.pk
+    authenticate_kiosk_session(session, partner)
     session.save()
     retraction_response = kiosk_client.post(
         reverse("kiosk-home"),
@@ -2268,7 +2266,7 @@ def test_meal_booking_rejects_family_guardian_changed_before_dependency_lock(kio
         unit_price=Decimal("5.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     original_fetch_all = QuerySet._fetch_all
     guardian_changed = False
@@ -2344,7 +2342,7 @@ def test_charge_less_partner_meal_retraction_is_audited_and_notified(
         categories=["booking_links"],
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     page_response = kiosk_client.get(reverse("kiosk-home"))
@@ -2430,7 +2428,7 @@ def test_paid_partner_meal_retraction_requires_signed_confirmation(kiosk_client,
         charge=charge,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     page_response = kiosk_client.get(reverse("kiosk-home"))
@@ -2647,7 +2645,7 @@ def test_partner_meal_retraction_revalidates_stale_state_after_row_lock(
         variant=MealSignup.Variant.NORMAL,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     page_response = kiosk_client.get(reverse("kiosk-home"))
     visible_signup = next(item for item in page_response.context["meal_signups"] if item.pk == signup.pk)
@@ -2960,7 +2958,7 @@ def test_partner_meal_batch_locks_all_signups_before_authorization(kiosk_client,
         for meal_date in (date(2026, 7, 2), date(2026, 7, 3))
     ]
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = actor.pk
+    authenticate_kiosk_session(session, actor)
     session.save()
     lock_events = []
     original_fetch_all = QuerySet._fetch_all
@@ -3038,7 +3036,7 @@ def test_partner_meal_batch_locks_camp_and_identities_before_creating_signup(kio
         is_default=True,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = actor.pk
+    authenticate_kiosk_session(session, actor)
     session.save()
     events = []
     original_fetch_all = QuerySet._fetch_all
@@ -3122,7 +3120,7 @@ def test_quick_booking_rejects_rule_that_does_not_apply_to_selected_partner_chil
         applies_to_companions=False,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -3181,7 +3179,7 @@ def test_quick_food_booking_resolves_the_selected_partner_child_price(kiosk_clie
         applies_to_companions=False,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -3228,7 +3226,7 @@ def test_adult_can_select_child_only_drink_for_authorized_partner_child(kiosk_cl
         applies_to_companions=False,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     page_response = kiosk_client.get(reverse("kiosk-home"))
@@ -3296,7 +3294,7 @@ def test_multi_account_quick_booking_requires_exact_cost_confirmation(kiosk_clie
         f"family-{partner_child.pk}",
     ]
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     request_data = {
         "action": "quick",
@@ -3447,7 +3445,7 @@ def test_multi_partner_quick_booking_locks_authorizations_in_canonical_order(kio
         f"family-{first_partner_child.pk}",
     ]
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     request_data = {
         "action": "quick",
@@ -3541,7 +3539,7 @@ def test_partner_quick_cancellation_locks_dependencies_before_authorization(kios
         description=f"{charge.booking_reference}: Schnellbuchung erstellt.",
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     lock_events = []
     original_fetch_all = QuerySet._fetch_all
@@ -3616,7 +3614,7 @@ def test_partner_meal_signup_charge_is_excluded_from_quick_cancellation(kiosk_cl
         charge=charge,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     page_response = kiosk_client.get(reverse("kiosk-home"))
@@ -3657,7 +3655,7 @@ def test_revoked_partner_authorization_immediately_removes_cross_account_cancell
         unit_price=Decimal("1.50"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     page_response = kiosk_client.get(reverse("kiosk-home"))
@@ -3700,7 +3698,7 @@ def test_revoke_closes_every_active_authorization_for_the_partner_pair(kiosk_cli
         status=ParticipantBookingLink.Status.PENDING,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -3732,7 +3730,7 @@ def test_partner_consent_rejected_if_camp_ends_before_lock(kiosk_client):
         status=ParticipantBookingLink.Status.PENDING,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = invitee.pk
+    authenticate_kiosk_session(session, invitee)
     session.save()
 
     def _simulate_camp_ended(*args, **kwargs):

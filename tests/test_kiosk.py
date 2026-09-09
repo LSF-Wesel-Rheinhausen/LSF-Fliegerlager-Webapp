@@ -35,6 +35,7 @@ from billing.models import (
 )
 from billing.services import create_settlement_run
 from tests.factories import CampFactory, ExpenseFactory, ParticipantFactory, PriceRuleFactory, UserFactory
+from tests.kiosk_helpers import authenticate_kiosk_session
 
 
 def _freeze_meal_lock_time(monkeypatch, fixed_now):
@@ -135,7 +136,7 @@ def test_kiosk_login_rejects_companion_without_preconfigured_pin(kiosk_client):
 def test_guardian_sets_pin_when_creating_companion(kiosk_client):
     participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -159,7 +160,7 @@ def test_guardian_sets_pin_when_creating_companion(kiosk_client):
 def test_guardian_cannot_create_companion_without_pin(kiosk_client):
     participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -181,7 +182,7 @@ def test_guardian_cannot_create_companion_without_pin(kiosk_client):
 def test_kiosk_family_member_form_does_not_render_subsidy_controls(kiosk_client):
     participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -197,7 +198,7 @@ def test_kiosk_family_member_form_does_not_render_subsidy_controls(kiosk_client)
 def test_kiosk_family_member_creation_ignores_forged_subsidy_fields(kiosk_client, role):
     participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     pin_data = {"family-pin": "2468", "family-pin_repeat": "2468"} if role == "companion" else {}
 
@@ -232,7 +233,7 @@ def test_guardian_can_set_pin_for_existing_companion(kiosk_client):
         role=ParticipantFamilyMember.Role.COMPANION,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -261,7 +262,7 @@ def test_guardian_cannot_set_pin_for_another_participants_companion(kiosk_client
         role=ParticipantFamilyMember.Role.COMPANION,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -298,8 +299,8 @@ def test_companion_cannot_set_pin_for_another_companion_of_same_guardian(kiosk_c
     target_companion.pin.set_pin("1357")
     target_companion.pin.save()
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
-    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = authenticated_companion.pk
+    authenticate_kiosk_session(session, participant)
+    authenticate_kiosk_session(session, participant, family_member=authenticated_companion)
     session.save()
 
     response = kiosk_client.post(
@@ -328,8 +329,8 @@ def test_companion_cannot_create_another_companion_for_guardian(kiosk_client):
         role=ParticipantFamilyMember.Role.COMPANION,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
-    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = authenticated_companion.pk
+    authenticate_kiosk_session(session, participant)
+    authenticate_kiosk_session(session, participant, family_member=authenticated_companion)
     session.save()
 
     response = kiosk_client.post(
@@ -358,7 +359,7 @@ def test_kiosk_participant_can_change_own_pin_and_must_log_in_again(kiosk_client
     participant.pin.set_pin("2468")
     participant.pin.save()
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -394,8 +395,8 @@ def test_kiosk_companion_can_change_only_own_pin(kiosk_client):
     companion.pin.set_pin("2468")
     companion.pin.save()
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
-    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    authenticate_kiosk_session(session, participant)
+    authenticate_kiosk_session(session, participant, family_member=companion)
     session.save()
 
     response = kiosk_client.post(
@@ -422,7 +423,7 @@ def test_kiosk_pin_change_rejects_wrong_current_pin_and_counts_attempt(kiosk_cli
     participant.pin.set_pin("2468")
     participant.pin.save()
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -461,7 +462,7 @@ def test_kiosk_pin_change_rejects_invalid_new_pin(kiosk_client, new_pin, pin_rep
     participant.pin.set_pin("2468")
     participant.pin.save()
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -492,7 +493,7 @@ def test_kiosk_pin_change_is_available_after_camp(kiosk_client):
     participant.pin.set_pin("2468")
     participant.pin.save()
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -517,7 +518,7 @@ def test_kiosk_home_renders_own_pin_change_dialog(kiosk_client):
     participant.pin.set_pin("2468")
     participant.pin.save()
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -537,7 +538,7 @@ def test_kiosk_pin_change_rejects_when_locked_out(kiosk_client):
     participant.pin.save()
 
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -563,7 +564,7 @@ def test_kiosk_pin_change_causes_lockout(kiosk_client):
     participant.pin.save()
 
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     for _ in range(participant.pin.MAX_FAILED_ATTEMPTS):
@@ -610,8 +611,8 @@ def test_companion_cannot_deactivate_guardians_family_member(kiosk_client):
         role=ParticipantFamilyMember.Role.CHILD,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
-    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = authenticated_companion.pk
+    authenticate_kiosk_session(session, participant)
+    authenticate_kiosk_session(session, participant, family_member=authenticated_companion)
     session.save()
 
     response = kiosk_client.post(
@@ -643,8 +644,8 @@ def test_companion_does_not_see_family_management(kiosk_client):
         role=ParticipantFamilyMember.Role.COMPANION,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
-    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = authenticated_companion.pk
+    authenticate_kiosk_session(session, participant)
+    authenticate_kiosk_session(session, participant, family_member=authenticated_companion)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -748,7 +749,7 @@ def test_kiosk_home_hides_normal_admin_header_and_renders_drink_dialog_controls(
         is_default=True,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -790,7 +791,7 @@ def test_pre_camp_kiosk_shows_only_identity_countdown_and_available_menu_areas(k
         status=ParticipantBookingLink.Status.PENDING,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -840,7 +841,7 @@ def test_pre_camp_kiosk_rejects_operational_posts(kiosk_client):
         unit_price=Decimal("1.50"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -898,7 +899,7 @@ def test_kiosk_checkin_targets_include_linked_household(kiosk_client, monkeypatc
         status=ParticipantBookingLink.Status.ACCEPTED,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -924,7 +925,7 @@ def test_kiosk_checkin_updates_linked_participant_dates(kiosk_client, monkeypatc
         status=ParticipantBookingLink.Status.ACCEPTED,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     linked_token = f"participant-{linked.pk}"
     checkin_state_tokens = _checkin_state_tokens(kiosk_client)
@@ -954,7 +955,7 @@ def test_kiosk_checkin_rejects_unlinked_participant(kiosk_client, monkeypatch):
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")
     unlinked = ParticipantFactory(camp=camp, first_name="Grace", last_name="B")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -980,7 +981,7 @@ def test_kiosk_checkin_rejects_departure_before_arrival(kiosk_client, monkeypatc
     camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 14))
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     participant_token = f"participant-{participant.pk}"
     checkin_state_tokens = _checkin_state_tokens(kiosk_client)
@@ -1009,7 +1010,7 @@ def test_kiosk_checkin_rejects_tampered_original_state(kiosk_client, monkeypatch
     camp = CampFactory(starts_on=date(2026, 7, 1), ends_on=date(2026, 7, 14))
     participant = ParticipantFactory(camp=camp)
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     participant_token = f"participant-{participant.pk}"
     checkin_state_tokens = _checkin_state_tokens(kiosk_client)
@@ -1050,7 +1051,7 @@ def test_kiosk_checkin_updates_companion_and_child_targets(kiosk_client, monkeyp
         role=ParticipantFamilyMember.Role.CHILD,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     companion_token = f"family-{companion.pk}"
     child_token = f"family-{child.pk}"
@@ -1097,7 +1098,7 @@ def test_kiosk_home_checkin_dialog_lists_companion_and_child(kiosk_client, monke
         role=ParticipantFamilyMember.Role.CHILD,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -1118,7 +1119,7 @@ def test_kiosk_home_shows_leadership_contact_button(kiosk_client):
     UserProfile.objects.create(user=admin_user, phone="0123 / 456")
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -1137,7 +1138,7 @@ def test_kiosk_home_renders_balance_with_correct_signs(kiosk_client):
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     Payment.objects.create(participant=participant, amount=Decimal("15.00"), paid_on=date(2026, 7, 1))
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -1151,7 +1152,7 @@ def test_kiosk_shared_expense_upload_storage_failure_is_a_form_error(kiosk_clien
     camp = CampFactory()
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     def fail_storage_save(*args, **kwargs):
@@ -1179,7 +1180,7 @@ def test_kiosk_shared_expense_upload_shows_receipt_link_and_serves_file(kiosk_cl
     camp = CampFactory()
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     receipt_content = b"%PDF-1.7\ntest receipt"
@@ -1231,7 +1232,7 @@ def test_pre_camp_kiosk_shared_expense_posts_cannot_create_expenses(kiosk_client
     )
     participant = ParticipantFactory(camp=camp)
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -1254,7 +1255,7 @@ def test_kiosk_shared_expense_upload_rejects_unsupported_receipt_type(kiosk_clie
     camp = CampFactory()
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     receipt = SimpleUploadedFile("rechnung.txt", b"not a receipt", content_type="text/plain")
@@ -1279,7 +1280,7 @@ def test_kiosk_shared_expense_upload_rejects_oversized_receipt(kiosk_client):
     camp = CampFactory()
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     receipt = SimpleUploadedFile("rechnung.pdf", b"x" * (5 * 1024 * 1024 + 1), content_type="application/pdf")
@@ -1311,7 +1312,7 @@ def test_kiosk_expense_receipt_rejects_other_participants(kiosk_client):
         receipt=SimpleUploadedFile("fremd.pdf", b"private receipt", content_type="application/pdf"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = viewer.pk
+    authenticate_kiosk_session(session, viewer)
     session.save()
 
     try:
@@ -1328,7 +1329,7 @@ def test_kiosk_owner_gets_not_found_for_expense_without_receipt(kiosk_client):
     participant = ParticipantFactory(camp=camp)
     expense = ExpenseFactory(participant=participant, camp=camp, receipt=None)
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("expense-receipt", args=[expense.pk]))
@@ -1367,7 +1368,7 @@ def test_kiosk_home_sorts_shared_expense_cards_by_status_and_recency(kiosk_clien
     Expense.objects.filter(pk=pending_older.pk).update(created_at=timezone.now() - timedelta(days=2))
     Expense.objects.filter(pk=pending_newer.pk).update(created_at=timezone.now() - timedelta(days=1))
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -1404,7 +1405,7 @@ def test_kiosk_home_renders_shared_expense_cards_with_receipt_and_rejection_deta
         receipt=SimpleUploadedFile("kisten.pdf", b"receipt", content_type="application/pdf"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     try:
@@ -1442,7 +1443,7 @@ def test_kiosk_home_marks_image_receipts_for_internal_preview(kiosk_client):
         ),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     try:
@@ -1465,7 +1466,7 @@ def test_kiosk_home_renders_only_ordered_core_cards_and_menu_dialogs(kiosk_clien
     inviter = ParticipantFactory(camp=camp, first_name="Grace", last_name="Hopper")
     ParticipantBookingLink.objects.create(inviter=inviter, invitee=participant)
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -1529,7 +1530,7 @@ def test_kiosk_home_shows_order_sent_for_next_day(kiosk_client, monkeypatch):
         unit_price=Decimal("7.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -1552,7 +1553,7 @@ def test_kiosk_home_does_not_show_not_sent_order_as_dispatched(kiosk_client, mon
     participant = ParticipantFactory(camp=camp)
     MealOrder.objects.create(camp=camp, meal_date=date(2026, 7, 2), is_sent=False)
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -1586,7 +1587,7 @@ def test_kiosk_rejects_meal_booking_after_order_was_sent(kiosk_client, monkeypat
         unit_price=Decimal("7.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -1610,7 +1611,7 @@ def test_kiosk_rejects_meal_booking_after_order_was_sent(kiosk_client, monkeypat
 def test_kiosk_menu_explains_destinations_and_has_an_explicit_trigger(kiosk_client):
     participant = ParticipantFactory()
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -1634,7 +1635,7 @@ def test_kiosk_home_shows_soft_meal_richtzeit_before_order_sent(kiosk_client, mo
     camp = CampFactory(meal_booking_cutoff_time=time(14, 45))
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -1668,7 +1669,7 @@ def test_kiosk_meal_calendar_renders_all_camp_days_with_menu_and_participant_pri
         description="Pasta mit Salat",
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -1702,7 +1703,7 @@ def test_kiosk_meal_calendar_preloads_dinner_overrides_and_sent_orders(kiosk_cli
     )
     MealOrder.objects.create(camp=camp, meal_date=fixed_now.date() + timedelta(days=2), is_sent=True)
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     with CaptureQueriesContext(connection) as queries:
@@ -1735,7 +1736,7 @@ def test_kiosk_meal_calendar_shows_closed_days_without_booking_action(kiosk_clie
         unit_price=Decimal("7.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -1757,7 +1758,7 @@ def test_kiosk_home_keeps_manual_lock_hint_after_richtzeit(kiosk_client, monkeyp
     camp = CampFactory(meal_booking_cutoff_time=time(12, 0))
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -1793,7 +1794,7 @@ def test_kiosk_meal_status_calendar_shows_day_states_and_detail_dialog(kiosk_cli
         retracted_at=timezone.now(),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -1853,7 +1854,7 @@ def test_kiosk_linked_meal_signup_does_not_set_current_calendar_status(
     )
 
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = linked.pk
+    authenticate_kiosk_session(session, linked)
     session.save()
     linked_response = kiosk_client.get(reverse("kiosk-home"))
 
@@ -1868,7 +1869,7 @@ def test_kiosk_linked_meal_signup_does_not_set_current_calendar_status(
     assert not Charge.objects.filter(participant=linked).exists()
     assert not MealSignup.objects.filter(participant=linked).exists()
 
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = owner.pk
+    authenticate_kiosk_session(session, owner)
     session.save()
     owner_response = kiosk_client.get(reverse("kiosk-home"))
     owner_days = owner_response.context[calendar_key]
@@ -1905,7 +1906,7 @@ def test_kiosk_own_active_signup_is_not_mixed_with_retracted_partner_signup(kios
     )
 
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = owner.pk
+    authenticate_kiosk_session(session, owner)
     session.save()
     response = kiosk_client.get(reverse("kiosk-home"))
 
@@ -1940,7 +1941,7 @@ def test_kiosk_meal_day_detail_opens_booking_for_the_selected_date(kiosk_client,
         description="Kartoffelsuppe mit Brot",
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -1980,7 +1981,7 @@ def test_kiosk_meal_day_detail_uses_price_rule_name_and_shows_free_price(kiosk_c
         unit_price=Decimal("0.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -2010,7 +2011,7 @@ def test_kiosk_meal_booking_dialog_shows_all_camp_days_with_prices(kiosk_client,
         unit_price=Decimal("7.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -2052,7 +2053,7 @@ def test_kiosk_meal_booking_dialog_keeps_child_only_price_day_selectable(kiosk_c
         unit_price=Decimal("4.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -2083,7 +2084,7 @@ def test_kiosk_books_drink_with_camp_drink_price_and_subsidy_flag(kiosk_client):
         foerdersatz=Decimal("1.0000"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -2112,7 +2113,7 @@ def test_kiosk_quick_booking_token_is_one_time_but_fresh_render_allows_identical
     participant = ParticipantFactory(camp=camp)
     rule = PriceRuleFactory(camp=camp, kind=PriceRule.Kind.DRINK, name="Wasser", unit_price=Decimal("1.50"))
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     first_render = kiosk_client.get(reverse("kiosk-home"))
@@ -2167,7 +2168,7 @@ def test_kiosk_quick_booking_rejects_invalid_one_time_tokens_without_charge(kios
     other_participant = ParticipantFactory(camp=camp)
     rule = PriceRuleFactory(camp=camp, kind=PriceRule.Kind.DRINK, name="Wasser", unit_price=Decimal("1.50"))
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -2177,7 +2178,7 @@ def test_kiosk_quick_booking_rejects_invalid_one_time_tokens_without_charge(kios
     elif token_mutation == "expired":
         monkeypatch.setattr("billing.views.KIOSK_QUICK_BOOKING_TOKEN_MAX_AGE_SECONDS", 0)
     else:
-        session[KIOSK_PARTICIPANT_SESSION_KEY] = other_participant.pk
+        authenticate_kiosk_session(session, other_participant)
         session.save()
 
     post_response = kiosk_client.post(
@@ -2217,8 +2218,7 @@ def test_companion_uses_own_booking_identity_but_guardian_pays_and_controls_targ
         applies_to_companions=True,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = guardian.pk
-    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    authenticate_kiosk_session(session, guardian, family_member=companion)
     session.save()
 
     home_response = kiosk_client.get(reverse("kiosk-home"))
@@ -2271,7 +2271,7 @@ def test_kiosk_quick_booking_rejects_explicitly_empty_target_selection(kiosk_cli
         unit_price=Decimal("1.50"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -2302,7 +2302,7 @@ def test_kiosk_can_cancel_own_quick_booking_within_cancel_window(kiosk_client):
         kiosk_booked_by=participant,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(reverse("kiosk-home"), {"action": "quick_cancel", "charge_id": charge.pk})
@@ -2327,7 +2327,7 @@ def test_kiosk_rejects_quick_booking_cancel_after_cancel_window(kiosk_client):
     )
     Charge.objects.filter(pk=charge.pk).update(created_at=timezone.now() - timedelta(minutes=16))
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(reverse("kiosk-home"), {"action": "quick_cancel", "charge_id": charge.pk})
@@ -2354,7 +2354,7 @@ def test_kiosk_allows_quick_booking_cancel_after_charge_appeared_in_settlement_s
     snapshot = run.settlements.get(participant=participant)
     snapshot_data = snapshot.data
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(reverse("kiosk-home"), {"action": "quick_cancel", "charge_id": charge.pk})
@@ -2381,7 +2381,7 @@ def test_kiosk_allows_quick_booking_cancel_when_charge_is_not_in_earlier_settlem
         kiosk_booked_by=participant,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(reverse("kiosk-home"), {"action": "quick_cancel", "charge_id": charge.pk})
@@ -2405,7 +2405,7 @@ def test_kiosk_rejects_quick_booking_cancel_for_unrelated_participant(kiosk_clie
         kiosk_booked_by=other,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(reverse("kiosk-home"), {"action": "quick_cancel", "charge_id": charge.pk})
@@ -2427,7 +2427,7 @@ def test_kiosk_linked_quick_booking_can_be_cancelled_by_booking_participant(kios
     )
     PriceRuleFactory(camp=camp, kind=PriceRule.Kind.DRINK, name="Wasser", unit_price=Decimal("1.50"))
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = booker.pk
+    authenticate_kiosk_session(session, booker)
     session.save()
     kiosk_client.post(
         reverse("kiosk-home"),
@@ -2463,7 +2463,7 @@ def test_kiosk_billed_linked_participant_can_cancel_own_quick_booking(kiosk_clie
         kiosk_booked_by=booker,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = linked.pk
+    authenticate_kiosk_session(session, linked)
     session.save()
 
     response = kiosk_client.post(reverse("kiosk-home"), {"action": "quick_cancel", "charge_id": charge.pk})
@@ -2486,7 +2486,7 @@ def test_kiosk_home_shows_quick_booking_cancel_action(kiosk_client):
         kiosk_booked_by=participant,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -2522,7 +2522,7 @@ def test_kiosk_home_filters_quick_booking_list_to_kiosk_created_charges(kiosk_cl
             unit_price=Decimal("7.00"),
         )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -2550,7 +2550,7 @@ def test_kiosk_meal_signup_ignores_client_price_tampering_and_uses_server_rule(k
         foerdersatz=Decimal("0"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     payload = {
@@ -2600,7 +2600,7 @@ def test_kiosk_meal_signup_uses_date_specific_price_only_for_matching_date(kiosk
         unit_price=Decimal("9.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -2691,7 +2691,7 @@ def test_kiosk_books_multiple_meal_dates_and_targets_atomically(kiosk_client, mo
         variant=MealSignup.Variant.NORMAL,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -2746,7 +2746,7 @@ def test_kiosk_rejects_entire_meal_batch_when_one_date_has_no_price(kiosk_client
         unit_price=Decimal("7.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -2795,7 +2795,7 @@ def test_kiosk_rejects_entire_meal_batch_when_one_date_is_locked(kiosk_client, m
         state=MealBookingOverride.State.CLOSED,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -2831,7 +2831,7 @@ def test_kiosk_normalizes_duplicate_meal_dates(kiosk_client, monkeypatch):
         unit_price=Decimal("7.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -2855,7 +2855,7 @@ def test_kiosk_rejects_meal_date_outside_configured_camp(kiosk_client, monkeypat
     camp = CampFactory(starts_on=date(2026, 6, 30), ends_on=date(2026, 7, 2))
     participant = ParticipantFactory(camp=camp, first_name="Ada", last_name="Lovelace")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -2890,7 +2890,7 @@ def test_kiosk_rejects_unknown_meal_target_without_partial_booking(kiosk_client,
         unit_price=Decimal("7.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -2934,7 +2934,7 @@ def test_kiosk_meal_signup_for_tomorrow_stays_open_after_camp_cutoff(kiosk_clien
         unit_price=Decimal("7.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -2972,7 +2972,7 @@ def test_kiosk_meal_signup_for_tomorrow_stays_open_before_camp_cutoff(kiosk_clie
         unit_price=Decimal("7.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -3007,7 +3007,7 @@ def test_kiosk_meal_signup_for_past_date_is_locked(kiosk_client, monkeypatch):
         unit_price=Decimal("7.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -3045,7 +3045,7 @@ def test_kiosk_meal_signup_for_today_is_open(kiosk_client, monkeypatch, meal):
         unit_price=Decimal("7.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -3083,7 +3083,7 @@ def test_kiosk_retracts_meal_signup_and_soft_deletes_food_charge(kiosk_client, m
         charge=charge,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(reverse("kiosk-home"), {"action": "meal_retract", "meal_signup_id": signup.pk})
@@ -3120,7 +3120,7 @@ def test_kiosk_allows_meal_retraction_after_charge_appeared_in_settlement_snapsh
     snapshot = run.settlements.get(participant=participant)
     snapshot_data = snapshot.data
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(reverse("kiosk-home"), {"action": "meal_retract", "meal_signup_id": signup.pk})
@@ -3158,7 +3158,7 @@ def test_kiosk_rejects_snapshotted_meal_retraction_after_catering_order(kiosk_cl
     create_settlement_run(camp, UserFactory())
     MealOrder.objects.create(camp=camp, meal_date=signup.meal_date)
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(reverse("kiosk-home"), {"action": "meal_retract", "meal_signup_id": signup.pk})
@@ -3194,7 +3194,7 @@ def test_kiosk_rejects_retraction_for_past_meal_signup(kiosk_client, monkeypatch
         charge=charge,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(reverse("kiosk-home"), {"action": "meal_retract", "meal_signup_id": signup.pk})
@@ -3232,7 +3232,7 @@ def test_kiosk_allows_retraction_for_today_meal_signup(kiosk_client, monkeypatch
         charge=charge,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(reverse("kiosk-home"), {"action": "meal_retract", "meal_signup_id": signup.pk})
@@ -3260,7 +3260,7 @@ def test_kiosk_meal_signup_requires_person_when_dialog_selection_is_empty(kiosk_
         unit_price=Decimal("7.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -3296,7 +3296,7 @@ def test_kiosk_cannot_self_award_family_subsidy_when_creating_member_and_booking
         unit_price=Decimal("4.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -3346,7 +3346,7 @@ def test_kiosk_deactivates_own_family_member(kiosk_client):
         role=ParticipantFamilyMember.Role.CHILD,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -3376,7 +3376,7 @@ def test_kiosk_deactivates_own_family_member(kiosk_client):
 def test_kiosk_rejects_non_numeric_related_object_ids(kiosk_client, action, id_field):
     participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     before_counts = {
         "meal_signups": MealSignup.objects.count(),
@@ -3411,7 +3411,7 @@ def test_kiosk_shifts_rejects_non_numeric_shift_id_without_side_effect(kiosk_cli
         required_slots=1,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -3431,7 +3431,7 @@ def test_kiosk_shifts_rejects_non_numeric_shift_id_without_side_effect(kiosk_cli
 def test_invalid_partner_invite_stays_on_activity_page(kiosk_client):
     participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -3453,7 +3453,7 @@ def test_kiosk_booking_link_invite_accept_revoke_flow(kiosk_client):
     inviter = ParticipantFactory(camp=camp, first_name="Ada", last_name="A")
     invitee = ParticipantFactory(camp=camp, first_name="Grace", last_name="B")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = inviter.pk
+    authenticate_kiosk_session(session, inviter)
     session.save()
 
     response = kiosk_client.post(
@@ -3468,7 +3468,7 @@ def test_kiosk_booking_link_invite_accept_revoke_flow(kiosk_client):
     link = ParticipantBookingLink.objects.get(inviter=inviter, invitee=invitee)
     assert link.status == ParticipantBookingLink.Status.PENDING
 
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = invitee.pk
+    authenticate_kiosk_session(session, invitee)
     session.save()
     response = kiosk_client.post(
         reverse("kiosk-partner-activity"),
@@ -3526,7 +3526,7 @@ def test_kiosk_books_meal_for_linked_participant_on_linked_account(kiosk_client,
         unit_price=Decimal("7.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = inviter.pk
+    authenticate_kiosk_session(session, inviter)
     session.save()
 
     response = kiosk_client.post(
@@ -3580,7 +3580,7 @@ def test_kiosk_shows_linked_participant_family_member_meal_signups(kiosk_client)
         variant=MealSignup.Variant.NORMAL_CHILD,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = viewer.pk
+    authenticate_kiosk_session(session, viewer)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -3624,7 +3624,7 @@ def test_kiosk_drink_form_filters_by_participant_type(kiosk_client):
     )
 
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant_child.pk
+    authenticate_kiosk_session(session, participant_child)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -3632,14 +3632,14 @@ def test_kiosk_drink_form_filters_by_participant_type(kiosk_client):
     assert b"Companion Drink" not in response.content
     assert b"Adult Drink" not in response.content
 
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant_companion.pk
+    authenticate_kiosk_session(session, participant_companion)
     session.save()
     response = kiosk_client.get(reverse("kiosk-home"))
     assert b"Child Drink" not in response.content
     assert b"Companion Drink" in response.content
     assert b"Adult Drink" not in response.content
 
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant_adult.pk
+    authenticate_kiosk_session(session, participant_adult)
     session.save()
     response = kiosk_client.get(reverse("kiosk-home"))
     assert b"Child Drink" not in response.content
@@ -3672,7 +3672,7 @@ def test_kiosk_quick_food_tiles_hide_date_specific_meal_rules(kiosk_client):
         unit_price=Decimal("6.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -3711,7 +3711,7 @@ def test_kiosk_quick_food_booking_applies_todays_date_specific_breakfast_price(k
         unit_price=Decimal("6.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -3764,7 +3764,7 @@ def test_kiosk_meal_signup_child_breakfast_override(kiosk_client, monkeypatch):
     )
 
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     # Book standard day
@@ -3815,7 +3815,7 @@ def test_kiosk_offers_breakfast_prebooking_in_meal_calendar(kiosk_client, monkey
         unit_price=Decimal("5.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -3873,7 +3873,7 @@ def test_kiosk_meal_calendars_keep_slots_descriptions_prices_and_aria_separate(k
         variant=MealSignup.Variant.NORMAL,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -3931,7 +3931,7 @@ def test_kiosk_breakfast_calendar_shows_retracted_status_separately(kiosk_client
         retracted_at=timezone.now(),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -3949,7 +3949,7 @@ def test_kiosk_breakfast_booking_without_price_is_rejected(kiosk_client, monkeyp
     camp = CampFactory(starts_on=date(2026, 6, 30), ends_on=date(2026, 7, 2))
     participant = ParticipantFactory(camp=camp)
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -3983,7 +3983,7 @@ def test_kiosk_breakfast_booking_rejects_date_outside_camp(kiosk_client, monkeyp
         unit_price=Decimal("5.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -4017,7 +4017,7 @@ def test_kiosk_duplicate_breakfast_booking_updates_one_signup(kiosk_client, monk
         unit_price=Decimal("5.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     payload = {
         "action": "meal",
@@ -4057,7 +4057,7 @@ def test_kiosk_books_breakfast_for_family_member(kiosk_client, monkeypatch):
         unit_price=Decimal("3.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -4095,7 +4095,7 @@ def test_kiosk_breakfast_booking_stays_open_after_richtzeit(kiosk_client, monkey
         unit_price=Decimal("5.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -4132,7 +4132,7 @@ def test_kiosk_breakfast_booking_rejects_unknown_target_without_partial_state(ki
         unit_price=Decimal("5.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -4158,7 +4158,7 @@ def test_kiosk_meal_signup_without_price_rule_shows_error(kiosk_client):
     # intentionally not creating a PriceRule for dinner
 
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -4196,7 +4196,7 @@ def test_kiosk_books_snack_successfully(kiosk_client):
         unit_price=Decimal("4.50"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -4221,7 +4221,7 @@ def test_kiosk_show_invoices_setting_toggle(kiosk_client):
     camp = CampFactory(is_active=True, show_kiosk_invoices=False)
     participant = ParticipantFactory(camp=camp)
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -4601,14 +4601,13 @@ def test_kiosk_donation_creates_charge(kiosk_client):
     from django.urls import reverse
 
     from billing.models import Charge
-    from billing.views import KIOSK_PARTICIPANT_SESSION_KEY
     from tests.factories import CampFactory, ParticipantFactory
 
     camp = CampFactory(is_active=True)
     participant = ParticipantFactory(camp=camp)
 
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -4633,14 +4632,13 @@ def test_kiosk_donation_invalid_amount(kiosk_client):
     from django.urls import reverse
 
     from billing.models import Charge
-    from billing.views import KIOSK_PARTICIPANT_SESSION_KEY
     from tests.factories import CampFactory, ParticipantFactory
 
     camp = CampFactory(is_active=True)
     participant = ParticipantFactory(camp=camp)
 
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
