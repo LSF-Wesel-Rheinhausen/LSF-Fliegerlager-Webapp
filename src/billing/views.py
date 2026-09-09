@@ -2384,9 +2384,13 @@ def _kiosk_participant_from_session(request, session_key):
         .filter(pk=participant_id, camp__is_active=True, archived_at__isnull=True)
         .first()
     )
-    if participant is not None and not request.session.get(KIOSK_FAMILY_MEMBER_SESSION_KEY):
+    if participant is not None:
+        family_member_id = request.session.get(KIOSK_FAMILY_MEMBER_SESSION_KEY)
+        if family_member_id and _kiosk_family_member_from_session(request, participant) is None:
+            _clear_kiosk_session(request)
+            return None
         fingerprint = request.session.get(KIOSK_PIN_FINGERPRINT_SESSION_KEY)
-        if fingerprint and fingerprint != kiosk_pin_fingerprint(participant.pin.pin_hash):
+        if not family_member_id and fingerprint and fingerprint != kiosk_pin_fingerprint(participant.pin.pin_hash):
             _clear_kiosk_session(request)
             return None
     return participant

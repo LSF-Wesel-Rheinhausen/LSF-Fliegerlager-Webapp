@@ -2361,6 +2361,7 @@ class PushMessage(TimeStampedModel):
 
     class Status(models.TextChoices):
         PENDING = "pending", "Ausstehend"
+        PROCESSING = "processing", "In Verarbeitung"
         SENT = "sent", "Gesendet"
         FAILED = "failed", "Fehlgeschlagen"
 
@@ -2379,6 +2380,7 @@ class PushMessage(TimeStampedModel):
     dedupe_key = models.CharField(max_length=180)
     scheduled_for = models.DateTimeField(default=timezone.now)
     next_attempt_at = models.DateTimeField(default=timezone.now)
+    processing_started_at = models.DateTimeField(null=True, blank=True)
     attempts = models.PositiveSmallIntegerField(default=0)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     sent_at = models.DateTimeField(null=True, blank=True)

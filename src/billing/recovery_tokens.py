@@ -13,7 +13,13 @@ from django.db import transaction
 from django.utils import timezone
 from django.utils.crypto import salted_hmac
 
-from .models import AccountRecoveryToken, Participant, ParticipantFamilyMember
+from .models import (
+    AccountRecoveryToken,
+    Participant,
+    ParticipantFamilyMember,
+    ParticipantFamilyMemberPin,
+    ParticipantPin,
+)
 
 User = get_user_model()
 RECOVERY_TOKEN_PLACEHOLDER = "ACCOUNT_RECOVERY_TOKEN"
@@ -109,18 +115,25 @@ def _initial_recovery(recovery_id: int) -> AccountRecoveryToken | None:
 
 
 def _lock_owner(recovery: AccountRecoveryToken) -> Any | None:
+    owner: Any | None = None
     if recovery.user_id is not None:
-        return User.objects.select_for_update().filter(pk=recovery.user_id).first()
-    if recovery.participant_id is not None:
-        return Participant.objects.select_related("camp").select_for_update().filter(pk=recovery.participant_id).first()
-    if recovery.family_member_id is not None:
-        return (
+        owner = User.objects.select_for_update().filter(pk=recovery.user_id).first()
+    elif recovery.participant_id is not None:
+        participants = Participant.objects.select_related("camp").select_for_update()
+        owner = participants.filter(pk=recovery.participant_id).first()
+    elif recovery.family_member_id is not None:
+        owner = (
             ParticipantFamilyMember.objects.select_related("guardian", "guardian__camp")
             .select_for_update()
             .filter(pk=recovery.family_member_id)
             .first()
         )
-    return None
+    if owner is not None:
+        if recovery.kind == AccountRecoveryToken.Kind.PARTICIPANT_PIN:
+            ParticipantPin.objects.select_for_update().filter(participant_id=owner.pk).first()
+        elif recovery.kind == AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN:
+            ParticipantFamilyMemberPin.objects.select_for_update().filter(family_member_id=owner.pk).first()
+    return owner
 
 
 def _matches_owner(recovery: AccountRecoveryToken, owner: Any) -> bool:

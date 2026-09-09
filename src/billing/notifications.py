@@ -49,6 +49,7 @@ ADMIN_CATEGORIES: dict[str, str] = {
 ALL_CATEGORIES = {**PARTICIPANT_CATEGORIES, **ADMIN_CATEGORIES}
 SECURITY_CATEGORY = "account_security"
 RETRY_DELAYS = (60, 300, 1800, 7200, 21600)
+PROCESSING_LEASE = timedelta(minutes=15)
 PUSH_DELIVERY_TIMEOUT_SECONDS = 5
 User = get_user_model()
 
@@ -492,6 +493,14 @@ def generate_scheduled_notifications(*, now: Any | None = None) -> int:
 def send_due_push_messages(*, batch_size: int = 50) -> PushDeliveryResult:
     """Deliver one bounded outbox batch without exposing push capabilities in logs."""
     now = timezone.now()
+    PushMessage.objects.filter(
+        status=PushMessage.Status.PROCESSING,
+        processing_started_at__lt=now - PROCESSING_LEASE,
+    ).update(
+        status=PushMessage.Status.PENDING,
+        processing_started_at=None,
+        next_attempt_at=now,
+    )
     messages = list(
         PushMessage.objects.select_related("subscription", "account_recovery")
         .filter(status=PushMessage.Status.PENDING, next_attempt_at__lte=now)
@@ -500,13 +509,22 @@ def send_due_push_messages(*, batch_size: int = 50) -> PushDeliveryResult:
     sent = retried = failed = removed = 0
     with _NoRedirectSession() as requests_session:
         for message in messages:
+            claimed = PushMessage.objects.filter(
+                pk=message.pk,
+                status=PushMessage.Status.PENDING,
+                next_attempt_at__lte=now,
+            ).update(status=PushMessage.Status.PROCESSING, processing_started_at=now)
+            if not claimed:
+                continue
+            message = PushMessage.objects.select_related("subscription", "account_recovery").get(pk=message.pk)
             subscription = message.subscription
             target_url = message.target_url
             if not is_allowed_push_endpoint(subscription.endpoint):
                 PushSubscription.objects.filter(pk=subscription.pk).update(is_active=False, updated_at=now)
                 message.status = PushMessage.Status.FAILED
                 message.last_error_code = "invalid_endpoint"
-                message.save(update_fields=["status", "last_error_code", "updated_at"])
+                message.processing_started_at = None
+                message.save(update_fields=["status", "last_error_code", "processing_started_at", "updated_at"])
                 failed += 1
                 continue
             if message.account_recovery_id is not None:
@@ -514,8 +532,11 @@ def send_due_push_messages(*, batch_size: int = 50) -> PushDeliveryResult:
                 if raw_token is None or RECOVERY_TOKEN_PLACEHOLDER not in target_url:
                     message.status = PushMessage.Status.FAILED
                     message.last_error_code = "recovery_unavailable"
+                    message.processing_started_at = None
                     message.attempts += 1
-                    message.save(update_fields=["status", "last_error_code", "attempts", "updated_at"])
+                    message.save(
+                        update_fields=["status", "last_error_code", "processing_started_at", "attempts", "updated_at"]
+                    )
                     failed += 1
                     continue
                 target_url = target_url.replace(RECOVERY_TOKEN_PLACEHOLDER, raw_token)
@@ -550,6 +571,7 @@ def send_due_push_messages(*, batch_size: int = 50) -> PushDeliveryResult:
                     removed += 1
                     continue
                 message.attempts += 1
+                message.processing_started_at = None
                 message.last_error_code = (
                     "redirect"
                     if isinstance(status_code, int) and 300 <= status_code < 400
@@ -559,9 +581,19 @@ def send_due_push_messages(*, batch_size: int = 50) -> PushDeliveryResult:
                     message.status = PushMessage.Status.FAILED
                     failed += 1
                 else:
+                    message.status = PushMessage.Status.PENDING
                     message.next_attempt_at = now + timedelta(seconds=RETRY_DELAYS[message.attempts - 1])
                     retried += 1
-                message.save(update_fields=["attempts", "last_error_code", "status", "next_attempt_at", "updated_at"])
+                message.save(
+                    update_fields=[
+                        "attempts",
+                        "last_error_code",
+                        "status",
+                        "processing_started_at",
+                        "next_attempt_at",
+                        "updated_at",
+                    ]
+                )
                 logger.warning(
                     "Push delivery failed",
                     extra={"push_message_id": message.pk, "status_code": status_code, "attempt": message.attempts},
@@ -570,10 +602,20 @@ def send_due_push_messages(*, batch_size: int = 50) -> PushDeliveryResult:
 
             with transaction.atomic():
                 message.status = PushMessage.Status.SENT
+                message.processing_started_at = None
                 message.sent_at = now
                 message.attempts += 1
                 message.last_error_code = ""
-                message.save(update_fields=["status", "sent_at", "attempts", "last_error_code", "updated_at"])
+                message.save(
+                    update_fields=[
+                        "status",
+                        "processing_started_at",
+                        "sent_at",
+                        "attempts",
+                        "last_error_code",
+                        "updated_at",
+                    ]
+                )
                 subscription.last_success_at = now
                 subscription.failure_count = 0
                 subscription.save(update_fields=["last_success_at", "failure_count", "updated_at"])

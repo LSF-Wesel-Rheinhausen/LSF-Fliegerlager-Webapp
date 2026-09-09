@@ -8,6 +8,7 @@ import pytest
 from django.contrib.auth import authenticate
 from django.core import mail
 from django.core.mail import get_connection
+from django.db.models import QuerySet
 from django.test import RequestFactory
 from django.urls import reverse
 from django.utils import timezone
@@ -21,11 +22,13 @@ from billing.models import (
     EmailConfiguration,
     EmailDelivery,
     ParticipantFamilyMember,
+    ParticipantFamilyMemberPin,
+    ParticipantPin,
     PushMessage,
     PushSubscription,
 )
 from billing.notifications import send_due_push_messages
-from billing.recovery_tokens import create_account_recovery_token
+from billing.recovery_tokens import activate_account_recovery_token, create_account_recovery_token
 from tests.factories import ParticipantFactory, ParticipantFamilyMemberFactory, SuperUserFactory, UserFactory
 
 
@@ -185,6 +188,25 @@ def test_kiosk_recovery_queues_both_channels_and_sets_a_new_pin(kiosk_client, se
     participant.pin.refresh_from_db()
     assert participant.pin.check_pin("8642") is True
     assert kiosk_client.get(path).status_code == 400
+
+
+@pytest.mark.django_db
+def test_kiosk_recovery_delivers_to_all_matching_participants(kiosk_client):
+    first_participant = ParticipantFactory(email="shared-many@example.test", first_name="Pilot0")
+    for index in range(1, 11):
+        ParticipantFactory(
+            camp=first_participant.camp,
+            email="shared-many@example.test",
+            first_name=f"Pilot{index}",
+        )
+
+    response = kiosk_client.post(
+        reverse("kiosk-pin-recovery-request"),
+        {"email": "shared-many@example.test"},
+    )
+
+    assert response.status_code == 302
+    assert EmailDelivery.objects.count() == 11
 
 
 @pytest.mark.django_db
@@ -400,6 +422,35 @@ def test_recovery_link_is_invalid_after_the_credential_changes(client):
 
 
 @pytest.mark.django_db
+def test_recovery_confirm_marks_all_new_credentials_as_sensitive(monkeypatch):
+    from billing import account_recovery
+
+    captured_request = None
+
+    def capture_invalid(request):
+        nonlocal captured_request
+        captured_request = request
+        return object()
+
+    monkeypatch.setattr(account_recovery, "find_valid_account_recovery", lambda token: None)
+    monkeypatch.setattr(account_recovery, "_invalid_token_response", capture_invalid)
+    request = RequestFactory().post(
+        "/account/recovery/token/",
+        {"new_password1": "secret", "new_password2": "secret", "pin": "1234", "pin_repeat": "1234"},
+    )
+
+    account_recovery.account_recovery_confirm(request, "token")
+
+    assert captured_request is not None
+    assert set(captured_request.sensitive_post_parameters) == {
+        "new_password1",
+        "new_password2",
+        "pin",
+        "pin_repeat",
+    }
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize("owner_kind", ["admin", "participant", "companion"])
 def test_recovery_email_is_suppressed_when_owner_address_changes_before_delivery(owner_kind):
     if owner_kind == "admin":
@@ -437,6 +488,39 @@ def test_recovery_email_is_suppressed_when_owner_address_changes_before_delivery
     assert recovery.token_digest is None
     assert recovery.expires_at is None
     assert mail.outbox == []
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("owner_kind", ["participant", "companion"])
+def test_recovery_activation_locks_the_actual_pin_row(monkeypatch, owner_kind):
+    participant = ParticipantFactory(email="owner@example.test")
+    if owner_kind == "participant":
+        owner = participant
+        kind = AccountRecoveryToken.Kind.PARTICIPANT_PIN
+        expected_model = ParticipantPin
+    else:
+        owner = ParticipantFamilyMemberFactory(
+            guardian=participant,
+            email="companion@example.test",
+            role=ParticipantFamilyMember.Role.COMPANION,
+        )
+        kind = AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN
+        expected_model = ParticipantFamilyMemberPin
+    recovery = create_account_recovery_token(kind=kind, owner=owner)
+    locked_models = []
+    real_fetch_all = QuerySet._fetch_all
+
+    def capture_locked_model(queryset):
+        if queryset._result_cache is None and queryset.query.select_for_update:
+            locked_models.append(queryset.model)
+        real_fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", capture_locked_model)
+
+    raw_token = activate_account_recovery_token(recovery.pk)
+
+    assert raw_token is not None
+    assert expected_model in locked_models
 
 
 @pytest.mark.django_db

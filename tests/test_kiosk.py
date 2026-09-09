@@ -4248,6 +4248,42 @@ def test_kiosk_show_invoices_setting_toggle(kiosk_client):
 
 
 @pytest.mark.django_db
+def test_companion_pin_change_revokes_participant_only_kiosk_routes(kiosk_client):
+    camp = CampFactory(is_active=True, show_kiosk_invoices=True)
+    participant = ParticipantFactory(camp=camp)
+    participant.pin.set_pin("2468")
+    participant.pin.save()
+    companion = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Grace",
+        last_name="Hopper",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    companion.pin.set_pin("2468")
+    companion.pin.save()
+
+    login_response = kiosk_client.post(
+        reverse("kiosk-login"),
+        {"participant": f"family-{companion.pk}", "pin": "2468"},
+    )
+    assert login_response.status_code == 302
+    assert kiosk_client.get(reverse("kiosk-current-settlement-pdf")).status_code == 200
+    assert kiosk_client.get(reverse("kiosk-shared-expense-request")).status_code == 200
+
+    companion.pin.set_pin("8642")
+    companion.pin.save()
+
+    settlement_response = kiosk_client.get(reverse("kiosk-current-settlement-pdf"))
+    assert settlement_response.status_code == 302
+    assert settlement_response.url == reverse("kiosk-login")
+    post_response = kiosk_client.post(
+        reverse("kiosk-shared-expense-request"),
+        {"category": "Verbrauchsmaterial", "description": "Schrauben", "amount": "12.50", "paid_on": "2026-07-01"},
+    )
+    assert post_response.url == reverse("kiosk-login")
+
+
+@pytest.mark.django_db
 def test_kiosk_self_registration_creates_pending_participant(kiosk_client):
     camp = CampFactory(is_active=True)
     response = kiosk_client.post(

@@ -11,6 +11,25 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.AlterField(
+            model_name="pushmessage",
+            name="status",
+            field=models.CharField(
+                choices=[
+                    ("pending", "Ausstehend"),
+                    ("processing", "In Verarbeitung"),
+                    ("sent", "Gesendet"),
+                    ("failed", "Fehlgeschlagen"),
+                ],
+                default="pending",
+                max_length=20,
+            ),
+        ),
+        migrations.AddField(
+            model_name="pushmessage",
+            name="processing_started_at",
+            field=models.DateTimeField(blank=True, null=True),
+        ),
+        migrations.AlterField(
             model_name="emailbatch",
             name="camp",
             field=models.ForeignKey(

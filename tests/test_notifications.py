@@ -30,6 +30,7 @@ from billing.models import (
     ShiftAssignment,
 )
 from billing.notifications import (
+    PushDeliveryResult,
     generate_scheduled_notifications,
     notify_booking_link,
     notify_expense_status,
@@ -38,6 +39,7 @@ from billing.notifications import (
     queue_participant_notification,
     send_due_push_messages,
 )
+from billing.recovery_tokens import create_account_recovery_token
 from billing.services import approve_shared_expense
 from billing.views import KIOSK_MODE_SESSION_KEY, KIOSK_PARTICIPANT_SESSION_KEY
 from tests.factories import CampFactory, ParticipantFactory, UserFactory
@@ -46,11 +48,7 @@ from tests.factories import CampFactory, ParticipantFactory, UserFactory
 @pytest.mark.django_db
 def test_deleting_recovery_token_cascades_queued_push_message():
     user = UserFactory()
-    token = AccountRecoveryToken.objects.create(
-        kind=AccountRecoveryToken.Kind.USER_PASSWORD,
-        user=user,
-        credential_fingerprint="f" * 64,
-    )
+    token = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
     subscription = PushSubscription.objects.create(
         user=user,
         endpoint="https://push.example.test/recovery",
@@ -71,6 +69,74 @@ def test_deleting_recovery_token_cascades_queued_push_message():
     token.delete()
 
     assert not PushMessage.objects.filter(pk=message.pk).exists()
+
+
+@pytest.mark.django_db
+@patch("billing.notifications.webpush")
+def test_push_worker_claims_recovery_message_before_token_activation(webpush):
+    user = UserFactory()
+    token = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    subscription = PushSubscription.objects.create(
+        user=user,
+        endpoint="https://push.example.test/recovery",
+        p256dh="key",
+        auth="secret",
+        categories=["account_security"],
+    )
+    message = PushMessage.objects.create(
+        subscription=subscription,
+        account_recovery=token,
+        category="account_security",
+        title="Passwort zurücksetzen",
+        body="Link",
+        target_url="/account-recovery/ACCOUNT_RECOVERY_TOKEN/",
+        dedupe_key="account-recovery:1",
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+    nested_results = []
+
+    def deliver_once(**_kwargs):
+        message.refresh_from_db()
+        assert message.status == PushMessage.Status.PROCESSING
+        nested_results.append(send_due_push_messages())
+        return None
+
+    webpush.side_effect = deliver_once
+
+    result = send_due_push_messages()
+
+    assert result.sent == 1
+    assert nested_results == [PushDeliveryResult()]
+
+
+@pytest.mark.django_db
+@patch("billing.notifications.webpush")
+def test_push_worker_requeues_stale_processing_claim(webpush):
+    subscription = PushSubscription.objects.create(
+        user=UserFactory(),
+        endpoint="https://push.example.test/stale",
+        p256dh="key",
+        auth="secret",
+        categories=["security"],
+    )
+    message = PushMessage.objects.create(
+        subscription=subscription,
+        category="security",
+        title="Hinweis",
+        body="Text",
+        target_url="/",
+        dedupe_key="stale-claim:1",
+        status=PushMessage.Status.PROCESSING,
+        processing_started_at=timezone.now() - timedelta(minutes=16),
+    )
+
+    result = send_due_push_messages()
+
+    assert result.sent == 1
+    message.refresh_from_db()
+    assert message.status == PushMessage.Status.SENT
+    assert message.processing_started_at is None
+    assert webpush.call_count == 1
 
 
 @pytest.fixture(autouse=True)

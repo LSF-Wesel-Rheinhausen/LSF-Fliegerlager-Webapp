@@ -14,6 +14,7 @@ from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.debug import sensitive_post_parameters
 
 from .email_delivery import has_valid_recipient_email, queue_account_recovery_email
 from .forms import _is_trivial_personal_pin, validate_personal_kiosk_pin
@@ -217,7 +218,7 @@ def kiosk_pin_recovery_request(request: HttpRequest) -> HttpResponse:
         )
         .exclude(status=Participant.Status.PENDING_APPROVAL)
         .select_related("camp")
-        .order_by("pk")[:10]
+        .order_by("pk")
     )
     for participant in participants:
         _deliver_recovery(
@@ -240,7 +241,7 @@ def kiosk_pin_recovery_request(request: HttpRequest) -> HttpResponse:
         )
         .exclude(guardian__status=Participant.Status.PENDING_APPROVAL)
         .select_related("guardian", "guardian__camp")
-        .order_by("pk")[:10]
+        .order_by("pk")
     )
     for family_member in family_members:
         _deliver_recovery(
@@ -272,6 +273,7 @@ def _protect_token_response(response: HttpResponse) -> HttpResponse:
     return response
 
 
+@sensitive_post_parameters("new_password1", "new_password2", "pin", "pin_repeat")
 def account_recovery_confirm(request: HttpRequest, token: str) -> HttpResponse:
     """Consume one valid recovery token after a replacement credential passes validation."""
     recovery = find_valid_account_recovery(token)
