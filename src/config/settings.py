@@ -106,6 +106,16 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "filters": {"redact_recovery_secrets": {"()": "config.gunicorn_logging.RecoverySecretFilter"}},
+    "handlers": {
+        "console": {"class": "logging.StreamHandler", "filters": ["redact_recovery_secrets"]},
+    },
+    "loggers": {"django.request": {"handlers": ["console"], "propagate": False}},
+}
+
 ROOT_URLCONF = "config.urls"
 
 TEMPLATES = [

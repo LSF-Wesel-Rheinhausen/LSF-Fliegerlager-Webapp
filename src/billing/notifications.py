@@ -90,7 +90,10 @@ def queue_participant_notification(
     """Queue one idempotent message for each eligible participant device."""
     subscriptions = [
         subscription
-        for subscription in participant.push_subscriptions.filter(is_active=True)
+        for subscription in PushSubscription.objects.filter(
+            Q(participant=participant) | Q(family_member__guardian=participant),
+            is_active=True,
+        )
         if category in subscription.categories
     ]
     return _queue_for_subscriptions(
@@ -179,9 +182,10 @@ def queue_account_recovery_push(
     """Queue a mandatory security message for every active device owned by one account."""
     if kind == AccountRecoveryToken.Kind.USER_PASSWORD:
         owner_filter = {"user": owner}
+    elif kind == AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN:
+        owner_filter = {"family_member": owner}
     else:
-        participant = owner.guardian if kind == AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN else owner
-        owner_filter = {"participant": participant}
+        owner_filter = {"participant": owner}
     subscriptions = PushSubscription.objects.filter(is_active=True, **owner_filter)
     created = 0
     for subscription in subscriptions:
@@ -647,7 +651,7 @@ def queue_information_push_batch(
         return 0
 
     subscriptions = PushSubscription.objects.filter(
-        participant_id__in=p_ids,
+        Q(participant_id__in=p_ids) | Q(family_member__guardian_id__in=p_ids),
         is_active=True,
     )
 

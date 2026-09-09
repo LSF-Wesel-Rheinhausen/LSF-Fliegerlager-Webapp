@@ -2318,6 +2318,13 @@ class PushSubscription(TimeStampedModel):
         null=True,
         blank=True,
     )
+    family_member = models.ForeignKey(
+        "ParticipantFamilyMember",
+        on_delete=models.CASCADE,
+        related_name="push_subscriptions",
+        null=True,
+        blank=True,
+    )
     endpoint = models.URLField(max_length=2048, unique=True)  # noqa: DJ001
     p256dh = models.CharField(max_length=512)
     auth = models.CharField(max_length=512)
@@ -2332,8 +2339,9 @@ class PushSubscription(TimeStampedModel):
         constraints = [
             models.CheckConstraint(
                 condition=(
-                    models.Q(user__isnull=False, participant__isnull=True)
-                    | models.Q(user__isnull=True, participant__isnull=False)
+                    models.Q(user__isnull=False, participant__isnull=True, family_member__isnull=True)
+                    | models.Q(user__isnull=True, participant__isnull=False, family_member__isnull=True)
+                    | models.Q(user__isnull=True, participant__isnull=True, family_member__isnull=False)
                 ),
                 name="push_subscription_exactly_one_owner",
             )
@@ -2352,7 +2360,7 @@ class PushSubscription(TimeStampedModel):
         return super().save(*args, **kwargs)
 
     def __str__(self) -> str:
-        owner = self.user_id or self.participant_id
+        owner = self.user_id or self.participant_id or self.family_member_id
         return f"Push-Gerät {self.device_name} ({owner})"
 
 

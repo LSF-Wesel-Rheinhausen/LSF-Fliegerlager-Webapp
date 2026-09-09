@@ -9,14 +9,14 @@ from django.shortcuts import get_object_or_404, render
 from django.views.decorators.http import require_POST
 
 from .kiosk_access import KIOSK_MODE_SESSION_KEY
-from .models import Participant, PushSubscription
+from .models import Participant, ParticipantFamilyMember, PushSubscription
 from .notifications import (
     _queue_for_subscriptions,
     allowed_categories,
 )
 from .push_endpoints import PUSH_ENDPOINT_ERROR, is_allowed_push_endpoint
 from .pwa_views import pwa_template_context
-from .views import _kiosk_context, _kiosk_participant
+from .views import _kiosk_context, _kiosk_family_member, _kiosk_participant
 
 
 def _json_payload(request: HttpRequest) -> dict[str, Any] | None:
@@ -34,6 +34,8 @@ def _private_participant(request: HttpRequest) -> Participant | None:
 
 
 def _owner_filter(owner: Any, participant_owner: bool) -> dict[str, Any]:
+    if participant_owner and isinstance(owner, ParticipantFamilyMember):
+        return {"family_member": owner, "user__isnull": True, "participant__isnull": True}
     return (
         {"participant": owner, "user__isnull": True}
         if participant_owner
@@ -99,10 +101,11 @@ def _settings_response(request: HttpRequest, owner: Any, *, participant_owner: b
         ),
     }
     if participant_owner:
+        participant = owner.guardian if isinstance(owner, ParticipantFamilyMember) else owner
         return render(
             request,
             "billing/kiosk_notification_settings.html",
-            {**context, **_kiosk_context("private"), "participant": owner},
+            {**context, **_kiosk_context("private"), "participant": participant},
         )
     return render(request, "billing/notification_settings.html", {**context, **pwa_template_context("admin")})
 
@@ -118,7 +121,11 @@ def kiosk_notification_settings(request: HttpRequest) -> HttpResponse:
     participant = _private_participant(request)
     if participant is None:
         return JsonResponse({"error": "Private Kiosk-Anmeldung erforderlich."}, status=403)
-    return _settings_response(request, participant, participant_owner=True)
+    return _settings_response(
+        request,
+        _kiosk_family_member(request, participant) or participant,
+        participant_owner=True,
+    )
 
 
 def _subscribe(request: HttpRequest, owner: Any, *, participant_owner: bool) -> JsonResponse:
@@ -145,13 +152,28 @@ def _subscribe(request: HttpRequest, owner: Any, *, participant_owner: bool) -> 
         return JsonResponse({"error": "Ungültige Benachrichtigungskategorie."}, status=400)
 
     existing = PushSubscription.objects.filter(endpoint=endpoint).first()
-    owner_matches = existing is not None and (
-        (participant_owner and existing.participant_id == owner.pk and existing.user_id is None)
-        or (not participant_owner and existing.user_id == owner.pk and existing.participant_id is None)
-    )
+    owner_matches = False
+    if existing is not None:
+        if participant_owner and isinstance(owner, ParticipantFamilyMember):
+            owner_matches = (
+                existing.family_member_id == owner.pk and existing.participant_id is None and existing.user_id is None
+            )
+        elif participant_owner:
+            owner_matches = (
+                existing.participant_id == owner.pk and existing.family_member_id is None and existing.user_id is None
+            )
+        else:
+            owner_matches = (
+                existing.user_id == owner.pk and existing.participant_id is None and existing.family_member_id is None
+            )
     if existing is not None and not owner_matches:
         return JsonResponse({"error": "Dieses Gerät ist bereits einem anderen Konto zugeordnet."}, status=409)
-    owner_values = {"participant": owner, "user": None} if participant_owner else {"user": owner, "participant": None}
+    if participant_owner and isinstance(owner, ParticipantFamilyMember):
+        owner_values = {"family_member": owner, "participant": None, "user": None}
+    elif participant_owner:
+        owner_values = {"participant": owner, "user": None, "family_member": None}
+    else:
+        owner_values = {"user": owner, "participant": None, "family_member": None}
     subscription, created = PushSubscription.objects.update_or_create(
         endpoint=endpoint,
         defaults={
@@ -180,7 +202,7 @@ def kiosk_notification_subscribe(request: HttpRequest) -> JsonResponse:
     participant = _private_participant(request)
     if participant is None:
         return JsonResponse({"error": "Private Kiosk-Anmeldung erforderlich."}, status=403)
-    return _subscribe(request, participant, participant_owner=True)
+    return _subscribe(request, _kiosk_family_member(request, participant) or participant, participant_owner=True)
 
 
 def _revoke(request: HttpRequest, owner: Any, subscription_id: int, *, participant_owner: bool) -> JsonResponse:
@@ -202,7 +224,9 @@ def kiosk_notification_revoke(request: HttpRequest, subscription_id: int) -> Jso
     participant = _private_participant(request)
     if participant is None:
         return JsonResponse({"error": "Private Kiosk-Anmeldung erforderlich."}, status=403)
-    return _revoke(request, participant, subscription_id, participant_owner=True)
+    return _revoke(
+        request, _kiosk_family_member(request, participant) or participant, subscription_id, participant_owner=True
+    )
 
 
 def _rename(
@@ -238,7 +262,12 @@ def kiosk_notification_rename(request: HttpRequest, subscription_id: int) -> Jso
     participant = _private_participant(request)
     if participant is None:
         return JsonResponse({"error": "Private Kiosk-Anmeldung erforderlich."}, status=403)
-    return _rename(participant, subscription_id, _json_payload(request), participant_owner=True)
+    return _rename(
+        _kiosk_family_member(request, participant) or participant,
+        subscription_id,
+        _json_payload(request),
+        participant_owner=True,
+    )
 
 
 def _update_preferences(
@@ -283,7 +312,7 @@ def kiosk_notification_preferences(request: HttpRequest, subscription_id: int) -
     if participant is None:
         return JsonResponse({"error": "Private Kiosk-Anmeldung erforderlich."}, status=403)
     return _update_preferences(
-        participant,
+        _kiosk_family_member(request, participant) or participant,
         subscription_id,
         _json_payload(request),
         participant_owner=True,
@@ -330,5 +359,9 @@ def kiosk_notification_test(request: HttpRequest, subscription_id: int) -> JsonR
     participant = _private_participant(request)
     if participant is None:
         return JsonResponse({"error": "Private Kiosk-Anmeldung erforderlich."}, status=403)
-    queue_test_notification(participant, participant_owner=True, subscription_id=subscription_id)
+    queue_test_notification(
+        _kiosk_family_member(request, participant) or participant,
+        participant_owner=True,
+        subscription_id=subscription_id,
+    )
     return JsonResponse({}, status=202)

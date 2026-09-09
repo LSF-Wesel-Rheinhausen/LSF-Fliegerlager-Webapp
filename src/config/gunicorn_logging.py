@@ -16,6 +16,25 @@ def redact_recovery_secrets(value: str) -> str:
     return _RECOVERY_SECRET_PATTERN.sub(r"\g<prefix>[REDACTED]", value)
 
 
+class RecoverySecretFilter:
+    """Remove recovery capabilities from Django request log records."""
+
+    def filter(self, record: Any) -> bool:
+        if isinstance(record.msg, str):
+            record.msg = redact_recovery_secrets(record.msg)
+        if record.args:
+            if isinstance(record.args, dict):
+                record.args = {
+                    key: redact_recovery_secrets(value) if isinstance(value, str) else value
+                    for key, value in record.args.items()
+                }
+            else:
+                record.args = tuple(
+                    redact_recovery_secrets(value) if isinstance(value, str) else value for value in record.args
+                )
+        return True
+
+
 class RecoverySafeLogger(Logger):
     """Build Gunicorn access-log atoms without raw account-recovery tokens."""
 

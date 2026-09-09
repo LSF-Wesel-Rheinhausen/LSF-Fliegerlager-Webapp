@@ -38,12 +38,14 @@ from billing.notifications import (
     notify_expense_status,
     notify_expense_submitted,
     notify_linked_booking,
+    queue_account_recovery_push,
+    queue_information_push_batch,
     queue_participant_notification,
     send_due_push_messages,
 )
 from billing.recovery_tokens import create_account_recovery_token
 from billing.services import approve_shared_expense
-from tests.factories import CampFactory, ParticipantFactory, UserFactory
+from tests.factories import CampFactory, ParticipantFactory, ParticipantFamilyMemberFactory, UserFactory
 
 
 @pytest.mark.django_db
@@ -238,6 +240,167 @@ def test_private_participant_can_subscribe_but_central_endpoint_does_not_exist(k
     assert response.status_code == 201
     assert PushSubscription.objects.filter(participant=participant, user__isnull=True).exists()
     assert kiosk_client.get("/central/kiosk/notifications/").status_code == 404
+
+
+@pytest.mark.django_db
+def test_companion_subscription_is_owned_by_companion_and_recovery_stays_scoped(kiosk_client, settings):
+    settings.WEB_PUSH_ENABLED = True
+    participant = ParticipantFactory(email="guardian@example.test")
+    companion = ParticipantFamilyMemberFactory(
+        guardian=participant,
+        email="companion@example.test",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    companion.pin.set_pin("2468")
+    companion.pin.save()
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    session[KIOSK_MODE_SESSION_KEY] = "private"
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(companion.pin.pin_hash)
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-notification-subscribe"),
+        data=json.dumps(subscription_payload("https://push.example.test/companion")),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 201
+    subscription = PushSubscription.objects.get()
+    assert subscription.family_member_id == companion.pk
+    assert subscription.participant_id is None
+    response = kiosk_client.post(
+        reverse("kiosk-notification-subscribe"),
+        data=json.dumps(subscription_payload("https://push.example.test/companion")),
+        content_type="application/json",
+    )
+    assert response.status_code == 200
+    assert PushSubscription.objects.get(pk=subscription.pk).family_member_id == companion.pk
+    assert (
+        queue_account_recovery_push(
+            companion,
+            kind=AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN,
+            title="PIN zurücksetzen",
+            body="body",
+            target_url="/account-recovery/PLACEHOLDER/",
+        )
+        == 1
+    )
+    assert PushMessage.objects.filter(subscription=subscription).exists()
+
+
+@pytest.mark.django_db
+def test_companion_cannot_reassign_participant_device_on_pk_collision(kiosk_client, settings):
+    settings.WEB_PUSH_ENABLED = True
+    participant = ParticipantFactory()
+    companion = ParticipantFamilyMemberFactory(
+        guardian=participant,
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    assert participant.pk == companion.pk
+    subscription = PushSubscription.objects.create(
+        participant=participant,
+        endpoint="https://push.example.test/pk-collision",
+        p256dh="key",
+        auth="auth",
+        categories=["shifts"],
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    session[KIOSK_MODE_SESSION_KEY] = "private"
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(companion.pin.pin_hash)
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-notification-subscribe"),
+        data=json.dumps(subscription_payload("https://push.example.test/pk-collision")),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 409
+    subscription.refresh_from_db()
+    assert subscription.participant_id == participant.pk
+    assert subscription.family_member_id is None
+
+
+@pytest.mark.django_db
+def test_ordinary_participant_notifications_include_family_devices(settings):
+    settings.WEB_PUSH_ENABLED = True
+    guardian = ParticipantFactory()
+    companion = ParticipantFamilyMemberFactory(
+        guardian=guardian,
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    guardian_subscription = PushSubscription.objects.create(
+        participant=guardian,
+        endpoint="https://push.example.test/guardian-ordinary",
+        p256dh="key",
+        auth="auth",
+        categories=["shifts"],
+    )
+    companion_subscription = PushSubscription.objects.create(
+        family_member=companion,
+        endpoint="https://push.example.test/companion-ordinary",
+        p256dh="key",
+        auth="auth",
+        categories=["shifts"],
+    )
+
+    assert (
+        queue_participant_notification(
+            guardian,
+            category="shifts",
+            title="Dienst",
+            body="Erinnerung",
+            target_url="/kiosk/shifts/",
+            dedupe_key="ordinary-family",
+        )
+        == 2
+    )
+    assert set(PushMessage.objects.values_list("subscription_id", flat=True)) == {
+        guardian_subscription.pk,
+        companion_subscription.pk,
+    }
+
+
+@pytest.mark.django_db
+def test_information_batch_includes_companion_devices_for_selected_participant(settings):
+    settings.WEB_PUSH_ENABLED = True
+    guardian = ParticipantFactory()
+    companion = ParticipantFamilyMemberFactory(
+        guardian=guardian,
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    guardian_subscription = PushSubscription.objects.create(
+        participant=guardian,
+        endpoint="https://push.example.test/guardian-information",
+        p256dh="key",
+        auth="auth",
+        categories=["shifts"],
+    )
+    companion_subscription = PushSubscription.objects.create(
+        family_member=companion,
+        endpoint="https://push.example.test/companion-information",
+        p256dh="key",
+        auth="auth",
+        categories=["shifts"],
+    )
+
+    assert (
+        queue_information_push_batch(
+            camp=guardian.camp,
+            participant_ids=[guardian.pk],
+            title="Hinweis",
+            body="Information",
+        )
+        == 2
+    )
+    assert set(PushMessage.objects.values_list("subscription_id", flat=True)) == {
+        guardian_subscription.pk,
+        companion_subscription.pk,
+    }
 
 
 @pytest.mark.django_db

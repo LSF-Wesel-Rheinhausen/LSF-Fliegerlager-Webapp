@@ -1,15 +1,17 @@
+import logging
 import os
 import socket
 import subprocess
 import sys
 import time
 from datetime import timedelta
+from io import StringIO
 from types import SimpleNamespace
 
 from gunicorn.config import Config
 
 from config import gunicorn_config
-from config.gunicorn_logging import RecoverySafeLogger, redact_recovery_secrets
+from config.gunicorn_logging import RecoverySafeLogger, RecoverySecretFilter, redact_recovery_secrets
 
 
 def test_recovery_secret_is_redacted_from_request_targets_and_referrers() -> None:
@@ -95,3 +97,21 @@ def test_real_gunicorn_access_log_does_not_contain_recovery_secret() -> None:
     logs = (stdout + stderr).decode(errors="replace")
     access_line = next(line for line in logs.splitlines() if "/account/recovery/confirm/[REDACTED]/" in line)
     assert raw_token not in access_line
+
+
+def test_django_request_handler_redacts_recovery_secret() -> None:
+    stream = StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.addFilter(RecoverySecretFilter())
+    logger = logging.getLogger("django.request.test")
+    logger.addHandler(handler)
+    logger.setLevel(logging.ERROR)
+    try:
+        logger.error("Internal Server Error: %s", "/account/recovery/confirm/raw-secret/")
+    finally:
+        logger.removeHandler(handler)
+        handler.close()
+
+    rendered = stream.getvalue()
+    assert "raw-secret" not in rendered
+    assert "/account/recovery/confirm/[REDACTED]/" in rendered

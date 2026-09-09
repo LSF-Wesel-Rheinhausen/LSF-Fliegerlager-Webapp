@@ -202,6 +202,45 @@ def test_kiosk_recovery_queues_both_channels_and_sets_a_new_pin(kiosk_client, se
 
 
 @pytest.mark.django_db
+def test_recovery_push_targets_only_the_companion_account(kiosk_client, settings):
+    settings.WEB_PUSH_ENABLED = True
+    guardian = ParticipantFactory(email="guardian@example.test", first_name="Grace", last_name="Guardian")
+    companion = ParticipantFamilyMemberFactory(
+        guardian=guardian,
+        email="companion@example.test",
+        first_name="Connie",
+        last_name="Companion",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    PushSubscription.objects.create(
+        family_member=companion,
+        endpoint="https://push.example.test/companion-identity",
+        p256dh="key",
+        auth="auth",
+        categories=[],
+    )
+
+    kiosk_client.post(reverse("kiosk-pin-recovery-request"), {"email": companion.email})
+
+    message = PushMessage.objects.get()
+    assert message.subscription.family_member_id == companion.pk
+    assert message.subscription.participant_id is None
+
+
+@pytest.mark.django_db
+def test_recovery_email_identifier_is_not_parsed_as_picker_token(kiosk_client):
+    participant = ParticipantFactory(email="participant-1@example.test")
+
+    response = kiosk_client.post(
+        reverse("kiosk-pin-recovery-request"),
+        {"email": participant.email},
+    )
+
+    assert response.status_code == 302
+    assert AccountRecoveryToken.objects.filter(participant=participant).exists()
+
+
+@pytest.mark.django_db
 def test_kiosk_recovery_delivers_to_all_matching_participants(kiosk_client):
     first_participant = ParticipantFactory(email="shared-many@example.test", first_name="Pilot0")
     for index in range(1, 11):
@@ -397,7 +436,7 @@ def test_kiosk_push_only_account_can_start_recovery_with_kiosk_identifier(kiosk_
         )
         identifier = f"family-{owner.pk}"
     PushSubscription.objects.create(
-        participant=participant,
+        **({"participant": participant} if owner_kind == "participant" else {"family_member": owner}),
         endpoint=f"https://push.example.test/{owner_kind}-recovery",
         p256dh="key",
         auth="auth",
@@ -442,7 +481,7 @@ def test_kiosk_recovery_identifier_prefix_prevents_participant_family_collision(
         role=ParticipantFamilyMember.Role.COMPANION,
     )
     PushSubscription.objects.create(
-        participant=participant,
+        family_member=companion,
         endpoint="https://push.example.test/prefix-recovery",
         p256dh="key",
         auth="auth",

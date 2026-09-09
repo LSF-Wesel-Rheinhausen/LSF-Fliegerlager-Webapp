@@ -131,7 +131,7 @@ def _rate_limited_response(request: HttpRequest) -> HttpResponse:
 
 def _has_delivery_channel(owner: Any) -> bool:
     email = getattr(owner, "email", "")
-    push_owner = owner.guardian if isinstance(owner, ParticipantFamilyMember) else owner
+    push_owner = owner
     return bool(email and has_valid_recipient_email(email)) or (
         settings.WEB_PUSH_ENABLED and push_owner.push_subscriptions.filter(is_active=True).exists()
     )
@@ -235,7 +235,7 @@ def kiosk_pin_recovery_request(request: HttpRequest) -> HttpResponse:
         return _rate_limited_response(request)
 
     identifier = form.cleaned_data["identifier"]
-    if identifier.startswith("participant-"):
+    if form.cleaned_data.get("participant") and identifier.startswith("participant-"):
         participants = (
             Participant.objects.filter(
                 pk=int(identifier.removeprefix("participant-")),
@@ -246,7 +246,7 @@ def kiosk_pin_recovery_request(request: HttpRequest) -> HttpResponse:
             .select_related("camp")
         )
         family_members = ParticipantFamilyMember.objects.none()
-    elif identifier.startswith("family-"):
+    elif form.cleaned_data.get("participant") and identifier.startswith("family-"):
         participants = Participant.objects.none()
         family_members = (
             ParticipantFamilyMember.objects.filter(
