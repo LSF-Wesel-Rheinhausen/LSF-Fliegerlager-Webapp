@@ -40,10 +40,14 @@ Do not silently exceed a limit. Preserve current evidence, explain the expected 
 
 1. Confirm that the user or applicable repository instruction authorizes subagents. Do not treat this skill alone as permission for unrelated external actions.
 2. Split the requested outcome into concrete tasks with dependencies, write scopes, validation, and completion criteria.
-3. Identify the immediate blocking task. Keep orchestration, integration, and simple critical-path work in the parent when delegation would duplicate context or leave the parent idle.
+3. Identify the immediate blocking task and delegate every substantive technical or domain task before the parent performs it. While this skill is active because the user requested subagents or delegation, the parent initially limits itself to budget accounting, task-graph construction, handoffs, coordination, and waiting; it does not retain simple critical-path implementation, diagnosis, test authoring, or other fachliche work merely to avoid idling. The parent may resume substantive work only for integration, verification, or an explicitly authorized privileged/external action after the delegated result (or after a documented capacity/authority blocker is presented to the user).
 4. Run independent tasks in parallel with disjoint write scopes. Never assign the same unresolved task twice.
 5. Keep irreversible, production, security-sensitive, or externally visible actions within the user's explicit authorization regardless of model choice.
 6. Batch related findings by owner and file scope. Do not create one agent per comment, test, or review thread.
+
+### Delegation gate
+
+Before each substantive work step, create or reuse a bounded subagent handoff for that step and record it in the budget ledger. This includes implementation, debugging, test design or authoring, security analysis, and technical research. The parent may perform only the coordination activities listed above until such a handoff has been made. If no permitted agent capacity remains, pause and request approval or report the blocker; silently taking the work back into the parent is not allowed.
 
 ## Select the cheapest capable model
 
@@ -78,7 +82,7 @@ Prefer a fresh, context-light agent for independent work. Pass file paths, invar
 
 ## Coordinate without wasting tokens
 
-- Continue non-overlapping parent work immediately after delegation.
+- After delegation, coordinate other handoffs, monitor progress, or prepare integration context; do not immediately continue non-overlapping substantive parent work without passing that work through the delegation gate.
 - Do not poll agents repeatedly. Wait only when their result blocks the next action; otherwise rely on completion notifications.
 - Assign CI waiting and GitHub comment inventory to one reused Luna-Low agent. Batch all checks in each status request and honor any user-specified reporting interval.
 - Ask for deltas rather than repeated full summaries.
@@ -109,6 +113,6 @@ Prefer a fresh, context-light agent for independent work. Pass file paths, invar
 ## Examples
 
 - “Watch both PRs and tell me when CI and comments are clean.” Use separate or shared Luna-Low monitoring work, depending on whether the checks can be batched.
-- “Fix these three independent P2 findings.” Assign each bounded finding to Luna Medium with disjoint files; keep integration local.
-- “Resolve this conflict.” First identify the competing contracts. Give a prepared, bounded conflict to Terra Medium; retain it locally only when it blocks the immediate next step and no parallel work remains.
+- “Fix these three independent P2 findings.” Assign each bounded finding to Luna Medium with disjoint files; keep only integration and verification local.
+- “Resolve this conflict.” Delegate diagnosis of the competing contracts and the bounded resolution to Terra Medium; retain only integration and verification locally after the delegated result.
 - “Audit authentication and implement the remediation.” Use a frontier model for threat and architecture decisions, then hand mechanical, well-specified fixes and tests to Luna Medium.
