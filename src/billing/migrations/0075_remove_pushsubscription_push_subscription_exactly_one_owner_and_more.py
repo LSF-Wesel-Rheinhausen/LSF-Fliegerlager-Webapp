@@ -13,6 +13,14 @@ def remove_companion_subscriptions_on_reverse(apps, schema_editor):
     ).delete()
 
 
+def verify_legacy_user_subscriptions(apps, schema_editor):
+    """Trust only admin devices that already had a user-bound identity."""
+    PushSubscription = apps.get_model('billing', 'PushSubscription')
+    PushSubscription.objects.using(schema_editor.connection.alias).filter(
+        user_id__isnull=False,
+    ).update(identity_verified=True)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -39,6 +47,10 @@ class Migration(migrations.Migration):
             name='identity_verified',
             field=models.BooleanField(default=False),
             preserve_default=False,
+        ),
+        migrations.RunPython(
+            verify_legacy_user_subscriptions,
+            reverse_code=migrations.RunPython.noop,
         ),
         migrations.AlterField(
             model_name='pushsubscription',

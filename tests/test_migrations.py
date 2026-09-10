@@ -35,6 +35,43 @@ PUSH_DELIVERY_BINDING_OLD_TARGET = [("billing", "0077_accountrecoveryidentifiera
 PUSH_DELIVERY_BINDING_NEW_TARGET = [("billing", "0078_recovery_push_delivery_subscription")]
 
 
+@pytest.mark.django_db(transaction=True)
+def test_account_recovery_owner_migration_verifies_legacy_user_devices_only() -> None:
+    try:
+        executor = MigrationExecutor(connection)
+        executor.migrate(ACCOUNT_RECOVERY_OLD_TARGET)
+        old_apps = executor.loader.project_state(ACCOUNT_RECOVERY_OLD_TARGET).apps
+        User = old_apps.get_model("auth", "User")
+        Camp = old_apps.get_model("billing", "Camp")
+        Participant = old_apps.get_model("billing", "Participant")
+        PushSubscription = old_apps.get_model("billing", "PushSubscription")
+        user = User.objects.create(username="legacy-admin-device", password="legacy-hash")
+        camp = Camp.objects.create(name="Legacy subscription migration", year=2048)
+        participant = Participant.objects.create(camp=camp, first_name="Legacy", last_name="Participant")
+        user_subscription = PushSubscription.objects.create(
+            user=user,
+            endpoint="https://push.example.test/legacy-admin-device",
+            p256dh="key",
+            auth="auth",
+        )
+        participant_subscription = PushSubscription.objects.create(
+            participant=participant,
+            endpoint="https://push.example.test/legacy-participant-device",
+            p256dh="key",
+            auth="auth",
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate(ACCOUNT_RECOVERY_NEW_TARGET)
+        new_apps = executor.loader.project_state(ACCOUNT_RECOVERY_NEW_TARGET).apps
+        NewPushSubscription = new_apps.get_model("billing", "PushSubscription")
+
+        assert NewPushSubscription.objects.get(pk=user_subscription.pk).identity_verified is True
+        assert NewPushSubscription.objects.get(pk=participant_subscription.pk).identity_verified is False
+    finally:
+        _restore_current_migration_state()
+
+
 def _create_historical_credit_payouts(historical_apps, amounts: list[Decimal]):
     User = historical_apps.get_model("auth", "User")
     Camp = historical_apps.get_model("billing", "Camp")

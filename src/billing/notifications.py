@@ -37,6 +37,7 @@ from .recovery_tokens import (
     consume_account_recovery_token,
     create_account_recovery_token,
     recovery_owner_is_active,
+    terminally_fail_account_recovery_push_delivery,
 )
 
 logger = logging.getLogger(__name__)
@@ -678,6 +679,33 @@ def send_due_push_messages(*, batch_size: int = 50) -> PushDeliveryResult:
                     raise WebPushException("Push endpoint returned a redirect.", response=response)
             except (WebPushException, requests.RequestException) as error:
                 status_code = getattr(getattr(error, "response", None), "status_code", None)
+                error_code = (
+                    "redirect"
+                    if isinstance(status_code, int) and 300 <= status_code < 400
+                    else str(status_code or "delivery_error")
+                )[:40]
+                is_removed_subscription = status_code in {404, 410}
+                if recovery_id is not None and (is_removed_subscription or message.attempts + 1 >= len(RETRY_DELAYS)):
+                    subscription_removed, attempts = terminally_fail_account_recovery_push_delivery(
+                        recovery_id=recovery_id,
+                        subscription_id=subscription.pk,
+                        message_id=message.pk,
+                        error_code=error_code,
+                        remove_subscription=is_removed_subscription,
+                    )
+                    if subscription_removed:
+                        removed += 1
+                    else:
+                        failed += 1
+                    logger.warning(
+                        "Push delivery failed",
+                        extra={
+                            "push_message_id": message.pk,
+                            "status_code": status_code,
+                            "attempt": attempts,
+                        },
+                    )
+                    continue
                 with transaction.atomic():
                     locked_message = PushMessage.objects.select_for_update().filter(pk=message.pk).first()
                     if locked_message is None:
@@ -688,7 +716,7 @@ def send_due_push_messages(*, batch_size: int = 50) -> PushDeliveryResult:
                     locked_subscription = (
                         PushSubscription.objects.select_for_update().filter(pk=subscription.pk).first()
                     )
-                    if status_code in {404, 410}:
+                    if is_removed_subscription:
                         if locked_message.account_recovery_id is not None:
                             consume_account_recovery_token(locked_message.account_recovery_id)
                         if locked_subscription is not None:
@@ -697,11 +725,7 @@ def send_due_push_messages(*, batch_size: int = 50) -> PushDeliveryResult:
                         continue
                     locked_message.attempts += 1
                     locked_message.processing_started_at = None
-                    locked_message.last_error_code = (
-                        "redirect"
-                        if isinstance(status_code, int) and 300 <= status_code < 400
-                        else str(status_code or "delivery_error")
-                    )[:40]
+                    locked_message.last_error_code = error_code
                     if locked_message.attempts >= len(RETRY_DELAYS):
                         locked_message.status = PushMessage.Status.FAILED
                         if locked_message.account_recovery_id is not None:

@@ -20,6 +20,7 @@ from .models import (
     ParticipantFamilyMember,
     ParticipantFamilyMemberPin,
     ParticipantPin,
+    PushMessage,
     PushSubscription,
 )
 from .push_endpoints import is_allowed_push_endpoint
@@ -142,6 +143,45 @@ def consume_account_recovery_token(recovery_id: int) -> None:
     recovery.token_digest = None
     recovery.expires_at = None
     recovery.save(update_fields=["used_at", "token_digest", "expires_at", "updated_at"])
+
+
+@transaction.atomic
+def terminally_fail_account_recovery_push_delivery(
+    *,
+    recovery_id: int,
+    subscription_id: int,
+    message_id: int,
+    error_code: str,
+    remove_subscription: bool,
+) -> tuple[bool, int | None]:
+    """Consume a terminal push capability in owner/token/subscription/message lock order.
+
+    Returns whether the subscription was removed and the final message attempt
+    count. No bearer secret is read or persisted while handling a failure.
+    """
+    initial = _initial_recovery(recovery_id)
+    if initial is None:
+        return False, None
+    _lock_owner(initial)
+    recovery = AccountRecoveryToken.objects.select_for_update().filter(pk=recovery_id).first()
+    subscription = PushSubscription.objects.select_for_update().filter(pk=subscription_id).first()
+    message = PushMessage.objects.select_for_update().filter(pk=message_id).first()
+    if recovery is not None:
+        recovery.used_at = recovery.used_at or timezone.now()
+        recovery.token_digest = None
+        recovery.expires_at = None
+        recovery.save(update_fields=["used_at", "token_digest", "expires_at", "updated_at"])
+    if message is None:
+        return False, None
+    if remove_subscription and subscription is not None:
+        subscription.delete()
+        return True, message.attempts
+    message.status = PushMessage.Status.FAILED
+    message.last_error_code = error_code
+    message.processing_started_at = None
+    message.attempts += 1
+    message.save(update_fields=["status", "last_error_code", "processing_started_at", "attempts", "updated_at"])
+    return False, message.attempts
 
 
 def create_account_recovery_token(*, kind: str, owner: Any) -> AccountRecoveryToken:

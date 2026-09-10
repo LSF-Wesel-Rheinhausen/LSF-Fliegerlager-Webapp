@@ -5,9 +5,10 @@ from unittest.mock import patch
 import pytest
 from django.db.models import QuerySet
 from django.urls import reverse
+from pywebpush import WebPushException
 
 from billing.models import AccountRecoveryToken, ParticipantFamilyMember, PushSubscription
-from billing.notifications import queue_account_recovery_push, send_due_push_messages
+from billing.notifications import PushDeliveryResult, queue_account_recovery_push, send_due_push_messages
 from billing.recovery_tokens import create_account_recovery_token, find_valid_account_recovery
 from tests.factories import ParticipantFactory, UserFactory
 from tests.kiosk_helpers import authenticate_kiosk_session
@@ -296,6 +297,45 @@ def test_invalid_recovery_endpoint_locks_owner_before_revoking_subscription(monk
     send_due_push_messages()
 
     assert events.index("lock:User") < events.index("update:PushSubscription")
+
+
+@pytest.mark.django_db
+@patch("billing.notifications.webpush")
+def test_gone_recovery_delivery_locks_owner_token_subscription_then_message(webpush, monkeypatch, settings):
+    class GoneResponse:
+        status_code = 410
+
+    settings.WEB_PUSH_ENABLED = True
+    webpush.side_effect = WebPushException("gone", response=GoneResponse())
+    user = UserFactory(password="old-password")
+    PushSubscription.objects.create(
+        user=user, endpoint="https://push.example.test/gone-lock-order", p256dh="key", auth="auth"
+    )
+    queue_account_recovery_push(
+        user,
+        kind=AccountRecoveryToken.Kind.USER_PASSWORD,
+        title="Reset",
+        body="Link",
+        target_url="/account-recovery/ACCOUNT_RECOVERY_TOKEN/",
+    )
+    locked_models = []
+    fetch_all = QuerySet._fetch_all
+
+    def record_locks(queryset):
+        if queryset._result_cache is None and queryset.query.select_for_update:
+            locked_models.append(queryset.model.__name__)
+        fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", record_locks)
+
+    result = send_due_push_messages()
+
+    recovery = AccountRecoveryToken.objects.get(user=user)
+    assert result == PushDeliveryResult(removed_subscriptions=1)
+    assert recovery.used_at is not None
+    assert recovery.token_digest is None
+    assert recovery.expires_at is None
+    assert locked_models[-4:] == ["User", "AccountRecoveryToken", "PushSubscription", "PushMessage"]
 
 
 @pytest.mark.django_db
