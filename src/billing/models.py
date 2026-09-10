@@ -262,6 +262,14 @@ class AccountRecoveryToken(TimeStampedModel):
     credential_fingerprint = models.CharField(max_length=64, editable=False)
     delivery_channel = models.CharField(max_length=8, choices=DeliveryChannel.choices, default=DeliveryChannel.PUSH)
     recipient_email_digest = models.CharField(max_length=64, editable=False, null=True, blank=True)
+    delivery_subscription = models.ForeignKey(
+        "PushSubscription",
+        on_delete=models.SET_NULL,
+        related_name="delivered_account_recovery_tokens",
+        null=True,
+        blank=True,
+    )
+    push_delivery_bound = models.BooleanField(default=False, editable=False)
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,

@@ -99,6 +99,7 @@ from .kiosk_security import (
     kiosk_pin_fingerprint,
 )
 from .models import (
+    AccountRecoveryToken,
     AttendanceDay,
     BookingAuditLog,
     Camp,
@@ -145,6 +146,7 @@ from .permissions import (
     superuser_required,
 )
 from .pwa_views import pwa_template_context
+from .recovery_tokens import has_usable_recovery_credential, revoke_owner_recovery_push_subscriptions
 from .roles import (
     ROLE_ADMIN,
     ROLE_EDITOR,
@@ -1032,8 +1034,12 @@ def user_password_reset(request: HttpRequest, user_id: int) -> HttpResponse:
     _require_superuser_for_superuser_account(request, managed_user)
     form = UserPasswordResetForm(managed_user, request.POST or None)
     if request.method == "POST" and form.is_valid():
-        form.save()
-        clear_login_rate_limit(managed_user.username)
+        with transaction.atomic():
+            locked_user = User.objects.select_for_update().get(pk=managed_user.pk)
+            locked_user.set_password(form.cleaned_data["new_password1"])
+            locked_user.save(update_fields=["password"])
+            revoke_owner_recovery_push_subscriptions(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=locked_user)
+        clear_login_rate_limit(locked_user.username)
         messages.success(request, "Passwort wurde neu gesetzt.")
         return redirect("user-list")
     return render(request, "billing/form.html", {"form": form, "title": "Passwort neu setzen"})
@@ -1690,8 +1696,13 @@ def pin_reset(request, participant_id):
     participant = get_object_or_404(Participant, pk=participant_id, archived_at__isnull=True)
     if request.method == "POST":
         with transaction.atomic():
-            participant.pin.reset_pin(changed_by=request.user)
-            participant.pin.save()
+            locked_participant = Participant.objects.select_for_update().get(pk=participant.pk)
+            pin = ParticipantPin.objects.select_for_update().get(participant=locked_participant)
+            pin.reset_pin(changed_by=request.user)
+            pin.save()
+            revoke_owner_recovery_push_subscriptions(
+                kind=AccountRecoveryToken.Kind.PARTICIPANT_PIN, owner=locked_participant
+            )
         messages.success(
             request,
             "Teilnehmer-PIN wurde gesperrt. Vor der nächsten Anmeldung muss eine neue PIN gesetzt werden.",
@@ -1723,8 +1734,15 @@ def pin_set(request, participant_id):
     form = ParticipantPinForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
-            participant.pin.set_pin(form.cleaned_data["pin"], changed_by=request.user)
-            participant.pin.save()
+            locked_participant = Participant.objects.select_for_update().get(pk=participant.pk)
+            pin = ParticipantPin.objects.select_for_update().get(participant=locked_participant)
+            established = has_usable_recovery_credential(AccountRecoveryToken.Kind.PARTICIPANT_PIN, locked_participant)
+            pin.set_pin(form.cleaned_data["pin"], changed_by=request.user)
+            pin.save()
+            if established:
+                revoke_owner_recovery_push_subscriptions(
+                    kind=AccountRecoveryToken.Kind.PARTICIPANT_PIN, owner=locked_participant
+                )
         messages.success(request, "Teilnehmer-PIN wurde gesetzt.")
         return redirect("participant-detail", participant_id=participant.pk)
     return render(request, "billing/form.html", {"form": form, "title": "Teilnehmer-PIN setzen"})
@@ -4448,11 +4466,22 @@ def kiosk_home(request, kiosk_mode="private"):
             pin_model = ParticipantFamilyMemberPin if active_family_member is not None else ParticipantPin
             pin_changed = False
             with transaction.atomic():
+                owner_model = ParticipantFamilyMember if active_family_member is not None else Participant
+                owner_id = active_family_member.pk if active_family_member is not None else participant.pk
+                locked_owner = owner_model.objects.select_for_update().get(pk=owner_id)
                 locked_pin = pin_model.objects.select_for_update().get(pk=actor_pin.pk)
                 pin_change_form = KioskPinChangeForm(request.POST, pin_record=locked_pin, prefix="pin")
                 if pin_change_form.is_valid():
                     locked_pin.set_pin(pin_change_form.cleaned_data["pin"])
                     locked_pin.save()
+                    revoke_owner_recovery_push_subscriptions(
+                        kind=(
+                            AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN
+                            if active_family_member is not None
+                            else AccountRecoveryToken.Kind.PARTICIPANT_PIN
+                        ),
+                        owner=locked_owner,
+                    )
                     pin_changed = True
             if pin_changed:
                 _clear_kiosk_session(request)
@@ -5114,8 +5143,17 @@ def kiosk_home(request, kiosk_mode="private"):
                 family_member_pin_form = KioskFamilyMemberPinForm(request.POST, prefix="family")
                 if family_member_pin_form.is_valid():
                     with transaction.atomic():
-                        family_member.pin.set_pin(family_member_pin_form.cleaned_data["pin"])
-                        family_member.pin.save()
+                        locked_member = ParticipantFamilyMember.objects.select_for_update().get(pk=family_member.pk)
+                        pin = ParticipantFamilyMemberPin.objects.select_for_update().get(family_member=locked_member)
+                        established = has_usable_recovery_credential(
+                            AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN, locked_member
+                        )
+                        pin.set_pin(family_member_pin_form.cleaned_data["pin"])
+                        pin.save()
+                        if established:
+                            revoke_owner_recovery_push_subscriptions(
+                                kind=AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN, owner=locked_member
+                            )
                     messages.success(request, f"PIN für {family_member.full_name} wurde gespeichert.")
                     return redirect(_kiosk_route(kiosk_mode, "home"))
         elif request.POST.get("action") == "family_member_deactivate":

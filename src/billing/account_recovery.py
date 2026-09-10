@@ -26,7 +26,6 @@ from .models import (
     AccountRecoveryToken,
     Participant,
     ParticipantFamilyMember,
-    PushSubscription,
 )
 from .notifications import queue_account_recovery_push
 from .recovery_tokens import (
@@ -37,6 +36,7 @@ from .recovery_tokens import (
     invalidate_account_recovery_tokens,
     lock_valid_account_recovery,
     recovery_owner_is_active,
+    revoke_owner_recovery_push_subscriptions,
 )
 
 User = get_user_model()
@@ -244,22 +244,6 @@ def _render_request_form(request: HttpRequest, *, form: forms.Form, title: str) 
     return render(request, "billing/account_recovery_request.html", {"form": form, "title": title})
 
 
-def _invalidate_recovery_owner_push_subscriptions(*, kind: str, owner: Any) -> None:
-    """Revoke or require re-verification for devices owned by the recovered account."""
-    if kind == AccountRecoveryToken.Kind.USER_PASSWORD:
-        owner_filter = {"user": owner}
-        update_fields = {"is_active": False}
-    elif kind == AccountRecoveryToken.Kind.PARTICIPANT_PIN:
-        owner_filter = {"participant": owner}
-        update_fields = {"identity_verified": False}
-    elif kind == AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN:
-        owner_filter = {"family_member": owner}
-        update_fields = {"identity_verified": False}
-    else:
-        raise ValueError("Unsupported account-recovery kind")
-    PushSubscription.objects.select_for_update().filter(**owner_filter).update(**update_fields)
-
-
 def account_recovery_request(request: HttpRequest) -> HttpResponse:
     """Accept an admin-interface identifier while returning a non-enumerating response."""
     form = AccountRecoveryRequestForm(request.POST or None)
@@ -417,20 +401,20 @@ def account_recovery_confirm(request: HttpRequest, token: str) -> HttpResponse:
             user = owner
             user.set_password(form.cleaned_data["new_password1"])
             user.save(update_fields=["password"])
-            _invalidate_recovery_owner_push_subscriptions(kind=locked_recovery.kind, owner=user)
+            revoke_owner_recovery_push_subscriptions(kind=locked_recovery.kind, owner=user)
             clear_login_rate_limit(user.get_username(), request=request, additional_usernames=(user.email,))
             success_message = "Passwort wurde geändert. Du kannst dich jetzt anmelden."
             destination = "login"
         elif locked_recovery.kind == AccountRecoveryToken.Kind.PARTICIPANT_PIN:
             owner.pin.set_pin(form.cleaned_data["pin"])
             owner.pin.save()
-            _invalidate_recovery_owner_push_subscriptions(kind=locked_recovery.kind, owner=owner)
+            revoke_owner_recovery_push_subscriptions(kind=locked_recovery.kind, owner=owner)
             success_message = "PIN wurde geändert. Du kannst dich jetzt anmelden."
             destination = "kiosk-login"
         else:
             owner.pin.set_pin(form.cleaned_data["pin"])
             owner.pin.save()
-            _invalidate_recovery_owner_push_subscriptions(kind=locked_recovery.kind, owner=owner)
+            revoke_owner_recovery_push_subscriptions(kind=locked_recovery.kind, owner=owner)
             success_message = "PIN wurde geändert. Du kannst dich jetzt anmelden."
             destination = "kiosk-login"
         locked_recovery.used_at = timezone.now()

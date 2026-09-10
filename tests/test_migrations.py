@@ -25,11 +25,14 @@ POSITION_REPORT_OLD_TARGET = CREDIT_PAYOUT_NEW_TARGET
 POSITION_REPORT_NEW_TARGET = [("billing", "0068_charge_position_report_description")]
 SHIFT_STAFFING_OLD_TARGET = [("billing", "0070_alter_camp_options_alter_dailyshifttemplate_options_and_more")]
 SHIFT_STAFFING_NEW_TARGET = [("billing", "0072_shift_staffing_audit")]
+ACCOUNT_RECOVERY_BASE_TARGET = [("billing", "0073_camp_meal_notification_settings")]
 ACCOUNT_RECOVERY_OLD_TARGET = [("billing", "0074_account_recovery")]
 ACCOUNT_RECOVERY_NEW_TARGET = [("billing", "0075_remove_pushsubscription_push_subscription_exactly_one_owner_and_more")]
 ACCOUNT_RECOVERY_ROLLBACK_TARGET = [("billing", "0074_account_recovery")]
 RECOVERY_BINDING_OLD_TARGET = ACCOUNT_RECOVERY_NEW_TARGET
 RECOVERY_BINDING_NEW_TARGET = [("billing", "0076_account_recovery_delivery_binding")]
+PUSH_DELIVERY_BINDING_OLD_TARGET = [("billing", "0077_accountrecoveryidentifierattempt")]
+PUSH_DELIVERY_BINDING_NEW_TARGET = [("billing", "0078_recovery_push_delivery_subscription")]
 
 
 def _create_historical_credit_payouts(historical_apps, amounts: list[Decimal]):
@@ -152,6 +155,73 @@ def test_account_recovery_migration_reverse_removes_companion_devices_before_con
 
 
 @pytest.mark.django_db(transaction=True)
+def test_account_recovery_migration_reverse_removes_recovery_batches_before_legacy_constraint() -> None:
+    try:
+        executor = MigrationExecutor(connection)
+        executor.migrate(ACCOUNT_RECOVERY_OLD_TARGET)
+        old_apps = executor.loader.project_state(ACCOUNT_RECOVERY_OLD_TARGET).apps
+        User = old_apps.get_model("auth", "User")
+        Camp = old_apps.get_model("billing", "Camp")
+        Participant = old_apps.get_model("billing", "Participant")
+        EmailBatch = old_apps.get_model("billing", "EmailBatch")
+        EmailDelivery = old_apps.get_model("billing", "EmailDelivery")
+        AccountRecoveryToken = old_apps.get_model("billing", "AccountRecoveryToken")
+        user = User.objects.create(username="rollback-batch-user", password="legacy-hash")
+        camp = Camp.objects.create(name="Recovery batch rollback", year=2047)
+        participant = Participant.objects.create(camp=camp, first_name="Recovery", last_name="Recipient")
+        recovery = AccountRecoveryToken.objects.create(
+            kind="participant_pin",
+            token_digest="c" * 64,
+            credential_fingerprint="d" * 64,
+            participant=participant,
+            expires_at=timezone.now() + timedelta(hours=1),
+        )
+        normal_batch = EmailBatch.objects.create(
+            kind="information",
+            camp=camp,
+            subject="Information",
+            body="Body",
+            created_by=user,
+        )
+        recovery_batch = EmailBatch.objects.create(
+            kind="account_recovery",
+            subject="Recovery",
+            body="Body",
+            created_by=user,
+        )
+        normal_delivery = EmailDelivery.objects.create(
+            batch=normal_batch,
+            recipient_email="normal@example.test",
+            recipient_names=["Normal"],
+            dedupe_key="normal",
+            subject="Information",
+            body_text="Body",
+        )
+        recovery_delivery = EmailDelivery.objects.create(
+            batch=recovery_batch,
+            account_recovery=recovery,
+            recipient_email="recovery@example.test",
+            recipient_names=["Recovery"],
+            dedupe_key="recovery",
+            subject="Recovery",
+            body_text="Body",
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate(ACCOUNT_RECOVERY_BASE_TARGET)
+        rolled_back_apps = executor.loader.project_state(ACCOUNT_RECOVERY_BASE_TARGET).apps
+        LegacyEmailBatch = rolled_back_apps.get_model("billing", "EmailBatch")
+        LegacyEmailDelivery = rolled_back_apps.get_model("billing", "EmailDelivery")
+
+        assert LegacyEmailBatch.objects.filter(pk=normal_batch.pk).exists()
+        assert LegacyEmailDelivery.objects.filter(pk=normal_delivery.pk).exists()
+        assert not LegacyEmailBatch.objects.filter(pk=recovery_batch.pk).exists()
+        assert not LegacyEmailDelivery.objects.filter(pk=recovery_delivery.pk).exists()
+    finally:
+        _restore_current_migration_state()
+
+
+@pytest.mark.django_db(transaction=True)
 def test_recovery_binding_migration_preserves_email_tokens_with_recipient_binding() -> None:
     try:
         executor = MigrationExecutor(connection)
@@ -189,6 +259,50 @@ def test_recovery_binding_migration_preserves_email_tokens_with_recipient_bindin
         assert len(migrated.recipient_email_digest) == 64
         assert migrated.used_at is None
         assert migrated.token_digest == "a" * 64
+    finally:
+        _restore_current_migration_state()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_push_delivery_binding_migration_invalidates_only_legacy_delivered_push_tokens() -> None:
+    try:
+        executor = MigrationExecutor(connection)
+        executor.migrate(PUSH_DELIVERY_BINDING_OLD_TARGET)
+        old_apps = executor.loader.project_state(PUSH_DELIVERY_BINDING_OLD_TARGET).apps
+        User = old_apps.get_model("auth", "User")
+        AccountRecoveryToken = old_apps.get_model("billing", "AccountRecoveryToken")
+        user = User.objects.create(username="legacy-push-recovery", password="legacy-hash")
+        push_recovery = AccountRecoveryToken.objects.create(
+            kind="user_password",
+            delivery_channel="push",
+            token_digest="a" * 64,
+            credential_fingerprint="b" * 64,
+            user=user,
+            expires_at=timezone.now() + timedelta(hours=1),
+        )
+        email_recovery = AccountRecoveryToken.objects.create(
+            kind="user_password",
+            delivery_channel="email",
+            recipient_email_digest="c" * 64,
+            token_digest="d" * 64,
+            credential_fingerprint="e" * 64,
+            user=user,
+            expires_at=timezone.now() + timedelta(hours=1),
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate(PUSH_DELIVERY_BINDING_NEW_TARGET)
+        new_apps = executor.loader.project_state(PUSH_DELIVERY_BINDING_NEW_TARGET).apps
+        NewRecovery = new_apps.get_model("billing", "AccountRecoveryToken")
+        migrated_push = NewRecovery.objects.get(pk=push_recovery.pk)
+        migrated_email = NewRecovery.objects.get(pk=email_recovery.pk)
+
+        assert migrated_push.used_at is not None
+        assert migrated_push.token_digest is None
+        assert migrated_push.expires_at is None
+        assert migrated_email.used_at is None
+        assert migrated_email.token_digest == "d" * 64
+        assert migrated_email.expires_at is not None
     finally:
         _restore_current_migration_state()
 

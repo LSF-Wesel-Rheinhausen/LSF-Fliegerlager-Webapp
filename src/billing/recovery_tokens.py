@@ -20,7 +20,9 @@ from .models import (
     ParticipantFamilyMember,
     ParticipantFamilyMemberPin,
     ParticipantPin,
+    PushSubscription,
 )
+from .push_endpoints import is_allowed_push_endpoint
 
 User = get_user_model()
 RECOVERY_TOKEN_PLACEHOLDER = "ACCOUNT_RECOVERY_TOKEN"
@@ -100,6 +102,30 @@ def invalidate_account_recovery_tokens(*, kind: str, owner: Any) -> None:
     AccountRecoveryToken.objects.filter(kind=kind, used_at__isnull=True, **_owner_filter(kind, owner)).update(
         used_at=timezone.now()
     )
+
+
+def revoke_owner_recovery_push_subscriptions(*, kind: str, owner: Any) -> None:
+    """Revoke exactly one credential owner's devices after an established rotation.
+
+    Callers hold the owner (and, for PIN credentials, PIN) row first.  This
+    helper then locks recovery capabilities before subscriptions, establishing
+    the shared ``owner -> PIN -> recovery token -> subscription`` order.
+    """
+    owner_filter = _owner_filter(kind, owner)
+    list(
+        AccountRecoveryToken.objects.select_for_update()
+        .filter(kind=kind, used_at__isnull=True, **owner_filter)
+        .order_by("pk")
+    )
+    if kind == AccountRecoveryToken.Kind.USER_PASSWORD:
+        updates = {"is_active": False}
+    else:
+        updates = {"identity_verified": False}
+    subscription_ids = list(
+        PushSubscription.objects.select_for_update().filter(**owner_filter).order_by("pk").values_list("pk", flat=True)
+    )
+    if subscription_ids:
+        PushSubscription.objects.filter(pk__in=subscription_ids).update(updated_at=timezone.now(), **updates)
 
 
 @transaction.atomic
@@ -222,7 +248,9 @@ def bind_account_recovery_email_recipient(recovery: AccountRecoveryToken, recipi
         or locked.delivery_channel != AccountRecoveryToken.DeliveryChannel.PUSH
         or locked.recipient_email_digest is not None
         or not _matches_delivery_address(owner, normalized_email)
-        or not recovery_matches_current_credential(locked, owner)
+        or not has_usable_recovery_credential(locked.kind, owner)
+        or not recovery_owner_is_active(locked.kind, owner)
+        or locked.credential_fingerprint != credential_fingerprint(locked.kind, owner)
     ):
         raise ValueError("Recovery capability cannot be bound to this recipient")
     digest = _recipient_email_digest(normalized_email)
@@ -244,11 +272,32 @@ def _matches_bound_recipient(recovery: AccountRecoveryToken, owner: Any) -> bool
     )
 
 
+def _matches_bound_push_subscription(recovery: AccountRecoveryToken, owner: Any) -> bool:
+    """Return whether the exact device that received a push link remains valid."""
+    if recovery.delivery_channel != AccountRecoveryToken.DeliveryChannel.PUSH:
+        return recovery.delivery_subscription_id is None
+    if recovery.delivery_subscription_id is None:
+        return not recovery.push_delivery_bound
+    subscription = PushSubscription.objects.filter(
+        pk=recovery.delivery_subscription_id,
+        is_active=True,
+        identity_verified=True,
+    ).first()
+    if subscription is None:
+        return False
+    if recovery.kind == AccountRecoveryToken.Kind.USER_PASSWORD:
+        return subscription.user_id == owner.pk
+    if recovery.kind == AccountRecoveryToken.Kind.PARTICIPANT_PIN:
+        return subscription.participant_id == owner.pk
+    return subscription.family_member_id == owner.pk
+
+
 def recovery_matches_current_credential(recovery: AccountRecoveryToken, owner: Any) -> bool:
     """Return whether account state still matches the token's issuance snapshot."""
     return bool(
         _matches_owner(recovery, owner)
         and _matches_bound_recipient(recovery, owner)
+        and _matches_bound_push_subscription(recovery, owner)
         and has_usable_recovery_credential(recovery.kind, owner)
         and recovery_owner_is_active(recovery.kind, owner)
         and recovery.credential_fingerprint == credential_fingerprint(recovery.kind, owner)
@@ -285,9 +334,7 @@ def activate_account_recovery_token(recovery_id: int, *, recipient_email: str | 
 def activate_account_recovery_push_token(
     recovery_id: int,
     *,
-    user_id: int | None,
-    participant_id: int | None,
-    family_member_id: int | None,
+    subscription_id: int,
 ) -> str | None:
     """Lock and activate a push capability only for the exact current subscription owner."""
     initial = _initial_recovery(recovery_id)
@@ -299,15 +346,24 @@ def activate_account_recovery_push_token(
     recovery = AccountRecoveryToken.objects.select_for_update().filter(pk=recovery_id).first()
     if recovery is None or recovery.delivery_channel != AccountRecoveryToken.DeliveryChannel.PUSH:
         return None
-    owner_matches = bool(
-        (recovery.kind == AccountRecoveryToken.Kind.USER_PASSWORD and recovery.user_id == user_id)
-        or (recovery.kind == AccountRecoveryToken.Kind.PARTICIPANT_PIN and recovery.participant_id == participant_id)
-        or (
-            recovery.kind == AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN
-            and recovery.family_member_id == family_member_id
-        )
+    subscription = PushSubscription.objects.select_for_update().filter(pk=subscription_id, is_active=True).first()
+    if subscription is None:
+        return None
+    if not is_allowed_push_endpoint(subscription.endpoint):
+        PushSubscription.objects.filter(pk=subscription.pk).update(is_active=False, updated_at=timezone.now())
+        return None
+    subscription_matches = bool(
+        (recovery.kind == AccountRecoveryToken.Kind.USER_PASSWORD and subscription.user_id == owner.pk)
+        or (recovery.kind == AccountRecoveryToken.Kind.PARTICIPANT_PIN and subscription.participant_id == owner.pk)
+        or (recovery.kind == AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN and subscription.family_member_id == owner.pk)
     )
-    return _activate_locked_recovery(recovery, owner) if owner_matches else None
+    requires_verified_identity = recovery.kind != AccountRecoveryToken.Kind.USER_PASSWORD
+    if not subscription_matches or (requires_verified_identity and not subscription.identity_verified):
+        return None
+    recovery.delivery_subscription = subscription
+    recovery.push_delivery_bound = True
+    recovery.save(update_fields=["delivery_subscription", "push_delivery_bound", "updated_at"])
+    return _activate_locked_recovery(recovery, owner)
 
 
 def find_valid_account_recovery(raw_token: str) -> AccountRecoveryToken | None:

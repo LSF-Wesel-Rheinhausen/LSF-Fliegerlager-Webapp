@@ -3,6 +3,12 @@ from django.conf import settings
 from django.db import migrations, models
 
 
+def remove_recovery_batches_on_reverse(apps, schema_editor):
+    """Remove batches that the pre-recovery constraint cannot represent."""
+    EmailBatch = apps.get_model("billing", "EmailBatch")
+    EmailBatch.objects.using(schema_editor.connection.alias).filter(kind="account_recovery").delete()
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ("billing", "0073_camp_meal_notification_settings"),
@@ -53,6 +59,10 @@ class Migration(migrations.Migration):
             ),
         ),
         migrations.RemoveConstraint(model_name="emailbatch", name="email_batch_run_matches_kind"),
+        migrations.RunPython(
+            migrations.RunPython.noop,
+            reverse_code=remove_recovery_batches_on_reverse,
+        ),
         migrations.AddConstraint(
             model_name="emailbatch",
             constraint=models.CheckConstraint(

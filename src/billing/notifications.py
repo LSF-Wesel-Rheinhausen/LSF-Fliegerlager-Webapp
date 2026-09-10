@@ -2,7 +2,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
-from typing import Any
+from typing import Any, cast
 
 import requests
 from django.conf import settings
@@ -252,11 +252,60 @@ def _terminally_fail_locked_push(message: PushMessage, error_code: str) -> None:
 def _authorize_push_delivery(message_id: int) -> tuple[PushMessage, PushSubscription, str | None] | None:
     """Authorize and activate a claimed delivery atomically before network I/O.
 
-    Message and subscription are locked first. Recovery lifecycle helpers then use
-    the global owner/PIN/token order. The transaction ends before ``webpush``.
+    Recovery deliveries use the global owner/PIN/token/subscription/message lock
+    order. The transaction ends before ``webpush``.
     """
-    message = PushMessage.objects.select_for_update().filter(pk=message_id).first()
-    if message is None or message.status != PushMessage.Status.PROCESSING:
+    message_data = (
+        PushMessage.objects.filter(pk=message_id, status=PushMessage.Status.PROCESSING)
+        .values("subscription_id", "account_recovery_id", "category", "target_url")
+        .first()
+    )
+    if message_data is None:
+        return None
+    recovery_id = cast(int | None, message_data["account_recovery_id"])
+    if recovery_id is not None:
+        subscription_snapshot = PushSubscription.objects.filter(pk=message_data["subscription_id"]).first()
+        endpoint_is_allowed = bool(
+            subscription_snapshot is not None and is_allowed_push_endpoint(subscription_snapshot.endpoint)
+        )
+        recovery_message_is_valid = bool(
+            message_data["category"] == SECURITY_CATEGORY and RECOVERY_TOKEN_PLACEHOLDER in message_data["target_url"]
+        )
+        if not endpoint_is_allowed or not recovery_message_is_valid:
+            consume_account_recovery_token(recovery_id)
+            if subscription_snapshot is not None and not endpoint_is_allowed:
+                PushSubscription.objects.filter(pk=subscription_snapshot.pk).update(
+                    is_active=False, updated_at=timezone.now()
+                )
+            message = (
+                PushMessage.objects.select_for_update()
+                .filter(pk=message_id, status=PushMessage.Status.PROCESSING)
+                .first()
+            )
+            if message is not None:
+                _terminally_fail_locked_push(message, "recovery_unavailable")
+            return None
+        raw_token = activate_account_recovery_push_token(
+            recovery_id,
+            subscription_id=message_data["subscription_id"],
+        )
+        if raw_token is None:
+            consume_account_recovery_token(recovery_id)
+        message = (
+            PushMessage.objects.select_for_update().filter(pk=message_id, status=PushMessage.Status.PROCESSING).first()
+        )
+        subscription = PushSubscription.objects.filter(pk=message_data["subscription_id"]).first()
+        if message is None or subscription is None or raw_token is None:
+            if raw_token is not None:
+                consume_account_recovery_token(recovery_id)
+            if message is not None:
+                _terminally_fail_locked_push(message, "recovery_unavailable")
+            return None
+        return message, subscription, raw_token
+    message = (
+        PushMessage.objects.select_for_update().filter(pk=message_id, status=PushMessage.Status.PROCESSING).first()
+    )
+    if message is None:
         return None
     subscription = PushSubscription.objects.select_for_update().filter(pk=message.subscription_id).first()
     if subscription is None:
@@ -269,27 +318,10 @@ def _authorize_push_delivery(message_id: int) -> tuple[PushMessage, PushSubscrip
         eligible = False
         eligibility_error = "invalid_endpoint"
 
-    raw_token = None
-    if message.account_recovery_id is not None:
-        eligible = bool(
-            eligible and message.category == SECURITY_CATEGORY and RECOVERY_TOKEN_PLACEHOLDER in message.target_url
-        )
-        if eligible:
-            raw_token = activate_account_recovery_push_token(
-                message.account_recovery_id,
-                user_id=subscription.user_id,
-                participant_id=subscription.participant_id,
-                family_member_id=subscription.family_member_id,
-            )
-            eligible = raw_token is not None
-        if not eligible:
-            consume_account_recovery_token(message.account_recovery_id)
-            _terminally_fail_locked_push(message, "recovery_unavailable")
-            return None
-    elif not eligible:
+    if not eligible:
         _terminally_fail_locked_push(message, eligibility_error)
         return None
-    return message, subscription, raw_token
+    return message, subscription, None
 
 
 def _administrative_users(*, include_meal_managers: bool = False) -> Any:
