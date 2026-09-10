@@ -113,7 +113,10 @@ LOGGING = {
     "handlers": {
         "console": {"class": "logging.StreamHandler", "filters": ["redact_recovery_secrets"]},
     },
-    "loggers": {"django.request": {"handlers": ["console"], "propagate": False}},
+    "loggers": {
+        "django.request": {"handlers": ["console"], "propagate": False},
+        "django.security.csrf": {"handlers": ["console"], "propagate": False},
+    },
 }
 
 ROOT_URLCONF = "config.urls"

@@ -91,8 +91,9 @@ def queue_participant_notification(
     subscriptions = [
         subscription
         for subscription in PushSubscription.objects.filter(
-            Q(participant=participant) | Q(family_member__guardian=participant),
+            Q(participant=participant) | Q(family_member__guardian=participant, family_member__is_active=True),
             is_active=True,
+            identity_verified=True,
         )
         if category in subscription.categories
     ]
@@ -186,7 +187,8 @@ def queue_account_recovery_push(
         owner_filter = {"family_member": owner}
     else:
         owner_filter = {"participant": owner}
-    subscriptions = PushSubscription.objects.filter(is_active=True, **owner_filter)
+    recovery_filter = {} if kind == AccountRecoveryToken.Kind.USER_PASSWORD else {"identity_verified": True}
+    subscriptions = PushSubscription.objects.filter(is_active=True, **owner_filter, **recovery_filter)
     created = 0
     for subscription in subscriptions:
         recovery = create_account_recovery_token(kind=kind, owner=owner)
@@ -651,8 +653,9 @@ def queue_information_push_batch(
         return 0
 
     subscriptions = PushSubscription.objects.filter(
-        Q(participant_id__in=p_ids) | Q(family_member__guardian_id__in=p_ids),
+        Q(participant_id__in=p_ids) | Q(family_member__guardian_id__in=p_ids, family_member__is_active=True),
         is_active=True,
+        identity_verified=True,
     )
 
     created_count = 0

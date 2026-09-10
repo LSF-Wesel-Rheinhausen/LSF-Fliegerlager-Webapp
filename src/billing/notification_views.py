@@ -153,11 +153,22 @@ def _subscribe(request: HttpRequest, owner: Any, *, participant_owner: bool) -> 
 
     existing = PushSubscription.objects.filter(endpoint=endpoint).first()
     owner_matches = False
+    owner_values: dict[str, Any] | None = None
     if existing is not None:
         if participant_owner and isinstance(owner, ParticipantFamilyMember):
             owner_matches = (
                 existing.family_member_id == owner.pk and existing.participant_id is None and existing.user_id is None
             )
+            if not owner_matches and (
+                existing.participant_id == owner.guardian_id
+                and existing.family_member_id is None
+                and existing.user_id is None
+                and not existing.identity_verified
+                and existing.p256dh == keys["p256dh"]
+                and existing.auth == keys["auth"]
+            ):
+                owner_matches = True
+                owner_values = {"family_member": owner, "participant": None, "user": None}
         elif participant_owner:
             owner_matches = (
                 existing.participant_id == owner.pk and existing.family_member_id is None and existing.user_id is None
@@ -168,11 +179,11 @@ def _subscribe(request: HttpRequest, owner: Any, *, participant_owner: bool) -> 
             )
     if existing is not None and not owner_matches:
         return JsonResponse({"error": "Dieses Gerät ist bereits einem anderen Konto zugeordnet."}, status=409)
-    if participant_owner and isinstance(owner, ParticipantFamilyMember):
+    if owner_values is None and participant_owner and isinstance(owner, ParticipantFamilyMember):
         owner_values = {"family_member": owner, "participant": None, "user": None}
-    elif participant_owner:
+    elif owner_values is None and participant_owner:
         owner_values = {"participant": owner, "user": None, "family_member": None}
-    else:
+    elif owner_values is None:
         owner_values = {"user": owner, "participant": None, "family_member": None}
     subscription, created = PushSubscription.objects.update_or_create(
         endpoint=endpoint,
@@ -184,6 +195,7 @@ def _subscribe(request: HttpRequest, owner: Any, *, participant_owner: bool) -> 
             "categories": categories,
             "is_active": True,
             "failure_count": 0,
+            "identity_verified": True,
         },
     )
     return JsonResponse({"device": _device_payload(subscription)}, status=201 if created else 200)

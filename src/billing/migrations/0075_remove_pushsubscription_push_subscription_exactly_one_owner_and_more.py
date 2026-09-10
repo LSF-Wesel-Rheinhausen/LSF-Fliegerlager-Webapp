@@ -22,6 +22,17 @@ class Migration(migrations.Migration):
             name='family_member',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='push_subscriptions', to='billing.participantfamilymember'),
         ),
+        migrations.AddField(
+            model_name='pushsubscription',
+            name='identity_verified',
+            field=models.BooleanField(default=False),
+            preserve_default=False,
+        ),
+        migrations.AlterField(
+            model_name='pushsubscription',
+            name='identity_verified',
+            field=models.BooleanField(default=True),
+        ),
         migrations.AddConstraint(
             model_name='pushsubscription',
             constraint=models.CheckConstraint(condition=models.Q(models.Q(('family_member__isnull', True), ('participant__isnull', True), ('user__isnull', False)), models.Q(('family_member__isnull', True), ('participant__isnull', False), ('user__isnull', True)), models.Q(('family_member__isnull', False), ('participant__isnull', True), ('user__isnull', True)), _connector='OR'), name='push_subscription_exactly_one_owner'),

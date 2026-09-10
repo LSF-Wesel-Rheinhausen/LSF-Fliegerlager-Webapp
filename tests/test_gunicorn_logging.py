@@ -8,6 +8,7 @@ from datetime import timedelta
 from io import StringIO
 from types import SimpleNamespace
 
+from django.test import Client
 from gunicorn.config import Config
 
 from config import gunicorn_config
@@ -114,4 +115,24 @@ def test_django_request_handler_redacts_recovery_secret() -> None:
 
     rendered = stream.getvalue()
     assert "raw-secret" not in rendered
+    assert "/account/recovery/confirm/[REDACTED]/" in rendered
+
+
+def test_csrf_rejection_log_redacts_recovery_secret() -> None:
+    stream = StringIO()
+    handler = logging.StreamHandler(stream)
+    logger = logging.getLogger("django.security.csrf")
+    logger.addHandler(handler)
+    logger.setLevel(logging.WARNING)
+    client = Client(enforce_csrf_checks=True)
+    raw_token = "csrf-raw-recovery-secret"
+    try:
+        response = client.post(f"/account/recovery/confirm/{raw_token}/", {"pin": "1234"})
+    finally:
+        logger.removeHandler(handler)
+        handler.close()
+
+    assert response.status_code == 403
+    rendered = stream.getvalue()
+    assert raw_token not in rendered
     assert "/account/recovery/confirm/[REDACTED]/" in rendered

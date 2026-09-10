@@ -15,6 +15,7 @@
 - Stellt Wiederherstellungslinks an alle passenden aktiven Kiosk-Konten einer gemeinsamen Adresse zu und schützt eingegebene Passwörter und PINs in technischen Fehlerberichten.
 - Redigiert Recovery-Secrets zusätzlich aus Django-Request-Logs und ordnet Companion-Push-Geräte der authentifizierten Begleitperson statt dem Guardian zu.
 - Unterscheidet Picker-Tokens explizit vom E-Mail-Feld, damit E-Mail-Adressen mit `participant-`-Präfix nicht als IDs interpretiert werden.
+- Markiert alte teilnehmerbezogene Push-Geräte bei der Umstellung auf getrennte Begleitpersonen-Identitäten als nicht für Recovery verifiziert; redigiert Recovery-Secrets auch aus CSRF-Ablehnungslogs und schließt inaktive Begleitpersonen aus regulären Push-Mitteilungen aus.
 
 ## Tests
 

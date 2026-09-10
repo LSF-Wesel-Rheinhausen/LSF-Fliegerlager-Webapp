@@ -23,6 +23,8 @@ POSITION_REPORT_OLD_TARGET = CREDIT_PAYOUT_NEW_TARGET
 POSITION_REPORT_NEW_TARGET = [("billing", "0068_charge_position_report_description")]
 SHIFT_STAFFING_OLD_TARGET = [("billing", "0070_alter_camp_options_alter_dailyshifttemplate_options_and_more")]
 SHIFT_STAFFING_NEW_TARGET = [("billing", "0072_shift_staffing_audit")]
+ACCOUNT_RECOVERY_OLD_TARGET = [("billing", "0074_account_recovery")]
+ACCOUNT_RECOVERY_NEW_TARGET = [("billing", "0075_remove_pushsubscription_push_subscription_exactly_one_owner_and_more")]
 
 
 def _create_historical_credit_payouts(historical_apps, amounts: list[Decimal]):
@@ -48,6 +50,47 @@ def _create_historical_credit_payouts(historical_apps, amounts: list[Decimal]):
 def _restore_current_migration_state() -> None:
     executor = MigrationExecutor(connection)
     executor.migrate(executor.loader.graph.leaf_nodes())
+
+
+@pytest.mark.django_db(transaction=True)
+def test_account_recovery_migration_keeps_legacy_devices_active_but_unverified() -> None:
+    try:
+        executor = MigrationExecutor(connection)
+        executor.migrate(ACCOUNT_RECOVERY_OLD_TARGET)
+        old_apps = executor.loader.project_state(ACCOUNT_RECOVERY_OLD_TARGET).apps
+        User = old_apps.get_model("auth", "User")
+        Camp = old_apps.get_model("billing", "Camp")
+        Participant = old_apps.get_model("billing", "Participant")
+        PushSubscription = old_apps.get_model("billing", "PushSubscription")
+        user = User.objects.create(username="migration-user")
+        camp = Camp.objects.create(name="Recovery migration", year=2045)
+        participant = Participant.objects.create(camp=camp, first_name="Legacy", last_name="Device")
+        participant_subscription = PushSubscription.objects.create(
+            participant=participant,
+            endpoint="https://push.example.test/migration-participant",
+            p256dh="key",
+            auth="auth",
+            categories=["shifts"],
+        )
+        user_subscription = PushSubscription.objects.create(
+            user=user,
+            endpoint="https://push.example.test/migration-user",
+            p256dh="key",
+            auth="auth",
+            categories=["expenses_admin"],
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate(ACCOUNT_RECOVERY_NEW_TARGET)
+        new_apps = executor.loader.project_state(ACCOUNT_RECOVERY_NEW_TARGET).apps
+        NewPushSubscription = new_apps.get_model("billing", "PushSubscription")
+
+        legacy = NewPushSubscription.objects.get(pk=participant_subscription.pk)
+        assert legacy.is_active
+        assert not legacy.identity_verified
+        assert NewPushSubscription.objects.get(pk=user_subscription.pk).is_active
+    finally:
+        _restore_current_migration_state()
 
 
 @pytest.mark.django_db(transaction=True)

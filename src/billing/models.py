@@ -2331,6 +2331,7 @@ class PushSubscription(TimeStampedModel):
     device_name = models.CharField(max_length=80, default="Dieses Gerät")
     categories = models.JSONField(default=list)
     is_active = models.BooleanField(default=True)
+    identity_verified = models.BooleanField(default=True)
     last_success_at = models.DateTimeField(null=True, blank=True)
     failure_count = models.PositiveSmallIntegerField(default=0)
 
