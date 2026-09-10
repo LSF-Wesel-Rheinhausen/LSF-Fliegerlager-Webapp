@@ -113,6 +113,201 @@ def test_push_worker_claims_recovery_message_before_token_activation(webpush):
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize("raises", [False, True])
+@patch("billing.notifications.webpush")
+def test_push_worker_consumes_activated_recovery_when_subscription_is_deleted_during_delivery(webpush, raises):
+    user = UserFactory()
+    token = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    subscription = PushSubscription.objects.create(
+        user=user,
+        endpoint="https://push.example.test/deleted-during-delivery",
+        p256dh="key",
+        auth="secret",
+        categories=["account_security"],
+    )
+    PushMessage.objects.create(
+        subscription=subscription,
+        account_recovery=token,
+        category="account_security",
+        title="Passwort zurücksetzen",
+        body="Link",
+        target_url="/account-recovery/ACCOUNT_RECOVERY_TOKEN/",
+        dedupe_key="account-recovery:deleted-during-delivery",
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+
+    def delete_subscription(**_kwargs):
+        subscription.delete()
+        if raises:
+            raise WebPushException("delivery failed")
+        return None
+
+    webpush.side_effect = delete_subscription
+
+    result = send_due_push_messages()
+
+    token.refresh_from_db()
+    assert result == PushDeliveryResult(failed=1)
+    assert token.used_at is not None
+    assert token.token_digest is None
+    assert token.expires_at is None
+
+
+@pytest.mark.django_db
+@patch("billing.notifications.webpush")
+def test_push_worker_terminally_fails_recovery_when_participant_becomes_ineligible(webpush):
+    participant = ParticipantFactory()
+    subscription = PushSubscription.objects.create(
+        participant=participant,
+        identity_verified=True,
+        endpoint="https://push.example.test/recovery-ineligible",
+        p256dh="key",
+        auth="secret",
+        categories=["account_security"],
+    )
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.PARTICIPANT_PIN, owner=participant)
+    message = PushMessage.objects.create(
+        subscription=subscription,
+        account_recovery=recovery,
+        category="account_security",
+        title="PIN zurücksetzen",
+        body="Link",
+        target_url="/account-recovery/ACCOUNT_RECOVERY_TOKEN/",
+        dedupe_key="account-recovery:ineligible",
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+    participant.archived_at = timezone.now()
+    participant.save(update_fields=["archived_at"])
+
+    result = send_due_push_messages()
+
+    message.refresh_from_db()
+    recovery.refresh_from_db()
+    assert result.failed == 1
+    assert message.status == PushMessage.Status.FAILED
+    assert message.last_error_code == "recovery_unavailable"
+    assert recovery.token_digest is None
+    assert recovery.expires_at is None
+    assert recovery.used_at is not None
+    assert webpush.call_count == 0
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("authorization_change", ["inactive", "unverified", "reassigned"])
+@patch("billing.notifications.webpush")
+def test_push_worker_consumes_recovery_when_subscription_authorization_changes(webpush, authorization_change):
+    participant = ParticipantFactory()
+    other_participant = ParticipantFactory(camp=participant.camp)
+    subscription = PushSubscription.objects.create(
+        participant=participant,
+        identity_verified=True,
+        endpoint=f"https://push.example.test/recovery-{authorization_change}",
+        p256dh="key",
+        auth="secret",
+        categories=["account_security"],
+    )
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.PARTICIPANT_PIN, owner=participant)
+    message = PushMessage.objects.create(
+        subscription=subscription,
+        account_recovery=recovery,
+        category="account_security",
+        title="PIN zuruecksetzen",
+        body="Link",
+        target_url="/account-recovery/ACCOUNT_RECOVERY_TOKEN/",
+        dedupe_key=f"account-recovery:{authorization_change}",
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+    if authorization_change == "inactive":
+        PushSubscription.objects.filter(pk=subscription.pk).update(is_active=False)
+    elif authorization_change == "unverified":
+        PushSubscription.objects.filter(pk=subscription.pk).update(identity_verified=False)
+    else:
+        PushSubscription.objects.filter(pk=subscription.pk).update(participant=other_participant)
+
+    result = send_due_push_messages()
+
+    message.refresh_from_db()
+    recovery.refresh_from_db()
+    assert result == PushDeliveryResult(failed=1)
+    assert message.status == PushMessage.Status.FAILED
+    assert message.last_error_code == "recovery_unavailable"
+    assert message.attempts == 1
+    assert recovery.used_at is not None
+    assert recovery.token_digest is None
+    assert recovery.expires_at is None
+    webpush.assert_not_called()
+
+
+@pytest.mark.django_db
+@patch("billing.notifications.webpush")
+def test_push_worker_consumes_recovery_when_token_kind_does_not_match_subscription(webpush):
+    participant = ParticipantFactory()
+    user = UserFactory()
+    subscription = PushSubscription.objects.create(
+        participant=participant,
+        identity_verified=True,
+        endpoint="https://push.example.test/recovery-wrong-kind",
+        p256dh="key",
+        auth="secret",
+        categories=["account_security"],
+    )
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    message = PushMessage.objects.create(
+        subscription=subscription,
+        account_recovery=recovery,
+        category="account_security",
+        title="Passwort zuruecksetzen",
+        body="Link",
+        target_url="/account-recovery/ACCOUNT_RECOVERY_TOKEN/",
+        dedupe_key="account-recovery:wrong-kind",
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+
+    result = send_due_push_messages()
+
+    message.refresh_from_db()
+    recovery.refresh_from_db()
+    assert result == PushDeliveryResult(failed=1)
+    assert message.status == PushMessage.Status.FAILED
+    assert message.last_error_code == "recovery_unavailable"
+    assert recovery.used_at is not None
+    webpush.assert_not_called()
+
+
+@pytest.mark.django_db
+@patch("billing.notifications.webpush")
+def test_push_worker_terminally_fails_ordinary_message_when_participant_becomes_ineligible(webpush):
+    participant = ParticipantFactory()
+    subscription = PushSubscription.objects.create(
+        participant=participant,
+        identity_verified=True,
+        endpoint="https://push.example.test/ordinary-ineligible",
+        p256dh="key",
+        auth="secret",
+        categories=["shifts"],
+    )
+    message = PushMessage.objects.create(
+        subscription=subscription,
+        category="shifts",
+        title="Hinweis",
+        body="Text",
+        target_url="/kiosk/",
+        dedupe_key="ordinary:ineligible",
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+    participant.archived_at = timezone.now()
+    participant.save(update_fields=["archived_at"])
+
+    result = send_due_push_messages()
+
+    message.refresh_from_db()
+    assert result.failed == 1
+    assert message.status == PushMessage.Status.FAILED
+    assert message.last_error_code == "subscription_ineligible"
+    assert webpush.call_count == 0
+
+
+@pytest.mark.django_db
 @patch("billing.notifications.webpush")
 def test_push_worker_requeues_stale_processing_claim(webpush):
     subscription = PushSubscription.objects.create(
@@ -982,6 +1177,78 @@ def test_worker_deletes_gone_subscription(webpush):
 
     assert result.removed_subscriptions == 1
     assert not PushSubscription.objects.filter(pk=subscription.pk).exists()
+
+
+@pytest.mark.django_db
+@patch("billing.notifications.webpush")
+def test_worker_consumes_recovery_token_when_push_subscription_is_gone(webpush):
+    class GoneResponse:
+        status_code = 410
+
+    webpush.side_effect = WebPushException("gone", response=GoneResponse())
+    user = UserFactory()
+    subscription = PushSubscription.objects.create(
+        user=user,
+        endpoint="https://push.example.test/gone-recovery",
+        p256dh="key",
+        auth="secret",
+        categories=["account_security"],
+    )
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    PushMessage.objects.create(
+        subscription=subscription,
+        account_recovery=recovery,
+        category="account_security",
+        title="Passwort zuruecksetzen",
+        body="Link",
+        target_url="/account-recovery/ACCOUNT_RECOVERY_TOKEN/",
+        dedupe_key="account-recovery:gone",
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+
+    result = send_due_push_messages()
+
+    recovery.refresh_from_db()
+    assert result.removed_subscriptions == 1
+    assert recovery.used_at is not None
+    assert recovery.token_digest is None
+    assert recovery.expires_at is None
+
+
+@pytest.mark.django_db
+@patch("billing.notifications.webpush")
+def test_worker_consumes_recovery_token_when_retry_budget_is_exhausted(webpush):
+    webpush.side_effect = WebPushException("unavailable")
+    user = UserFactory()
+    subscription = PushSubscription.objects.create(
+        user=user,
+        endpoint="https://push.example.test/exhausted-recovery",
+        p256dh="key",
+        auth="secret",
+        categories=["account_security"],
+    )
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    message = PushMessage.objects.create(
+        subscription=subscription,
+        account_recovery=recovery,
+        category="account_security",
+        title="Passwort zuruecksetzen",
+        body="Link",
+        target_url="/account-recovery/ACCOUNT_RECOVERY_TOKEN/",
+        dedupe_key="account-recovery:exhausted",
+        attempts=4,
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+
+    result = send_due_push_messages()
+
+    message.refresh_from_db()
+    recovery.refresh_from_db()
+    assert result.failed == 1
+    assert message.status == PushMessage.Status.FAILED
+    assert recovery.used_at is not None
+    assert recovery.token_digest is None
+    assert recovery.expires_at is None
 
 
 @pytest.mark.django_db

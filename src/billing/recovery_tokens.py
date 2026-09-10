@@ -7,11 +7,12 @@ from typing import Any
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth.hashers import is_password_usable
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.core.validators import validate_email
 from django.db import transaction
 from django.utils import timezone
-from django.utils.crypto import salted_hmac
+from django.utils.crypto import constant_time_compare, salted_hmac
 
 from .models import (
     AccountRecoveryToken,
@@ -52,6 +53,17 @@ def _pin_hash(owner: Any) -> str:
         return ""
 
 
+def has_usable_recovery_credential(kind: str, owner: Any) -> bool:
+    """Return whether recovery replaces an established, usable login credential."""
+    if kind == AccountRecoveryToken.Kind.USER_PASSWORD:
+        return bool(getattr(owner, "has_usable_password", lambda: False)())
+    try:
+        pin = owner.pin
+    except ObjectDoesNotExist:
+        return False
+    return bool(pin.pin_hash and is_password_usable(pin.pin_hash) and not pin.must_set_pin)
+
+
 def credential_fingerprint(kind: str, owner: Any) -> str:
     """Snapshot the current credential without duplicating its reusable hash."""
     credential_hash = str(owner.password) if kind == AccountRecoveryToken.Kind.USER_PASSWORD else _pin_hash(owner)
@@ -90,10 +102,27 @@ def invalidate_account_recovery_tokens(*, kind: str, owner: Any) -> None:
     )
 
 
+@transaction.atomic
+def consume_account_recovery_token(recovery_id: int) -> None:
+    """Terminally invalidate one capability while preserving the owner/token lock order."""
+    initial = _initial_recovery(recovery_id)
+    if initial is None:
+        return
+    _lock_owner(initial)
+    recovery = AccountRecoveryToken.objects.select_for_update().filter(pk=recovery_id).first()
+    if recovery is None:
+        return
+    recovery.used_at = recovery.used_at or timezone.now()
+    recovery.token_digest = None
+    recovery.expires_at = None
+    recovery.save(update_fields=["used_at", "token_digest", "expires_at", "updated_at"])
+
+
 def create_account_recovery_token(*, kind: str, owner: Any) -> AccountRecoveryToken:
     """Create an inactive token record that contains no bearer secret."""
     return AccountRecoveryToken.objects.create(
         kind=kind,
+        delivery_channel=AccountRecoveryToken.DeliveryChannel.PUSH,
         credential_fingerprint=credential_fingerprint(kind, owner),
         **_owner_filter(kind, owner),
     )
@@ -167,13 +196,74 @@ def _matches_delivery_address(owner: Any, recipient_email: str | None) -> bool:
     return queued_email is not None and queued_email == owner_email
 
 
+def _recipient_email_digest(email: str) -> str:
+    return salted_hmac(
+        "billing.account-recovery-recipient", email, secret=settings.SECRET_KEY, algorithm="sha256"
+    ).hexdigest()
+
+
+@transaction.atomic
+def bind_account_recovery_email_recipient(recovery: AccountRecoveryToken, recipient_email: str) -> None:
+    """Bind one unused capability to its current owner's normalized email address."""
+    normalized_email = _normalized_email(recipient_email)
+    if normalized_email is None:
+        raise ValueError("Recovery recipient address is invalid")
+    initial = _initial_recovery(recovery.pk)
+    if initial is None:
+        raise ValueError("Recovery capability does not exist")
+    owner = _lock_owner(initial)
+    locked = AccountRecoveryToken.objects.select_for_update().filter(pk=recovery.pk).first()
+    if (
+        owner is None
+        or locked is None
+        or locked.used_at is not None
+        or locked.token_digest is not None
+        or locked.expires_at is not None
+        or locked.delivery_channel != AccountRecoveryToken.DeliveryChannel.PUSH
+        or locked.recipient_email_digest is not None
+        or not _matches_delivery_address(owner, normalized_email)
+        or not recovery_matches_current_credential(locked, owner)
+    ):
+        raise ValueError("Recovery capability cannot be bound to this recipient")
+    digest = _recipient_email_digest(normalized_email)
+    locked.delivery_channel = AccountRecoveryToken.DeliveryChannel.EMAIL
+    locked.recipient_email_digest = digest
+    locked.save(update_fields=["delivery_channel", "recipient_email_digest", "updated_at"])
+    recovery.delivery_channel = locked.delivery_channel
+    recovery.recipient_email_digest = digest
+
+
+def _matches_bound_recipient(recovery: AccountRecoveryToken, owner: Any) -> bool:
+    if recovery.delivery_channel == AccountRecoveryToken.DeliveryChannel.PUSH:
+        return recovery.recipient_email_digest is None
+    owner_email = _normalized_email(getattr(owner, "email", None))
+    return bool(
+        owner_email
+        and recovery.recipient_email_digest
+        and constant_time_compare(recovery.recipient_email_digest, _recipient_email_digest(owner_email))
+    )
+
+
 def recovery_matches_current_credential(recovery: AccountRecoveryToken, owner: Any) -> bool:
     """Return whether account state still matches the token's issuance snapshot."""
     return bool(
         _matches_owner(recovery, owner)
+        and _matches_bound_recipient(recovery, owner)
+        and has_usable_recovery_credential(recovery.kind, owner)
         and recovery_owner_is_active(recovery.kind, owner)
         and recovery.credential_fingerprint == credential_fingerprint(recovery.kind, owner)
     )
+
+
+def _activate_locked_recovery(recovery: AccountRecoveryToken, owner: Any) -> str | None:
+    if recovery.used_at is not None or not recovery_matches_current_credential(recovery, owner):
+        return None
+    raw_token = secrets.token_urlsafe(32)
+    now = timezone.now()
+    recovery.token_digest = recovery_token_digest(raw_token)
+    recovery.expires_at = now + _token_timeout()
+    recovery.save(update_fields=["token_digest", "expires_at", "updated_at"])
+    return raw_token
 
 
 @transaction.atomic
@@ -186,19 +276,38 @@ def activate_account_recovery_token(recovery_id: int, *, recipient_email: str | 
     if owner is None:
         return None
     recovery = AccountRecoveryToken.objects.select_for_update().filter(pk=recovery_id).first()
-    if (
-        recovery is None
-        or recovery.used_at is not None
-        or not _matches_delivery_address(owner, recipient_email)
-        or not recovery_matches_current_credential(recovery, owner)
-    ):
+    if recovery is None or not _matches_delivery_address(owner, recipient_email):
         return None
-    raw_token = secrets.token_urlsafe(32)
-    now = timezone.now()
-    recovery.token_digest = recovery_token_digest(raw_token)
-    recovery.expires_at = now + _token_timeout()
-    recovery.save(update_fields=["token_digest", "expires_at", "updated_at"])
-    return raw_token
+    return _activate_locked_recovery(recovery, owner)
+
+
+@transaction.atomic
+def activate_account_recovery_push_token(
+    recovery_id: int,
+    *,
+    user_id: int | None,
+    participant_id: int | None,
+    family_member_id: int | None,
+) -> str | None:
+    """Lock and activate a push capability only for the exact current subscription owner."""
+    initial = _initial_recovery(recovery_id)
+    if initial is None:
+        return None
+    owner = _lock_owner(initial)
+    if owner is None:
+        return None
+    recovery = AccountRecoveryToken.objects.select_for_update().filter(pk=recovery_id).first()
+    if recovery is None or recovery.delivery_channel != AccountRecoveryToken.DeliveryChannel.PUSH:
+        return None
+    owner_matches = bool(
+        (recovery.kind == AccountRecoveryToken.Kind.USER_PASSWORD and recovery.user_id == user_id)
+        or (recovery.kind == AccountRecoveryToken.Kind.PARTICIPANT_PIN and recovery.participant_id == participant_id)
+        or (
+            recovery.kind == AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN
+            and recovery.family_member_id == family_member_id
+        )
+    )
+    return _activate_locked_recovery(recovery, owner) if owner_matches else None
 
 
 def find_valid_account_recovery(raw_token: str) -> AccountRecoveryToken | None:

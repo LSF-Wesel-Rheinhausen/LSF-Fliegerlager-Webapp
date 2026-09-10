@@ -26,7 +26,11 @@ from .models import (
     Settlement,
     SettlementRun,
 )
-from .recovery_tokens import RECOVERY_TOKEN_PLACEHOLDER, activate_account_recovery_token
+from .recovery_tokens import (
+    RECOVERY_TOKEN_PLACEHOLDER,
+    activate_account_recovery_token,
+    bind_account_recovery_email_recipient,
+)
 
 logger = logging.getLogger(__name__)
 EMAIL_RETRY_DELAYS = (60, 300, 1800, 7200, 21600)
@@ -247,6 +251,7 @@ def queue_account_recovery_email(
 ) -> EmailDelivery:
     """Queue one system-generated credential-recovery email."""
     normalized_email = normalize_recipient_email(recipient_email)
+    bind_account_recovery_email_recipient(account_recovery, normalized_email)
     clean_subject, clean_body = _validate_message(subject, body)
     batch = EmailBatch.objects.create(
         camp=camp,

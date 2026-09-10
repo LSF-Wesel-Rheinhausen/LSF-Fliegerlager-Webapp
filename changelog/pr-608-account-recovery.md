@@ -16,6 +16,9 @@
 - Redigiert Recovery-Secrets zusätzlich aus Django-Request-Logs und ordnet Companion-Push-Geräte der authentifizierten Begleitperson statt dem Guardian zu.
 - Unterscheidet Picker-Tokens explizit vom E-Mail-Feld, damit E-Mail-Adressen mit `participant-`-Präfix nicht als IDs interpretiert werden.
 - Markiert alte teilnehmerbezogene Push-Geräte bei der Umstellung auf getrennte Begleitpersonen-Identitäten als nicht für Recovery verifiziert; redigiert Recovery-Secrets auch aus CSRF-Ablehnungslogs und schließt inaktive Begleitpersonen aus regulären Push-Mitteilungen aus.
+- Bindet E-Mail-Recovery-Capabilities mittels domänengetrenntem HMAC an die normalisierte Empfängeradresse, verlangt bereits konfigurierte Zugangsdaten und prüft Kiosk-Push-Berechtigung und Eigentümerschaft unmittelbar vor dem Versand erneut.
+- Invalidiert Recovery-Capabilities bei endgültig fehlgeschlagenen oder während der Zustellung entfernten Push-Zielen.
+- Serialisiert Login-Attempt-Mutationen in einer gemeinsamen sortierten Sperrreihenfolge und leert erfolgreiche Sperren statt sie zu löschen.
 
 ## Tests
 

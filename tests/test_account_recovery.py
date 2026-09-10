@@ -28,7 +28,12 @@ from billing.models import (
     PushSubscription,
 )
 from billing.notifications import send_due_push_messages
-from billing.recovery_tokens import activate_account_recovery_token, create_account_recovery_token
+from billing.recovery_tokens import (
+    activate_account_recovery_token,
+    bind_account_recovery_email_recipient,
+    create_account_recovery_token,
+    find_valid_account_recovery,
+)
 from tests.factories import ParticipantFactory, ParticipantFamilyMemberFactory, SuperUserFactory, UserFactory
 
 
@@ -212,6 +217,8 @@ def test_recovery_push_targets_only_the_companion_account(kiosk_client, settings
         last_name="Companion",
         role=ParticipantFamilyMember.Role.COMPANION,
     )
+    companion.pin.set_pin("2468")
+    companion.pin.save()
     PushSubscription.objects.create(
         family_member=companion,
         endpoint="https://push.example.test/companion-identity",
@@ -230,6 +237,8 @@ def test_recovery_push_targets_only_the_companion_account(kiosk_client, settings
 @pytest.mark.django_db
 def test_recovery_email_identifier_is_not_parsed_as_picker_token(kiosk_client):
     participant = ParticipantFactory(email="participant-1@example.test")
+    participant.pin.set_pin("2468")
+    participant.pin.save()
 
     response = kiosk_client.post(
         reverse("kiosk-pin-recovery-request"),
@@ -243,12 +252,16 @@ def test_recovery_email_identifier_is_not_parsed_as_picker_token(kiosk_client):
 @pytest.mark.django_db
 def test_kiosk_recovery_delivers_to_all_matching_participants(kiosk_client):
     first_participant = ParticipantFactory(email="shared-many@example.test", first_name="Pilot0")
+    first_participant.pin.set_pin("2468")
+    first_participant.pin.save()
     for index in range(1, 11):
-        ParticipantFactory(
+        participant = ParticipantFactory(
             camp=first_participant.camp,
             email="shared-many@example.test",
             first_name=f"Pilot{index}",
         )
+        participant.pin.set_pin("2468")
+        participant.pin.save()
 
     response = kiosk_client.post(
         reverse("kiosk-pin-recovery-request"),
@@ -425,6 +438,8 @@ def test_push_only_account_can_recover_without_email(client, settings):
 def test_kiosk_push_only_account_can_start_recovery_with_kiosk_identifier(kiosk_client, settings, owner_kind):
     settings.WEB_PUSH_ENABLED = True
     participant = ParticipantFactory(email="")
+    participant.pin.set_pin("2468")
+    participant.pin.save()
     if owner_kind == "participant":
         owner = participant
         identifier = f"participant-{owner.pk}"
@@ -434,6 +449,8 @@ def test_kiosk_push_only_account_can_start_recovery_with_kiosk_identifier(kiosk_
             email="",
             role=ParticipantFamilyMember.Role.COMPANION,
         )
+        owner.pin.set_pin("2468")
+        owner.pin.save()
         identifier = f"family-{owner.pk}"
     PushSubscription.objects.create(
         **({"participant": participant} if owner_kind == "participant" else {"family_member": owner}),
@@ -475,11 +492,15 @@ def test_kiosk_recovery_unknown_identifier_does_not_disclose_or_deliver(kiosk_cl
 def test_kiosk_recovery_identifier_prefix_prevents_participant_family_collision(kiosk_client, settings):
     settings.WEB_PUSH_ENABLED = True
     participant = ParticipantFactory(email="")
+    participant.pin.set_pin("2468")
+    participant.pin.save()
     companion = ParticipantFamilyMemberFactory(
         guardian=participant,
         email="",
         role=ParticipantFamilyMember.Role.COMPANION,
     )
+    companion.pin.set_pin("2468")
+    companion.pin.save()
     PushSubscription.objects.create(
         family_member=companion,
         endpoint="https://push.example.test/prefix-recovery",
@@ -548,6 +569,87 @@ def test_recovery_link_is_invalid_after_the_credential_changes(client):
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize("owner_kind", ["admin", "participant", "companion"])
+def test_email_recovery_link_is_invalid_when_owner_address_changes_after_activation(owner_kind):
+    if owner_kind == "admin":
+        owner = SuperUserFactory(email=" Initial@Example.test ")
+        kind = AccountRecoveryToken.Kind.USER_PASSWORD
+    elif owner_kind == "participant":
+        owner = ParticipantFactory(email=" Initial@Example.test ")
+        kind = AccountRecoveryToken.Kind.PARTICIPANT_PIN
+    else:
+        owner = ParticipantFamilyMemberFactory(
+            guardian=ParticipantFactory(email="guardian@example.test"),
+            email=" Initial@Example.test ",
+            role=ParticipantFamilyMember.Role.COMPANION,
+        )
+        kind = AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN
+
+    if kind != AccountRecoveryToken.Kind.USER_PASSWORD:
+        owner.pin.set_pin("2468")
+        owner.pin.save()
+    recovery = create_account_recovery_token(kind=kind, owner=owner)
+    bind_account_recovery_email_recipient(recovery, "initial@example.test")
+    raw_token = activate_account_recovery_token(recovery.pk, recipient_email="initial@example.test")
+    assert raw_token is not None
+    owner.email = "changed@example.test"
+    owner.save(update_fields=["email"])
+
+    assert find_valid_account_recovery(raw_token) is None
+
+
+@pytest.mark.django_db
+def test_email_recipient_binding_rejects_an_already_activated_capability():
+    user = SuperUserFactory(email="admin@example.test")
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    assert activate_account_recovery_token(recovery.pk) is not None
+
+    with pytest.raises(ValueError, match="cannot be bound"):
+        bind_account_recovery_email_recipient(recovery, user.email)
+
+
+@pytest.mark.django_db
+def test_secret_key_rotation_invalidates_short_lived_email_recovery_link(settings):
+    user = SuperUserFactory(email="admin@example.test")
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    bind_account_recovery_email_recipient(recovery, user.email)
+    raw_token = activate_account_recovery_token(recovery.pk, recipient_email=user.email)
+    assert raw_token is not None
+
+    settings.SECRET_KEY = "rotated-recovery-key"
+
+    assert find_valid_account_recovery(raw_token) is None
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("owner_kind", ["admin", "participant", "companion"])
+def test_recovery_does_not_activate_without_an_existing_usable_credential(owner_kind):
+    if owner_kind == "admin":
+        owner = SuperUserFactory(email="admin@example.test")
+        owner.set_unusable_password()
+        owner.save(update_fields=["password"])
+        kind = AccountRecoveryToken.Kind.USER_PASSWORD
+    elif owner_kind == "participant":
+        owner = ParticipantFactory(email="participant@example.test")
+        owner.pin.pin_hash = "!"
+        owner.pin.save(update_fields=["pin_hash"])
+        kind = AccountRecoveryToken.Kind.PARTICIPANT_PIN
+    else:
+        owner = ParticipantFamilyMemberFactory(
+            guardian=ParticipantFactory(email="guardian@example.test"),
+            email="companion@example.test",
+            role=ParticipantFamilyMember.Role.COMPANION,
+        )
+        owner.pin.pin_hash = "!"
+        owner.pin.save(update_fields=["pin_hash"])
+        kind = AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN
+
+    recovery = create_account_recovery_token(kind=kind, owner=owner)
+
+    assert activate_account_recovery_token(recovery.pk) is None
+
+
+@pytest.mark.django_db
 def test_recovery_confirm_marks_all_new_credentials_as_sensitive(monkeypatch):
     from billing import account_recovery
 
@@ -592,6 +694,9 @@ def test_recovery_email_is_suppressed_when_owner_address_changes_before_delivery
             role=ParticipantFamilyMember.Role.COMPANION,
         )
         kind = AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN
+    if kind != AccountRecoveryToken.Kind.USER_PASSWORD:
+        owner.pin.set_pin("2468")
+        owner.pin.save()
 
     recovery = create_account_recovery_token(kind=kind, owner=owner)
     queue_account_recovery_email(
@@ -632,6 +737,8 @@ def test_recovery_activation_locks_the_actual_pin_row(monkeypatch, owner_kind):
         )
         kind = AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN
         expected_model = ParticipantFamilyMemberPin
+    owner.pin.set_pin("2468")
+    owner.pin.save()
     recovery = create_account_recovery_token(kind=kind, owner=owner)
     locked_models = []
     real_fetch_all = QuerySet._fetch_all
@@ -652,6 +759,8 @@ def test_recovery_activation_locks_the_actual_pin_row(monkeypatch, owner_kind):
 @pytest.mark.django_db
 def test_companion_can_recover_own_pin_and_message_identifies_account(kiosk_client):
     guardian = ParticipantFactory(email="shared@example.test")
+    guardian.pin.set_pin("2468")
+    guardian.pin.save()
     companion = ParticipantFamilyMemberFactory(
         guardian=guardian,
         first_name="Grace",

@@ -25,6 +25,7 @@ from .recovery_tokens import (
     RECOVERY_TOKEN_PLACEHOLDER,
     create_account_recovery_token,
     find_valid_account_recovery,
+    has_usable_recovery_credential,
     invalidate_account_recovery_tokens,
     lock_valid_account_recovery,
     recovery_owner_is_active,
@@ -161,6 +162,8 @@ def _deliver_recovery(
     else:
         raise ValueError("Unsupported account-recovery kind")
     if not recovery_owner_is_active(kind, owner):
+        return
+    if not has_usable_recovery_credential(kind, owner):
         return
     invalidate_account_recovery_tokens(kind=kind, owner=owner)
     target_path = reverse("account-recovery-confirm", kwargs={"token": RECOVERY_TOKEN_PLACEHOLDER})

@@ -137,10 +137,7 @@ def consume_login_failure(request: HttpRequest, username: str = "") -> None:
             keys_to_update.append(f"user:{user_key_hash}")
 
     with transaction.atomic():
-        for key in keys_to_update:
-            attempt_state, _created = LoginAttempt.objects.select_for_update().get_or_create(
-                client_key=key,
-            )
+        for attempt_state in _locked_login_attempts(keys_to_update):
             recent_failures = _recent_attempts(attempt_state.failure_timestamps, cutoff=cutoff)
             recent_failures.append(now.timestamp())
             attempt_state.failure_timestamps = recent_failures
@@ -167,14 +164,29 @@ def is_login_locked_out(username: str) -> bool:
 
 def clear_login_rate_limit(username: str = "", request: HttpRequest | None = None) -> None:
     """Clear failed login rate-limit records for a targeted username and optional request IP."""
-    from .models import LoginAttempt
-
+    keys_to_clear = []
     if username:
         user_key_hash = login_user_key(username)
         if user_key_hash:
-            user_key = f"user:{user_key_hash}"
-            LoginAttempt.objects.filter(client_key=user_key).delete()
+            keys_to_clear.append(f"user:{user_key_hash}")
 
     if request:
-        ip_key = f"ip:{kiosk_client_key(request)}"
-        LoginAttempt.objects.filter(client_key=ip_key).delete()
+        keys_to_clear.append(f"ip:{kiosk_client_key(request)}")
+    with transaction.atomic():
+        for attempt_state in _locked_login_attempts(keys_to_clear):
+            attempt_state.failure_timestamps = []
+            attempt_state.save(update_fields=["failure_timestamps", "updated_at"])
+
+
+def _locked_login_attempts(keys: list[str], *, create_missing: bool = True):
+    """Create and lock distinct LoginAttempt rows in deterministic key order."""
+    from .models import LoginAttempt
+
+    attempts = []
+    for key in sorted(set(keys)):
+        if create_missing:
+            LoginAttempt.objects.get_or_create(client_key=key)
+        attempt = LoginAttempt.objects.select_for_update().filter(client_key=key).first()
+        if attempt is not None:
+            attempts.append(attempt)
+    return attempts

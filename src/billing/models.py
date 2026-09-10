@@ -253,9 +253,15 @@ class AccountRecoveryToken(TimeStampedModel):
         PARTICIPANT_PIN = "participant_pin", "Teilnehmer-PIN"
         FAMILY_MEMBER_PIN = "family_member_pin", "Begleitpersonen-PIN"
 
+    class DeliveryChannel(models.TextChoices):
+        EMAIL = "email", "E-Mail"
+        PUSH = "push", "Push"
+
     kind = models.CharField(max_length=24, choices=Kind.choices)
     token_digest = models.CharField(max_length=64, unique=True, editable=False, null=True, blank=True)
     credential_fingerprint = models.CharField(max_length=64, editable=False)
+    delivery_channel = models.CharField(max_length=8, choices=DeliveryChannel.choices, default=DeliveryChannel.PUSH)
+    recipient_email_digest = models.CharField(max_length=64, editable=False, null=True, blank=True)
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -305,7 +311,14 @@ class AccountRecoveryToken(TimeStampedModel):
                     )
                 ),
                 name="recovery_token_owner_matches_kind",
-            )
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(delivery_channel="email", recipient_email_digest__isnull=False)
+                    | models.Q(delivery_channel="push", recipient_email_digest__isnull=True)
+                ),
+                name="recovery_token_delivery_binding_matches_channel",
+            ),
         ]
         indexes = [models.Index(fields=["token_digest", "expires_at"], name="recovery_token_lookup_idx")]
 
