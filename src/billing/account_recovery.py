@@ -400,7 +400,7 @@ def account_recovery_confirm(request: HttpRequest, token: str) -> HttpResponse:
             user = owner
             user.set_password(form.cleaned_data["new_password1"])
             user.save(update_fields=["password"])
-            clear_login_rate_limit(user.get_username(), request=request)
+            clear_login_rate_limit(user.get_username(), request=request, additional_usernames=(user.email,))
             success_message = "Passwort wurde geändert. Du kannst dich jetzt anmelden."
             destination = "login"
         elif locked_recovery.kind == AccountRecoveryToken.Kind.PARTICIPANT_PIN:

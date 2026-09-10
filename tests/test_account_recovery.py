@@ -140,11 +140,14 @@ def test_admin_recovery_token_is_single_use_and_clears_login_lockout(client):
     request = RequestFactory().post("/login/", REMOTE_ADDR="192.0.2.10")
     for _ in range(5):
         consume_login_failure(request, username=user.username)
+    for _ in range(5):
+        consume_login_failure(request, username=f"  {user.email.upper()}  ")
     assert is_login_locked_out(user.username) is True
+    assert is_login_locked_out(user.email) is True
     assert check_login_rate_limit(request, username=user.username) is False
     client.post(
         reverse("account-recovery-request"),
-        {"identifier": user.username},
+        {"identifier": f"  {user.email.upper()}  "},
         REMOTE_ADDR="192.0.2.10",
         follow=True,
     )
@@ -167,6 +170,7 @@ def test_admin_recovery_token_is_single_use_and_clears_login_lockout(client):
     assert "Passwort wurde geändert" in reset_response.content.decode()
     assert authenticate(username=user.username, password="A-secure-new-password-601") == user
     assert is_login_locked_out(user.username) is False
+    assert is_login_locked_out(user.email) is False
     assert check_login_rate_limit(request, username=user.username) is True
     assert client.get(path).status_code == 400
 

@@ -162,11 +162,16 @@ def is_login_locked_out(username: str) -> bool:
     return False
 
 
-def clear_login_rate_limit(username: str = "", request: HttpRequest | None = None) -> None:
-    """Clear failed login rate-limit records for a targeted username and optional request IP."""
+def clear_login_rate_limit(
+    username: str = "",
+    request: HttpRequest | None = None,
+    *,
+    additional_usernames: tuple[str, ...] = (),
+) -> None:
+    """Clear failed login rate-limit records for one or more identities and an optional request IP."""
     keys_to_clear = []
-    if username:
-        user_key_hash = login_user_key(username)
+    for identity in (username, *additional_usernames):
+        user_key_hash = login_user_key(identity)
         if user_key_hash:
             keys_to_clear.append(f"user:{user_key_hash}")
 
