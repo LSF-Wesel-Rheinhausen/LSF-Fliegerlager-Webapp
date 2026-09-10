@@ -500,6 +500,96 @@ def test_participant_pdf_export_returns_pdf_preview(client, export_dataset):
 
 @pytest.mark.django_db
 @pytest.mark.parametrize("invoice_source", ["current", "snapshot"])
+def test_invoice_pdf_uses_structured_letterhead(invoice_source, recording_pdf_canvases):
+    participant = ParticipantFactory(
+        camp=CampFactory(name="Sommerlager", year=2026),
+        first_name="Ada",
+        last_name="Lovelace",
+    )
+
+    if invoice_source == "snapshot":
+        run = create_settlement_run(participant.camp, SuperUserFactory())
+        settlement_snapshot_pdf_bytes(run.settlements.get())
+    else:
+        participant_pdf_response(participant)
+
+    first_page_text = [text for page, _y, text in recording_pdf_canvases[0].text_positions if page == 1]
+    assert "LUFTSPORTFREUNDE WESEL-RHEINHAUSEN E.V." in first_page_text
+    assert "RECHNUNG AN" in first_page_text
+    assert "EINZELABRECHNUNG" in first_page_text
+    assert "Ada Lovelace" in first_page_text
+    assert "Sommerlager 2026" in first_page_text
+    assert "Postfach 100240 | 46462 Wesel" in first_page_text
+
+
+@pytest.mark.django_db
+def test_invoice_pdf_uses_a_readable_vertical_rhythm(recording_pdf_canvases):
+    participant = ParticipantFactory(
+        camp=CampFactory(name="Sommerlager", year=2026, iban="DE02120300000000202051"),
+        first_name="Ada",
+        last_name="Lovelace",
+    )
+    ChargeFactory(participant=participant, description="Lagerpauschale", unit_price=Decimal("145.00"))
+    PaymentFactory(participant=participant, amount=Decimal("50.00"))
+
+    participant_pdf_response(participant)
+
+    text_positions = recording_pdf_canvases[0].text_positions
+
+    def y_position(text):
+        return next(y for page, y, rendered_text in text_positions if page == 1 and rendered_text == text)
+
+    recipient_y = y_position("Ada Lovelace")
+    table_header_y = y_position("POSITION")
+    first_position_y = y_position("Lagerpauschale")
+    balance_y = y_position("Kontostand:")
+    payment_heading_y = y_position("Zahlungsinformationen")
+
+    assert 24 <= recipient_y - table_header_y <= 36
+    assert table_header_y - first_position_y >= 21
+    assert 44 <= balance_y - payment_heading_y <= 52
+
+
+@pytest.mark.django_db
+def test_invoice_pdf_shortens_letterhead_values_that_exceed_their_columns(recording_pdf_canvases):
+    participant = ParticipantFactory(
+        camp=CampFactory(name="L" * 160, year=2026),
+        first_name="V" * 120,
+        last_name="N" * 120,
+    )
+
+    participant_pdf_response(participant)
+
+    first_page_text = [text for page, _y, text in recording_pdf_canvases[0].text_positions if page == 1]
+    assert participant.full_name not in first_page_text
+    assert f"{participant.camp.name} {participant.camp.year}" not in first_page_text
+    assert len([text for text in first_page_text if text.endswith("...")]) == 2
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("invoice_source", ["current", "snapshot"])
+def test_invoice_pdf_uses_compact_letterhead_on_continuation_pages(invoice_source, recording_pdf_canvases):
+    participant = ParticipantFactory(first_name="Ada", last_name="Lovelace")
+    for index in range(28):
+        ChargeFactory(participant=participant, description=f"Buchung {index + 1}")
+
+    if invoice_source == "snapshot":
+        run = create_settlement_run(participant.camp, SuperUserFactory())
+        settlement_snapshot_pdf_bytes(run.settlements.get())
+    else:
+        participant_pdf_response(participant)
+
+    recording_canvas = recording_pdf_canvases[0]
+    continuation_pages = range(2, recording_canvas.page_number)
+    for page in continuation_pages:
+        page_text = [text for text_page, _y, text in recording_canvas.text_positions if text_page == page]
+        assert "EINZELABRECHNUNG - FORTSETZUNG" in page_text
+        assert "Ada Lovelace" in page_text
+        assert "RECHNUNG AN" not in page_text
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("invoice_source", ["current", "snapshot"])
 def test_invoice_pdf_prints_every_grouped_booking_reference_and_date(
     invoice_source,
     recording_pdf_canvases,
@@ -545,8 +635,10 @@ def test_invoice_pdf_places_separators_clear_of_the_following_position(invoice_s
 
     recording_canvas = recording_pdf_canvases[0]
     second_position_y = next(y for _page, y, text in recording_canvas.text_positions if text == "Zweite Buchung")
-    first_separator_y = next(
-        y1 for _page, x1, y1, x2, y2 in recording_canvas.line_positions if x1 == 50 and x2 == A4[0] - 50 and y1 == y2
+    first_separator_y = min(
+        y1
+        for _page, x1, y1, x2, y2 in recording_canvas.line_positions
+        if x1 == 50 and x2 == A4[0] - 50 and y1 == y2 and y1 > second_position_y
     )
 
     assert first_separator_y - second_position_y >= 8
