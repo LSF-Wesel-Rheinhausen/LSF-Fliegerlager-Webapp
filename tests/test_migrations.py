@@ -27,6 +27,7 @@ SHIFT_STAFFING_OLD_TARGET = [("billing", "0070_alter_camp_options_alter_dailyshi
 SHIFT_STAFFING_NEW_TARGET = [("billing", "0072_shift_staffing_audit")]
 ACCOUNT_RECOVERY_OLD_TARGET = [("billing", "0074_account_recovery")]
 ACCOUNT_RECOVERY_NEW_TARGET = [("billing", "0075_remove_pushsubscription_push_subscription_exactly_one_owner_and_more")]
+ACCOUNT_RECOVERY_ROLLBACK_TARGET = [("billing", "0074_account_recovery")]
 RECOVERY_BINDING_OLD_TARGET = ACCOUNT_RECOVERY_NEW_TARGET
 RECOVERY_BINDING_NEW_TARGET = [("billing", "0076_account_recovery_delivery_binding")]
 
@@ -93,6 +94,59 @@ def test_account_recovery_migration_keeps_legacy_devices_active_but_unverified()
         assert legacy.is_active
         assert not legacy.identity_verified
         assert NewPushSubscription.objects.get(pk=user_subscription.pk).is_active
+    finally:
+        _restore_current_migration_state()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_account_recovery_migration_reverse_removes_companion_devices_before_constraint() -> None:
+    try:
+        executor = MigrationExecutor(connection)
+        executor.migrate(ACCOUNT_RECOVERY_NEW_TARGET)
+        apps_0075 = executor.loader.project_state(ACCOUNT_RECOVERY_NEW_TARGET).apps
+        User = apps_0075.get_model("auth", "User")
+        Camp = apps_0075.get_model("billing", "Camp")
+        Participant = apps_0075.get_model("billing", "Participant")
+        FamilyMember = apps_0075.get_model("billing", "ParticipantFamilyMember")
+        PushSubscription = apps_0075.get_model("billing", "PushSubscription")
+        user = User.objects.create(username="rollback-user")
+        camp = Camp.objects.create(name="Reverse migration", year=2046)
+        participant = Participant.objects.create(camp=camp, first_name="Rollback", last_name="Participant")
+        companion = FamilyMember.objects.create(
+            guardian=participant,
+            first_name="Rollback",
+            last_name="Companion",
+            role="companion",
+        )
+        PushSubscription.objects.create(
+            family_member=companion,
+            endpoint="https://push.example.test/migration-companion",
+            p256dh="key",
+            auth="auth",
+        )
+        participant_subscription = PushSubscription.objects.create(
+            participant=participant,
+            endpoint="https://push.example.test/migration-participant-rollback",
+            p256dh="key",
+            auth="auth",
+        )
+        user_subscription = PushSubscription.objects.create(
+            user=user,
+            endpoint="https://push.example.test/migration-user-rollback",
+            p256dh="key",
+            auth="auth",
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate(ACCOUNT_RECOVERY_ROLLBACK_TARGET)
+        rolled_back_apps = executor.loader.project_state(ACCOUNT_RECOVERY_ROLLBACK_TARGET).apps
+        LegacyPushSubscription = rolled_back_apps.get_model("billing", "PushSubscription")
+
+        assert LegacyPushSubscription.objects.filter(pk=participant_subscription.pk).exists()
+        assert LegacyPushSubscription.objects.filter(pk=user_subscription.pk).exists()
+        assert not LegacyPushSubscription.objects.filter(
+            endpoint="https://push.example.test/migration-companion"
+        ).exists()
     finally:
         _restore_current_migration_state()
 

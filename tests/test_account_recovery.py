@@ -946,6 +946,76 @@ def test_companion_can_recover_own_pin_and_message_identifies_account(kiosk_clie
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize("owner_kind", ["admin", "participant", "companion"])
+def test_successful_recovery_revokes_or_requires_reverification_for_only_owner_device(client, owner_kind):
+    if owner_kind == "admin":
+        owner = SuperUserFactory(email="owner@example.test", password="old-password")
+        kind = AccountRecoveryToken.Kind.USER_PASSWORD
+        replacement = {"new_password1": "new-password", "new_password2": "new-password"}
+        foreign_owner = UserFactory(username="foreign")
+        own_kwargs, foreign_kwargs = {"user": owner}, {"user": foreign_owner}
+    else:
+        guardian = ParticipantFactory(email="guardian@example.test")
+        if owner_kind == "participant":
+            owner = guardian
+            kind = AccountRecoveryToken.Kind.PARTICIPANT_PIN
+            foreign_owner = ParticipantFactory(camp=guardian.camp)
+            own_kwargs, foreign_kwargs = {"participant": owner}, {"participant": foreign_owner}
+        else:
+            owner = ParticipantFamilyMemberFactory(
+                guardian=guardian,
+                email="owner@example.test",
+                role=ParticipantFamilyMember.Role.COMPANION,
+            )
+            kind = AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN
+            foreign_owner = ParticipantFamilyMemberFactory(
+                guardian=guardian,
+                role=ParticipantFamilyMember.Role.COMPANION,
+            )
+            own_kwargs, foreign_kwargs = {"family_member": owner}, {"family_member": foreign_owner}
+        owner.pin.set_pin("2468")
+        owner.pin.save()
+        replacement = {"pin": "8642", "pin_repeat": "8642"}
+
+    own = PushSubscription.objects.create(endpoint=f"https://push.example.test/{owner_kind}-own", **own_kwargs)
+    foreign = PushSubscription.objects.create(
+        endpoint=f"https://push.example.test/{owner_kind}-foreign", **foreign_kwargs
+    )
+    recovery = create_account_recovery_token(kind=kind, owner=owner)
+    raw_token = activate_account_recovery_token(recovery.pk)
+    assert raw_token is not None
+
+    response = client.post(reverse("account-recovery-confirm", kwargs={"token": raw_token}), replacement)
+
+    assert response.status_code == 302
+    own.refresh_from_db()
+    foreign.refresh_from_db()
+    if owner_kind == "admin":
+        assert own.is_active is False
+        assert own.identity_verified is True
+    else:
+        assert own.is_active is True
+        assert own.identity_verified is False
+    assert foreign.is_active is True
+    assert foreign.identity_verified is True
+
+
+@pytest.mark.django_db
+def test_successful_recovery_without_push_subscriptions_is_harmless(client):
+    owner = SuperUserFactory(email="no-device@example.test", password="old-password")
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=owner)
+    raw_token = activate_account_recovery_token(recovery.pk)
+    assert raw_token is not None
+
+    response = client.post(
+        reverse("account-recovery-confirm", kwargs={"token": raw_token}),
+        {"new_password1": "new-password", "new_password2": "new-password"},
+    )
+
+    assert response.status_code == 302
+
+
+@pytest.mark.django_db
 def test_email_settings_excludes_system_recovery_batches(client):
     admin = SuperUserFactory(email="admin@example.test")
     client.post(reverse("account-recovery-request"), {"identifier": admin.email})

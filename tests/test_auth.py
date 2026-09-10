@@ -147,7 +147,27 @@ def test_successful_login_does_not_increment_failures(client):
         )
         assert response.status_code == 302
 
-    # Durable empty rows retain the lock targets without recording a failure.
+    # Successful logins must not leave durable rate-limit rows behind.
+    assert not any(LoginAttempt.objects.values_list("failure_timestamps", flat=True))
+    assert LoginAttempt.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_clear_login_rate_limit_only_clears_existing_rows(client):
+    from billing.kiosk_security import clear_login_rate_limit, consume_login_failure
+    from billing.models import LoginAttempt
+
+    UserFactory(username="clearuser", password="valid-password")
+    request = client.request().wsgi_request
+    request.META["REMOTE_ADDR"] = "192.0.2.10"
+
+    clear_login_rate_limit("clearuser", request=request)
+    assert LoginAttempt.objects.count() == 0
+
+    consume_login_failure(request, username="clearuser")
+    assert LoginAttempt.objects.count() == 2
+    clear_login_rate_limit("clearuser", request=request)
+    assert LoginAttempt.objects.count() == 2
     assert not any(LoginAttempt.objects.values_list("failure_timestamps", flat=True))
 
 

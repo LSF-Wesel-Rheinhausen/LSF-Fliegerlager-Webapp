@@ -508,13 +508,14 @@ def send_due_email_deliveries(*, batch_size: int = 25, connection: Any | None = 
     sent = retried = failed = 0
     try:
         for delivery_id in delivery_ids:
+            claim_time = timezone.now()
             claimed = EmailDelivery.objects.filter(
                 pk=delivery_id,
                 status=EmailDelivery.Status.PENDING,
                 next_attempt_at__lte=now,
             ).update(
                 status=EmailDelivery.Status.PROCESSING,
-                processing_started_at=now,
+                processing_started_at=claim_time,
             )
             if not claimed:
                 continue

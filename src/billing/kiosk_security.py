@@ -178,7 +178,7 @@ def clear_login_rate_limit(
     if request:
         keys_to_clear.append(f"ip:{kiosk_client_key(request)}")
     with transaction.atomic():
-        for attempt_state in _locked_login_attempts(keys_to_clear):
+        for attempt_state in _locked_login_attempts(keys_to_clear, create_missing=False):
             attempt_state.failure_timestamps = []
             attempt_state.save(update_fields=["failure_timestamps", "updated_at"])
 

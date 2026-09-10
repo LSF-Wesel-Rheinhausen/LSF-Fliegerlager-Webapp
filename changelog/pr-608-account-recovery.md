@@ -21,10 +21,12 @@
 - Redigiert Recovery-Secrets auch in Gunicorn-Fehler- und Django-Entwicklungsserver-Logs und begrenzt die Push-Aufbewahrung auf die Token-Laufzeit.
 - Begrenzt Recovery-Anfragen zusätzlich pro normalisierter Identität über einen nicht umkehrbaren HMAC-Schlüssel, ohne bekannte Konten offenzulegen.
 - Serialisiert Login-Attempt-Mutationen in einer gemeinsamen sortierten Sperrreihenfolge und leert erfolgreiche Sperren statt sie zu löschen.
+- Widerruft nach erfolgreicher Wiederherstellung exakt die Push-Geräte des betroffenen Kontos beziehungsweise verlangt deren erneute Identitätsprüfung.
+- Verhindert leere Login-Sperrzeilen bei erfolgreichen Anmeldungen, verwendet pro E-Mail-Zustellung eine frische Claim-Zeit und bereinigt nicht abbildbare Begleitpersonen-Geräte beim Rollback der Eigentümermigration.
 
 ## Tests
 
-- Pytest-Abdeckung für alle Kontotypen und Kanäle, unbekannte/inaktive Konten, gemeinsam genutzte und nachträglich geänderte Adressen, mehr als zehn passende Kiosk-Konten, Push-only-Konten, Einmaligkeit, zustellungsbezogenen Ablauf, parallele Push-Worker, Wiederholungsversuche, PIN-Zeilensperren, externe Zugangsdatenänderungen, vollständigen Session-Widerruf einschließlich Benachrichtigungs-Endpunkten, Access-Log-Redaktion, sensible POST-Daten, gelöschte Tokens und Rate-Limits.
+- Pytest-Abdeckung für alle Kontotypen und Kanäle, unbekannte/inaktive Konten, gemeinsam genutzte und nachträglich geänderte Adressen, mehr als zehn passende Kiosk-Konten, Push-only-Konten, Einmaligkeit, zustellungsbezogenen Ablauf, parallele Push- und E-Mail-Worker, Wiederholungsversuche, PIN-Zeilensperren, externe Zugangsdatenänderungen, vollständigen Session- und Geräte-Widerruf einschließlich Benachrichtigungs-Endpunkten, reversible Migrationen, Access-Log-Redaktion, sensible POST-Daten, gelöschte Tokens und Rate-Limits.
 
 ## Offene Punkte
 

@@ -5,6 +5,14 @@ from django.conf import settings
 from django.db import migrations, models
 
 
+def remove_companion_subscriptions_on_reverse(apps, schema_editor):
+    """Remove subscriptions whose owner cannot be represented by the previous schema."""
+    PushSubscription = apps.get_model('billing', 'PushSubscription')
+    PushSubscription.objects.using(schema_editor.connection.alias).filter(
+        family_member_id__isnull=False,
+    ).delete()
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -21,6 +29,10 @@ class Migration(migrations.Migration):
             model_name='pushsubscription',
             name='family_member',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='push_subscriptions', to='billing.participantfamilymember'),
+        ),
+        migrations.RunPython(
+            migrations.RunPython.noop,
+            reverse_code=remove_companion_subscriptions_on_reverse,
         ),
         migrations.AddField(
             model_name='pushsubscription',
