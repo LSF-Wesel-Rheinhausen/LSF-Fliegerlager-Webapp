@@ -14,12 +14,19 @@ from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.crypto import salted_hmac
 from django.views.decorators.debug import sensitive_post_parameters
 
 from .email_delivery import has_valid_recipient_email, queue_account_recovery_email
 from .forms import KioskLoginForm, _is_trivial_personal_pin, validate_personal_kiosk_pin
 from .kiosk_security import _recent_attempts, clear_login_rate_limit, kiosk_client_key
-from .models import AccountRecoveryAttempt, AccountRecoveryToken, Participant, ParticipantFamilyMember
+from .models import (
+    AccountRecoveryAttempt,
+    AccountRecoveryIdentifierAttempt,
+    AccountRecoveryToken,
+    Participant,
+    ParticipantFamilyMember,
+)
 from .notifications import queue_account_recovery_push
 from .recovery_tokens import (
     RECOVERY_TOKEN_PLACEHOLDER,
@@ -35,6 +42,7 @@ User = get_user_model()
 GENERIC_RECOVERY_MESSAGE = (
     "Falls ein aktives Konto passt und ein Kontaktweg hinterlegt ist, wurde ein Link zum Zurücksetzen versendet."
 )
+_IDENTIFIER_BUDGET_KEY = "0" * 64
 
 
 class AccountRecoveryRequestForm(forms.Form):
@@ -99,13 +107,30 @@ class RecoveryPinForm(forms.Form):
         return cleaned_data
 
 
-def _consume_recovery_attempt(request: HttpRequest) -> bool:
-    """Consume one request from a persistent per-client sliding window."""
+def _identifier_key(identifier: str) -> str:
+    """Return a keyed, irreversible key for a bounded normalized identifier."""
+    normalized = identifier.strip().casefold()[:254]
+    return salted_hmac(
+        "billing.account-recovery-identifier", normalized, secret=settings.SECRET_KEY, algorithm="sha256"
+    ).hexdigest()
+
+
+def _save_recovery_attempt(attempt: Any, timestamps: list[float], *, now: Any) -> None:
+    timestamps.append(now.timestamp())
+    attempt.request_timestamps = timestamps
+    attempt.save(update_fields=["request_timestamps", "updated_at"])
+
+
+def _consume_recovery_attempt(request: HttpRequest, identifier: str) -> bool:
+    """Consume one request from both persistent client and identifier windows."""
     now = timezone.now()
     window_seconds = max(1, int(getattr(settings, "ACCOUNT_RECOVERY_REQUEST_WINDOW_SECONDS", 900)))
     maximum = max(1, int(getattr(settings, "ACCOUNT_RECOVERY_MAX_REQUESTS", 5)))
     cutoff = now.timestamp() - window_seconds
     AccountRecoveryAttempt.objects.filter(updated_at__lt=now - timedelta(seconds=window_seconds)).delete()
+    AccountRecoveryIdentifierAttempt.objects.exclude(identifier_key=_IDENTIFIER_BUDGET_KEY).filter(
+        updated_at__lt=now - timedelta(seconds=window_seconds)
+    ).delete()
     with transaction.atomic():
         attempt, _created = AccountRecoveryAttempt.objects.select_for_update().get_or_create(
             client_key=kiosk_client_key(request)
@@ -113,9 +138,28 @@ def _consume_recovery_attempt(request: HttpRequest) -> bool:
         recent = _recent_attempts(attempt.request_timestamps, cutoff=cutoff)
         if len(recent) >= maximum:
             return False
-        recent.append(now.timestamp())
-        attempt.request_timestamps = recent
-        attempt.save(update_fields=["request_timestamps", "updated_at"])
+        AccountRecoveryIdentifierAttempt.objects.get_or_create(identifier_key=_IDENTIFIER_BUDGET_KEY)
+        AccountRecoveryIdentifierAttempt.objects.select_for_update().get(identifier_key=_IDENTIFIER_BUDGET_KEY)
+        identifier_key = _identifier_key(identifier)
+        identifier_attempt = (
+            AccountRecoveryIdentifierAttempt.objects.select_for_update().filter(identifier_key=identifier_key).first()
+        )
+        if identifier_attempt is None:
+            identifier_budget = max(1, int(getattr(settings, "ACCOUNT_RECOVERY_MAX_IDENTIFIER_BUCKETS", 10_000)))
+            stored_identifiers = AccountRecoveryIdentifierAttempt.objects.exclude(
+                identifier_key=_IDENTIFIER_BUDGET_KEY
+            ).count()
+            if stored_identifiers >= identifier_budget:
+                _save_recovery_attempt(attempt, recent, now=now)
+                return False
+            identifier_attempt = AccountRecoveryIdentifierAttempt.objects.create(identifier_key=identifier_key)
+        identifier_recent = _recent_attempts(identifier_attempt.request_timestamps, cutoff=cutoff)
+        identifier_maximum = max(1, int(getattr(settings, "ACCOUNT_RECOVERY_MAX_REQUESTS_PER_IDENTIFIER", maximum)))
+        if len(recent) >= maximum or len(identifier_recent) >= identifier_maximum:
+            _save_recovery_attempt(attempt, recent, now=now)
+            return False
+        _save_recovery_attempt(attempt, recent, now=now)
+        _save_recovery_attempt(identifier_attempt, identifier_recent, now=now)
     return True
 
 
@@ -204,10 +248,10 @@ def account_recovery_request(request: HttpRequest) -> HttpResponse:
     form = AccountRecoveryRequestForm(request.POST or None)
     if request.method != "POST" or not form.is_valid():
         return _render_request_form(request, form=form, title="Passwort zurücksetzen")
-    if not _consume_recovery_attempt(request):
+    identifier = form.cleaned_data["identifier"]
+    if not _consume_recovery_attempt(request, identifier):
         return _rate_limited_response(request)
 
-    identifier = form.cleaned_data["identifier"]
     users: QuerySet[Any] = User.objects.filter(is_active=True).filter(
         Q(username__iexact=identifier) | Q(email__iexact=identifier)
     )
@@ -234,10 +278,10 @@ def kiosk_pin_recovery_request(request: HttpRequest) -> HttpResponse:
         if any(error.code == "invalid_choice" for error in invalid_participant):
             return redirect("account-recovery-sent")
         return _render_request_form(request, form=form, title="PIN zurücksetzen")
-    if not _consume_recovery_attempt(request):
+    identifier = form.cleaned_data["identifier"]
+    if not _consume_recovery_attempt(request, identifier):
         return _rate_limited_response(request)
 
-    identifier = form.cleaned_data["identifier"]
     if form.cleaned_data.get("participant") and identifier.startswith("participant-"):
         participants = (
             Participant.objects.filter(

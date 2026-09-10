@@ -635,7 +635,11 @@ def send_due_push_messages(*, batch_size: int = 50) -> PushDeliveryResult:
                     vapid_claims={"sub": settings.WEB_PUSH_VAPID_SUBJECT},
                     requests_session=requests_session,
                     timeout=PUSH_DELIVERY_TIMEOUT_SECONDS,
-                    ttl=86400,
+                    ttl=(
+                        min(86400, max(1, int(getattr(settings, "ACCOUNT_RECOVERY_TIMEOUT_SECONDS", 3600))))
+                        if message.account_recovery_id is not None
+                        else 86400
+                    ),
                 )
                 status_code = getattr(response, "status_code", None)
                 if isinstance(status_code, int) and 300 <= status_code < 400:

@@ -38,6 +38,10 @@ class RecoverySecretFilter:
 class RecoverySafeLogger(Logger):
     """Build Gunicorn access-log atoms without raw account-recovery tokens."""
 
+    def __init__(self, cfg: Any) -> None:
+        super().__init__(cfg)
+        self.error_log.addFilter(RecoverySecretFilter())
+
     def atoms(self, resp: Any, req: Any, environ: dict[str, Any], request_time: Any) -> dict[str, Any]:
         safe_environ = environ.copy()
         for key in _SENSITIVE_ENVIRONMENT_KEYS:

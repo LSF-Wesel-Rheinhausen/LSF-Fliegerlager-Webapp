@@ -18,6 +18,8 @@
 - Markiert alte teilnehmerbezogene Push-Geräte bei der Umstellung auf getrennte Begleitpersonen-Identitäten als nicht für Recovery verifiziert; redigiert Recovery-Secrets auch aus CSRF-Ablehnungslogs und schließt inaktive Begleitpersonen aus regulären Push-Mitteilungen aus.
 - Bindet E-Mail-Recovery-Capabilities mittels domänengetrenntem HMAC an die normalisierte Empfängeradresse, verlangt bereits konfigurierte Zugangsdaten und prüft Kiosk-Push-Berechtigung und Eigentümerschaft unmittelbar vor dem Versand erneut.
 - Invalidiert Recovery-Capabilities bei endgültig fehlgeschlagenen oder während der Zustellung entfernten Push-Zielen.
+- Redigiert Recovery-Secrets auch in Gunicorn-Fehler- und Django-Entwicklungsserver-Logs und begrenzt die Push-Aufbewahrung auf die Token-Laufzeit.
+- Begrenzt Recovery-Anfragen zusätzlich pro normalisierter Identität über einen nicht umkehrbaren HMAC-Schlüssel, ohne bekannte Konten offenzulegen.
 - Serialisiert Login-Attempt-Mutationen in einer gemeinsamen sortierten Sperrreihenfolge und leert erfolgreiche Sperren statt sie zu löschen.
 
 ## Tests

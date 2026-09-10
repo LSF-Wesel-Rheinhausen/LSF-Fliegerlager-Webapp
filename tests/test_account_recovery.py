@@ -17,6 +17,7 @@ from billing.email_delivery import queue_account_recovery_email, send_due_email_
 from billing.kiosk_access import KIOSK_PARTICIPANT_SESSION_KEY
 from billing.kiosk_security import check_login_rate_limit, consume_login_failure, is_login_locked_out
 from billing.models import (
+    AccountRecoveryIdentifierAttempt,
     AccountRecoveryToken,
     EmailBatch,
     EmailConfiguration,
@@ -388,6 +389,158 @@ def test_recovery_requests_are_rate_limited_per_client_without_disclosure(client
     assert [response.status_code for response in responses] == [302, 302, 302, 429]
     assert responses[-1]["Retry-After"] == "900"
     assert EmailDelivery.objects.count() == 3
+
+
+@pytest.mark.django_db
+def test_recovery_requests_are_rate_limited_per_identifier_across_rotating_clients(client, settings):
+    settings.ACCOUNT_RECOVERY_MAX_REQUESTS = 20
+    settings.ACCOUNT_RECOVERY_MAX_REQUESTS_PER_IDENTIFIER = 2
+    UserFactory(email="identity-limit@example.test")
+
+    responses = [
+        client.post(
+            reverse("account-recovery-request"),
+            {"identifier": " identity-limit@example.test "},
+            REMOTE_ADDR=f"192.0.2.{index}",
+        )
+        for index in range(1, 4)
+    ]
+
+    assert [response.status_code for response in responses] == [302, 302, 429]
+    assert EmailDelivery.objects.count() == 2
+
+
+@pytest.mark.django_db
+def test_exhausted_client_limit_does_not_create_identifier_rows(client, settings):
+    settings.ACCOUNT_RECOVERY_MAX_REQUESTS = 1
+    settings.ACCOUNT_RECOVERY_MAX_REQUESTS_PER_IDENTIFIER = 20
+
+    first = client.post(
+        reverse("account-recovery-request"),
+        {"identifier": "first-storage-limit@example.test"},
+        REMOTE_ADDR="192.0.2.70",
+    )
+    for index in range(10):
+        blocked = client.post(
+            reverse("account-recovery-request"),
+            {"identifier": f"new-storage-limit-{index}@example.test"},
+            REMOTE_ADDR="192.0.2.70",
+        )
+        assert blocked.status_code == 429
+
+    assert first.status_code == 302
+    assert AccountRecoveryIdentifierAttempt.objects.exclude(identifier_key="0" * 64).count() == 1
+
+
+@pytest.mark.django_db
+def test_identifier_attempt_storage_is_bounded_across_rotating_clients(client, settings):
+    settings.ACCOUNT_RECOVERY_MAX_REQUESTS = 20
+    settings.ACCOUNT_RECOVERY_MAX_REQUESTS_PER_IDENTIFIER = 20
+    settings.ACCOUNT_RECOVERY_MAX_IDENTIFIER_BUCKETS = 2
+
+    responses = [
+        client.post(
+            reverse("account-recovery-request"),
+            {"identifier": f"storage-cap-{index}@example.test"},
+            REMOTE_ADDR=f"192.0.2.{80 + index}",
+        )
+        for index in range(3)
+    ]
+
+    assert [response.status_code for response in responses] == [302, 302, 429]
+    assert AccountRecoveryIdentifierAttempt.objects.exclude(identifier_key="0" * 64).count() == 2
+
+
+@pytest.mark.django_db
+def test_identifier_limited_requests_still_consume_the_client_budget(client, settings):
+    settings.ACCOUNT_RECOVERY_MAX_REQUESTS = 2
+    settings.ACCOUNT_RECOVERY_MAX_REQUESTS_PER_IDENTIFIER = 1
+
+    first = client.post(
+        reverse("account-recovery-request"),
+        {"identifier": "identifier-limited@example.test"},
+        REMOTE_ADDR="192.0.2.90",
+    )
+    identifier_limited = client.post(
+        reverse("account-recovery-request"),
+        {"identifier": "identifier-limited@example.test"},
+        REMOTE_ADDR="192.0.2.90",
+    )
+    client_limited = client.post(
+        reverse("account-recovery-request"),
+        {"identifier": "different-identifier@example.test"},
+        REMOTE_ADDR="192.0.2.90",
+    )
+
+    assert [first.status_code, identifier_limited.status_code, client_limited.status_code] == [302, 429, 429]
+    assert AccountRecoveryIdentifierAttempt.objects.exclude(identifier_key="0" * 64).count() == 1
+
+
+@pytest.mark.django_db
+def test_recovery_identifier_limit_is_shared_by_admin_and_kiosk_and_preserves_other_links(
+    client, kiosk_client, settings
+):
+    settings.ACCOUNT_RECOVERY_MAX_REQUESTS = 20
+    settings.ACCOUNT_RECOVERY_MAX_REQUESTS_PER_IDENTIFIER = 1
+    UserFactory(email="shared-identifier@example.test")
+    participant = ParticipantFactory(email="other-identifier@example.test")
+    participant.pin.set_pin("2468")
+    participant.pin.save()
+
+    first = client.post(
+        reverse("account-recovery-request"),
+        {"identifier": "SHARED-IDENTIFIER@EXAMPLE.TEST"},
+        REMOTE_ADDR="192.0.2.51",
+    )
+    blocked = kiosk_client.post(
+        reverse("kiosk-pin-recovery-request"),
+        {"email": " shared-identifier@example.test "},
+        REMOTE_ADDR="192.0.2.52",
+    )
+    other = kiosk_client.post(
+        reverse("kiosk-pin-recovery-request"),
+        {"email": participant.email},
+        REMOTE_ADDR="192.0.2.53",
+    )
+
+    assert first.status_code == 302
+    assert blocked.status_code == 429
+    assert "Falls ein aktives Konto passt" in blocked.content.decode()
+    assert other.status_code == 302
+    assert AccountRecoveryToken.objects.filter(participant=participant).exists()
+
+
+@pytest.mark.django_db
+def test_unknown_identifier_and_known_identifier_have_same_rate_limit_response(client, settings):
+    settings.ACCOUNT_RECOVERY_MAX_REQUESTS = 20
+    settings.ACCOUNT_RECOVERY_MAX_REQUESTS_PER_IDENTIFIER = 1
+    known = UserFactory(email="observable@example.test")
+
+    known_first = client.post(
+        reverse("account-recovery-request"),
+        {"identifier": known.email},
+        REMOTE_ADDR="192.0.2.61",
+    )
+    known_response = client.post(
+        reverse("account-recovery-request"),
+        {"identifier": known.email},
+        REMOTE_ADDR="192.0.2.63",
+    )
+    unknown_first = client.post(
+        reverse("account-recovery-request"),
+        {"identifier": "unknown-observable@example.test"},
+        REMOTE_ADDR="192.0.2.62",
+    )
+    unknown_response = client.post(
+        reverse("account-recovery-request"),
+        {"identifier": "unknown-observable@example.test"},
+        REMOTE_ADDR="192.0.2.64",
+    )
+
+    assert known_first.status_code == unknown_first.status_code == 302
+    assert known_response.status_code == unknown_response.status_code == 429
+    assert known_response.content == unknown_response.content
+    assert known_response["Retry-After"] == unknown_response["Retry-After"]
 
 
 @pytest.mark.django_db

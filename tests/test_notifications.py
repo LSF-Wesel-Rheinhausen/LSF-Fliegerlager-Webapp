@@ -75,6 +75,42 @@ def test_deleting_recovery_token_cascades_queued_push_message():
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("timeout_seconds", "expected_ttl"),
+    [(0, 1), (60, 60), (172800, 86400)],
+)
+@patch("billing.notifications.webpush")
+def test_recovery_push_ttl_does_not_exceed_configured_recovery_timeout(
+    webpush, settings, timeout_seconds, expected_ttl
+):
+    settings.WEB_PUSH_ENABLED = True
+    settings.ACCOUNT_RECOVERY_TIMEOUT_SECONDS = timeout_seconds
+    user = UserFactory()
+    subscription = PushSubscription.objects.create(
+        user=user,
+        endpoint="https://push.example.test/recovery-ttl",
+        p256dh="key",
+        auth="secret",
+        categories=[],
+    )
+
+    assert (
+        queue_account_recovery_push(
+            user,
+            kind=AccountRecoveryToken.Kind.USER_PASSWORD,
+            title="Passwort zurücksetzen",
+            body="Link",
+            target_url="/account-recovery/ACCOUNT_RECOVERY_TOKEN/",
+        )
+        == 1
+    )
+    send_due_push_messages()
+
+    assert webpush.call_args.kwargs["ttl"] == expected_ttl
+    assert PushMessage.objects.get(subscription=subscription).status == PushMessage.Status.SENT
+
+
+@pytest.mark.django_db
 @patch("billing.notifications.webpush")
 def test_push_worker_claims_recovery_message_before_token_activation(webpush):
     user = UserFactory()

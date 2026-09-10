@@ -34,6 +34,8 @@ KIOSK_ACCESS_ATTEMPT_WINDOW = 5 * 60
 KIOSK_REGISTRATION_MAX_ATTEMPTS = 10
 KIOSK_REGISTRATION_ATTEMPT_WINDOW = 15 * 60
 ACCOUNT_RECOVERY_MAX_REQUESTS = 5
+ACCOUNT_RECOVERY_MAX_REQUESTS_PER_IDENTIFIER = ACCOUNT_RECOVERY_MAX_REQUESTS
+ACCOUNT_RECOVERY_MAX_IDENTIFIER_BUCKETS = 10_000
 ACCOUNT_RECOVERY_REQUEST_WINDOW_SECONDS = 15 * 60
 ACCOUNT_RECOVERY_TIMEOUT_SECONDS = 60 * 60
 KIOSK_ACCESS_TRUSTED_PROXY_ADDRESSES = frozenset(
@@ -115,6 +117,7 @@ LOGGING = {
     },
     "loggers": {
         "django.request": {"handlers": ["console"], "propagate": False},
+        "django.server": {"handlers": ["console"], "propagate": False},
         "django.security.csrf": {"handlers": ["console"], "propagate": False},
     },
 }

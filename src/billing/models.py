@@ -340,6 +340,20 @@ class AccountRecoveryAttempt(TimeStampedModel):
         return f"Recovery requests ({self.client_key[:8]})"
 
 
+class AccountRecoveryIdentifierAttempt(TimeStampedModel):
+    """Persist a privacy-preserving sliding-window limit for one identifier."""
+
+    identifier_key = models.CharField(max_length=64, unique=True)
+    request_timestamps = models.JSONField(default=list)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        indexes = [models.Index(fields=["updated_at"], name="recovery_ident_updated_idx")]
+
+    def __str__(self) -> str:
+        return f"Recovery identifier requests ({self.identifier_key[:8]})"
+
+
 class UserProfile(TimeStampedModel):
     """Store editable application metadata for a Django user account."""
 
