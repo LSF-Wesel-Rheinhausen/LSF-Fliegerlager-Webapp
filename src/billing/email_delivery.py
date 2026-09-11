@@ -553,7 +553,15 @@ def send_due_email_deliveries(*, batch_size: int = 25, connection: Any | None = 
                 delivery.attempts += 1
                 smtp_code = _smtp_status_code(error)
                 permanent = _is_permanent_smtp_failure(error, smtp_code)
-                if permanent or delivery.attempts > len(EMAIL_RETRY_DELAYS):
+                ambiguous_recovery_delivery = bool(
+                    delivery.account_recovery_id
+                    and smtp_code is None
+                    and AccountRecoveryToken.objects.filter(
+                        pk=delivery.account_recovery_id,
+                        token_digest__isnull=False,
+                    ).exists()
+                )
+                if ambiguous_recovery_delivery or permanent or delivery.attempts > len(EMAIL_RETRY_DELAYS):
                     delivery.status = EmailDelivery.Status.FAILED
                     failed += 1
                 else:

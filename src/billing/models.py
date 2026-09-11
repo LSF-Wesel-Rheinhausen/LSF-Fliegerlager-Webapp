@@ -370,6 +370,10 @@ class AccountRecoveryDeliveryRequest(TimeStampedModel):
         KIOSK_PIN_EMAIL = "kiosk_pin_email", "Kiosk-PIN per E-Mail"
         KIOSK_PIN_PICKER = "kiosk_pin_picker", "Kiosk-PIN per Auswahl"
 
+    class KioskMode(models.TextChoices):
+        PRIVATE = "private", "Privater Kiosk"
+        CENTRAL = "central", "Zentraler Kiosk"
+
     class Status(models.TextChoices):
         PENDING = "pending", "Ausstehend"
         PROCESSING = "processing", "In Verarbeitung"
@@ -378,6 +382,7 @@ class AccountRecoveryDeliveryRequest(TimeStampedModel):
 
     identifier = models.CharField(max_length=254)
     kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.USER_PASSWORD)
+    kiosk_mode = models.CharField(max_length=8, choices=KioskMode.choices, default=KioskMode.PRIVATE)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     processing_started_at = models.DateTimeField(null=True, blank=True)
     attempts = models.PositiveSmallIntegerField(default=0)

@@ -165,11 +165,23 @@ def _consume_recovery_attempt(request: HttpRequest, identifier: str) -> bool:
     return True
 
 
-def _rate_limited_response(request: HttpRequest) -> HttpResponse:
+def _kiosk_login_route(kiosk_mode: str) -> str:
+    return "central-kiosk-login" if kiosk_mode == AccountRecoveryDeliveryRequest.KioskMode.CENTRAL else "kiosk-login"
+
+
+def _kiosk_recovery_sent_route(kiosk_mode: str) -> str:
+    return (
+        "central-kiosk-pin-recovery-sent"
+        if kiosk_mode == AccountRecoveryDeliveryRequest.KioskMode.CENTRAL
+        else "account-recovery-sent"
+    )
+
+
+def _rate_limited_response(request: HttpRequest, *, kiosk_mode: str = "private") -> HttpResponse:
     response = render(
         request,
         "billing/account_recovery_sent.html",
-        {"message": GENERIC_RECOVERY_MESSAGE},
+        {"message": GENERIC_RECOVERY_MESSAGE, "kiosk_login_url": reverse(_kiosk_login_route(kiosk_mode))},
         status=429,
     )
     response["Retry-After"] = str(max(1, int(getattr(settings, "ACCOUNT_RECOVERY_REQUEST_WINDOW_SECONDS", 900))))
@@ -192,6 +204,7 @@ def _deliver_recovery(
     kind: str,
     subject: str,
     body_intro: str,
+    target_path: str | None = None,
 ) -> None:
     if not _has_delivery_channel(owner):
         return
@@ -212,7 +225,7 @@ def _deliver_recovery(
     if not has_usable_recovery_credential(kind, owner):
         return
     invalidate_account_recovery_tokens(kind=kind, owner=owner)
-    target_path = reverse("account-recovery-confirm", kwargs={"token": RECOVERY_TOKEN_PLACEHOLDER})
+    target_path = target_path or reverse("account-recovery-confirm", kwargs={"token": RECOVERY_TOKEN_PLACEHOLDER})
     if kind == AccountRecoveryToken.Kind.USER_PASSWORD:
         name = owner.get_full_name() or owner.get_username()
     else:
@@ -303,6 +316,7 @@ def send_due_account_recovery_requests(*, batch_size: int = 25) -> int:
                 _deliver_kiosk_recovery(
                     job.identifier,
                     picker=job.kind == AccountRecoveryDeliveryRequest.Kind.KIOSK_PIN_PICKER,
+                    kiosk_mode=job.kiosk_mode,
                 )
             else:
                 raise ValueError("Unsupported account-recovery request kind")
@@ -311,7 +325,7 @@ def send_due_account_recovery_requests(*, batch_size: int = 25) -> int:
     return delivered
 
 
-def _deliver_kiosk_recovery(identifier: str, *, picker: bool) -> None:
+def _deliver_kiosk_recovery(identifier: str, *, picker: bool, kiosk_mode: str) -> None:
     """Resolve one queued kiosk request and enqueue its recovery channels."""
     if picker and identifier.startswith("participant-"):
         participants = (
@@ -360,7 +374,12 @@ def _deliver_kiosk_recovery(identifier: str, *, picker: bool) -> None:
             .select_related("guardian", "guardian__camp")
             .order_by("pk")
         )
-    target_path = reverse("account-recovery-confirm", kwargs={"token": RECOVERY_TOKEN_PLACEHOLDER})
+    confirm_route = (
+        "central-kiosk-pin-recovery-confirm"
+        if kiosk_mode == AccountRecoveryDeliveryRequest.KioskMode.CENTRAL
+        else "account-recovery-confirm"
+    )
+    target_path = reverse(confirm_route, kwargs={"token": RECOVERY_TOKEN_PLACEHOLDER})
     recovery_url = f"{settings.ACCOUNT_RECOVERY_PUBLIC_ORIGIN}{target_path}"
     for participant in participants:
         _deliver_recovery(
@@ -372,6 +391,7 @@ def _deliver_kiosk_recovery(identifier: str, *, picker: bool) -> None:
                 f"Für das Kiosk-Konto {participant.full_name} im Fliegerlager {participant.camp.name} "
                 "wurde eine neue PIN angefordert."
             ),
+            target_path=target_path,
         )
     for family_member in family_members:
         _deliver_recovery(
@@ -383,10 +403,11 @@ def _deliver_kiosk_recovery(identifier: str, *, picker: bool) -> None:
                 f"Für das Kiosk-Konto {family_member.full_name} im Fliegerlager "
                 f"{family_member.guardian.camp.name} wurde eine neue PIN angefordert."
             ),
+            target_path=target_path,
         )
 
 
-def kiosk_pin_recovery_request(request: HttpRequest) -> HttpResponse:
+def kiosk_pin_recovery_request(request: HttpRequest, kiosk_mode: str = "private") -> HttpResponse:
     """Accept a visible kiosk identity or email while returning a non-enumerating response."""
     form = KioskPinRecoveryRequestForm(request.POST or None)
     if request.method != "POST":
@@ -394,11 +415,11 @@ def kiosk_pin_recovery_request(request: HttpRequest) -> HttpResponse:
     if not form.is_valid():
         invalid_participant = form.errors.as_data().get("participant", [])
         if any(error.code == "invalid_choice" for error in invalid_participant):
-            return redirect("account-recovery-sent")
+            return redirect(_kiosk_recovery_sent_route(kiosk_mode))
         return _render_request_form(request, form=form, title="PIN zurücksetzen")
     identifier = form.cleaned_data["identifier"]
     if not _consume_recovery_attempt(request, identifier):
-        return _rate_limited_response(request)
+        return _rate_limited_response(request, kiosk_mode=kiosk_mode)
     AccountRecoveryDeliveryRequest.objects.create(
         identifier=identifier,
         kind=(
@@ -406,13 +427,18 @@ def kiosk_pin_recovery_request(request: HttpRequest) -> HttpResponse:
             if form.cleaned_data.get("participant")
             else AccountRecoveryDeliveryRequest.Kind.KIOSK_PIN_EMAIL
         ),
+        kiosk_mode=kiosk_mode,
     )
-    return redirect("account-recovery-sent")
+    return redirect(_kiosk_recovery_sent_route(kiosk_mode))
 
 
-def account_recovery_sent(request: HttpRequest) -> HttpResponse:
+def account_recovery_sent(request: HttpRequest, kiosk_mode: str = "private") -> HttpResponse:
     """Render the same completion response for matching and unknown identifiers."""
-    return render(request, "billing/account_recovery_sent.html", {"message": GENERIC_RECOVERY_MESSAGE})
+    return render(
+        request,
+        "billing/account_recovery_sent.html",
+        {"message": GENERIC_RECOVERY_MESSAGE, "kiosk_login_url": reverse(_kiosk_login_route(kiosk_mode))},
+    )
 
 
 def _invalid_token_response(request: HttpRequest) -> HttpResponse:
@@ -427,7 +453,7 @@ def _protect_token_response(response: HttpResponse) -> HttpResponse:
 
 
 @sensitive_post_parameters("new_password1", "new_password2", "pin", "pin_repeat")
-def account_recovery_confirm(request: HttpRequest, token: str) -> HttpResponse:
+def account_recovery_confirm(request: HttpRequest, token: str, kiosk_mode: str = "private") -> HttpResponse:
     """Consume one valid recovery token after a replacement credential passes validation."""
     recovery = find_valid_account_recovery(token)
     if recovery is None:
@@ -465,13 +491,13 @@ def account_recovery_confirm(request: HttpRequest, token: str) -> HttpResponse:
             owner.pin.save()
             revoke_owner_recovery_push_subscriptions(kind=locked_recovery.kind, owner=owner)
             success_message = "PIN wurde geändert. Du kannst dich jetzt anmelden."
-            destination = "kiosk-login"
+            destination = _kiosk_login_route(kiosk_mode)
         else:
             owner.pin.set_pin(form.cleaned_data["pin"])
             owner.pin.save()
             revoke_owner_recovery_push_subscriptions(kind=locked_recovery.kind, owner=owner)
             success_message = "PIN wurde geändert. Du kannst dich jetzt anmelden."
-            destination = "kiosk-login"
+            destination = _kiosk_login_route(kiosk_mode)
         locked_recovery.used_at = timezone.now()
         locked_recovery.save(update_fields=["used_at", "updated_at"])
     messages.success(request, success_message)

@@ -396,6 +396,24 @@ urlpatterns = [
     ),
     path("central/kiosk/login/", views.kiosk_login, {"kiosk_mode": "central"}, name="central-kiosk-login"),
     path(
+        "central/kiosk/pin/recovery/",
+        account_recovery.kiosk_pin_recovery_request,
+        {"kiosk_mode": "central"},
+        name="central-kiosk-pin-recovery-request",
+    ),
+    path(
+        "central/kiosk/pin/recovery/sent/",
+        account_recovery.account_recovery_sent,
+        {"kiosk_mode": "central"},
+        name="central-kiosk-pin-recovery-sent",
+    ),
+    path(
+        "central/kiosk/pin/recovery/confirm/<str:token>/",
+        account_recovery.account_recovery_confirm,
+        {"kiosk_mode": "central"},
+        name="central-kiosk-pin-recovery-confirm",
+    ),
+    path(
         "central/kiosk/register/",
         views.kiosk_self_register,
         {"kiosk_mode": "central"},

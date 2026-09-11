@@ -685,13 +685,25 @@ def send_due_push_messages(*, batch_size: int = 50) -> PushDeliveryResult:
                     else str(status_code or "delivery_error")
                 )[:40]
                 is_removed_subscription = status_code in {404, 410}
-                if recovery_id is not None and (is_removed_subscription or message.attempts + 1 >= len(RETRY_DELAYS)):
+                subscription_was_revoked = (
+                    recovery_id is not None and not PushSubscription.objects.filter(pk=subscription.pk).exists()
+                )
+                ambiguous_recovery_delivery = (
+                    recovery_id is not None and status_code is None and not subscription_was_revoked
+                )
+                if recovery_id is not None and (
+                    ambiguous_recovery_delivery
+                    or is_removed_subscription
+                    or subscription_was_revoked
+                    or message.attempts + 1 >= len(RETRY_DELAYS)
+                ):
                     subscription_removed, attempts = terminally_fail_account_recovery_push_delivery(
                         recovery_id=recovery_id,
                         subscription_id=subscription.pk,
                         message_id=message.pk,
                         error_code=error_code,
                         remove_subscription=is_removed_subscription,
+                        preserve_capability=ambiguous_recovery_delivery,
                     )
                     if subscription_removed:
                         removed += 1

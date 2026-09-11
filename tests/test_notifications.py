@@ -43,7 +43,7 @@ from billing.notifications import (
     queue_participant_notification,
     send_due_push_messages,
 )
-from billing.recovery_tokens import create_account_recovery_token
+from billing.recovery_tokens import create_account_recovery_token, find_valid_account_recovery
 from billing.services import approve_shared_expense
 from tests.factories import CampFactory, ParticipantFactory, ParticipantFamilyMemberFactory, UserFactory
 
@@ -1254,7 +1254,10 @@ def test_worker_consumes_recovery_token_when_push_subscription_is_gone(webpush):
 @pytest.mark.django_db
 @patch("billing.notifications.webpush")
 def test_worker_consumes_recovery_token_when_retry_budget_is_exhausted(webpush):
-    webpush.side_effect = WebPushException("unavailable")
+    class UnavailableResponse:
+        status_code = 503
+
+    webpush.side_effect = WebPushException("unavailable", response=UnavailableResponse())
     user = UserFactory()
     subscription = PushSubscription.objects.create(
         user=user,
@@ -1285,6 +1288,44 @@ def test_worker_consumes_recovery_token_when_retry_budget_is_exhausted(webpush):
     assert recovery.used_at is not None
     assert recovery.token_digest is None
     assert recovery.expires_at is None
+
+
+@pytest.mark.django_db
+@patch("billing.notifications.webpush")
+def test_recovery_push_ambiguous_failure_is_terminal_and_preserves_first_token(webpush, settings):
+    settings.WEB_PUSH_ENABLED = True
+    webpush.side_effect = requests.Timeout("delivery outcome unknown")
+    user = UserFactory()
+    subscription = PushSubscription.objects.create(
+        user=user,
+        endpoint="https://push.example.test/ambiguous-recovery",
+        p256dh="key",
+        auth="secret",
+        categories=["account_security"],
+    )
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    message = PushMessage.objects.create(
+        subscription=subscription,
+        account_recovery=recovery,
+        category="account_security",
+        title="Passwort zuruecksetzen",
+        body="Link",
+        target_url="/account/recovery/ACCOUNT_RECOVERY_TOKEN/",
+        dedupe_key="account-recovery:ambiguous",
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+
+    with patch("billing.recovery_tokens.secrets.token_urlsafe", return_value="accepted-push-token"):
+        result = send_due_push_messages()
+
+    message.refresh_from_db()
+    recovery.refresh_from_db()
+    assert result == PushDeliveryResult(failed=1)
+    assert message.status == PushMessage.Status.FAILED
+    assert recovery.used_at is None
+    assert recovery.token_digest is not None
+    assert recovery.expires_at is not None
+    assert find_valid_account_recovery("accepted-push-token") == recovery
 
 
 @pytest.mark.django_db

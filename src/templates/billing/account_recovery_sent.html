@@ -5,7 +5,7 @@
     <h1>Anfrage erhalten</h1>
     <p role="status">{{ message }}</p>
     <div class="form-actions">
-      <a class="button button-secondary" href="{% url 'kiosk-login' %}">Zum Kiosk</a>
+      <a class="button button-secondary" href="{{ kiosk_login_url }}">Zum Kiosk</a>
       <a class="button" href="{% url 'login' %}">Zum Admin-Login</a>
     </div>
   </section>

@@ -16,7 +16,7 @@ from django.utils import timezone
 
 from billing.account_recovery import send_due_account_recovery_requests
 from billing.email_delivery import queue_account_recovery_email, send_due_email_deliveries
-from billing.kiosk_access import KIOSK_PARTICIPANT_SESSION_KEY
+from billing.kiosk_access import KIOSK_MODE_SESSION_KEY, KIOSK_PARTICIPANT_SESSION_KEY
 from billing.kiosk_security import check_login_rate_limit, consume_login_failure, is_login_locked_out
 from billing.models import (
     AccountRecoveryDeliveryRequest,
@@ -567,7 +567,7 @@ def test_recovery_rejects_expired_tokens_without_changing_credentials(client, se
 
 
 @pytest.mark.django_db
-def test_recovery_email_retry_rotates_token_and_restarts_expiry(client, settings):
+def test_recovery_email_ambiguous_failure_is_terminal_and_preserves_first_token(client, settings):
     settings.ACCOUNT_RECOVERY_TIMEOUT_SECONDS = 60
     user = UserFactory(email="retry@example.test")
     client.post(reverse("account-recovery-request"), {"identifier": user.email})
@@ -579,27 +579,70 @@ def test_recovery_email_retry_rotates_token_and_restarts_expiry(client, settings
     configuration.from_email = "lager@example.test"
     configuration.save()
     connection = Mock()
-    connection.send_messages.side_effect = [smtplib.SMTPException("temporarily unavailable"), 1]
+    connection.send_messages.side_effect = smtplib.SMTPServerDisconnected("delivery outcome unknown")
     first_attempt_at = timezone.now()
 
     with (
         patch("billing.email_delivery.timezone.now", return_value=first_attempt_at),
         patch("billing.recovery_tokens.timezone.now", return_value=first_attempt_at),
+        patch("billing.recovery_tokens.secrets.token_urlsafe", return_value="accepted-email-token"),
     ):
-        assert send_due_email_deliveries(connection=connection).retried == 1
+        result = send_due_email_deliveries(connection=connection)
+    assert result.failed == 1
+    assert result.retried == 0
     recovery = AccountRecoveryToken.objects.get()
     first_digest = recovery.token_digest
     assert recovery.expires_at == first_attempt_at + timezone.timedelta(seconds=60)
+    assert find_valid_account_recovery("accepted-email-token") == recovery
+    delivery = EmailDelivery.objects.get()
+    assert delivery.status == EmailDelivery.Status.FAILED
 
     second_attempt_at = first_attempt_at + timezone.timedelta(seconds=61)
-    with (
-        patch("billing.email_delivery.timezone.now", return_value=second_attempt_at),
-        patch("billing.recovery_tokens.timezone.now", return_value=second_attempt_at),
-    ):
-        assert send_due_email_deliveries(connection=connection).sent == 1
+    with patch("billing.email_delivery.timezone.now", return_value=second_attempt_at):
+        assert send_due_email_deliveries(connection=connection).sent == 0
     recovery.refresh_from_db()
-    assert recovery.token_digest != first_digest
-    assert recovery.expires_at == second_attempt_at + timezone.timedelta(seconds=60)
+    assert recovery.token_digest == first_digest
+    assert recovery.expires_at == first_attempt_at + timezone.timedelta(seconds=60)
+    assert connection.send_messages.call_count == 1
+
+
+@pytest.mark.django_db
+def test_central_kiosk_recovery_keeps_central_routes_and_session_semantics(kiosk_client, settings):
+    settings.ACCOUNT_RECOVERY_PUBLIC_ORIGIN = "https://recovery.example.test"
+    participant = ParticipantFactory(email="central-recovery@example.test")
+    participant.pin.set_pin("2468")
+    participant.pin.save()
+
+    login_page = kiosk_client.get(reverse("central-kiosk-login"))
+    login_content = login_page.content.decode()
+    assert f'href="{reverse("central-kiosk-pin-recovery-request")}"' in login_content
+    assert f'href="{reverse("kiosk-pin-recovery-request")}"' not in login_content
+    assert kiosk_client.session[KIOSK_MODE_SESSION_KEY] == "central"
+
+    response = kiosk_client.post(
+        reverse("central-kiosk-pin-recovery-request"),
+        {"email": participant.email},
+    )
+    assert response.status_code == 302
+    assert response.url == reverse("central-kiosk-pin-recovery-sent")
+    sent_page = kiosk_client.get(response.url)
+    sent_content = sent_page.content.decode()
+    assert f'href="{reverse("central-kiosk-login")}"' in sent_content
+    assert f'href="{reverse("kiosk-login")}"' not in sent_content
+    queued = AccountRecoveryDeliveryRequest.objects.get()
+    assert queued.kiosk_mode == AccountRecoveryDeliveryRequest.KioskMode.CENTRAL
+
+    assert send_due_account_recovery_requests() == 1
+    delivery = EmailDelivery.objects.get()
+    assert "/central/kiosk/pin/recovery/confirm/ACCOUNT_RECOVERY_TOKEN/" in delivery.body_text
+    _send_recovery_emails()
+    path = urlsplit(mail.outbox[0].body.splitlines()[-1]).path
+    reset = kiosk_client.post(path, {"pin": "8642", "pin_repeat": "8642"}, follow=True)
+
+    assert reset.status_code == 200
+    assert reset.redirect_chain[-1][0] == reverse("central-kiosk-login")
+    assert kiosk_client.session[KIOSK_MODE_SESSION_KEY] == "central"
+    assert 0 < kiosk_client.session.get_expiry_age() <= 120
 
 
 @pytest.mark.django_db

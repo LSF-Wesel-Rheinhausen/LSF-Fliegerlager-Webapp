@@ -196,9 +196,11 @@ def terminally_fail_account_recovery_push_delivery(
     message_id: int,
     error_code: str,
     remove_subscription: bool,
+    preserve_capability: bool = False,
 ) -> tuple[bool, int | None]:
-    """Consume a terminal push capability in owner/token/subscription/message lock order.
+    """Terminalize a recovery push delivery in a consistent lock order.
 
+    The capability may be preserved when the transport outcome is ambiguous.
     Returns whether the subscription was removed and the final message attempt
     count. No bearer secret is read or persisted while handling a failure.
     """
@@ -209,7 +211,7 @@ def terminally_fail_account_recovery_push_delivery(
     recovery = AccountRecoveryToken.objects.select_for_update().filter(pk=recovery_id).first()
     subscription = PushSubscription.objects.select_for_update().filter(pk=subscription_id).first()
     message = PushMessage.objects.select_for_update().filter(pk=message_id).first()
-    if recovery is not None:
+    if recovery is not None and not preserve_capability:
         recovery.used_at = recovery.used_at or timezone.now()
         recovery.token_digest = None
         recovery.expires_at = None
