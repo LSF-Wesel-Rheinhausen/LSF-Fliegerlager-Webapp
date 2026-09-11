@@ -28,6 +28,8 @@
 - Bereinigt beim Rollback auf das Schema vor der Kontowiederherstellung ausschließlich nicht mehr darstellbare Recovery-E-Mail-Batches samt Zustellungen, bevor die alte Datenbankbedingung wiederhergestellt wird.
 - Verifiziert bei der Geräte-Eigentümermigration bestehende Admin-Geräte, widerruft sie bei jedem Django-Admin-Passwortwechsel und hält auch terminale Push-Fehler in der gemeinsamen Recovery-Sperrreihenfolge ab.
 - Verarbeitet öffentliche Admin-Recovery-Anfragen über eine persistente Worker-Queue, damit Treffer und Nichttreffer im HTTP-Pfad gleichartig bleiben.
+- Verarbeitet auch Kiosk-PIN-Recovery-Anfragen über dieselbe persistente Worker-Queue, sodass E-Mail-Treffer nicht synchron offenlegen, ob eine private Adresse zu einem Kiosk-Konto gehört.
+- Entfernt abgearbeitete Recovery-Queue-Einträge einschließlich der eingegebenen Identität atomar und erzeugt bearbeitbare Links ausschließlich aus einem strikt konfigurierten öffentlichen Origin.
 
 ## Tests
 

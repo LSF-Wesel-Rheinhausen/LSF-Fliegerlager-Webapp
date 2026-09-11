@@ -23,6 +23,7 @@ services:
     environment:
       AUTHELIA_SSO_EMAIL_HEADER: ${AUTHELIA_SSO_EMAIL_HEADER:-Remote-Email}
       AUTHELIA_SSO_ENABLED: ${AUTHELIA_SSO_ENABLED:-0}
+      ACCOUNT_RECOVERY_PUBLIC_ORIGIN: ${ACCOUNT_RECOVERY_PUBLIC_ORIGIN:?ACCOUNT_RECOVERY_PUBLIC_ORIGIN must be set in .env}
       BACKUP_DIR: /backups
       CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set in .env}
@@ -209,6 +210,7 @@ services:
     image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}
     restart: unless-stopped
     environment:
+      ACCOUNT_RECOVERY_PUBLIC_ORIGIN: ${ACCOUNT_RECOVERY_PUBLIC_ORIGIN:?ACCOUNT_RECOVERY_PUBLIC_ORIGIN must be set in .env}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set in .env}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
       DJANGO_DEBUG: ${DJANGO_DEBUG:-0}

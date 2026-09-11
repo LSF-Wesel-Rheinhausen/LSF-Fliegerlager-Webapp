@@ -365,6 +365,11 @@ class AccountRecoveryIdentifierAttempt(TimeStampedModel):
 class AccountRecoveryDeliveryRequest(TimeStampedModel):
     """Persist a public recovery request until a worker resolves and delivers it."""
 
+    class Kind(models.TextChoices):
+        USER_PASSWORD = "user_password", "Admin-Passwort"
+        KIOSK_PIN_EMAIL = "kiosk_pin_email", "Kiosk-PIN per E-Mail"
+        KIOSK_PIN_PICKER = "kiosk_pin_picker", "Kiosk-PIN per Auswahl"
+
     class Status(models.TextChoices):
         PENDING = "pending", "Ausstehend"
         PROCESSING = "processing", "In Verarbeitung"
@@ -372,7 +377,7 @@ class AccountRecoveryDeliveryRequest(TimeStampedModel):
         FAILED = "failed", "Fehlgeschlagen"
 
     identifier = models.CharField(max_length=254)
-    origin = models.URLField(max_length=500)
+    kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.USER_PASSWORD)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     processing_started_at = models.DateTimeField(null=True, blank=True)
     attempts = models.PositiveSmallIntegerField(default=0)

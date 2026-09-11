@@ -14,7 +14,7 @@ class Migration(migrations.Migration):
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 ("identifier", models.CharField(max_length=254)),
-                ("origin", models.URLField(max_length=500)),
+                ("kind", models.CharField(choices=[("user_password", "Admin-Passwort"), ("kiosk_pin_email", "Kiosk-PIN per E-Mail"), ("kiosk_pin_picker", "Kiosk-PIN per Auswahl")], default="user_password", max_length=20)),
                 ("status", models.CharField(choices=[("pending", "Ausstehend"), ("processing", "In Verarbeitung"), ("sent", "Eingeplant"), ("failed", "Fehlgeschlagen")], default="pending", max_length=20)),
                 ("processing_started_at", models.DateTimeField(blank=True, null=True)),
                 ("attempts", models.PositiveSmallIntegerField(default=0)),

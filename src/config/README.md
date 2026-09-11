@@ -17,6 +17,7 @@ Unterstuetzte Umgebungsvariablen:
 - `DJANGO_SECRET_KEY`: Django Secret Key; bei `DJANGO_DEBUG=0` sind mindestens 50 Zeichen Pflicht.
 - `DJANGO_DEBUG`: `1` aktiviert Debug-Modus, jeder andere Wert deaktiviert ihn.
 - `DJANGO_ALLOWED_HOSTS`: kommaseparierte Hostliste; bei `DJANGO_DEBUG=0` ist ein Wert Pflicht.
+- `ACCOUNT_RECOVERY_PUBLIC_ORIGIN`: exakter öffentlicher HTTPS-Origin für Passwort-Recovery-Links; HTTP ist ausschließlich für localhost zulässig.
 - `DJANGO_HTTPS`: `1` aktiviert HTTPS-Redirect sowie sichere Session- und CSRF-Cookies.
 - `DJANGO_TRUST_PROXY_SSL_HEADER`: nur auf `1` setzen, wenn ein kontrollierter Reverse Proxy `X-Forwarded-Proto` bereinigt und setzt.
 - `KIOSK_ACCESS_TRUSTED_PROXY_ADDRESSES`: exakte direkte Proxy-IP-Adressen, die `X-Forwarded-For` mit genau einer Client-IP ersetzen dürfen.

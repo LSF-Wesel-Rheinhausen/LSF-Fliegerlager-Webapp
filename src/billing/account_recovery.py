@@ -253,7 +253,7 @@ def account_recovery_request(request: HttpRequest) -> HttpResponse:
 
     AccountRecoveryDeliveryRequest.objects.create(
         identifier=identifier,
-        origin=request.build_absolute_uri("/"),
+        kind=AccountRecoveryDeliveryRequest.Kind.USER_PASSWORD,
     )
     return redirect("account-recovery-sent")
 
@@ -279,45 +279,41 @@ def send_due_account_recovery_requests(*, batch_size: int = 25) -> int:
             if not claimed:
                 continue
             job = AccountRecoveryDeliveryRequest.objects.select_for_update().get(pk=request_id)
-            target_path = reverse("account-recovery-confirm", kwargs={"token": RECOVERY_TOKEN_PLACEHOLDER})
-            recovery_url = f"{job.origin.rstrip('/')}{target_path}"
-            users: QuerySet[Any] = User.objects.filter(is_active=True).filter(
-                Q(username__iexact=job.identifier) | Q(email__iexact=job.identifier)
-            )
-            for user in users.order_by("pk")[:10]:
-                _deliver_recovery(
-                    recovery_url,
-                    owner=user,
-                    kind=AccountRecoveryToken.Kind.USER_PASSWORD,
-                    subject="Passwort zurücksetzen",
-                    body_intro=(
-                        "Für das Fliegerlager-Administrationskonto "
-                        f"{user.get_username()} wurde ein neues Passwort angefordert."
-                    ),
+            if job.kind == AccountRecoveryDeliveryRequest.Kind.USER_PASSWORD:
+                target_path = reverse("account-recovery-confirm", kwargs={"token": RECOVERY_TOKEN_PLACEHOLDER})
+                recovery_url = f"{settings.ACCOUNT_RECOVERY_PUBLIC_ORIGIN}{target_path}"
+                users: QuerySet[Any] = User.objects.filter(is_active=True).filter(
+                    Q(username__iexact=job.identifier) | Q(email__iexact=job.identifier)
                 )
-            job.status = AccountRecoveryDeliveryRequest.Status.SENT
-            job.processing_started_at = None
-            job.attempts += 1
-            job.save(update_fields=["status", "processing_started_at", "attempts", "updated_at"])
+                for user in users.order_by("pk")[:10]:
+                    _deliver_recovery(
+                        recovery_url,
+                        owner=user,
+                        kind=AccountRecoveryToken.Kind.USER_PASSWORD,
+                        subject="Passwort zurücksetzen",
+                        body_intro=(
+                            "Für das Fliegerlager-Administrationskonto "
+                            f"{user.get_username()} wurde ein neues Passwort angefordert."
+                        ),
+                    )
+            elif job.kind in {
+                AccountRecoveryDeliveryRequest.Kind.KIOSK_PIN_EMAIL,
+                AccountRecoveryDeliveryRequest.Kind.KIOSK_PIN_PICKER,
+            }:
+                _deliver_kiosk_recovery(
+                    job.identifier,
+                    picker=job.kind == AccountRecoveryDeliveryRequest.Kind.KIOSK_PIN_PICKER,
+                )
+            else:
+                raise ValueError("Unsupported account-recovery request kind")
+            job.delete()
             delivered += 1
     return delivered
 
 
-def kiosk_pin_recovery_request(request: HttpRequest) -> HttpResponse:
-    """Accept a visible kiosk identity or email while returning a non-enumerating response."""
-    form = KioskPinRecoveryRequestForm(request.POST or None)
-    if request.method != "POST":
-        return _render_request_form(request, form=form, title="PIN zurücksetzen")
-    if not form.is_valid():
-        invalid_participant = form.errors.as_data().get("participant", [])
-        if any(error.code == "invalid_choice" for error in invalid_participant):
-            return redirect("account-recovery-sent")
-        return _render_request_form(request, form=form, title="PIN zurücksetzen")
-    identifier = form.cleaned_data["identifier"]
-    if not _consume_recovery_attempt(request, identifier):
-        return _rate_limited_response(request)
-
-    if form.cleaned_data.get("participant") and identifier.startswith("participant-"):
+def _deliver_kiosk_recovery(identifier: str, *, picker: bool) -> None:
+    """Resolve one queued kiosk request and enqueue its recovery channels."""
+    if picker and identifier.startswith("participant-"):
         participants = (
             Participant.objects.filter(
                 pk=int(identifier.removeprefix("participant-")),
@@ -328,7 +324,7 @@ def kiosk_pin_recovery_request(request: HttpRequest) -> HttpResponse:
             .select_related("camp")
         )
         family_members = ParticipantFamilyMember.objects.none()
-    elif form.cleaned_data.get("participant") and identifier.startswith("family-"):
+    elif picker and identifier.startswith("family-"):
         participants = Participant.objects.none()
         family_members = (
             ParticipantFamilyMember.objects.filter(
@@ -364,11 +360,11 @@ def kiosk_pin_recovery_request(request: HttpRequest) -> HttpResponse:
             .select_related("guardian", "guardian__camp")
             .order_by("pk")
         )
+    target_path = reverse("account-recovery-confirm", kwargs={"token": RECOVERY_TOKEN_PLACEHOLDER})
+    recovery_url = f"{settings.ACCOUNT_RECOVERY_PUBLIC_ORIGIN}{target_path}"
     for participant in participants:
         _deliver_recovery(
-            request.build_absolute_uri(
-                reverse("account-recovery-confirm", kwargs={"token": RECOVERY_TOKEN_PLACEHOLDER})
-            ),
+            recovery_url,
             owner=participant,
             kind=AccountRecoveryToken.Kind.PARTICIPANT_PIN,
             subject="PIN zurücksetzen",
@@ -379,9 +375,7 @@ def kiosk_pin_recovery_request(request: HttpRequest) -> HttpResponse:
         )
     for family_member in family_members:
         _deliver_recovery(
-            request.build_absolute_uri(
-                reverse("account-recovery-confirm", kwargs={"token": RECOVERY_TOKEN_PLACEHOLDER})
-            ),
+            recovery_url,
             owner=family_member,
             kind=AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN,
             subject="PIN zurücksetzen",
@@ -390,6 +384,29 @@ def kiosk_pin_recovery_request(request: HttpRequest) -> HttpResponse:
                 f"{family_member.guardian.camp.name} wurde eine neue PIN angefordert."
             ),
         )
+
+
+def kiosk_pin_recovery_request(request: HttpRequest) -> HttpResponse:
+    """Accept a visible kiosk identity or email while returning a non-enumerating response."""
+    form = KioskPinRecoveryRequestForm(request.POST or None)
+    if request.method != "POST":
+        return _render_request_form(request, form=form, title="PIN zurücksetzen")
+    if not form.is_valid():
+        invalid_participant = form.errors.as_data().get("participant", [])
+        if any(error.code == "invalid_choice" for error in invalid_participant):
+            return redirect("account-recovery-sent")
+        return _render_request_form(request, form=form, title="PIN zurücksetzen")
+    identifier = form.cleaned_data["identifier"]
+    if not _consume_recovery_attempt(request, identifier):
+        return _rate_limited_response(request)
+    AccountRecoveryDeliveryRequest.objects.create(
+        identifier=identifier,
+        kind=(
+            AccountRecoveryDeliveryRequest.Kind.KIOSK_PIN_PICKER
+            if form.cleaned_data.get("participant")
+            else AccountRecoveryDeliveryRequest.Kind.KIOSK_PIN_EMAIL
+        ),
+    )
     return redirect("account-recovery-sent")
 
 

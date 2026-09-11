@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 import pytest
 from django.contrib.auth import authenticate
 from django.core import mail
+from django.core.exceptions import ImproperlyConfigured
 from django.core.mail import get_connection
 from django.db.models import QuerySet
 from django.test import RequestFactory
@@ -37,6 +38,7 @@ from billing.recovery_tokens import (
     create_account_recovery_token,
     find_valid_account_recovery,
 )
+from config.settings import _validate_account_recovery_public_origin
 from tests.factories import ParticipantFactory, ParticipantFamilyMemberFactory, SuperUserFactory, UserFactory
 
 
@@ -83,11 +85,87 @@ def test_recovery_worker_delivers_durable_request_and_reclaims_stale_claim(clien
     request.save(update_fields=["status", "processing_started_at"])
 
     assert send_due_account_recovery_requests() == 1
-    request.refresh_from_db()
-    assert request.status == AccountRecoveryDeliveryRequest.Status.SENT
-    assert request.attempts == 1
+    assert not AccountRecoveryDeliveryRequest.objects.filter(pk=request.pk).exists()
     assert EmailDelivery.objects.count() == 1
     assert PushMessage.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_recovery_worker_deletes_completed_requests_for_matched_and_unmatched_identifiers(client, settings):
+    settings.ACCOUNT_RECOVERY_PUBLIC_ORIGIN = "https://recovery.example.test"
+    user = UserFactory(email="delete-recovery@example.test")
+
+    client.post(reverse("account-recovery-request"), {"identifier": user.email})
+    client.post(reverse("account-recovery-request"), {"identifier": "unknown-delete@example.test"})
+
+    assert send_due_account_recovery_requests() == 2
+    assert AccountRecoveryDeliveryRequest.objects.count() == 0
+    assert EmailDelivery.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_recovery_worker_uses_canonical_origin_instead_of_forged_request_host(client, settings):
+    settings.ACCOUNT_RECOVERY_PUBLIC_ORIGIN = "https://recovery.example.test"
+    settings.ALLOWED_HOSTS = ["testserver", "forged.example.test"]
+    user = UserFactory(email="canonical-origin@example.test")
+
+    response = client.post(
+        reverse("account-recovery-request"),
+        {"identifier": user.email},
+        HTTP_HOST="forged.example.test",
+        HTTP_X_FORWARDED_HOST="proxy-forged.example.test",
+        HTTP_X_FORWARDED_PROTO="http",
+    )
+
+    assert response.status_code == 302
+    assert send_due_account_recovery_requests() == 1
+    body = EmailDelivery.objects.select_related("batch").get().batch.body
+    assert "https://recovery.example.test/account/recovery/confirm/ACCOUNT_RECOVERY_TOKEN/" in body
+    assert "forged.example.test" not in body
+    assert "proxy-forged.example.test" not in body
+
+
+@pytest.mark.django_db
+def test_kiosk_email_recovery_queues_known_and_unknown_requests_before_identity_lookup(kiosk_client, settings):
+    settings.ACCOUNT_RECOVERY_PUBLIC_ORIGIN = "https://recovery.example.test"
+    participant = ParticipantFactory(email="kiosk-queued@example.test")
+    participant.pin.set_pin("2468")
+    participant.pin.save()
+
+    known_response = kiosk_client.post(
+        reverse("kiosk-pin-recovery-request"), {"participant": "", "email": participant.email}
+    )
+    unknown_response = kiosk_client.post(
+        reverse("kiosk-pin-recovery-request"), {"participant": "", "email": "unknown-kiosk-queued@example.test"}
+    )
+
+    assert known_response.status_code == unknown_response.status_code == 302
+    assert list(AccountRecoveryDeliveryRequest.objects.values_list("kind", flat=True)) == [
+        AccountRecoveryDeliveryRequest.Kind.KIOSK_PIN_EMAIL,
+        AccountRecoveryDeliveryRequest.Kind.KIOSK_PIN_EMAIL,
+    ]
+    assert EmailDelivery.objects.count() == 0
+    assert PushMessage.objects.count() == 0
+
+    assert send_due_account_recovery_requests() == 2
+    assert AccountRecoveryDeliveryRequest.objects.count() == 0
+    assert EmailDelivery.objects.count() == 1
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "",
+        "https://recovery.example.test/path",
+        "https://user:password@recovery.example.test",
+        "https://recovery.example.test?next=/",
+        "ftp://recovery.example.test",
+        "http://recovery.example.test",
+    ],
+)
+def test_recovery_public_origin_rejects_noncanonical_or_insecure_values(origin):
+    with pytest.raises(ImproperlyConfigured):
+        _validate_account_recovery_public_origin(origin)
 
 
 @pytest.mark.django_db
@@ -238,6 +316,7 @@ def test_kiosk_recovery_queues_both_channels_and_sets_a_new_pin(kiosk_client, se
 
     assert response.status_code == 200
     assert "Falls ein aktives Konto passt" in response.content.decode()
+    assert send_due_account_recovery_requests() == 1
     message = PushMessage.objects.get(subscription=subscription)
     assert message.title == "PIN zurücksetzen"
     _send_recovery_emails()
@@ -275,6 +354,7 @@ def test_recovery_push_targets_only_the_companion_account(kiosk_client, settings
 
     kiosk_client.post(reverse("kiosk-pin-recovery-request"), {"email": companion.email})
 
+    assert send_due_account_recovery_requests() == 1
     message = PushMessage.objects.get()
     assert message.subscription.family_member_id == companion.pk
     assert message.subscription.participant_id is None
@@ -292,6 +372,7 @@ def test_recovery_email_identifier_is_not_parsed_as_picker_token(kiosk_client):
     )
 
     assert response.status_code == 302
+    assert send_due_account_recovery_requests() == 1
     assert AccountRecoveryToken.objects.filter(participant=participant).exists()
 
 
@@ -315,6 +396,7 @@ def test_kiosk_recovery_delivers_to_all_matching_participants(kiosk_client):
     )
 
     assert response.status_code == 302
+    assert send_due_account_recovery_requests() == 1
     assert EmailDelivery.objects.count() == 11
 
 
@@ -555,6 +637,7 @@ def test_recovery_identifier_limit_is_shared_by_admin_and_kiosk_and_preserves_ot
     assert blocked.status_code == 429
     assert "Falls ein aktives Konto passt" in blocked.content.decode()
     assert other.status_code == 302
+    assert send_due_account_recovery_requests() == 2
     assert AccountRecoveryToken.objects.filter(participant=participant).exists()
 
 
@@ -666,6 +749,7 @@ def test_kiosk_push_only_account_can_start_recovery_with_kiosk_identifier(kiosk_
 
     assert response.status_code == 302
     assert response.url == reverse("account-recovery-sent")
+    assert send_due_account_recovery_requests() == 1
     assert AccountRecoveryToken.objects.filter(
         **({"participant": owner.pk} if owner_kind == "participant" else {"family_member": owner.pk})
     ).exists()
@@ -713,6 +797,7 @@ def test_kiosk_recovery_identifier_prefix_prevents_participant_family_collision(
 
     kiosk_client.post(reverse("kiosk-pin-recovery-request"), {"participant": f"family-{participant.pk}"})
 
+    assert send_due_account_recovery_requests() == 1
     recovery = AccountRecoveryToken.objects.get()
     assert recovery.family_member_id == companion.pk
     assert recovery.participant_id is None
@@ -976,6 +1061,7 @@ def test_companion_can_recover_own_pin_and_message_identifies_account(kiosk_clie
 
     kiosk_client.post(reverse("kiosk-pin-recovery-request"), {"email": companion.email})
 
+    assert send_due_account_recovery_requests() == 1
     assert EmailDelivery.objects.count() == 2
     queued_bodies = " ".join(EmailDelivery.objects.values_list("body_text", flat=True))
     assert all(name in queued_bodies for name in [guardian.full_name, companion.full_name])

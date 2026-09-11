@@ -10,7 +10,7 @@ mkdir -p /srv/fliegerlager
 ```
 
 In `.env` müssen mindestens `DJANGO_SECRET_KEY`, `UPDATE_AGENT_TOKEN`, `UPDATE_AGENT_URL`, `POSTGRES_PASSWORD`,
-`DATABASE_URL`, `DJANGO_ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, `PORTAINER_URL`, `PORTAINER_API_KEY`,
+`DATABASE_URL`, `DJANGO_ALLOWED_HOSTS`, `ACCOUNT_RECOVERY_PUBLIC_ORIGIN`, `CSRF_TRUSTED_ORIGINS`, `PORTAINER_URL`, `PORTAINER_API_KEY`,
 `PORTAINER_ENDPOINT_ID` und `PORTAINER_STACK_ID` angepasst werden. `POSTGRES_PASSWORD` und das Passwort innerhalb von
 `DATABASE_URL` müssen identisch sein.
 
@@ -46,9 +46,13 @@ Prozess benötigten Variablen:
 `updater`-Service vorkommen. Änderungen an der Allowlist müssen durch die Compose-Konfigurationstests abgesichert
 werden.
 
-`DJANGO_ALLOWED_HOSTS` wird für den `app`-Service weiterhin zwingend aus `.env` verlangt. Die drei Worker verwenden
+`DJANGO_ALLOWED_HOSTS` wird für den `app`-Service weiterhin zwingend aus `.env` verlangt. Die vier Worker verwenden
 dieselbe Variable und fallen bei einem isolierten Start sicher auf `localhost,127.0.0.1` zurück; eine Wildcard wird
 nicht verwendet.
+
+`ACCOUNT_RECOVERY_PUBLIC_ORIGIN` ist der exakte öffentliche HTTPS-Origin für bearbeitbare Recovery-Links. Er wird vom
+App- und Account-Recovery-Worker zwingend aus `.env` gelesen und darf nicht aus Request- oder Proxy-Host-Headern
+abgeleitet werden.
 
 Optionale Variablen mit Defaults:
 
