@@ -172,6 +172,49 @@ def revoke_owner_recovery_push_subscriptions(*, kind: str, owner: Any) -> None:
 
 
 @transaction.atomic
+def revoke_owned_push_subscription(*, subscription_id: int, owner: Any) -> bool:
+    """Delete one authorized device after acquiring the shared recovery lock order.
+
+    The subscription may be referenced by recovery tokens through ``SET_NULL``.
+    Locking the owner, its PIN where applicable, all outstanding tokens, and
+    finally the subscription prevents that collector update from deadlocking
+    with credential rotation and recovery delivery transactions.
+    """
+    owner_filter: dict[str, Any]
+    if isinstance(owner, User):
+        owner_filter = {"user": owner}
+        User.objects.select_for_update().filter(pk=owner.pk).first()
+    elif isinstance(owner, ParticipantFamilyMember):
+        owner_filter = {"family_member": owner}
+        ParticipantFamilyMember.objects.select_related("guardian", "guardian__camp").select_for_update().filter(
+            pk=owner.pk
+        ).first()
+        ParticipantFamilyMemberPin.objects.select_for_update().filter(family_member_id=owner.pk).first()
+    elif isinstance(owner, Participant):
+        owner_filter = {"participant": owner}
+        Participant.objects.select_related("camp").select_for_update().filter(pk=owner.pk).first()
+        ParticipantPin.objects.select_for_update().filter(participant_id=owner.pk).first()
+    else:
+        raise TypeError("Unsupported push-subscription owner")
+
+    kind = (
+        AccountRecoveryToken.Kind.USER_PASSWORD
+        if isinstance(owner, User)
+        else (
+            AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN
+            if isinstance(owner, ParticipantFamilyMember)
+            else AccountRecoveryToken.Kind.PARTICIPANT_PIN
+        )
+    )
+    list(AccountRecoveryToken.objects.select_for_update().filter(kind=kind, **owner_filter).order_by("pk"))
+    subscription = PushSubscription.objects.select_for_update().filter(pk=subscription_id, **owner_filter).first()
+    if subscription is None:
+        return False
+    subscription.delete()
+    return True
+
+
+@transaction.atomic
 def consume_account_recovery_token(recovery_id: int) -> None:
     """Terminally invalidate one capability while preserving the owner/token lock order."""
     initial = _initial_recovery(recovery_id)

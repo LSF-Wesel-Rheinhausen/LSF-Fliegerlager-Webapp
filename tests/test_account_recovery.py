@@ -16,7 +16,13 @@ from django.utils import timezone
 
 from billing.account_recovery import send_due_account_recovery_requests
 from billing.email_delivery import queue_account_recovery_email, send_due_email_deliveries
-from billing.kiosk_access import KIOSK_MODE_SESSION_KEY, KIOSK_PARTICIPANT_SESSION_KEY
+from billing.kiosk_access import (
+    KIOSK_FAMILY_MEMBER_SESSION_KEY,
+    KIOSK_MODE_SESSION_KEY,
+    KIOSK_PARTICIPANT_SESSION_KEY,
+    KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY,
+    KIOSK_PIN_SETUP_SESSION_KEY,
+)
 from billing.kiosk_security import check_login_rate_limit, consume_login_failure, is_login_locked_out
 from billing.models import (
     AccountRecoveryDeliveryRequest,
@@ -671,6 +677,40 @@ def test_central_recovery_confirm_is_public_across_browsers(settings):
     assert response.url == reverse("central-kiosk-login")
     assert other_browser.session[KIOSK_MODE_SESSION_KEY] == "central"
     assert 0 < other_browser.session.get_expiry_age() <= 120
+
+
+@pytest.mark.django_db
+def test_central_recovery_confirm_clears_existing_kiosk_identity(settings):
+    settings.ACCOUNT_RECOVERY_PUBLIC_ORIGIN = "https://recovery.example.test"
+    participant = ParticipantFactory(email="central-identity@example.test")
+    other_participant = ParticipantFactory(camp=participant.camp)
+    other_family_member = ParticipantFamilyMemberFactory(guardian=other_participant)
+    participant.pin.set_pin("2468")
+    participant.pin.save()
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.PARTICIPANT_PIN, owner=participant)
+    bind_account_recovery_email_recipient(recovery, participant.email)
+    token = activate_account_recovery_token(recovery.pk, recipient_email=participant.email)
+    assert token is not None
+    browser = Client()
+    session = browser.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = other_participant.pk
+    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = other_family_member.pk
+    session[KIOSK_PIN_SETUP_SESSION_KEY] = other_participant.pk
+    session[KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY] = other_family_member.pk
+    session.save()
+
+    response = browser.get(reverse("central-kiosk-pin-recovery-confirm", kwargs={"token": token}))
+
+    assert response.status_code == 200
+    refreshed_session = browser.session
+    assert refreshed_session[KIOSK_MODE_SESSION_KEY] == "central"
+    for key in (
+        KIOSK_PARTICIPANT_SESSION_KEY,
+        KIOSK_FAMILY_MEMBER_SESSION_KEY,
+        KIOSK_PIN_SETUP_SESSION_KEY,
+        KIOSK_PIN_SETUP_FAMILY_MEMBER_SESSION_KEY,
+    ):
+        assert key not in refreshed_session
 
 
 @pytest.mark.django_db

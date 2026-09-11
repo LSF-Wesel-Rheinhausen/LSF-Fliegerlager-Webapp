@@ -7,10 +7,19 @@ from django.db.models import QuerySet
 from django.urls import reverse
 from pywebpush import WebPushException
 
-from billing.models import AccountRecoveryToken, ParticipantFamilyMember, PushSubscription
+from billing.models import (
+    AccountRecoveryToken,
+    ParticipantFamilyMember,
+    ParticipantFamilyMemberPin,
+    PushSubscription,
+)
 from billing.notifications import PushDeliveryResult, queue_account_recovery_push, send_due_push_messages
-from billing.recovery_tokens import create_account_recovery_token, find_valid_account_recovery
-from tests.factories import ParticipantFactory, UserFactory
+from billing.recovery_tokens import (
+    create_account_recovery_token,
+    find_valid_account_recovery,
+    revoke_owned_push_subscription,
+)
+from tests.factories import ParticipantFactory, ParticipantFamilyMemberFactory, UserFactory
 from tests.kiosk_helpers import authenticate_kiosk_session
 
 
@@ -101,6 +110,53 @@ def test_credential_rotation_locks_owner_token_then_subscriptions(client, monkey
     assert response.status_code == 302
     assert locked_models.index("User") < locked_models.index("AccountRecoveryToken")
     assert locked_models.index("AccountRecoveryToken") < locked_models.index("PushSubscription")
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("owner_kind", ["user", "participant", "family_member"])
+def test_explicit_device_revocation_locks_owner_pin_token_then_subscription(monkeypatch, owner_kind):
+    if owner_kind == "user":
+        owner = UserFactory(password="old-password")
+        kind = AccountRecoveryToken.Kind.USER_PASSWORD
+        owner_filter = {"user": owner}
+        expected_prefix = ["User"]
+    elif owner_kind == "participant":
+        owner = ParticipantFactory()
+        owner.pin.set_pin("2468")
+        owner.pin.save()
+        kind = AccountRecoveryToken.Kind.PARTICIPANT_PIN
+        owner_filter = {"participant": owner}
+        expected_prefix = ["Participant", "ParticipantPin"]
+    else:
+        guardian = ParticipantFactory()
+        owner = ParticipantFamilyMemberFactory(guardian=guardian)
+        ParticipantFamilyMemberPin.objects.create(family_member=owner, pin_hash="!placeholder")
+        kind = AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN
+        owner_filter = {"family_member": owner}
+        expected_prefix = ["ParticipantFamilyMember", "ParticipantFamilyMemberPin"]
+    subscription = PushSubscription.objects.create(
+        **owner_filter, endpoint=f"https://push.example.test/revoke-{owner_kind}", p256dh="key", auth="auth"
+    )
+    recovery = create_account_recovery_token(kind=kind, owner=owner)
+    recovery.delivery_subscription = subscription
+    recovery.save(update_fields=["delivery_subscription", "updated_at"])
+
+    locked_models = []
+    fetch_all = QuerySet._fetch_all
+
+    def record_locks(queryset):
+        if queryset._result_cache is None and queryset.query.select_for_update:
+            locked_models.append(queryset.model.__name__)
+        fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", record_locks)
+
+    assert revoke_owned_push_subscription(subscription_id=subscription.pk, owner=owner) is True
+    assert locked_models[-(len(expected_prefix) + 2) :] == expected_prefix + [
+        "AccountRecoveryToken",
+        "PushSubscription",
+    ]
+    assert not PushSubscription.objects.filter(pk=subscription.pk).exists()
 
 
 @pytest.mark.django_db

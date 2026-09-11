@@ -19,7 +19,7 @@ from django.views.decorators.debug import sensitive_post_parameters
 
 from .email_delivery import has_valid_recipient_email, queue_account_recovery_email
 from .forms import KioskLoginForm, _is_trivial_personal_pin, validate_personal_kiosk_pin
-from .kiosk_access import KIOSK_MODE_SESSION_KEY
+from .kiosk_access import KIOSK_MODE_SESSION_KEY, clear_kiosk_identity_session
 from .kiosk_security import _recent_attempts, clear_login_rate_limit, kiosk_client_key
 from .models import (
     AccountRecoveryAttempt,
@@ -460,6 +460,7 @@ def account_recovery_confirm(request: HttpRequest, token: str, kiosk_mode: str =
     if recovery is None:
         return _invalid_token_response(request)
     if kiosk_mode == AccountRecoveryDeliveryRequest.KioskMode.CENTRAL:
+        clear_kiosk_identity_session(request)
         request.session[KIOSK_MODE_SESSION_KEY] = kiosk_mode
         request.session.set_expiry(120)
     if recovery.kind == AccountRecoveryToken.Kind.USER_PASSWORD:

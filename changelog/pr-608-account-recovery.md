@@ -27,11 +27,13 @@
 - Widerruft persönliche Recovery-Geräte bei jeder etablierten Passwort- oder PIN-Rotation und verwendet für Zustellung, Bestätigung und Widerruf eine einheitliche Sperrreihenfolge.
 - Bereinigt beim Rollback auf das Schema vor der Kontowiederherstellung ausschließlich nicht mehr darstellbare Recovery-E-Mail-Batches samt Zustellungen, bevor die alte Datenbankbedingung wiederhergestellt wird.
 - Verifiziert bei der Geräte-Eigentümermigration bestehende Admin-Geräte, widerruft sie bei jedem Django-Admin-Passwortwechsel und hält auch terminale Push-Fehler in der gemeinsamen Recovery-Sperrreihenfolge ab.
+- Ordnet auch den expliziten Widerruf einzelner Admin- und Kiosk-Geräte vor dem Löschen in die Owner-/PIN-/Recovery-Token-/Subscription-Sperrreihenfolge ein, damit die SET_NULL-Bindung ohne Deadlock aufgelöst wird.
 - Verarbeitet öffentliche Admin-Recovery-Anfragen über eine persistente Worker-Queue, damit Treffer und Nichttreffer im HTTP-Pfad gleichartig bleiben.
 - Verarbeitet auch Kiosk-PIN-Recovery-Anfragen über dieselbe persistente Worker-Queue, sodass E-Mail-Treffer nicht synchron offenlegen, ob eine private Adresse zu einem Kiosk-Konto gehört.
 - Entfernt abgearbeitete Recovery-Queue-Einträge einschließlich der eingegebenen Identität atomar und erzeugt bearbeitbare Links ausschließlich aus einem strikt konfigurierten öffentlichen Origin.
 - Löscht abgelaufene oder verwendete Recovery-Tokens zusammen mit terminalen E-Mail-/Push-Artefakten, ohne aktive Zustellungen anzutasten, und konfiguriert alle Worker mit dem kanonischen Origin sowie passenden Healthchecks.
 - Behält bei mehrdeutigen Transportfehlern und Worker-Neustarts den möglicherweise bereits zugestellten Einmal-Link bis zu seinem ursprünglichen Ablauf gültig und führt zentrale Kiosk-Recoveries über feste, öffentlich einlösbare zentrale Rückwege, ohne in private Sitzungseinstellungen zu wechseln; beide Confirm-Routen werden in Logs redigiert und der lokale Compose-Origin ist vollständig dokumentiert.
+- Leert bei gültigen zentralen Recovery-Bestätigungen jede vorhandene Teilnehmer- und Begleitpersonen-Identität aus der Browser-Session, bevor die zentrale 120-Sekunden-Sitzung beginnt.
 
 ## Tests
 

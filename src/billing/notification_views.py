@@ -16,6 +16,7 @@ from .notifications import (
 )
 from .push_endpoints import PUSH_ENDPOINT_ERROR, is_allowed_push_endpoint
 from .pwa_views import pwa_template_context
+from .recovery_tokens import revoke_owned_push_subscription
 from .views import _kiosk_context, _kiosk_family_member, _kiosk_participant
 
 
@@ -218,8 +219,8 @@ def kiosk_notification_subscribe(request: HttpRequest) -> JsonResponse:
 
 
 def _revoke(request: HttpRequest, owner: Any, subscription_id: int, *, participant_owner: bool) -> JsonResponse:
-    subscription = get_object_or_404(PushSubscription, pk=subscription_id, **_owner_filter(owner, participant_owner))
-    subscription.delete()
+    get_object_or_404(PushSubscription, pk=subscription_id, **_owner_filter(owner, participant_owner))
+    revoke_owned_push_subscription(subscription_id=subscription_id, owner=owner)
     return JsonResponse({}, status=204)
 
 
