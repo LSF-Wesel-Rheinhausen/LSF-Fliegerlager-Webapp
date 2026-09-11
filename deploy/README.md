@@ -38,6 +38,7 @@ Prozess benötigten Variablen:
   Push-Origins und das Worker-Intervall.
 - `email-worker`: Django-Secret, Django-Host-Allowlist und Datenbank-URL. SMTP-Zugangsdaten liegen verschlüsselt in
   PostgreSQL; Web-Push-Schlüssel werden diesem Dienst nicht bereitgestellt.
+- `account-recovery-worker`: löst öffentliche Recovery-Anfragen nach der HTTP-Antwort in E-Mail- und Push-Outbox-Einträge auf.
 - `updater`: Update-Agent-Token, Datenbank-/Backup-Konfiguration, Portainer-Zugangsdaten, Registry-Allowlist und
   optional `GHCR_TOKEN`.
 

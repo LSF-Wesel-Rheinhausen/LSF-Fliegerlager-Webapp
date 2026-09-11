@@ -362,6 +362,29 @@ class AccountRecoveryIdentifierAttempt(TimeStampedModel):
         return f"Recovery identifier requests ({self.identifier_key[:8]})"
 
 
+class AccountRecoveryDeliveryRequest(TimeStampedModel):
+    """Persist a public recovery request until a worker resolves and delivers it."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Ausstehend"
+        PROCESSING = "processing", "In Verarbeitung"
+        SENT = "sent", "Eingeplant"
+        FAILED = "failed", "Fehlgeschlagen"
+
+    identifier = models.CharField(max_length=254)
+    origin = models.URLField(max_length=500)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    processing_started_at = models.DateTimeField(null=True, blank=True)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    last_error_code = models.CharField(max_length=40, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["status", "created_at"], name="recovery_request_due_idx")]
+
+    def __str__(self) -> str:
+        return f"Recovery delivery request ({self.pk})"
+
+
 class UserProfile(TimeStampedModel):
     """Store editable application metadata for a Django user account."""
 

@@ -27,6 +27,7 @@
 - Widerruft persönliche Recovery-Geräte bei jeder etablierten Passwort- oder PIN-Rotation und verwendet für Zustellung, Bestätigung und Widerruf eine einheitliche Sperrreihenfolge.
 - Bereinigt beim Rollback auf das Schema vor der Kontowiederherstellung ausschließlich nicht mehr darstellbare Recovery-E-Mail-Batches samt Zustellungen, bevor die alte Datenbankbedingung wiederhergestellt wird.
 - Verifiziert bei der Geräte-Eigentümermigration bestehende Admin-Geräte, widerruft sie bei jedem Django-Admin-Passwortwechsel und hält auch terminale Push-Fehler in der gemeinsamen Recovery-Sperrreihenfolge ab.
+- Verarbeitet öffentliche Admin-Recovery-Anfragen über eine persistente Worker-Queue, damit Treffer und Nichttreffer im HTTP-Pfad gleichartig bleiben.
 
 ## Tests
 

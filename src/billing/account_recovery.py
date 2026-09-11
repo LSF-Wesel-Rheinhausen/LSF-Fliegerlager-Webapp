@@ -22,6 +22,7 @@ from .forms import KioskLoginForm, _is_trivial_personal_pin, validate_personal_k
 from .kiosk_security import _recent_attempts, clear_login_rate_limit, kiosk_client_key
 from .models import (
     AccountRecoveryAttempt,
+    AccountRecoveryDeliveryRequest,
     AccountRecoveryIdentifierAttempt,
     AccountRecoveryToken,
     Participant,
@@ -185,7 +186,7 @@ def _has_delivery_channel(owner: Any) -> bool:
 
 @transaction.atomic
 def _deliver_recovery(
-    request: HttpRequest,
+    recovery_url: str,
     *,
     owner: Any,
     kind: str,
@@ -224,10 +225,7 @@ def _deliver_recovery(
             recipient_email=email,
             recipient_name=name,
             subject=subject,
-            body=(
-                f"{body_intro}\n\nDer Link ist zeitlich begrenzt und kann einmal verwendet werden.\n"
-                f"{request.build_absolute_uri(target_path)}"
-            ),
+            body=(f"{body_intro}\n\nDer Link ist zeitlich begrenzt und kann einmal verwendet werden.\n{recovery_url}"),
             camp=camp,
             account_recovery=recovery,
         )
@@ -253,20 +251,56 @@ def account_recovery_request(request: HttpRequest) -> HttpResponse:
     if not _consume_recovery_attempt(request, identifier):
         return _rate_limited_response(request)
 
-    users: QuerySet[Any] = User.objects.filter(is_active=True).filter(
-        Q(username__iexact=identifier) | Q(email__iexact=identifier)
+    AccountRecoveryDeliveryRequest.objects.create(
+        identifier=identifier,
+        origin=request.build_absolute_uri("/"),
     )
-    for user in users.order_by("pk")[:10]:
-        _deliver_recovery(
-            request,
-            owner=user,
-            kind=AccountRecoveryToken.Kind.USER_PASSWORD,
-            subject="Passwort zurücksetzen",
-            body_intro=(
-                f"Für das Fliegerlager-Administrationskonto {user.get_username()} wurde ein neues Passwort angefordert."
-            ),
-        )
     return redirect("account-recovery-sent")
+
+
+def send_due_account_recovery_requests(*, batch_size: int = 25) -> int:
+    """Resolve durable public requests outside the HTTP response path."""
+    now = timezone.now()
+    AccountRecoveryDeliveryRequest.objects.filter(
+        status=AccountRecoveryDeliveryRequest.Status.PROCESSING,
+        processing_started_at__lt=now - timedelta(minutes=15),
+    ).update(status=AccountRecoveryDeliveryRequest.Status.PENDING, processing_started_at=None)
+    request_ids = list(
+        AccountRecoveryDeliveryRequest.objects.filter(status=AccountRecoveryDeliveryRequest.Status.PENDING)
+        .order_by("created_at", "pk")
+        .values_list("pk", flat=True)[:batch_size]
+    )
+    delivered = 0
+    for request_id in request_ids:
+        with transaction.atomic():
+            claimed = AccountRecoveryDeliveryRequest.objects.filter(
+                pk=request_id, status=AccountRecoveryDeliveryRequest.Status.PENDING
+            ).update(status=AccountRecoveryDeliveryRequest.Status.PROCESSING, processing_started_at=timezone.now())
+            if not claimed:
+                continue
+            job = AccountRecoveryDeliveryRequest.objects.select_for_update().get(pk=request_id)
+            target_path = reverse("account-recovery-confirm", kwargs={"token": RECOVERY_TOKEN_PLACEHOLDER})
+            recovery_url = f"{job.origin.rstrip('/')}{target_path}"
+            users: QuerySet[Any] = User.objects.filter(is_active=True).filter(
+                Q(username__iexact=job.identifier) | Q(email__iexact=job.identifier)
+            )
+            for user in users.order_by("pk")[:10]:
+                _deliver_recovery(
+                    recovery_url,
+                    owner=user,
+                    kind=AccountRecoveryToken.Kind.USER_PASSWORD,
+                    subject="Passwort zurücksetzen",
+                    body_intro=(
+                        "Für das Fliegerlager-Administrationskonto "
+                        f"{user.get_username()} wurde ein neues Passwort angefordert."
+                    ),
+                )
+            job.status = AccountRecoveryDeliveryRequest.Status.SENT
+            job.processing_started_at = None
+            job.attempts += 1
+            job.save(update_fields=["status", "processing_started_at", "attempts", "updated_at"])
+            delivered += 1
+    return delivered
 
 
 def kiosk_pin_recovery_request(request: HttpRequest) -> HttpResponse:
@@ -332,7 +366,9 @@ def kiosk_pin_recovery_request(request: HttpRequest) -> HttpResponse:
         )
     for participant in participants:
         _deliver_recovery(
-            request,
+            request.build_absolute_uri(
+                reverse("account-recovery-confirm", kwargs={"token": RECOVERY_TOKEN_PLACEHOLDER})
+            ),
             owner=participant,
             kind=AccountRecoveryToken.Kind.PARTICIPANT_PIN,
             subject="PIN zurücksetzen",
@@ -343,7 +379,9 @@ def kiosk_pin_recovery_request(request: HttpRequest) -> HttpResponse:
         )
     for family_member in family_members:
         _deliver_recovery(
-            request,
+            request.build_absolute_uri(
+                reverse("account-recovery-confirm", kwargs={"token": RECOVERY_TOKEN_PLACEHOLDER})
+            ),
             owner=family_member,
             kind=AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN,
             subject="PIN zurücksetzen",

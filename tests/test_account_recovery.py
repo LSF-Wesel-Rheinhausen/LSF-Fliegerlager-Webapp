@@ -13,10 +13,12 @@ from django.test import RequestFactory
 from django.urls import reverse
 from django.utils import timezone
 
+from billing.account_recovery import send_due_account_recovery_requests
 from billing.email_delivery import queue_account_recovery_email, send_due_email_deliveries
 from billing.kiosk_access import KIOSK_PARTICIPANT_SESSION_KEY
 from billing.kiosk_security import check_login_rate_limit, consume_login_failure, is_login_locked_out
 from billing.models import (
+    AccountRecoveryDeliveryRequest,
     AccountRecoveryIdentifierAttempt,
     AccountRecoveryToken,
     EmailBatch,
@@ -39,6 +41,7 @@ from tests.factories import ParticipantFactory, ParticipantFamilyMemberFactory, 
 
 
 def _send_recovery_emails(*, expected_failed: int = 0):
+    send_due_account_recovery_requests()
     configuration = EmailConfiguration.load()
     configuration.enabled = True
     configuration.host = "smtp.example.test"
@@ -48,6 +51,43 @@ def _send_recovery_emails(*, expected_failed: int = 0):
     result = send_due_email_deliveries(connection=get_connection("django.core.mail.backends.locmem.EmailBackend"))
     assert result.failed == expected_failed
     return result
+
+
+@pytest.mark.django_db
+def test_admin_recovery_request_queues_identical_durable_work_without_sync_delivery(client, settings):
+    settings.WEB_PUSH_ENABLED = True
+    known = UserFactory(email="known-timing@example.test")
+    PushSubscription.objects.create(user=known, endpoint="https://push.example.test/timing", p256dh="key", auth="auth")
+
+    known_response = client.post(reverse("account-recovery-request"), {"identifier": known.email})
+    unknown_response = client.post(reverse("account-recovery-request"), {"identifier": "unknown-timing@example.test"})
+
+    assert known_response.status_code == unknown_response.status_code == 302
+    assert AccountRecoveryDeliveryRequest.objects.count() == 2
+    assert AccountRecoveryToken.objects.count() == 0
+    assert EmailDelivery.objects.count() == 0
+    assert PushMessage.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_recovery_worker_delivers_durable_request_and_reclaims_stale_claim(client, settings):
+    settings.WEB_PUSH_ENABLED = True
+    user = UserFactory(email="worker-recovery@example.test")
+    PushSubscription.objects.create(
+        user=user, endpoint="https://push.example.test/worker-recovery", p256dh="key", auth="auth"
+    )
+    client.post(reverse("account-recovery-request"), {"identifier": user.email})
+    request = AccountRecoveryDeliveryRequest.objects.get()
+    request.status = AccountRecoveryDeliveryRequest.Status.PROCESSING
+    request.processing_started_at = timezone.now() - timezone.timedelta(minutes=16)
+    request.save(update_fields=["status", "processing_started_at"])
+
+    assert send_due_account_recovery_requests() == 1
+    request.refresh_from_db()
+    assert request.status == AccountRecoveryDeliveryRequest.Status.SENT
+    assert request.attempts == 1
+    assert EmailDelivery.objects.count() == 1
+    assert PushMessage.objects.count() == 1
 
 
 @pytest.mark.django_db
@@ -93,6 +133,7 @@ def test_admin_recovery_queues_email_and_push_without_disclosing_account(client,
     )
 
     response = client.post(reverse("account-recovery-request"), {"identifier": " ada@example.test "}, follow=True)
+    send_due_account_recovery_requests()
 
     assert response.status_code == 200
     assert "Falls ein aktives Konto passt" in response.content.decode()
@@ -345,6 +386,7 @@ def test_recovery_email_retry_rotates_token_and_restarts_expiry(client, settings
     settings.ACCOUNT_RECOVERY_TIMEOUT_SECONDS = 60
     user = UserFactory(email="retry@example.test")
     client.post(reverse("account-recovery-request"), {"identifier": user.email})
+    send_due_account_recovery_requests()
     configuration = EmailConfiguration.load()
     configuration.enabled = True
     configuration.host = "smtp.example.test"
@@ -392,6 +434,7 @@ def test_recovery_requests_are_rate_limited_per_client_without_disclosure(client
 
     assert [response.status_code for response in responses] == [302, 302, 302, 429]
     assert responses[-1]["Retry-After"] == "900"
+    send_due_account_recovery_requests()
     assert EmailDelivery.objects.count() == 3
 
 
@@ -411,6 +454,7 @@ def test_recovery_requests_are_rate_limited_per_identifier_across_rotating_clien
     ]
 
     assert [response.status_code for response in responses] == [302, 302, 429]
+    send_due_account_recovery_requests()
     assert EmailDelivery.objects.count() == 2
 
 
@@ -576,6 +620,7 @@ def test_push_only_account_can_recover_without_email(client, settings):
     )
 
     client.post(reverse("account-recovery-request"), {"identifier": user.username})
+    send_due_account_recovery_requests()
 
     recovery = AccountRecoveryToken.objects.get()
     message = PushMessage.objects.get()
@@ -687,6 +732,7 @@ def test_invalid_push_endpoint_does_not_activate_recovery_token(client, settings
     )
     PushSubscription.objects.filter(pk=subscription.pk).update(endpoint="http://push.example.test/insecure")
     client.post(reverse("account-recovery-request"), {"identifier": user.username})
+    send_due_account_recovery_requests()
 
     result = send_due_push_messages()
 
@@ -1019,6 +1065,7 @@ def test_successful_recovery_without_push_subscriptions_is_harmless(client):
 def test_email_settings_excludes_system_recovery_batches(client):
     admin = SuperUserFactory(email="admin@example.test")
     client.post(reverse("account-recovery-request"), {"identifier": admin.email})
+    send_due_account_recovery_requests()
     recovery_batch = EmailBatch.objects.get(kind=EmailBatch.Kind.ACCOUNT_RECOVERY)
     client.force_login(admin)
 
