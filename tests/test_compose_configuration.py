@@ -140,6 +140,12 @@ def test_example_environment_documents_registry_allowlist_default() -> None:
     assert "UPDATE_REGISTRY_ALLOWED_HOSTS=ghcr.io" in example
 
 
+def test_example_environment_documents_local_recovery_origin_default() -> None:
+    example = (PROJECT_ROOT / ".env.example").read_text(encoding="utf-8")
+
+    assert "ACCOUNT_RECOVERY_PUBLIC_ORIGIN=http://localhost" in example
+
+
 @pytest.mark.parametrize("compose_path", ["docker-compose.yml", "deploy/docker-compose.example.yml"])
 def test_background_workers_disable_inherited_http_healthcheck(compose_path: str) -> None:
     configuration = yaml.safe_load((PROJECT_ROOT / compose_path).read_text(encoding="utf-8"))

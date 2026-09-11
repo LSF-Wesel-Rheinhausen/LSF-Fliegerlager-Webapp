@@ -8,6 +8,7 @@ from datetime import timedelta
 from io import StringIO
 from types import SimpleNamespace
 
+import pytest
 from django.test import Client
 from gunicorn.config import Config
 
@@ -15,9 +16,13 @@ from config import gunicorn_config, settings
 from config.gunicorn_logging import RecoverySafeLogger, RecoverySecretFilter, redact_recovery_secrets
 
 
-def test_recovery_secret_is_redacted_from_request_targets_and_referrers() -> None:
+@pytest.mark.parametrize(
+    "recovery_route",
+    ("/account/recovery/confirm/", "/central/kiosk/pin/recovery/confirm/"),
+)
+def test_recovery_secret_is_redacted_from_request_targets_and_referrers(recovery_route: str) -> None:
     raw_token = "secret-token_123"
-    recovery_path = f"/account/recovery/confirm/{raw_token}/"
+    recovery_path = f"{recovery_route}{raw_token}/"
     logger = RecoverySafeLogger(Config())
 
     atoms = logger.atoms(
@@ -37,9 +42,10 @@ def test_recovery_secret_is_redacted_from_request_targets_and_referrers() -> Non
 
     rendered_atoms = " ".join(str(value) for value in atoms.values())
     assert raw_token not in rendered_atoms
-    assert atoms["r"] == "GET /account/recovery/confirm/[REDACTED]/?next=%2Fkiosk%2F HTTP/1.1"
-    assert atoms["U"] == "/account/recovery/confirm/[REDACTED]/"
-    assert atoms["f"] == "https://example.test/account/recovery/confirm/[REDACTED]/"
+    redacted_path = f"{recovery_route}[REDACTED]/"
+    assert atoms["r"] == f"GET {redacted_path}?next=%2Fkiosk%2F HTTP/1.1"
+    assert atoms["U"] == redacted_path
+    assert atoms["f"] == f"https://example.test{redacted_path}"
 
 
 def test_redaction_preserves_non_recovery_urls() -> None:

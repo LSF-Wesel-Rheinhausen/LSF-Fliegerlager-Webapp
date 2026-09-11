@@ -373,6 +373,56 @@ def test_push_worker_requeues_stale_processing_claim(webpush):
     assert webpush.call_count == 1
 
 
+@pytest.mark.django_db
+@patch("billing.notifications.webpush")
+def test_push_reclaim_after_provider_acceptance_reuses_original_capability(webpush, monkeypatch):
+    user = UserFactory()
+    subscription = PushSubscription.objects.create(
+        user=user,
+        endpoint="https://push.example.test/stale-recovery",
+        p256dh="key",
+        auth="secret",
+        categories=["account_security"],
+    )
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    message = PushMessage.objects.create(
+        subscription=subscription,
+        account_recovery=recovery,
+        category="account_security",
+        title="Reset",
+        body="Link",
+        target_url="/account/recovery/ACCOUNT_RECOVERY_TOKEN/",
+        dedupe_key="account-recovery:stale",
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+    payloads = []
+    webpush.side_effect = lambda **kwargs: payloads.append(kwargs["data"]) or None
+    original_save = PushMessage.save
+    crashed = False
+
+    def crash_after_sent(self, *args, **kwargs):
+        nonlocal crashed
+        if self.pk == message.pk and self.status == PushMessage.Status.SENT and not crashed:
+            crashed = True
+            raise RuntimeError("worker crashed after provider acceptance")
+        return original_save(self, *args, **kwargs)
+
+    monkeypatch.setattr(PushMessage, "save", crash_after_sent)
+    with pytest.raises(RuntimeError, match="provider acceptance"):
+        send_due_push_messages()
+    recovery.refresh_from_db()
+    first_expiry = recovery.expires_at
+    first_payload = payloads[-1]
+    message.refresh_from_db()
+    message.processing_started_at = timezone.now() - timedelta(minutes=16)
+    message.save(update_fields=["processing_started_at"])
+
+    assert send_due_push_messages().sent == 1
+    recovery.refresh_from_db()
+    assert recovery.expires_at == first_expiry
+    assert payloads[-1] == first_payload
+
+
 @pytest.fixture(autouse=True)
 def enable_web_push(settings):
     settings.WEB_PUSH_ENABLED = True
@@ -1294,7 +1344,13 @@ def test_worker_consumes_recovery_token_when_retry_budget_is_exhausted(webpush):
 @patch("billing.notifications.webpush")
 def test_recovery_push_ambiguous_failure_is_terminal_and_preserves_first_token(webpush, settings):
     settings.WEB_PUSH_ENABLED = True
-    webpush.side_effect = requests.Timeout("delivery outcome unknown")
+    accepted_payloads = []
+
+    def accept_then_timeout(**kwargs):
+        accepted_payloads.append(kwargs["data"])
+        raise requests.Timeout("delivery outcome unknown")
+
+    webpush.side_effect = accept_then_timeout
     user = UserFactory()
     subscription = PushSubscription.objects.create(
         user=user,
@@ -1315,8 +1371,7 @@ def test_recovery_push_ambiguous_failure_is_terminal_and_preserves_first_token(w
         scheduled_for=timezone.now() - timedelta(seconds=1),
     )
 
-    with patch("billing.recovery_tokens.secrets.token_urlsafe", return_value="accepted-push-token"):
-        result = send_due_push_messages()
+    result = send_due_push_messages()
 
     message.refresh_from_db()
     recovery.refresh_from_db()
@@ -1325,7 +1380,9 @@ def test_recovery_push_ambiguous_failure_is_terminal_and_preserves_first_token(w
     assert recovery.used_at is None
     assert recovery.token_digest is not None
     assert recovery.expires_at is not None
-    assert find_valid_account_recovery("accepted-push-token") == recovery
+    accepted_url = json.loads(accepted_payloads[0])["url"]
+    accepted_token = accepted_url.rsplit("/", 2)[-2]
+    assert find_valid_account_recovery(accepted_token) == recovery
 
 
 @pytest.mark.django_db

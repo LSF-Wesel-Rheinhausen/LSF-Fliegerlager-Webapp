@@ -10,7 +10,7 @@ from django.core import mail
 from django.core.exceptions import ImproperlyConfigured
 from django.core.mail import get_connection
 from django.db.models import QuerySet
-from django.test import RequestFactory
+from django.test import Client, RequestFactory
 from django.urls import reverse
 from django.utils import timezone
 
@@ -579,13 +579,18 @@ def test_recovery_email_ambiguous_failure_is_terminal_and_preserves_first_token(
     configuration.from_email = "lager@example.test"
     configuration.save()
     connection = Mock()
-    connection.send_messages.side_effect = smtplib.SMTPServerDisconnected("delivery outcome unknown")
+    accepted_messages = []
+
+    def accept_then_disconnect(messages):
+        accepted_messages.append(messages[0].body)
+        raise smtplib.SMTPServerDisconnected("delivery outcome unknown")
+
+    connection.send_messages.side_effect = accept_then_disconnect
     first_attempt_at = timezone.now()
 
     with (
         patch("billing.email_delivery.timezone.now", return_value=first_attempt_at),
         patch("billing.recovery_tokens.timezone.now", return_value=first_attempt_at),
-        patch("billing.recovery_tokens.secrets.token_urlsafe", return_value="accepted-email-token"),
     ):
         result = send_due_email_deliveries(connection=connection)
     assert result.failed == 1
@@ -593,7 +598,8 @@ def test_recovery_email_ambiguous_failure_is_terminal_and_preserves_first_token(
     recovery = AccountRecoveryToken.objects.get()
     first_digest = recovery.token_digest
     assert recovery.expires_at == first_attempt_at + timezone.timedelta(seconds=60)
-    assert find_valid_account_recovery("accepted-email-token") == recovery
+    accepted_token = urlsplit(accepted_messages[0].splitlines()[-1]).path.rstrip("/").rsplit("/", 1)[-1]
+    assert find_valid_account_recovery(accepted_token) == recovery
     delivery = EmailDelivery.objects.get()
     assert delivery.status == EmailDelivery.Status.FAILED
 
@@ -643,6 +649,117 @@ def test_central_kiosk_recovery_keeps_central_routes_and_session_semantics(kiosk
     assert reset.redirect_chain[-1][0] == reverse("central-kiosk-login")
     assert kiosk_client.session[KIOSK_MODE_SESSION_KEY] == "central"
     assert 0 < kiosk_client.session.get_expiry_age() <= 120
+
+
+@pytest.mark.django_db
+def test_central_recovery_confirm_is_public_across_browsers(settings):
+    settings.ACCOUNT_RECOVERY_PUBLIC_ORIGIN = "https://recovery.example.test"
+    participant = ParticipantFactory(email="central-cross-browser@example.test")
+    participant.pin.set_pin("2468")
+    participant.pin.save()
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.PARTICIPANT_PIN, owner=participant)
+    bind_account_recovery_email_recipient(recovery, participant.email)
+    token = activate_account_recovery_token(recovery.pk, recipient_email=participant.email)
+    assert token is not None
+    path = reverse("central-kiosk-pin-recovery-confirm", kwargs={"token": token})
+
+    other_browser = Client()
+    assert other_browser.get(path).status_code == 200
+    response = other_browser.post(path, {"pin": "8642", "pin_repeat": "8642"})
+
+    assert response.status_code == 302
+    assert response.url == reverse("central-kiosk-login")
+    assert other_browser.session[KIOSK_MODE_SESSION_KEY] == "central"
+    assert 0 < other_browser.session.get_expiry_age() <= 120
+
+
+@pytest.mark.django_db
+def test_invalid_central_recovery_url_does_not_create_central_session():
+    other_browser = Client()
+
+    response = other_browser.get(reverse("central-kiosk-pin-recovery-confirm", kwargs={"token": "invalid"}))
+    assert response.status_code == 400
+    assert KIOSK_MODE_SESSION_KEY not in other_browser.session
+
+
+@pytest.mark.django_db
+def test_email_reclaim_after_provider_acceptance_reuses_original_capability(monkeypatch, settings):
+    user = UserFactory(email="stale-email-recovery@example.test")
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    delivery = queue_account_recovery_email(
+        recipient_email=user.email,
+        recipient_name="User",
+        subject="Reset",
+        body="Link ACCOUNT_RECOVERY_TOKEN",
+        account_recovery=recovery,
+    )
+    configuration = EmailConfiguration.load()
+    configuration.enabled = True
+    configuration.host = "smtp.example.test"
+    configuration.from_name = "Fliegerlager"
+    configuration.from_email = "lager@example.test"
+    configuration.save()
+    connection = get_connection("django.core.mail.backends.locmem.EmailBackend")
+    original_save = EmailDelivery.save
+    crashed = False
+
+    def crash_after_sent(self, *args, **kwargs):
+        nonlocal crashed
+        if self.pk == delivery.pk and self.status == EmailDelivery.Status.SENT and not crashed:
+            crashed = True
+            raise RuntimeError("worker crashed after provider acceptance")
+        return original_save(self, *args, **kwargs)
+
+    monkeypatch.setattr(EmailDelivery, "save", crash_after_sent)
+    with pytest.raises(RuntimeError, match="provider acceptance"):
+        send_due_email_deliveries(connection=connection)
+    recovery.refresh_from_db()
+    first_token = next(iter(mail.outbox)).body.split(" ")[-1]
+    first_expiry = recovery.expires_at
+    delivery.refresh_from_db()
+    delivery.processing_started_at = timezone.now() - timezone.timedelta(minutes=16)
+    delivery.save(update_fields=["processing_started_at"])
+
+    assert send_due_email_deliveries(connection=connection).sent == 1
+    recovery.refresh_from_db()
+    assert recovery.expires_at == first_expiry
+    assert find_valid_account_recovery(first_token) == recovery
+    assert mail.outbox[-1].body.split(" ")[-1] == first_token
+
+
+@pytest.mark.django_db
+def test_email_reclaim_at_capability_expiry_does_not_send_again(settings):
+    user = UserFactory(email="expired-stale-email@example.test")
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    delivery = queue_account_recovery_email(
+        recipient_email=user.email,
+        recipient_name="User",
+        subject="Reset",
+        body="Link ACCOUNT_RECOVERY_TOKEN",
+        account_recovery=recovery,
+    )
+    activated = activate_account_recovery_token(recovery.pk, recipient_email=user.email)
+    assert activated is not None
+    expiry_boundary = timezone.now()
+    recovery.expires_at = expiry_boundary
+    recovery.save(update_fields=["expires_at"])
+    delivery.status = EmailDelivery.Status.PROCESSING
+    delivery.processing_started_at = timezone.now() - timezone.timedelta(minutes=16)
+    delivery.save(update_fields=["status", "processing_started_at"])
+    configuration = EmailConfiguration.load()
+    configuration.enabled = True
+    configuration.host = "smtp.example.test"
+    configuration.from_name = "Fliegerlager"
+    configuration.from_email = "lager@example.test"
+    configuration.save()
+
+    with patch("billing.recovery_tokens.timezone.now", return_value=expiry_boundary):
+        result = send_due_email_deliveries(connection=get_connection("django.core.mail.backends.locmem.EmailBackend"))
+
+    assert result.sent == 0
+    assert result.failed == 1
+    delivery.refresh_from_db()
+    assert delivery.status == EmailDelivery.Status.FAILED
 
 
 @pytest.mark.django_db

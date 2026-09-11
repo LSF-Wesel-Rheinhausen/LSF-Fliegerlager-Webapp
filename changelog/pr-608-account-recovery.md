@@ -31,7 +31,7 @@
 - Verarbeitet auch Kiosk-PIN-Recovery-Anfragen über dieselbe persistente Worker-Queue, sodass E-Mail-Treffer nicht synchron offenlegen, ob eine private Adresse zu einem Kiosk-Konto gehört.
 - Entfernt abgearbeitete Recovery-Queue-Einträge einschließlich der eingegebenen Identität atomar und erzeugt bearbeitbare Links ausschließlich aus einem strikt konfigurierten öffentlichen Origin.
 - Löscht abgelaufene oder verwendete Recovery-Tokens zusammen mit terminalen E-Mail-/Push-Artefakten, ohne aktive Zustellungen anzutasten, und konfiguriert alle Worker mit dem kanonischen Origin sowie passenden Healthchecks.
-- Behält bei mehrdeutigen Transportfehlern den möglicherweise bereits zugestellten Einmal-Link gültig und führt zentrale Kiosk-Recoveries über feste zentrale Rückwege, ohne in private Sitzungseinstellungen zu wechseln.
+- Behält bei mehrdeutigen Transportfehlern und Worker-Neustarts den möglicherweise bereits zugestellten Einmal-Link bis zu seinem ursprünglichen Ablauf gültig und führt zentrale Kiosk-Recoveries über feste, öffentlich einlösbare zentrale Rückwege, ohne in private Sitzungseinstellungen zu wechseln; beide Confirm-Routen werden in Logs redigiert und der lokale Compose-Origin ist vollständig dokumentiert.
 
 ## Tests
 

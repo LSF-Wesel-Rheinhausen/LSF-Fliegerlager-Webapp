@@ -1,7 +1,6 @@
 """Lifecycle helpers for delivery-activated account-recovery capabilities."""
 
 import hashlib
-import secrets
 from datetime import timedelta
 from typing import Any
 
@@ -390,19 +389,31 @@ def recovery_matches_current_credential(recovery: AccountRecoveryToken, owner: A
 
 
 def _activate_locked_recovery(recovery: AccountRecoveryToken, owner: Any) -> str | None:
-    if recovery.used_at is not None or not recovery_matches_current_credential(recovery, owner):
+    if (
+        recovery.used_at is not None
+        or (recovery.expires_at is not None and recovery.expires_at <= timezone.now())
+        or not recovery_matches_current_credential(recovery, owner)
+    ):
         return None
-    raw_token = secrets.token_urlsafe(32)
-    now = timezone.now()
+    if recovery.expires_at is None:
+        recovery.expires_at = timezone.now() + _token_timeout()
+    # Derive the bearer from immutable, capability-bound state.  This lets a
+    # worker retry after provider acceptance without storing the bearer itself.
+    binding = recovery.recipient_email_digest or str(recovery.delivery_subscription_id or "")
+    raw_token = salted_hmac(
+        "billing.account-recovery-token",
+        f"{recovery.pk}:{recovery.credential_fingerprint}:{binding}:{recovery.expires_at.isoformat()}",
+        secret=settings.SECRET_KEY,
+        algorithm="sha256",
+    ).hexdigest()
     recovery.token_digest = recovery_token_digest(raw_token)
-    recovery.expires_at = now + _token_timeout()
     recovery.save(update_fields=["token_digest", "expires_at", "updated_at"])
     return raw_token
 
 
 @transaction.atomic
 def activate_account_recovery_token(recovery_id: int, *, recipient_email: str | None = None) -> str | None:
-    """Create a fresh in-memory bearer secret immediately before one delivery attempt."""
+    """Derive the delivery-bound bearer without persisting the raw secret."""
     initial = _initial_recovery(recovery_id)
     if initial is None:
         return None

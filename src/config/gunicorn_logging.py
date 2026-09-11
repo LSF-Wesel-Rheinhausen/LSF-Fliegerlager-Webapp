@@ -7,7 +7,7 @@ from typing import Any
 
 from gunicorn.glogging import Logger
 
-_RECOVERY_SECRET_PATTERN = re.compile(r"(?P<prefix>/account/recovery/confirm/)[^/?#]+")
+_RECOVERY_SECRET_PATTERN = re.compile(r"(?P<prefix>/(?:account/recovery|central/kiosk/pin/recovery)/confirm/)[^/?#]+")
 _SENSITIVE_ENVIRONMENT_KEYS = ("RAW_URI", "PATH_INFO", "HTTP_REFERER")
 
 
