@@ -135,6 +135,7 @@ services:
     image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}
     restart: unless-stopped
     environment:
+      ACCOUNT_RECOVERY_PUBLIC_ORIGIN: ${ACCOUNT_RECOVERY_PUBLIC_ORIGIN:?ACCOUNT_RECOVERY_PUBLIC_ORIGIN must be set in .env}
       BACKUP_DIR: /backups
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set in .env}
       DAILY_SETTLEMENT_BACKUP_INTERVAL_SECONDS: ${DAILY_SETTLEMENT_BACKUP_INTERVAL_SECONDS:-300}
@@ -161,6 +162,7 @@ services:
     image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}
     restart: unless-stopped
     environment:
+      ACCOUNT_RECOVERY_PUBLIC_ORIGIN: ${ACCOUNT_RECOVERY_PUBLIC_ORIGIN:?ACCOUNT_RECOVERY_PUBLIC_ORIGIN must be set in .env}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set in .env}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
       DJANGO_DEBUG: ${DJANGO_DEBUG:-0}
@@ -190,6 +192,7 @@ services:
     image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}
     restart: unless-stopped
     environment:
+      ACCOUNT_RECOVERY_PUBLIC_ORIGIN: ${ACCOUNT_RECOVERY_PUBLIC_ORIGIN:?ACCOUNT_RECOVERY_PUBLIC_ORIGIN must be set in .env}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set in .env}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
       DJANGO_DEBUG: ${DJANGO_DEBUG:-0}
@@ -222,6 +225,8 @@ services:
       WEB_PUSH_VAPID_PUBLIC_KEY: ${WEB_PUSH_VAPID_PUBLIC_KEY:-}
       WEB_PUSH_VAPID_SUBJECT: ${WEB_PUSH_VAPID_SUBJECT:-mailto:admin@example.invalid}
     command: ["python", "manage.py", "run_account_recovery_worker", "--loop"]
+    healthcheck:
+      disable: true
     depends_on:
       db:
         condition: service_healthy

@@ -3,6 +3,7 @@ import time
 from django.core.management.base import BaseCommand
 
 from billing.account_recovery import send_due_account_recovery_requests
+from billing.recovery_tokens import cleanup_account_recovery_artifacts
 
 
 class Command(BaseCommand):
@@ -18,7 +19,11 @@ class Command(BaseCommand):
         interval = max(5, options["interval"])
         while True:
             queued = send_due_account_recovery_requests()
-            self.stdout.write(f"Recovery-Durchlauf abgeschlossen: {queued} Anfragen eingeplant.")
+            cleaned = cleanup_account_recovery_artifacts()
+            self.stdout.write(
+                f"Recovery-Durchlauf abgeschlossen: {queued} Anfragen eingeplant, "
+                f"{cleaned} abgelaufene Artefakte entfernt."
+            )
             if not options["loop"]:
                 return
             time.sleep(interval)

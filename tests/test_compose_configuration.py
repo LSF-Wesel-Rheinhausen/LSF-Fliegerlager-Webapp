@@ -50,6 +50,7 @@ EXPECTED_SERVICE_ENVIRONMENT_KEYS = {
         "WEB_PUSH_VAPID_SUBJECT",
     },
     "daily-settlement-backup": {
+        "ACCOUNT_RECOVERY_PUBLIC_ORIGIN",
         "BACKUP_DIR",
         "DATABASE_URL",
         "DAILY_SETTLEMENT_BACKUP_INTERVAL_SECONDS",
@@ -58,6 +59,7 @@ EXPECTED_SERVICE_ENVIRONMENT_KEYS = {
         "DJANGO_SECRET_KEY",
     },
     "push-worker": {
+        "ACCOUNT_RECOVERY_PUBLIC_ORIGIN",
         "DATABASE_URL",
         "DJANGO_ALLOWED_HOSTS",
         "DJANGO_DEBUG",
@@ -71,6 +73,7 @@ EXPECTED_SERVICE_ENVIRONMENT_KEYS = {
         "WEB_PUSH_WORKER_INTERVAL_SECONDS",
     },
     "email-worker": {
+        "ACCOUNT_RECOVERY_PUBLIC_ORIGIN",
         "DATABASE_URL",
         "DJANGO_ALLOWED_HOSTS",
         "DJANGO_DEBUG",
@@ -141,8 +144,18 @@ def test_example_environment_documents_registry_allowlist_default() -> None:
 def test_background_workers_disable_inherited_http_healthcheck(compose_path: str) -> None:
     configuration = yaml.safe_load((PROJECT_ROOT / compose_path).read_text(encoding="utf-8"))
 
-    for service_name in ("daily-settlement-backup", "push-worker", "email-worker"):
+    for service_name in ("daily-settlement-backup", "push-worker", "email-worker", "account-recovery-worker"):
         assert configuration["services"][service_name]["healthcheck"] == {"disable": True}
+
+
+@pytest.mark.parametrize("compose_path", ["docker-compose.yml", "deploy/docker-compose.example.yml"])
+def test_all_django_services_receive_canonical_recovery_origin(compose_path: str) -> None:
+    configuration = yaml.safe_load((PROJECT_ROOT / compose_path).read_text(encoding="utf-8"))
+
+    for service_name in EXPECTED_SERVICE_ENVIRONMENT_KEYS:
+        assert configuration["services"][service_name]["environment"]["ACCOUNT_RECOVERY_PUBLIC_ORIGIN"] == (
+            "${ACCOUNT_RECOVERY_PUBLIC_ORIGIN:?ACCOUNT_RECOVERY_PUBLIC_ORIGIN must be set in .env}"
+        )
 
 
 @pytest.mark.parametrize("compose_path", ["docker-compose.yml", "deploy/docker-compose.example.yml"])

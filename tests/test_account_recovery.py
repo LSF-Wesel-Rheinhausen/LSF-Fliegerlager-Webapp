@@ -35,6 +35,7 @@ from billing.notifications import send_due_push_messages
 from billing.recovery_tokens import (
     activate_account_recovery_token,
     bind_account_recovery_email_recipient,
+    cleanup_account_recovery_artifacts,
     create_account_recovery_token,
     find_valid_account_recovery,
 )
@@ -101,6 +102,108 @@ def test_recovery_worker_deletes_completed_requests_for_matched_and_unmatched_id
     assert send_due_account_recovery_requests() == 2
     assert AccountRecoveryDeliveryRequest.objects.count() == 0
     assert EmailDelivery.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_recovery_cleanup_removes_expired_terminal_email_artifacts_without_touching_other_batches():
+    user = UserFactory(email="expired-artifacts@example.test")
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    delivery = queue_account_recovery_email(
+        recipient_email=user.email,
+        recipient_name="Expired User",
+        subject="Passwort zuruecksetzen",
+        body="Recovery ACCOUNT_RECOVERY_TOKEN",
+        account_recovery=recovery,
+    )
+    recovery.expires_at = timezone.now() - timezone.timedelta(seconds=1)
+    recovery.save(update_fields=["expires_at"])
+    delivery.status = EmailDelivery.Status.SENT
+    delivery.save(update_fields=["status"])
+    recovery_batch_id = delivery.batch_id
+    other_batch = EmailBatch.objects.create(
+        camp=ParticipantFactory().camp,
+        kind=EmailBatch.Kind.INFORMATION,
+        subject="Information",
+        body="Bleibt erhalten",
+    )
+
+    assert cleanup_account_recovery_artifacts() == 1
+
+    assert not AccountRecoveryToken.objects.filter(pk=recovery.pk).exists()
+    assert not EmailDelivery.objects.filter(pk=delivery.pk).exists()
+    assert not EmailBatch.objects.filter(pk=recovery_batch_id).exists()
+    assert EmailBatch.objects.filter(pk=other_batch.pk).exists()
+
+
+@pytest.mark.django_db
+def test_recovery_cleanup_preserves_expired_token_while_delivery_is_pending():
+    user = UserFactory(email="pending-artifacts@example.test")
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    delivery = queue_account_recovery_email(
+        recipient_email=user.email,
+        recipient_name="Pending User",
+        subject="Passwort zuruecksetzen",
+        body="Recovery ACCOUNT_RECOVERY_TOKEN",
+        account_recovery=recovery,
+    )
+    recovery.expires_at = timezone.now() - timezone.timedelta(seconds=1)
+    recovery.save(update_fields=["expires_at"])
+
+    assert cleanup_account_recovery_artifacts() == 0
+    assert AccountRecoveryToken.objects.filter(pk=recovery.pk).exists()
+    assert EmailDelivery.objects.filter(pk=delivery.pk).exists()
+
+
+@pytest.mark.django_db
+def test_recovery_cleanup_removes_used_terminal_push_artifacts():
+    user = UserFactory()
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    subscription = PushSubscription.objects.create(
+        user=user,
+        endpoint="https://push.example.test/cleanup-used",
+        p256dh="key",
+        auth="auth",
+    )
+    message = PushMessage.objects.create(
+        subscription=subscription,
+        account_recovery=recovery,
+        category="account_security",
+        title="Passwort zuruecksetzen",
+        body="Link",
+        target_url="/account/recovery/confirm/ACCOUNT_RECOVERY_TOKEN/",
+        dedupe_key="account-recovery:cleanup-used",
+        status=PushMessage.Status.SENT,
+    )
+    recovery.used_at = timezone.now()
+    recovery.save(update_fields=["used_at"])
+
+    assert cleanup_account_recovery_artifacts() == 1
+    assert not AccountRecoveryToken.objects.filter(pk=recovery.pk).exists()
+    assert not PushMessage.objects.filter(pk=message.pk).exists()
+    assert PushSubscription.objects.filter(pk=subscription.pk).exists()
+
+
+@pytest.mark.django_db
+def test_recovery_cleanup_bounds_unactivated_failed_artifact_retention():
+    now = timezone.now()
+    user = UserFactory(email="failed-artifacts@example.test")
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    delivery = queue_account_recovery_email(
+        recipient_email=user.email,
+        recipient_name="Failed User",
+        subject="Passwort zuruecksetzen",
+        body="Recovery ACCOUNT_RECOVERY_TOKEN",
+        account_recovery=recovery,
+    )
+    delivery.status = EmailDelivery.Status.FAILED
+    delivery.save(update_fields=["status"])
+    boundary = now - timezone.timedelta(days=30)
+    AccountRecoveryToken.objects.filter(pk=recovery.pk).update(updated_at=boundary)
+
+    assert cleanup_account_recovery_artifacts(now=now) == 0
+
+    AccountRecoveryToken.objects.filter(pk=recovery.pk).update(updated_at=boundary - timezone.timedelta(microseconds=1))
+    assert cleanup_account_recovery_artifacts(now=now) == 1
 
 
 @pytest.mark.django_db

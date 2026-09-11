@@ -30,6 +30,7 @@
 - Verarbeitet öffentliche Admin-Recovery-Anfragen über eine persistente Worker-Queue, damit Treffer und Nichttreffer im HTTP-Pfad gleichartig bleiben.
 - Verarbeitet auch Kiosk-PIN-Recovery-Anfragen über dieselbe persistente Worker-Queue, sodass E-Mail-Treffer nicht synchron offenlegen, ob eine private Adresse zu einem Kiosk-Konto gehört.
 - Entfernt abgearbeitete Recovery-Queue-Einträge einschließlich der eingegebenen Identität atomar und erzeugt bearbeitbare Links ausschließlich aus einem strikt konfigurierten öffentlichen Origin.
+- Löscht abgelaufene oder verwendete Recovery-Tokens zusammen mit terminalen E-Mail-/Push-Artefakten, ohne aktive Zustellungen anzutasten, und konfiguriert alle Worker mit dem kanonischen Origin sowie passenden Healthchecks.
 
 ## Tests
 

@@ -11,11 +11,14 @@ from django.contrib.auth.hashers import is_password_usable
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.core.validators import validate_email
 from django.db import transaction
+from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 from django.utils.crypto import constant_time_compare, salted_hmac
 
 from .models import (
     AccountRecoveryToken,
+    EmailBatch,
+    EmailDelivery,
     Participant,
     ParticipantFamilyMember,
     ParticipantFamilyMemberPin,
@@ -27,6 +30,46 @@ from .push_endpoints import is_allowed_push_endpoint
 
 User = get_user_model()
 RECOVERY_TOKEN_PLACEHOLDER = "ACCOUNT_RECOVERY_TOKEN"
+RECOVERY_ARTIFACT_RETENTION = timedelta(days=30)
+
+
+@transaction.atomic
+def cleanup_account_recovery_artifacts(*, now: Any | None = None, batch_size: int = 100) -> int:
+    """Delete terminal recovery capabilities and their private delivery metadata."""
+    cleanup_time = now or timezone.now()
+    active_statuses = [EmailDelivery.Status.PENDING, EmailDelivery.Status.PROCESSING]
+    candidates = (
+        AccountRecoveryToken.objects.annotate(
+            has_active_email=Exists(
+                EmailDelivery.objects.filter(
+                    account_recovery_id=OuterRef("pk"),
+                    status__in=active_statuses,
+                )
+            ),
+            has_active_push=Exists(
+                PushMessage.objects.filter(
+                    account_recovery_id=OuterRef("pk"),
+                    status__in=[PushMessage.Status.PENDING, PushMessage.Status.PROCESSING],
+                )
+            ),
+        )
+        .filter(has_active_email=False, has_active_push=False)
+        .filter(
+            Q(used_at__isnull=False)
+            | Q(expires_at__lte=cleanup_time)
+            | Q(
+                token_digest__isnull=True,
+                expires_at__isnull=True,
+                updated_at__lt=cleanup_time - RECOVERY_ARTIFACT_RETENTION,
+            )
+        )
+        .order_by("updated_at", "pk")
+    )
+    recovery_ids = list(candidates.select_for_update().values_list("pk", flat=True)[: max(1, batch_size)])
+    if recovery_ids:
+        AccountRecoveryToken.objects.filter(pk__in=recovery_ids).delete()
+        EmailBatch.objects.filter(kind=EmailBatch.Kind.ACCOUNT_RECOVERY, deliveries__isnull=True).delete()
+    return len(recovery_ids)
 
 
 def recovery_token_digest(raw_token: str) -> str:
