@@ -62,12 +62,12 @@ def cleanup_account_recovery_artifacts(*, now: Any | None = None, batch_size: in
                 updated_at__lt=cleanup_time - RECOVERY_ARTIFACT_RETENTION,
             )
         )
-        .order_by("updated_at", "pk")
+        .order_by("pk")
     )
     recovery_ids = list(candidates.select_for_update().values_list("pk", flat=True)[: max(1, batch_size)])
     if recovery_ids:
         AccountRecoveryToken.objects.filter(pk__in=recovery_ids).delete()
-        EmailBatch.objects.filter(kind=EmailBatch.Kind.ACCOUNT_RECOVERY, deliveries__isnull=True).delete()
+    EmailBatch.objects.filter(kind=EmailBatch.Kind.ACCOUNT_RECOVERY, deliveries__isnull=True).delete()
     return len(recovery_ids)
 
 

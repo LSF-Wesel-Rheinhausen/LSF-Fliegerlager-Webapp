@@ -5,8 +5,8 @@ from django.db import migrations, models
 from django.utils import timezone
 
 
-def invalidate_unbound_delivered_push_tokens(apps, schema_editor):
-    """Fail closed for push links issued before an exact device was persisted."""
+def invalidate_active_push_tokens(apps, schema_editor):
+    """Fail closed whenever exact push-delivery binding is unavailable."""
     AccountRecoveryToken = apps.get_model("billing", "AccountRecoveryToken")
     AccountRecoveryToken.objects.using(schema_editor.connection.alias).filter(
         delivery_channel="push", used_at__isnull=True, token_digest__isnull=False
@@ -30,5 +30,5 @@ class Migration(migrations.Migration):
                 to="billing.pushsubscription",
             ),
         ),
-        migrations.RunPython(invalidate_unbound_delivered_push_tokens, migrations.RunPython.noop),
+        migrations.RunPython(invalidate_active_push_tokens, invalidate_active_push_tokens),
     ]

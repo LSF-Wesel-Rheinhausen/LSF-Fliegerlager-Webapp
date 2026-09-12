@@ -114,6 +114,83 @@ def test_disabled_email_with_push_recovery_uses_push_without_email_artifacts(cli
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize("owner_kind", ["participant", "companion"])
+def test_unverified_kiosk_push_is_not_a_recovery_channel_and_preserves_existing_link(
+    kiosk_client, settings, owner_kind
+):
+    settings.WEB_PUSH_ENABLED = True
+    participant = ParticipantFactory(email="legacy-owner@example.test")
+    if owner_kind == "participant":
+        owner = participant
+        subscription_owner = {"participant": participant}
+    else:
+        owner = ParticipantFamilyMemberFactory(
+            guardian=participant,
+            email="legacy-companion@example.test",
+            role=ParticipantFamilyMember.Role.COMPANION,
+        )
+        subscription_owner = {"family_member": owner}
+    owner.pin.set_pin("2468")
+    owner.pin.save()
+    PushSubscription.objects.create(
+        **subscription_owner,
+        endpoint=f"https://push.example.test/legacy-{owner_kind}",
+        p256dh="key",
+        auth="auth",
+        identity_verified=False,
+    )
+    kiosk_client.post(reverse("kiosk-pin-recovery-request"), {"email": owner.email})
+    _send_recovery_emails()
+    existing_path = urlsplit(mail.outbox[-1].body.splitlines()[-1]).path
+
+    _disable_recovery_email()
+    kiosk_client.post(reverse("kiosk-pin-recovery-request"), {"email": owner.email})
+
+    assert send_due_account_recovery_requests() == 1
+    assert kiosk_client.get(existing_path).status_code == 200
+    assert AccountRecoveryToken.objects.count() == 1
+    assert not PushMessage.objects.exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("owner_kind", ["participant", "companion"])
+def test_verified_kiosk_push_is_a_recovery_channel_without_email(kiosk_client, settings, owner_kind):
+    settings.WEB_PUSH_ENABLED = True
+    _disable_recovery_email()
+    participant = ParticipantFactory(email="verified-owner@example.test")
+    if owner_kind == "participant":
+        owner = participant
+        subscription_owner = {"participant": participant}
+        expected_kind = AccountRecoveryToken.Kind.PARTICIPANT_PIN
+    else:
+        owner = ParticipantFamilyMemberFactory(
+            guardian=participant,
+            email="verified-companion@example.test",
+            role=ParticipantFamilyMember.Role.COMPANION,
+        )
+        subscription_owner = {"family_member": owner}
+        expected_kind = AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN
+    owner.pin.set_pin("2468")
+    owner.pin.save()
+    subscription = PushSubscription.objects.create(
+        **subscription_owner,
+        endpoint=f"https://push.example.test/verified-{owner_kind}",
+        p256dh="key",
+        auth="auth",
+        identity_verified=True,
+    )
+
+    kiosk_client.post(reverse("kiosk-pin-recovery-request"), {"email": owner.email})
+
+    assert send_due_account_recovery_requests() == 1
+    recovery = AccountRecoveryToken.objects.get()
+    assert recovery.kind == expected_kind
+    assert recovery.delivery_channel == AccountRecoveryToken.DeliveryChannel.PUSH
+    assert PushMessage.objects.filter(subscription=subscription, account_recovery=recovery).exists()
+    assert not EmailDelivery.objects.exists()
+
+
+@pytest.mark.django_db
 def test_enabled_email_recovery_still_queues_email_delivery(client):
     _enable_recovery_email()
     user = UserFactory(email="enabled-email@example.test")
@@ -297,6 +374,49 @@ def test_recovery_cleanup_bounds_unactivated_failed_artifact_retention():
 
     AccountRecoveryToken.objects.filter(pk=recovery.pk).update(updated_at=boundary - timezone.timedelta(microseconds=1))
     assert cleanup_account_recovery_artifacts(now=now) == 1
+
+
+@pytest.mark.django_db
+def test_recovery_cleanup_locks_tokens_in_primary_key_order(monkeypatch):
+    user = UserFactory(email="ordered-cleanup@example.test")
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    recovery.expires_at = timezone.now() - timezone.timedelta(seconds=1)
+    recovery.save(update_fields=["expires_at"])
+    token_lock_orders = []
+    fetch_all = QuerySet._fetch_all
+
+    def record_token_lock_order(queryset):
+        if (
+            queryset._result_cache is None
+            and queryset.query.select_for_update
+            and queryset.model is AccountRecoveryToken
+        ):
+            token_lock_orders.append(queryset.query.order_by)
+        fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", record_token_lock_order)
+
+    assert cleanup_account_recovery_artifacts() == 1
+    assert token_lock_orders == [("pk",)]
+
+
+@pytest.mark.django_db
+def test_recovery_cleanup_removes_orphan_batch_without_token_candidates():
+    orphan = EmailBatch.objects.create(
+        kind=EmailBatch.Kind.ACCOUNT_RECOVERY,
+        subject="Password recovery for private@example.test",
+        body="Private recovery metadata",
+    )
+    other_batch = EmailBatch.objects.create(
+        camp=ParticipantFactory().camp,
+        kind=EmailBatch.Kind.INFORMATION,
+        subject="Information",
+        body="Must remain",
+    )
+
+    assert cleanup_account_recovery_artifacts() == 0
+    assert not EmailBatch.objects.filter(pk=orphan.pk).exists()
+    assert EmailBatch.objects.filter(pk=other_batch.pk).exists()
 
 
 @pytest.mark.django_db

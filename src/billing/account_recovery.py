@@ -190,11 +190,11 @@ def _rate_limited_response(request: HttpRequest, *, kiosk_mode: str = "private")
     return response
 
 
-def _has_delivery_channel(owner: Any, *, email_enabled: bool) -> bool:
+def _has_delivery_channel(owner: Any, *, kind: str, email_enabled: bool) -> bool:
     email = getattr(owner, "email", "")
-    push_owner = owner
+    recovery_filter = {} if kind == AccountRecoveryToken.Kind.USER_PASSWORD else {"identity_verified": True}
     return (email_enabled and bool(email and has_valid_recipient_email(email))) or (
-        settings.WEB_PUSH_ENABLED and push_owner.push_subscriptions.filter(is_active=True).exists()
+        settings.WEB_PUSH_ENABLED and owner.push_subscriptions.filter(is_active=True, **recovery_filter).exists()
     )
 
 
@@ -212,7 +212,7 @@ def _deliver_recovery(
     configuration = EmailConfiguration.load()
     configuration = EmailConfiguration.objects.select_for_update().get(pk=configuration.pk)
     email_enabled = is_email_configuration_usable(configuration)
-    if not _has_delivery_channel(owner, email_enabled=email_enabled):
+    if not _has_delivery_channel(owner, kind=kind, email_enabled=email_enabled):
         return
     if kind == AccountRecoveryToken.Kind.PARTICIPANT_PIN:
         owner = Participant.objects.select_for_update().get(pk=owner.pk)
