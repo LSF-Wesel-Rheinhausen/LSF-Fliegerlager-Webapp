@@ -257,10 +257,15 @@ class AccountRecoveryToken(TimeStampedModel):
         EMAIL = "email", "E-Mail"
         PUSH = "push", "Push"
 
+    class KioskMode(models.TextChoices):
+        PRIVATE = "private", "Privater Kiosk"
+        CENTRAL = "central", "Zentraler Kiosk"
+
     kind = models.CharField(max_length=24, choices=Kind.choices)
     token_digest = models.CharField(max_length=64, unique=True, editable=False, null=True, blank=True)
     credential_fingerprint = models.CharField(max_length=64, editable=False)
     delivery_channel = models.CharField(max_length=8, choices=DeliveryChannel.choices, default=DeliveryChannel.PUSH)
+    kiosk_mode = models.CharField(max_length=8, choices=KioskMode.choices, null=True, blank=True)
     recipient_email_digest = models.CharField(max_length=64, editable=False, null=True, blank=True)
     delivery_subscription = models.ForeignKey(
         "PushSubscription",

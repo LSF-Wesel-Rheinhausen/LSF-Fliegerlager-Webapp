@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import pytest
 import requests
+from django.contrib.auth.hashers import make_password
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import QuerySet
@@ -27,6 +28,8 @@ from billing.models import (
     Participant,
     ParticipantBookingLink,
     ParticipantFamilyMember,
+    ParticipantFamilyMemberPin,
+    ParticipantPin,
     PushMessage,
     PushSubscription,
     Shift,
@@ -44,7 +47,11 @@ from billing.notifications import (
     queue_participant_notification,
     send_due_push_messages,
 )
-from billing.recovery_tokens import create_account_recovery_token, find_valid_account_recovery
+from billing.recovery_tokens import (
+    create_account_recovery_token,
+    find_valid_account_recovery,
+    lock_push_subscription_registration,
+)
 from billing.services import approve_shared_expense
 from tests.factories import CampFactory, ParticipantFactory, ParticipantFamilyMemberFactory, UserFactory
 
@@ -507,6 +514,94 @@ def test_admin_can_create_and_update_own_push_subscription(client):
 
 
 @pytest.mark.django_db
+def test_subscription_registration_locks_owner_tokens_then_subscription(client, monkeypatch):
+    user = UserFactory()
+    client.force_login(user)
+    create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    locked_models = []
+    fetch_all = QuerySet._fetch_all
+
+    def record_locks(queryset):
+        if queryset._result_cache is None and queryset.query.select_for_update:
+            locked_models.append(queryset.model.__name__)
+        fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", record_locks)
+    response = client.post(
+        reverse("notification-subscribe"),
+        data=json.dumps({**subscription_payload(), "categories": ["expenses_admin"]}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 201
+    assert locked_models.index("User") < locked_models.index("AccountRecoveryToken")
+    assert locked_models.index("AccountRecoveryToken") < locked_models.index("PushSubscription")
+
+
+@pytest.mark.django_db
+def test_admin_subscription_registration_rejects_password_rotation_after_session_check(client, monkeypatch):
+    user = UserFactory()
+    client.force_login(user)
+    original_lock = lock_push_subscription_registration
+
+    def rotate_then_lock(**kwargs):
+        user.__class__.objects.filter(pk=user.pk).update(password=make_password("replacement-password"))
+        return original_lock(**kwargs)
+
+    monkeypatch.setattr("billing.notification_views.lock_push_subscription_registration", rotate_then_lock)
+
+    response = client.post(
+        reverse("notification-subscribe"),
+        data=json.dumps({**subscription_payload(), "categories": ["expenses_admin"]}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 403
+    assert not PushSubscription.objects.exists()
+    assert "_auth_user_id" not in client.session
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("family_member", [False, True], ids=["participant", "family-member"])
+def test_kiosk_subscription_registration_rejects_pin_rotation_after_session_check(
+    kiosk_client, monkeypatch, family_member
+):
+    participant = ParticipantFactory()
+    identity = (
+        ParticipantFamilyMemberFactory(guardian=participant, role=ParticipantFamilyMember.Role.COMPANION)
+        if family_member
+        else participant
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_MODE_SESSION_KEY] = "private"
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(identity.pin.pin_hash)
+    if family_member:
+        session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = identity.pk
+    session.save()
+    original_lock = lock_push_subscription_registration
+
+    def rotate_then_lock(**kwargs):
+        pin_model = ParticipantFamilyMemberPin if family_member else ParticipantPin
+        owner_filter = {"family_member": identity} if family_member else {"participant": identity}
+        pin_model.objects.filter(**owner_filter).update(pin_hash=make_password("8642"))
+        return original_lock(**kwargs)
+
+    monkeypatch.setattr("billing.notification_views.lock_push_subscription_registration", rotate_then_lock)
+
+    response = kiosk_client.post(
+        reverse("kiosk-notification-subscribe"),
+        data=json.dumps(subscription_payload()),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 403
+    assert not PushSubscription.objects.exists()
+    assert KIOSK_PARTICIPANT_SESSION_KEY not in kiosk_client.session
+    assert KIOSK_FAMILY_MEMBER_SESSION_KEY not in kiosk_client.session
+
+
+@pytest.mark.django_db
 def test_private_participant_can_subscribe_but_central_endpoint_does_not_exist(kiosk_client):
     participant = ParticipantFactory()
     session = kiosk_client.session
@@ -549,6 +644,56 @@ def test_legacy_participant_device_is_active_but_not_eligible_for_recovery(kiosk
         )
         == 0
     )
+
+
+@pytest.mark.django_db
+def test_legacy_unverified_participant_device_remains_eligible_for_normal_notifications():
+    participant = ParticipantFactory()
+    PushSubscription.objects.create(
+        participant=participant,
+        endpoint="https://push.example.test/legacy-normal",
+        p256dh="key",
+        auth="auth",
+        categories=["shifts"],
+        identity_verified=False,
+    )
+
+    assert (
+        queue_participant_notification(
+            participant,
+            category="shifts",
+            title="Schicht",
+            body="Neue Schicht",
+            target_url="/kiosk/",
+            dedupe_key="normal-legacy-device",
+        )
+        == 1
+    )
+    assert PushMessage.objects.filter(category="shifts").count() == 1
+
+
+@pytest.mark.django_db
+def test_legacy_unverified_participant_device_is_shown_active_with_recovery_limitation(kiosk_client):
+    participant = ParticipantFactory()
+    PushSubscription.objects.create(
+        participant=participant,
+        endpoint="https://push.example.test/legacy-settings",
+        p256dh="key",
+        auth="auth",
+        categories=["shifts"],
+        identity_verified=False,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_MODE_SESSION_KEY] = "private"
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(participant.pin.pin_hash)
+    session.save()
+
+    response = kiosk_client.get(reverse("kiosk-notification-settings"))
+
+    assert response.status_code == 200
+    assert "Aktiv – Kontowiederherstellung erst nach erneuter Registrierung" in response.content.decode()
+    assert "Inaktiv – bitte erneut registrieren" not in response.content.decode()
 
 
 @pytest.mark.django_db

@@ -745,12 +745,44 @@ def test_central_kiosk_recovery_keeps_central_routes_and_session_semantics(kiosk
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("token_mode", "confirm_route"),
+    [
+        (AccountRecoveryDeliveryRequest.KioskMode.CENTRAL, "account-recovery-confirm"),
+        (AccountRecoveryDeliveryRequest.KioskMode.PRIVATE, "central-kiosk-pin-recovery-confirm"),
+    ],
+)
+def test_kiosk_recovery_token_is_bound_to_its_confirm_mode_without_session_side_effect(
+    kiosk_client, token_mode, confirm_route
+):
+    participant = ParticipantFactory()
+    participant.pin.set_pin("2468")
+    participant.pin.save()
+    recovery = create_account_recovery_token(
+        kind=AccountRecoveryToken.Kind.PARTICIPANT_PIN,
+        owner=participant,
+        kiosk_mode=token_mode,
+    )
+    raw_token = activate_account_recovery_token(recovery.pk)
+    assert raw_token is not None
+
+    response = kiosk_client.get(reverse(confirm_route, args=[raw_token]))
+
+    assert response.status_code == 400
+    assert KIOSK_MODE_SESSION_KEY not in kiosk_client.session
+
+
+@pytest.mark.django_db
 def test_central_recovery_confirm_is_public_across_browsers(settings):
     settings.ACCOUNT_RECOVERY_PUBLIC_ORIGIN = "https://recovery.example.test"
     participant = ParticipantFactory(email="central-cross-browser@example.test")
     participant.pin.set_pin("2468")
     participant.pin.save()
-    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.PARTICIPANT_PIN, owner=participant)
+    recovery = create_account_recovery_token(
+        kind=AccountRecoveryToken.Kind.PARTICIPANT_PIN,
+        owner=participant,
+        kiosk_mode=AccountRecoveryDeliveryRequest.KioskMode.CENTRAL,
+    )
     bind_account_recovery_email_recipient(recovery, participant.email)
     token = activate_account_recovery_token(recovery.pk, recipient_email=participant.email)
     assert token is not None
@@ -774,7 +806,11 @@ def test_central_recovery_confirm_clears_existing_kiosk_identity(settings):
     other_family_member = ParticipantFamilyMemberFactory(guardian=other_participant)
     participant.pin.set_pin("2468")
     participant.pin.save()
-    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.PARTICIPANT_PIN, owner=participant)
+    recovery = create_account_recovery_token(
+        kind=AccountRecoveryToken.Kind.PARTICIPANT_PIN,
+        owner=participant,
+        kiosk_mode=AccountRecoveryDeliveryRequest.KioskMode.CENTRAL,
+    )
     bind_account_recovery_email_recipient(recovery, participant.email)
     token = activate_account_recovery_token(recovery.pk, recipient_email=participant.email)
     assert token is not None
@@ -1516,7 +1552,7 @@ def test_successful_recovery_revokes_or_requires_reverification_for_only_owner_d
         assert own.is_active is False
         assert own.identity_verified is True
     else:
-        assert own.is_active is True
+        assert own.is_active is False
         assert own.identity_verified is False
     assert foreign.is_active is True
     assert foreign.identity_verified is True

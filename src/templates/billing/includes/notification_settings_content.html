@@ -66,7 +66,11 @@
             <span class="status-badge status-badge--ok" data-notification-current hidden>Dieses Gerät</span>
           </span>
           <span class="hint">{% if subscription.last_success_at %}Zuletzt erreicht: {{ subscription.last_success_at|date:"d.m.Y H:i" }}{% else %}Noch nicht erreicht{% endif %}</span>
-          {% if not subscription.is_active or not subscription.identity_verified %}<span class="status-badge">Inaktiv – bitte erneut registrieren</span>{% endif %}
+          {% if not subscription.is_active %}
+            <span class="status-badge">Inaktiv – bitte erneut registrieren</span>
+          {% elif not subscription.identity_verified %}
+            <span class="status-badge">Aktiv – Kontowiederherstellung erst nach erneuter Registrierung</span>
+          {% endif %}
         </div>
         <div class="actions">
           <button class="button button-secondary" type="button" data-preferences-subscription="{{ subscription.id }}">Nachrichten auswählen</button>

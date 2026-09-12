@@ -3,20 +3,22 @@ import json
 from typing import Any
 
 from django.conf import settings
+from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.http import require_POST
 
-from .kiosk_access import KIOSK_MODE_SESSION_KEY
-from .models import Participant, ParticipantFamilyMember, PushSubscription
+from .kiosk_access import KIOSK_MODE_SESSION_KEY, clear_kiosk_identity_session
+from .models import AccountRecoveryToken, Participant, ParticipantFamilyMember, PushSubscription
 from .notifications import (
     _queue_for_subscriptions,
     allowed_categories,
 )
 from .push_endpoints import PUSH_ENDPOINT_ERROR, is_allowed_push_endpoint
 from .pwa_views import pwa_template_context
-from .recovery_tokens import revoke_owned_push_subscription
+from .recovery_tokens import credential_fingerprint, lock_push_subscription_registration, revoke_owned_push_subscription
 from .views import _kiosk_context, _kiosk_family_member, _kiosk_participant
 
 
@@ -131,6 +133,7 @@ def kiosk_notification_settings(request: HttpRequest) -> HttpResponse:
     )
 
 
+@transaction.atomic
 def _subscribe(request: HttpRequest, owner: Any, *, participant_owner: bool) -> JsonResponse:
     if not settings.WEB_PUSH_ENABLED:
         return JsonResponse({"error": "Push-Benachrichtigungen sind deaktiviert."}, status=503)
@@ -141,7 +144,7 @@ def _subscribe(request: HttpRequest, owner: Any, *, participant_owner: bool) -> 
     keys = payload.get("keys")
     device_name = payload.get("device_name", "Dieses Gerät")
     allowed = allowed_categories(participant_owner=participant_owner)
-    if not is_allowed_push_endpoint(endpoint):
+    if not isinstance(endpoint, str) or not is_allowed_push_endpoint(endpoint):
         return JsonResponse({"error": PUSH_ENDPOINT_ERROR}, status=400)
     if not isinstance(keys, dict) or not all(isinstance(keys.get(key), str) for key in ("p256dh", "auth")):
         return JsonResponse({"error": "Ungültige Browser-Schlüssel."}, status=400)
@@ -154,7 +157,25 @@ def _subscribe(request: HttpRequest, owner: Any, *, participant_owner: bool) -> 
     if categories is None:
         return JsonResponse({"error": "Ungültige Benachrichtigungskategorie."}, status=400)
 
-    existing = PushSubscription.objects.filter(endpoint=endpoint).first()
+    kind = (
+        AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN
+        if isinstance(owner, ParticipantFamilyMember)
+        else AccountRecoveryToken.Kind.PARTICIPANT_PIN
+        if participant_owner
+        else AccountRecoveryToken.Kind.USER_PASSWORD
+    )
+    credential_is_current, existing = lock_push_subscription_registration(
+        kind=kind,
+        owner=owner,
+        endpoint=endpoint,
+        expected_credential_fingerprint=credential_fingerprint(kind, owner),
+    )
+    if not credential_is_current:
+        if participant_owner:
+            clear_kiosk_identity_session(request)
+        else:
+            logout(request)
+        return JsonResponse({"error": "Die Anmeldung ist nicht mehr gültig."}, status=403)
     owner_matches = False
     owner_values: dict[str, Any] | None = None
     if existing is not None:

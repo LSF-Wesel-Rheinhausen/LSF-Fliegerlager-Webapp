@@ -207,6 +207,7 @@ def _deliver_recovery(
     subject: str,
     body_intro: str,
     target_path: str | None = None,
+    kiosk_mode: str | None = None,
 ) -> None:
     configuration = EmailConfiguration.load()
     configuration = EmailConfiguration.objects.select_for_update().get(pk=configuration.pk)
@@ -238,7 +239,7 @@ def _deliver_recovery(
     camp = owner.guardian.camp if kind == AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN else getattr(owner, "camp", None)
     email = getattr(owner, "email", "")
     if email_enabled and email and has_valid_recipient_email(email):
-        recovery = create_account_recovery_token(kind=kind, owner=owner)
+        recovery = create_account_recovery_token(kind=kind, owner=owner, kiosk_mode=kiosk_mode)
         queue_account_recovery_email(
             recipient_email=email,
             recipient_name=name,
@@ -253,6 +254,7 @@ def _deliver_recovery(
         title=subject,
         body="Öffne diesen zeitlich begrenzten Link, um neue Zugangsdaten festzulegen.",
         target_url=target_path,
+        kiosk_mode=kiosk_mode,
     )
 
 
@@ -397,6 +399,7 @@ def _deliver_kiosk_recovery(identifier: str, *, picker: bool, kiosk_mode: str) -
                 "wurde eine neue PIN angefordert."
             ),
             target_path=target_path,
+            kiosk_mode=kiosk_mode,
         )
     for family_member in family_members:
         _deliver_recovery(
@@ -409,6 +412,7 @@ def _deliver_kiosk_recovery(identifier: str, *, picker: bool, kiosk_mode: str) -
                 f"{family_member.guardian.camp.name} wurde eine neue PIN angefordert."
             ),
             target_path=target_path,
+            kiosk_mode=kiosk_mode,
         )
 
 
@@ -462,6 +466,8 @@ def account_recovery_confirm(request: HttpRequest, token: str, kiosk_mode: str =
     """Consume one valid recovery token after a replacement credential passes validation."""
     recovery = find_valid_account_recovery(token)
     if recovery is None:
+        return _invalid_token_response(request)
+    if recovery.kind != AccountRecoveryToken.Kind.USER_PASSWORD and recovery.kiosk_mode != kiosk_mode:
         return _invalid_token_response(request)
     if kiosk_mode == AccountRecoveryDeliveryRequest.KioskMode.CENTRAL:
         clear_kiosk_identity_session(request)

@@ -103,7 +103,6 @@ def queue_participant_notification(
         for subscription in PushSubscription.objects.filter(
             Q(participant=participant) | Q(family_member__guardian=participant, family_member__is_active=True),
             is_active=True,
-            identity_verified=True,
         )
         if category in subscription.categories
     ]
@@ -189,6 +188,7 @@ def queue_account_recovery_push(
     title: str,
     body: str,
     target_url: str,
+    kiosk_mode: str | None = None,
 ) -> int:
     """Queue a mandatory security message for every active device owned by one account."""
     if kind == AccountRecoveryToken.Kind.USER_PASSWORD:
@@ -201,7 +201,7 @@ def queue_account_recovery_push(
     subscriptions = PushSubscription.objects.filter(is_active=True, **owner_filter, **recovery_filter)
     created = 0
     for subscription in subscriptions:
-        recovery = create_account_recovery_token(kind=kind, owner=owner)
+        recovery = create_account_recovery_token(kind=kind, owner=owner, kiosk_mode=kiosk_mode)
         queued = _queue_for_subscriptions(
             [subscription],
             category=SECURITY_CATEGORY,
@@ -224,8 +224,6 @@ def _subscription_owner_is_eligible(subscription: PushSubscription) -> bool:
         return False
     if subscription.user_id is not None:
         return User.objects.filter(pk=subscription.user_id, is_active=True).exists()
-    if not subscription.identity_verified:
-        return False
     if subscription.participant_id is not None:
         participant = Participant.objects.select_related("camp").filter(pk=subscription.participant_id).first()
         return participant is not None and recovery_owner_is_active(
@@ -850,7 +848,6 @@ def queue_information_push_batch(
     subscriptions = PushSubscription.objects.filter(
         Q(participant_id__in=p_ids) | Q(family_member__guardian_id__in=p_ids, family_member__is_active=True),
         is_active=True,
-        identity_verified=True,
     )
 
     created_count = 0

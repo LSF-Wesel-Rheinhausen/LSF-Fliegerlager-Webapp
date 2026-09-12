@@ -177,6 +177,7 @@ def test_pin_set_revokes_participant_devices_only_after_an_established_pin(clien
 
     assert response.status_code == 302
     own.refresh_from_db()
+    assert own.is_active is False
     assert own.identity_verified is False
 
 
@@ -211,6 +212,7 @@ def test_admin_pin_reset_revokes_participant_devices(client):
 
     assert response.status_code == 302
     own.refresh_from_db()
+    assert own.is_active is False
     assert own.identity_verified is False
 
 
@@ -254,6 +256,7 @@ def test_kiosk_pin_change_revokes_the_authenticated_owners_devices(kiosk_client,
 
     assert response.status_code == 302
     own.refresh_from_db()
+    assert own.is_active is False
     assert own.identity_verified is False
 
 
@@ -290,6 +293,7 @@ def test_guardian_pin_rotation_revokes_companion_devices(kiosk_client):
 
     assert response.status_code == 302
     own.refresh_from_db()
+    assert own.is_active is False
     assert own.identity_verified is False
 
 

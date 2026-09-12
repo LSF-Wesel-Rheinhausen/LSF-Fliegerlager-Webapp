@@ -35,6 +35,9 @@
 - Behält bei mehrdeutigen Transportfehlern und Worker-Neustarts den möglicherweise bereits zugestellten Einmal-Link bis zu seinem ursprünglichen Ablauf gültig und führt zentrale Kiosk-Recoveries über feste, öffentlich einlösbare zentrale Rückwege, ohne in private Sitzungseinstellungen zu wechseln; beide Confirm-Routen werden in Logs redigiert und der lokale Compose-Origin ist vollständig dokumentiert.
 - Leert bei gültigen zentralen Recovery-Bestätigungen jede vorhandene Teilnehmer- und Begleitpersonen-Identität aus der Browser-Session, bevor die zentrale 120-Sekunden-Sitzung beginnt.
 - Behandelt deaktivierte oder unvollständig konfigurierte E-Mail-Zustellung nicht als Recovery-Kanal und erzeugt dafür weder ausstehende Zustellungen noch personenbezogene Recovery-Artefakte; Push-only-Recovery bleibt verfügbar.
+- Hält migrierte, noch nicht erneut verifizierte Push-Geräte für normale Benachrichtigungen aktiv, schließt sie aber weiterhin sicher von Recovery-Zustellungen aus; nach einem späteren Zugangsdatenwechsel wird das betroffene Gerät dagegen vollständig bis zur erneuten Registrierung deaktiviert.
+- Serialisiert Geräte-Registrierungen mit Zugangsdatenwechseln, prüft den zuvor authentifizierten Credential-Zustand nach dem Lock erneut und verwirft dabei veraltete Admin- sowie Kiosk-Sitzungen.
+- Bindet Kiosk-Recovery-Tokens an den bei der Anforderung gewählten privaten oder zentralen Modus und lehnt eine Einlösung über die jeweils andere Route ohne Session-Seiteneffekt ab.
 - Vereinheitlicht die Sperrreihenfolge der Push-Zustellung mit parallelen Gerätewiderrufen und kennzeichnet widerrufene Browsergeräte bis zur erneuten Registrierung sichtbar als inaktiv.
 
 ## Tests

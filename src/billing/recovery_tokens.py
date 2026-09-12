@@ -160,15 +160,54 @@ def revoke_owner_recovery_push_subscriptions(*, kind: str, owner: Any) -> None:
         .filter(kind=kind, used_at__isnull=True, **owner_filter)
         .order_by("pk")
     )
-    if kind == AccountRecoveryToken.Kind.USER_PASSWORD:
-        updates = {"is_active": False}
-    else:
-        updates = {"identity_verified": False}
+    updates = {"is_active": False}
+    if kind != AccountRecoveryToken.Kind.USER_PASSWORD:
+        updates["identity_verified"] = False
     subscription_ids = list(
         PushSubscription.objects.select_for_update().filter(**owner_filter).order_by("pk").values_list("pk", flat=True)
     )
     if subscription_ids:
         PushSubscription.objects.filter(pk__in=subscription_ids).update(updated_at=timezone.now(), **updates)
+
+
+def lock_push_subscription_registration(
+    *, kind: str, owner: Any, endpoint: str, expected_credential_fingerprint: str
+) -> tuple[bool, PushSubscription | None]:
+    """Lock registration state in the shared owner/PIN/token/subscription order.
+
+    The caller must hold the surrounding transaction until the subscription
+    update commits.  This serializes reactivation with credential rotation.
+    """
+    locked_owner: Any | None
+    if kind == AccountRecoveryToken.Kind.USER_PASSWORD:
+        locked_owner = User.objects.select_for_update().filter(pk=owner.pk).first()
+        owner_filter = {"user": owner}
+    elif kind == AccountRecoveryToken.Kind.PARTICIPANT_PIN:
+        locked_owner = Participant.objects.select_for_update().filter(pk=owner.pk).first()
+        ParticipantPin.objects.select_for_update().filter(participant_id=owner.pk).first()
+        owner_filter = {"participant": owner}
+    elif kind == AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN:
+        locked_owner = ParticipantFamilyMember.objects.select_for_update().filter(pk=owner.pk).first()
+        ParticipantFamilyMemberPin.objects.select_for_update().filter(family_member_id=owner.pk).first()
+        owner_filter = {"family_member": owner}
+    else:
+        raise ValueError("Unsupported recovery kind")
+    if (
+        locked_owner is None
+        or not recovery_owner_is_active(kind, locked_owner)
+        or not constant_time_compare(
+            credential_fingerprint(kind, locked_owner),
+            expected_credential_fingerprint,
+        )
+    ):
+        return False, None
+    list(
+        AccountRecoveryToken.objects.select_for_update()
+        .filter(kind=kind, used_at__isnull=True, **owner_filter)
+        .order_by("pk")
+    )
+    subscription = PushSubscription.objects.select_for_update().filter(endpoint=endpoint).first()
+    return True, subscription
 
 
 @transaction.atomic
@@ -343,11 +382,14 @@ def complete_account_recovery_push_delivery(
     return True
 
 
-def create_account_recovery_token(*, kind: str, owner: Any) -> AccountRecoveryToken:
+def create_account_recovery_token(*, kind: str, owner: Any, kiosk_mode: str | None = None) -> AccountRecoveryToken:
     """Create an inactive token record that contains no bearer secret."""
+    if kind != AccountRecoveryToken.Kind.USER_PASSWORD and kiosk_mode is None:
+        kiosk_mode = AccountRecoveryToken.KioskMode.PRIVATE
     return AccountRecoveryToken.objects.create(
         kind=kind,
         delivery_channel=AccountRecoveryToken.DeliveryChannel.PUSH,
+        kiosk_mode=kiosk_mode,
         credential_fingerprint=credential_fingerprint(kind, owner),
         **_owner_filter(kind, owner),
     )
