@@ -1279,7 +1279,7 @@ def test_worker_sends_due_message_and_records_success(webpush):
 
 @pytest.mark.django_db
 @patch("billing.notifications.webpush")
-def test_worker_success_locks_subscription_before_message_after_provider_acceptance(webpush, monkeypatch):
+def test_worker_success_locks_subscription_before_message_throughout_delivery(webpush, monkeypatch):
     subscription = PushSubscription.objects.create(
         user=UserFactory(), endpoint="https://push.example.test/lock-order", p256dh="key", auth="secret"
     )
@@ -1303,7 +1303,12 @@ def test_worker_success_locks_subscription_before_message_after_provider_accepta
     monkeypatch.setattr(QuerySet, "_fetch_all", record_locks)
     send_due_push_messages()
 
-    assert locked_models[-2:] == ["PushSubscription", "PushMessage"]
+    assert locked_models == [
+        "PushSubscription",
+        "PushMessage",
+        "PushSubscription",
+        "PushMessage",
+    ]
 
 
 @pytest.mark.django_db

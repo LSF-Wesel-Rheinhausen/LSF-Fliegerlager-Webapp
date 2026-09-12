@@ -303,13 +303,13 @@ def _authorize_push_delivery(message_id: int) -> tuple[PushMessage, PushSubscrip
                 _terminally_fail_locked_push(message, "recovery_unavailable")
             return None
         return message, subscription, raw_token
+    subscription = PushSubscription.objects.select_for_update().filter(pk=message_data["subscription_id"]).first()
+    if subscription is None:
+        return None
     message = (
         PushMessage.objects.select_for_update().filter(pk=message_id, status=PushMessage.Status.PROCESSING).first()
     )
     if message is None:
-        return None
-    subscription = PushSubscription.objects.select_for_update().filter(pk=message.subscription_id).first()
-    if subscription is None:
         return None
     eligible = _subscription_owner_is_eligible(subscription)
     eligibility_error = "subscription_ineligible"
