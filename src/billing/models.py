@@ -132,13 +132,14 @@ class EmailTestLog(TimeStampedModel):
 
 
 class EmailBatch(TimeStampedModel):
-    """Record one manually confirmed information or invoice delivery batch."""
+    """Record one manual message batch or system-generated recovery delivery."""
 
     class Kind(models.TextChoices):
         INFORMATION = "information", "Information"
         SETTLEMENT = "settlement", "Rechnung"
+        ACCOUNT_RECOVERY = "account_recovery", "Kontowiederherstellung"
 
-    camp = models.ForeignKey("Camp", on_delete=models.RESTRICT, related_name="email_batches")
+    camp = models.ForeignKey("Camp", on_delete=models.RESTRICT, related_name="email_batches", null=True, blank=True)
     settlement_run = models.ForeignKey(
         "SettlementRun",
         on_delete=models.RESTRICT,
@@ -161,8 +162,9 @@ class EmailBatch(TimeStampedModel):
         constraints = [
             models.CheckConstraint(
                 condition=(
-                    models.Q(kind="information", settlement_run__isnull=True)
-                    | models.Q(kind="settlement", settlement_run__isnull=False)
+                    models.Q(kind="information", settlement_run__isnull=True, camp__isnull=False)
+                    | models.Q(kind="settlement", settlement_run__isnull=False, camp__isnull=False)
+                    | models.Q(kind="account_recovery", settlement_run__isnull=True)
                 ),
                 name="email_batch_run_matches_kind",
             )
@@ -188,6 +190,13 @@ class EmailDelivery(TimeStampedModel):
         null=True,
         blank=True,
         related_name="email_deliveries",
+    )
+    account_recovery = models.ForeignKey(
+        "AccountRecoveryToken",
+        on_delete=models.CASCADE,
+        related_name="email_deliveries",
+        null=True,
+        blank=True,
     )
     recipient_email = models.EmailField()
     recipient_names = models.JSONField(default=list)
@@ -234,6 +243,161 @@ class LoginAttempt(TimeStampedModel):
 
     def __str__(self):
         return f"Login Attempts (Client {self.client_key[:8]})"
+
+
+class AccountRecoveryToken(TimeStampedModel):
+    """Store a delivery-activated, credential-bound recovery capability."""
+
+    class Kind(models.TextChoices):
+        USER_PASSWORD = "user_password", "Admin-Passwort"
+        PARTICIPANT_PIN = "participant_pin", "Teilnehmer-PIN"
+        FAMILY_MEMBER_PIN = "family_member_pin", "Begleitpersonen-PIN"
+
+    class DeliveryChannel(models.TextChoices):
+        EMAIL = "email", "E-Mail"
+        PUSH = "push", "Push"
+
+    class KioskMode(models.TextChoices):
+        PRIVATE = "private", "Privater Kiosk"
+        CENTRAL = "central", "Zentraler Kiosk"
+
+    kind = models.CharField(max_length=24, choices=Kind.choices)
+    token_digest = models.CharField(max_length=64, unique=True, editable=False, null=True, blank=True)
+    credential_fingerprint = models.CharField(max_length=64, editable=False)
+    delivery_channel = models.CharField(max_length=8, choices=DeliveryChannel.choices, default=DeliveryChannel.PUSH)
+    kiosk_mode = models.CharField(max_length=8, choices=KioskMode.choices, null=True, blank=True)
+    recipient_email_digest = models.CharField(max_length=64, editable=False, null=True, blank=True)
+    delivery_subscription = models.ForeignKey(
+        "PushSubscription",
+        on_delete=models.SET_NULL,
+        related_name="delivered_account_recovery_tokens",
+        null=True,
+        blank=True,
+    )
+    push_delivery_bound = models.BooleanField(default=False, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="account_recovery_tokens",
+        null=True,
+        blank=True,
+    )
+    participant = models.ForeignKey(
+        "Participant",
+        on_delete=models.CASCADE,
+        related_name="account_recovery_tokens",
+        null=True,
+        blank=True,
+    )
+    family_member = models.ForeignKey(
+        "ParticipantFamilyMember",
+        on_delete=models.CASCADE,
+        related_name="account_recovery_tokens",
+        null=True,
+        blank=True,
+    )
+    expires_at = models.DateTimeField(null=True, blank=True)
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        kind="user_password",
+                        user__isnull=False,
+                        participant__isnull=True,
+                        family_member__isnull=True,
+                    )
+                    | models.Q(
+                        kind="participant_pin",
+                        user__isnull=True,
+                        participant__isnull=False,
+                        family_member__isnull=True,
+                    )
+                    | models.Q(
+                        kind="family_member_pin",
+                        user__isnull=True,
+                        participant__isnull=True,
+                        family_member__isnull=False,
+                    )
+                ),
+                name="recovery_token_owner_matches_kind",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(delivery_channel="email", recipient_email_digest__isnull=False)
+                    | models.Q(delivery_channel="push", recipient_email_digest__isnull=True)
+                ),
+                name="recovery_token_delivery_binding_matches_channel",
+            ),
+        ]
+        indexes = [models.Index(fields=["token_digest", "expires_at"], name="recovery_token_lookup_idx")]
+
+    def __str__(self) -> str:
+        return f"{self.get_kind_display()} ({self.pk})"
+
+
+class AccountRecoveryAttempt(TimeStampedModel):
+    """Persist a privacy-preserving sliding-window limit for recovery requests."""
+
+    client_key = models.CharField(max_length=64, unique=True)
+    request_timestamps = models.JSONField(default=list)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        indexes = [models.Index(fields=["updated_at"], name="recovery_attempt_updated_idx")]
+
+    def __str__(self) -> str:
+        return f"Recovery requests ({self.client_key[:8]})"
+
+
+class AccountRecoveryIdentifierAttempt(TimeStampedModel):
+    """Persist a privacy-preserving sliding-window limit for one identifier."""
+
+    identifier_key = models.CharField(max_length=64, unique=True)
+    request_timestamps = models.JSONField(default=list)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        indexes = [models.Index(fields=["updated_at"], name="recovery_ident_updated_idx")]
+
+    def __str__(self) -> str:
+        return f"Recovery identifier requests ({self.identifier_key[:8]})"
+
+
+class AccountRecoveryDeliveryRequest(TimeStampedModel):
+    """Persist a public recovery request until a worker resolves and delivers it."""
+
+    class Kind(models.TextChoices):
+        USER_PASSWORD = "user_password", "Admin-Passwort"
+        KIOSK_PIN_EMAIL = "kiosk_pin_email", "Kiosk-PIN per E-Mail"
+        KIOSK_PIN_PICKER = "kiosk_pin_picker", "Kiosk-PIN per Auswahl"
+
+    class KioskMode(models.TextChoices):
+        PRIVATE = "private", "Privater Kiosk"
+        CENTRAL = "central", "Zentraler Kiosk"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Ausstehend"
+        PROCESSING = "processing", "In Verarbeitung"
+        SENT = "sent", "Eingeplant"
+        FAILED = "failed", "Fehlgeschlagen"
+
+    identifier = models.CharField(max_length=254)
+    kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.USER_PASSWORD)
+    kiosk_mode = models.CharField(max_length=8, choices=KioskMode.choices, default=KioskMode.PRIVATE)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    processing_started_at = models.DateTimeField(null=True, blank=True)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    last_error_code = models.CharField(max_length=40, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["status", "created_at"], name="recovery_request_due_idx")]
+
+    def __str__(self) -> str:
+        return f"Recovery delivery request ({self.pk})"
 
 
 class UserProfile(TimeStampedModel):
@@ -2227,12 +2391,20 @@ class PushSubscription(TimeStampedModel):
         null=True,
         blank=True,
     )
+    family_member = models.ForeignKey(
+        "ParticipantFamilyMember",
+        on_delete=models.CASCADE,
+        related_name="push_subscriptions",
+        null=True,
+        blank=True,
+    )
     endpoint = models.URLField(max_length=2048, unique=True)  # noqa: DJ001
     p256dh = models.CharField(max_length=512)
     auth = models.CharField(max_length=512)
     device_name = models.CharField(max_length=80, default="Dieses Gerät")
     categories = models.JSONField(default=list)
     is_active = models.BooleanField(default=True)
+    identity_verified = models.BooleanField(default=True)
     last_success_at = models.DateTimeField(null=True, blank=True)
     failure_count = models.PositiveSmallIntegerField(default=0)
 
@@ -2241,8 +2413,9 @@ class PushSubscription(TimeStampedModel):
         constraints = [
             models.CheckConstraint(
                 condition=(
-                    models.Q(user__isnull=False, participant__isnull=True)
-                    | models.Q(user__isnull=True, participant__isnull=False)
+                    models.Q(user__isnull=False, participant__isnull=True, family_member__isnull=True)
+                    | models.Q(user__isnull=True, participant__isnull=False, family_member__isnull=True)
+                    | models.Q(user__isnull=True, participant__isnull=True, family_member__isnull=False)
                 ),
                 name="push_subscription_exactly_one_owner",
             )
@@ -2261,7 +2434,7 @@ class PushSubscription(TimeStampedModel):
         return super().save(*args, **kwargs)
 
     def __str__(self) -> str:
-        owner = self.user_id or self.participant_id
+        owner = self.user_id or self.participant_id or self.family_member_id
         return f"Push-Gerät {self.device_name} ({owner})"
 
 
@@ -2270,10 +2443,18 @@ class PushMessage(TimeStampedModel):
 
     class Status(models.TextChoices):
         PENDING = "pending", "Ausstehend"
+        PROCESSING = "processing", "In Verarbeitung"
         SENT = "sent", "Gesendet"
         FAILED = "failed", "Fehlgeschlagen"
 
     subscription = models.ForeignKey(PushSubscription, on_delete=models.CASCADE, related_name="messages")
+    account_recovery = models.ForeignKey(
+        AccountRecoveryToken,
+        on_delete=models.CASCADE,
+        related_name="push_messages",
+        null=True,
+        blank=True,
+    )
     category = models.CharField(max_length=40)
     title = models.CharField(max_length=120)
     body = models.CharField(max_length=300)
@@ -2281,6 +2462,7 @@ class PushMessage(TimeStampedModel):
     dedupe_key = models.CharField(max_length=180)
     scheduled_for = models.DateTimeField(default=timezone.now)
     next_attempt_at = models.DateTimeField(default=timezone.now)
+    processing_started_at = models.DateTimeField(null=True, blank=True)
     attempts = models.PositiveSmallIntegerField(default=0)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     sent_at = models.DateTimeField(null=True, blank=True)

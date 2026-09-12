@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import dj_database_url
 from django.core.exceptions import ImproperlyConfigured
@@ -21,6 +22,32 @@ if not DEBUG and not ALLOWED_HOSTS:
     raise ImproperlyConfigured("DJANGO_ALLOWED_HOSTS must be configured when DJANGO_DEBUG=0.")
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if origin.strip()]
 
+
+def _validate_account_recovery_public_origin(value: str) -> str:
+    """Return one exact public origin suitable for bearer recovery links."""
+    origin = value.strip().rstrip("/")
+    parts = urlsplit(origin)
+    if not origin or parts.scheme not in {"http", "https"} or not parts.hostname:
+        raise ImproperlyConfigured("ACCOUNT_RECOVERY_PUBLIC_ORIGIN must be an absolute HTTP(S) origin.")
+    if parts.username or parts.password or parts.path or parts.query or parts.fragment:
+        raise ImproperlyConfigured(
+            "ACCOUNT_RECOVERY_PUBLIC_ORIGIN must be an exact origin without credentials or path."
+        )
+    try:
+        port = parts.port
+    except ValueError as error:
+        raise ImproperlyConfigured("ACCOUNT_RECOVERY_PUBLIC_ORIGIN contains an invalid port.") from error
+    if port is not None and not 1 <= port <= 65535:
+        raise ImproperlyConfigured("ACCOUNT_RECOVERY_PUBLIC_ORIGIN contains an invalid port.")
+    if parts.scheme != "https" and parts.hostname != "localhost":
+        raise ImproperlyConfigured("ACCOUNT_RECOVERY_PUBLIC_ORIGIN must use HTTPS except on localhost.")
+    return origin
+
+
+ACCOUNT_RECOVERY_PUBLIC_ORIGIN = _validate_account_recovery_public_origin(
+    os.getenv("ACCOUNT_RECOVERY_PUBLIC_ORIGIN", "http://localhost" if DEBUG else "")
+)
+
 HTTPS_ENABLED = os.getenv("DJANGO_HTTPS", "0") == "1"
 SECURE_SSL_REDIRECT = HTTPS_ENABLED
 SESSION_COOKIE_SECURE = HTTPS_ENABLED
@@ -33,6 +60,11 @@ KIOSK_ACCESS_MAX_ATTEMPTS = 5
 KIOSK_ACCESS_ATTEMPT_WINDOW = 5 * 60
 KIOSK_REGISTRATION_MAX_ATTEMPTS = 10
 KIOSK_REGISTRATION_ATTEMPT_WINDOW = 15 * 60
+ACCOUNT_RECOVERY_MAX_REQUESTS = 5
+ACCOUNT_RECOVERY_MAX_REQUESTS_PER_IDENTIFIER = ACCOUNT_RECOVERY_MAX_REQUESTS
+ACCOUNT_RECOVERY_MAX_IDENTIFIER_BUCKETS = 10_000
+ACCOUNT_RECOVERY_REQUEST_WINDOW_SECONDS = 15 * 60
+ACCOUNT_RECOVERY_TIMEOUT_SECONDS = 60 * 60
 KIOSK_ACCESS_TRUSTED_PROXY_ADDRESSES = frozenset(
     address.strip() for address in os.getenv("KIOSK_ACCESS_TRUSTED_PROXY_ADDRESSES", "").split(",") if address.strip()
 )
@@ -102,6 +134,20 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "filters": {"redact_recovery_secrets": {"()": "config.gunicorn_logging.RecoverySecretFilter"}},
+    "handlers": {
+        "console": {"class": "logging.StreamHandler", "filters": ["redact_recovery_secrets"]},
+    },
+    "loggers": {
+        "django.request": {"handlers": ["console"], "propagate": False},
+        "django.server": {"handlers": ["console"], "propagate": False},
+        "django.security.csrf": {"handlers": ["console"], "propagate": False},
+    },
+}
 
 ROOT_URLCONF = "config.urls"
 

@@ -16,7 +16,7 @@ from django.utils import timezone
 
 from billing import services as billing_services
 from billing import views as billing_views
-from billing.kiosk_access import KIOSK_ACCESS_COOKIE_NAME, KIOSK_PARTICIPANT_SESSION_KEY
+from billing.kiosk_access import KIOSK_ACCESS_COOKIE_NAME
 from billing.models import (
     Camp,
     Charge,
@@ -46,6 +46,7 @@ from tests.factories import (
     PriceRuleFactory,
     SuperUserFactory,
 )
+from tests.kiosk_helpers import authenticate_kiosk_session
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -155,7 +156,7 @@ def test_quick_booking_replay_is_idempotent_across_postgresql_connections(kiosk_
     participant = ParticipantFactory(camp=camp)
     rule = PriceRuleFactory(camp=camp, kind=PriceRule.Kind.DRINK, name="Wasser")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     rendered_response = kiosk_client.get(reverse("kiosk-home"))
     token = rendered_response.context["quick_booking_token"]
@@ -415,7 +416,7 @@ def test_manual_close_committed_after_initial_read_blocks_concurrent_meal_bookin
     )
     manager = User.objects.create_superuser(username="meal-manager-booking", password="test-password")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     initial_state_read = Event()
     continue_booking = Event()
@@ -508,7 +509,7 @@ def test_manual_close_committed_after_initial_read_blocks_concurrent_meal_retrac
     )
     manager = User.objects.create_superuser(username="meal-manager-retraction", password="test-password")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     initial_state_read = Event()
     continue_retraction = Event()
@@ -577,7 +578,7 @@ def test_order_sent_after_initial_read_blocks_concurrent_meal_booking(kiosk_clie
     )
     manager = User.objects.create_superuser(username="meal-manager-order-booking", password="test-password")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     initial_state_read = Event()
     continue_booking = Event()
@@ -658,7 +659,7 @@ def test_order_sent_after_initial_read_blocks_concurrent_meal_retraction(kiosk_c
     )
     manager = User.objects.create_superuser(username="meal-manager-order-retraction", password="test-password")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     initial_state_read = Event()
     continue_retraction = Event()
@@ -721,7 +722,7 @@ def test_marking_order_sent_waits_for_booking_camp_lock(kiosk_client, monkeypatc
     )
     manager = User.objects.create_superuser(username="meal-manager-order-lock", password="test-password")
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     booking_holds_camp_lock = Event()
     release_booking = Event()

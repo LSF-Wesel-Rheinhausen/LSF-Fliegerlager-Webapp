@@ -2,7 +2,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
-from typing import Any
+from typing import Any, cast
 
 import requests
 from django.conf import settings
@@ -13,6 +13,7 @@ from django.utils import timezone
 from pywebpush import WebPushException, webpush
 
 from .models import (
+    AccountRecoveryToken,
     Camp,
     Charge,
     Expense,
@@ -22,6 +23,7 @@ from .models import (
     MealSignup,
     Participant,
     ParticipantBookingLink,
+    ParticipantFamilyMember,
     PushMessage,
     PushSubscription,
     Shift,
@@ -29,6 +31,16 @@ from .models import (
 )
 from .permissions import ADMIN_GROUP, EDITOR_GROUP, HUEBERS_GROUP
 from .push_endpoints import is_allowed_push_endpoint
+from .recovery_tokens import (
+    RECOVERY_TOKEN_PLACEHOLDER,
+    activate_account_recovery_push_token,
+    complete_account_recovery_push_delivery,
+    consume_account_recovery_token,
+    create_account_recovery_token,
+    recovery_owner_is_active,
+    retry_account_recovery_push_delivery,
+    terminally_fail_account_recovery_push_delivery,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +57,9 @@ ADMIN_CATEGORIES: dict[str, str] = {
     "meal_orders_admin": "Offene Essensbestellungen",
 }
 ALL_CATEGORIES = {**PARTICIPANT_CATEGORIES, **ADMIN_CATEGORIES}
+SECURITY_CATEGORY = "account_security"
 RETRY_DELAYS = (60, 300, 1800, 7200, 21600)
+PROCESSING_LEASE = timedelta(minutes=15)
 PUSH_DELIVERY_TIMEOUT_SECONDS = 5
 User = get_user_model()
 
@@ -86,7 +100,10 @@ def queue_participant_notification(
     """Queue one idempotent message for each eligible participant device."""
     subscriptions = [
         subscription
-        for subscription in participant.push_subscriptions.filter(is_active=True)
+        for subscription in PushSubscription.objects.filter(
+            Q(participant=participant) | Q(family_member__guardian=participant, family_member__is_active=True),
+            is_active=True,
+        )
         if category in subscription.categories
     ]
     return _queue_for_subscriptions(
@@ -136,10 +153,11 @@ def _queue_for_subscriptions(
     target_url: str,
     dedupe_key: str,
     scheduled_for: Any | None,
+    account_recovery: AccountRecoveryToken | None = None,
 ) -> int:
     if not settings.WEB_PUSH_ENABLED:
         return 0
-    if category not in ALL_CATEGORIES:
+    if category not in {*ALL_CATEGORIES, SECURITY_CATEGORY}:
         raise ValueError("Unsupported push category")
     if not target_url.startswith("/") or target_url.startswith("//"):
         raise ValueError("Push target URL must be a same-origin relative path")
@@ -156,10 +174,155 @@ def _queue_for_subscriptions(
                 "target_url": target_url[:500],
                 "scheduled_for": due_at,
                 "next_attempt_at": due_at,
+                "account_recovery": account_recovery,
             },
         )
         created += int(was_created)
     return created
+
+
+def queue_account_recovery_push(
+    owner: Any,
+    *,
+    kind: str,
+    title: str,
+    body: str,
+    target_url: str,
+    kiosk_mode: str | None = None,
+) -> int:
+    """Queue a mandatory security message for every active device owned by one account."""
+    if kind == AccountRecoveryToken.Kind.USER_PASSWORD:
+        owner_filter = {"user": owner}
+    elif kind == AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN:
+        owner_filter = {"family_member": owner}
+    else:
+        owner_filter = {"participant": owner}
+    recovery_filter = {} if kind == AccountRecoveryToken.Kind.USER_PASSWORD else {"identity_verified": True}
+    subscriptions = PushSubscription.objects.filter(is_active=True, **owner_filter, **recovery_filter)
+    created = 0
+    for subscription in subscriptions:
+        recovery = create_account_recovery_token(kind=kind, owner=owner, kiosk_mode=kiosk_mode)
+        queued = _queue_for_subscriptions(
+            [subscription],
+            category=SECURITY_CATEGORY,
+            title=title,
+            body=body,
+            target_url=target_url,
+            dedupe_key=f"account-recovery:{recovery.pk}",
+            scheduled_for=None,
+            account_recovery=recovery,
+        )
+        if not queued:
+            recovery.delete()
+        created += queued
+    return created
+
+
+def _subscription_owner_is_eligible(subscription: PushSubscription) -> bool:
+    """Recheck the persisted subscription owner without using a stale relation cache."""
+    if not subscription.is_active:
+        return False
+    if subscription.user_id is not None:
+        return User.objects.filter(pk=subscription.user_id, is_active=True).exists()
+    if subscription.participant_id is not None:
+        participant = Participant.objects.select_related("camp").filter(pk=subscription.participant_id).first()
+        return participant is not None and recovery_owner_is_active(
+            AccountRecoveryToken.Kind.PARTICIPANT_PIN, participant
+        )
+    if subscription.family_member_id is not None:
+        family_member = (
+            ParticipantFamilyMember.objects.select_related("guardian", "guardian__camp")
+            .filter(pk=subscription.family_member_id)
+            .first()
+        )
+        return family_member is not None and recovery_owner_is_active(
+            AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN, family_member
+        )
+    return False
+
+
+def _terminally_fail_locked_push(message: PushMessage, error_code: str) -> None:
+    message.status = PushMessage.Status.FAILED
+    message.last_error_code = error_code
+    message.processing_started_at = None
+    message.attempts += 1
+    message.save(update_fields=["status", "last_error_code", "processing_started_at", "attempts", "updated_at"])
+
+
+@transaction.atomic
+def _authorize_push_delivery(message_id: int) -> tuple[PushMessage, PushSubscription, str | None] | None:
+    """Authorize and activate a claimed delivery atomically before network I/O.
+
+    Recovery deliveries use the global owner/PIN/token/subscription/message lock
+    order. The transaction ends before ``webpush``.
+    """
+    message_data = (
+        PushMessage.objects.filter(pk=message_id, status=PushMessage.Status.PROCESSING)
+        .values("subscription_id", "account_recovery_id", "category", "target_url")
+        .first()
+    )
+    if message_data is None:
+        return None
+    recovery_id = cast(int | None, message_data["account_recovery_id"])
+    if recovery_id is not None:
+        subscription_snapshot = PushSubscription.objects.filter(pk=message_data["subscription_id"]).first()
+        endpoint_is_allowed = bool(
+            subscription_snapshot is not None and is_allowed_push_endpoint(subscription_snapshot.endpoint)
+        )
+        recovery_message_is_valid = bool(
+            message_data["category"] == SECURITY_CATEGORY and RECOVERY_TOKEN_PLACEHOLDER in message_data["target_url"]
+        )
+        if not endpoint_is_allowed or not recovery_message_is_valid:
+            consume_account_recovery_token(recovery_id)
+            if subscription_snapshot is not None and not endpoint_is_allowed:
+                PushSubscription.objects.filter(pk=subscription_snapshot.pk).update(
+                    is_active=False, updated_at=timezone.now()
+                )
+            message = (
+                PushMessage.objects.select_for_update()
+                .filter(pk=message_id, status=PushMessage.Status.PROCESSING)
+                .first()
+            )
+            if message is not None:
+                _terminally_fail_locked_push(message, "recovery_unavailable")
+            return None
+        raw_token = activate_account_recovery_push_token(
+            recovery_id,
+            subscription_id=message_data["subscription_id"],
+        )
+        if raw_token is None:
+            consume_account_recovery_token(recovery_id)
+        message = (
+            PushMessage.objects.select_for_update().filter(pk=message_id, status=PushMessage.Status.PROCESSING).first()
+        )
+        subscription = PushSubscription.objects.filter(pk=message_data["subscription_id"]).first()
+        if message is None or subscription is None or raw_token is None:
+            if raw_token is not None:
+                consume_account_recovery_token(recovery_id)
+            if message is not None:
+                _terminally_fail_locked_push(message, "recovery_unavailable")
+            return None
+        return message, subscription, raw_token
+    message = (
+        PushMessage.objects.select_for_update().filter(pk=message_id, status=PushMessage.Status.PROCESSING).first()
+    )
+    if message is None:
+        return None
+    subscription = PushSubscription.objects.select_for_update().filter(pk=message.subscription_id).first()
+    if subscription is None:
+        return None
+    eligible = _subscription_owner_is_eligible(subscription)
+    eligibility_error = "subscription_ineligible"
+    if not is_allowed_push_endpoint(subscription.endpoint):
+        PushSubscription.objects.filter(pk=subscription.pk).update(is_active=False, updated_at=timezone.now())
+        subscription.is_active = False
+        eligible = False
+        eligibility_error = "invalid_endpoint"
+
+    if not eligible:
+        _terminally_fail_locked_push(message, eligibility_error)
+        return None
+    return message, subscription, None
 
 
 def _administrative_users(*, include_meal_managers: bool = False) -> Any:
@@ -453,22 +616,39 @@ def generate_scheduled_notifications(*, now: Any | None = None) -> int:
 def send_due_push_messages(*, batch_size: int = 50) -> PushDeliveryResult:
     """Deliver one bounded outbox batch without exposing push capabilities in logs."""
     now = timezone.now()
+    PushMessage.objects.filter(
+        status=PushMessage.Status.PROCESSING,
+        processing_started_at__lt=now - PROCESSING_LEASE,
+    ).update(
+        status=PushMessage.Status.PENDING,
+        processing_started_at=None,
+        next_attempt_at=now,
+    )
     messages = list(
-        PushMessage.objects.select_related("subscription")
+        PushMessage.objects.select_related("subscription", "account_recovery")
         .filter(status=PushMessage.Status.PENDING, next_attempt_at__lte=now)
         .order_by("next_attempt_at", "pk")[:batch_size]
     )
     sent = retried = failed = removed = 0
     with _NoRedirectSession() as requests_session:
         for message in messages:
-            subscription = message.subscription
-            if not is_allowed_push_endpoint(subscription.endpoint):
-                PushSubscription.objects.filter(pk=subscription.pk).update(is_active=False, updated_at=now)
-                message.status = PushMessage.Status.FAILED
-                message.last_error_code = "invalid_endpoint"
-                message.save(update_fields=["status", "last_error_code", "updated_at"])
+            claimed = PushMessage.objects.filter(
+                pk=message.pk,
+                status=PushMessage.Status.PENDING,
+                next_attempt_at__lte=now,
+            ).update(status=PushMessage.Status.PROCESSING, processing_started_at=now)
+            if not claimed:
+                continue
+            authorized = _authorize_push_delivery(message.pk)
+            if authorized is None:
                 failed += 1
                 continue
+            message, subscription, raw_token = authorized
+            target_url = message.target_url
+            recovery_id = message.account_recovery_id
+            if message.account_recovery_id is not None:
+                assert raw_token is not None
+                target_url = target_url.replace(RECOVERY_TOKEN_PLACEHOLDER, raw_token)
             try:
                 response = webpush(
                     subscription_info={
@@ -479,7 +659,7 @@ def send_due_push_messages(*, batch_size: int = 50) -> PushDeliveryResult:
                         {
                             "title": message.title,
                             "body": message.body,
-                            "url": message.target_url,
+                            "url": target_url,
                             "tag": message.dedupe_key,
                         },
                         ensure_ascii=False,
@@ -488,45 +668,156 @@ def send_due_push_messages(*, batch_size: int = 50) -> PushDeliveryResult:
                     vapid_claims={"sub": settings.WEB_PUSH_VAPID_SUBJECT},
                     requests_session=requests_session,
                     timeout=PUSH_DELIVERY_TIMEOUT_SECONDS,
-                    ttl=86400,
+                    ttl=(
+                        min(86400, max(1, int(getattr(settings, "ACCOUNT_RECOVERY_TIMEOUT_SECONDS", 3600))))
+                        if message.account_recovery_id is not None
+                        else 86400
+                    ),
                 )
                 status_code = getattr(response, "status_code", None)
                 if isinstance(status_code, int) and 300 <= status_code < 400:
                     raise WebPushException("Push endpoint returned a redirect.", response=response)
             except (WebPushException, requests.RequestException) as error:
                 status_code = getattr(getattr(error, "response", None), "status_code", None)
-                if status_code in {404, 410}:
-                    subscription.delete()
-                    removed += 1
-                    continue
-                message.attempts += 1
-                message.last_error_code = (
+                error_code = (
                     "redirect"
                     if isinstance(status_code, int) and 300 <= status_code < 400
                     else str(status_code or "delivery_error")
                 )[:40]
-                if message.attempts >= len(RETRY_DELAYS):
-                    message.status = PushMessage.Status.FAILED
-                    failed += 1
-                else:
-                    message.next_attempt_at = now + timedelta(seconds=RETRY_DELAYS[message.attempts - 1])
-                    retried += 1
-                message.save(update_fields=["attempts", "last_error_code", "status", "next_attempt_at", "updated_at"])
+                is_removed_subscription = status_code in {404, 410}
+                subscription_was_revoked = (
+                    recovery_id is not None and not PushSubscription.objects.filter(pk=subscription.pk).exists()
+                )
+                ambiguous_recovery_delivery = (
+                    recovery_id is not None and status_code is None and not subscription_was_revoked
+                )
+                if recovery_id is not None and (
+                    ambiguous_recovery_delivery
+                    or is_removed_subscription
+                    or subscription_was_revoked
+                    or message.attempts + 1 >= len(RETRY_DELAYS)
+                ):
+                    subscription_removed, attempts = terminally_fail_account_recovery_push_delivery(
+                        recovery_id=recovery_id,
+                        subscription_id=subscription.pk,
+                        message_id=message.pk,
+                        error_code=error_code,
+                        remove_subscription=is_removed_subscription,
+                        preserve_capability=ambiguous_recovery_delivery,
+                    )
+                    if subscription_removed:
+                        removed += 1
+                    else:
+                        failed += 1
+                    logger.warning(
+                        "Push delivery failed",
+                        extra={
+                            "push_message_id": message.pk,
+                            "status_code": status_code,
+                            "attempt": attempts,
+                        },
+                    )
+                    continue
+                if recovery_id is not None:
+                    attempts = retry_account_recovery_push_delivery(
+                        recovery_id=recovery_id,
+                        subscription_id=subscription.pk,
+                        message_id=message.pk,
+                        error_code=error_code,
+                        next_attempt_at=now + timedelta(seconds=RETRY_DELAYS[message.attempts]),
+                    )
+                    if attempts is None:
+                        failed += 1
+                    else:
+                        retried += 1
+                    continue
+                with transaction.atomic():
+                    locked_subscription = (
+                        PushSubscription.objects.select_for_update().filter(pk=subscription.pk).first()
+                    )
+                    locked_message = PushMessage.objects.select_for_update().filter(pk=message.pk).first()
+                    if locked_message is None:
+                        failed += 1
+                        continue
+                    if is_removed_subscription:
+                        if locked_message.account_recovery_id is not None:
+                            consume_account_recovery_token(locked_message.account_recovery_id)
+                        if locked_subscription is not None:
+                            locked_subscription.delete()
+                        removed += 1
+                        continue
+                    locked_message.attempts += 1
+                    locked_message.processing_started_at = None
+                    locked_message.last_error_code = error_code
+                    if locked_message.attempts >= len(RETRY_DELAYS):
+                        locked_message.status = PushMessage.Status.FAILED
+                        if locked_message.account_recovery_id is not None:
+                            consume_account_recovery_token(locked_message.account_recovery_id)
+                        failed += 1
+                    else:
+                        locked_message.status = PushMessage.Status.PENDING
+                        locked_message.next_attempt_at = now + timedelta(
+                            seconds=RETRY_DELAYS[locked_message.attempts - 1]
+                        )
+                        retried += 1
+                    locked_message.save(
+                        update_fields=[
+                            "attempts",
+                            "last_error_code",
+                            "status",
+                            "processing_started_at",
+                            "next_attempt_at",
+                            "updated_at",
+                        ]
+                    )
                 logger.warning(
                     "Push delivery failed",
-                    extra={"push_message_id": message.pk, "status_code": status_code, "attempt": message.attempts},
+                    extra={
+                        "push_message_id": locked_message.pk,
+                        "status_code": status_code,
+                        "attempt": locked_message.attempts,
+                    },
                 )
                 continue
 
+            if recovery_id is not None:
+                if complete_account_recovery_push_delivery(
+                    recovery_id=recovery_id,
+                    subscription_id=subscription.pk,
+                    message_id=message.pk,
+                    sent_at=now,
+                ):
+                    sent += 1
+                else:
+                    failed += 1
+                continue
             with transaction.atomic():
-                message.status = PushMessage.Status.SENT
-                message.sent_at = now
-                message.attempts += 1
-                message.last_error_code = ""
-                message.save(update_fields=["status", "sent_at", "attempts", "last_error_code", "updated_at"])
-                subscription.last_success_at = now
-                subscription.failure_count = 0
-                subscription.save(update_fields=["last_success_at", "failure_count", "updated_at"])
+                locked_subscription = PushSubscription.objects.select_for_update().filter(pk=subscription.pk).first()
+                locked_message = PushMessage.objects.select_for_update().filter(pk=message.pk).first()
+                if locked_message is None:
+                    failed += 1
+                    continue
+                if locked_subscription is None:
+                    failed += 1
+                    continue
+                locked_message.status = PushMessage.Status.SENT
+                locked_message.processing_started_at = None
+                locked_message.sent_at = now
+                locked_message.attempts += 1
+                locked_message.last_error_code = ""
+                locked_message.save(
+                    update_fields=[
+                        "status",
+                        "processing_started_at",
+                        "sent_at",
+                        "attempts",
+                        "last_error_code",
+                        "updated_at",
+                    ]
+                )
+                locked_subscription.last_success_at = now
+                locked_subscription.failure_count = 0
+                locked_subscription.save(update_fields=["last_success_at", "failure_count", "updated_at"])
             sent += 1
     return PushDeliveryResult(sent=sent, retried=retried, failed=failed, removed_subscriptions=removed)
 
@@ -555,7 +846,7 @@ def queue_information_push_batch(
         return 0
 
     subscriptions = PushSubscription.objects.filter(
-        participant_id__in=p_ids,
+        Q(participant_id__in=p_ids) | Q(family_member__guardian_id__in=p_ids, family_member__is_active=True),
         is_active=True,
     )
 

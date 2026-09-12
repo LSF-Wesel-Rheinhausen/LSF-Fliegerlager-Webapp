@@ -33,6 +33,7 @@ PUBLIC_KIOSK_ROUTES = frozenset(
         "pwa-worker-central",
         "kiosk-access",
         "central-kiosk-access",
+        "central-kiosk-pin-recovery-confirm",
     }
 )
 KIOSK_ACCESS_PROMPT_ROUTES = frozenset({"kiosk-access", "central-kiosk-access"})

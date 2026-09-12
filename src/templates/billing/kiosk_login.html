@@ -34,6 +34,7 @@
           <div class="form-actions">
             <a class="button button-secondary" href="{% url 'user-guide' %}">Hilfe</a>
             <a class="button button-secondary" href="{% url 'login' %}">Admin-Interface</a>
+            <a class="button button-secondary" href="{% if kiosk_mode == 'central' %}{% url 'central-kiosk-pin-recovery-request' %}{% else %}{% url 'kiosk-pin-recovery-request' %}{% endif %}">PIN vergessen?</a>
             <button type="submit" class="button">Anmelden</button>
           </div>
         </form>

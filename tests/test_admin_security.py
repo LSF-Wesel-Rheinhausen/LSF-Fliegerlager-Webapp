@@ -7,7 +7,13 @@ from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
-from billing.models import Expense, ParticipantFamilyMember, ParticipantFamilyMemberPin, ParticipantPin
+from billing.models import (
+    Expense,
+    ParticipantFamilyMember,
+    ParticipantFamilyMemberPin,
+    ParticipantPin,
+    PushSubscription,
+)
 from billing.roles import bootstrap_default_roles
 from tests.factories import (
     CampFactory,
@@ -280,3 +286,79 @@ def test_superuser_user_admin_retains_privileged_fields(client):
     assert 'name="is_staff"' in content
     assert 'name="groups"' in content
     assert 'name="user_permissions"' in content
+
+
+@pytest.mark.django_db
+def test_admin_password_change_revokes_only_the_changed_users_recovery_devices(client):
+    administrator = SuperUserFactory(username="password-administrator")
+    managed_user = UserFactory(username="managed-user", password="old-password")
+    other_user = UserFactory(username="other-user")
+    managed_subscription = PushSubscription.objects.create(
+        user=managed_user,
+        endpoint="https://push.example.test/managed-password-change",
+        p256dh="key",
+        auth="auth",
+    )
+    other_subscription = PushSubscription.objects.create(
+        user=other_user,
+        endpoint="https://push.example.test/other-password-change",
+        p256dh="key",
+        auth="auth",
+    )
+    client.force_login(administrator)
+
+    response = client.post(
+        reverse("admin:auth_user_password_change", args=[managed_user.pk]),
+        {"password1": "Managed-2026-Password", "password2": "Managed-2026-Password", "usable_password": "true"},
+    )
+
+    assert response.status_code == 302
+    managed_subscription.refresh_from_db()
+    other_subscription.refresh_from_db()
+    assert managed_subscription.is_active is False
+    assert other_subscription.is_active is True
+
+
+@pytest.mark.django_db
+def test_admin_self_password_change_revokes_own_recovery_devices(client):
+    administrator = SuperUserFactory(username="self-password-administrator", password="old-password")
+    own_subscription = PushSubscription.objects.create(
+        user=administrator,
+        endpoint="https://push.example.test/self-password-change",
+        p256dh="key",
+        auth="auth",
+    )
+    client.force_login(administrator)
+
+    response = client.post(
+        reverse("admin:password_change"),
+        {"old_password": "old-password", "new_password1": "Self-2026-Password", "new_password2": "Self-2026-Password"},
+    )
+
+    assert response.status_code == 302
+    own_subscription.refresh_from_db()
+    assert own_subscription.is_active is False
+
+
+@pytest.mark.django_db
+def test_admin_initial_password_provisioning_keeps_existing_recovery_device(client):
+    administrator = SuperUserFactory(username="initial-password-administrator")
+    managed_user = UserFactory(username="initial-password-user")
+    managed_user.set_unusable_password()
+    managed_user.save(update_fields=["password"])
+    subscription = PushSubscription.objects.create(
+        user=managed_user,
+        endpoint="https://push.example.test/initial-password-provisioning",
+        p256dh="key",
+        auth="auth",
+    )
+    client.force_login(administrator)
+
+    response = client.post(
+        reverse("admin:auth_user_password_change", args=[managed_user.pk]),
+        {"password1": "Aero-97531-Password", "password2": "Aero-97531-Password"},
+    )
+
+    assert response.status_code == 302
+    subscription.refresh_from_db()
+    assert subscription.is_active is True

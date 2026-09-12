@@ -3,6 +3,7 @@
 from config.gunicorn_parser_guard import configure
 
 http_parser = "python"
+logger_class = "config.gunicorn_logging.RecoverySafeLogger"
 
 
 def on_starting(server: object) -> None:

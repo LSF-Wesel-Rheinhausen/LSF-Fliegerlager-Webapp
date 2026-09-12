@@ -147,8 +147,28 @@ def test_successful_login_does_not_increment_failures(client):
         )
         assert response.status_code == 302
 
-    # Should not have recorded any failure attempts
+    # Successful logins must not leave durable rate-limit rows behind.
+    assert not any(LoginAttempt.objects.values_list("failure_timestamps", flat=True))
     assert LoginAttempt.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_clear_login_rate_limit_only_clears_existing_rows(client):
+    from billing.kiosk_security import clear_login_rate_limit, consume_login_failure
+    from billing.models import LoginAttempt
+
+    UserFactory(username="clearuser", password="valid-password")
+    request = client.request().wsgi_request
+    request.META["REMOTE_ADDR"] = "192.0.2.10"
+
+    clear_login_rate_limit("clearuser", request=request)
+    assert LoginAttempt.objects.count() == 0
+
+    consume_login_failure(request, username="clearuser")
+    assert LoginAttempt.objects.count() == 2
+    clear_login_rate_limit("clearuser", request=request)
+    assert LoginAttempt.objects.count() == 2
+    assert not any(LoginAttempt.objects.values_list("failure_timestamps", flat=True))
 
 
 @pytest.mark.django_db
@@ -162,8 +182,8 @@ def test_empty_form_fields_do_not_increment_failures(client):
         response = client.post("/login/", {"username": "", "password": ""})
         assert response.status_code == 200
 
-    # No failure attempts recorded since no authentication was attempted
-    assert LoginAttempt.objects.count() == 0
+    # No failure timestamps are recorded; an empty row may serialize later clears.
+    assert not any(LoginAttempt.objects.values_list("failure_timestamps", flat=True))
 
 
 @pytest.mark.django_db
@@ -233,6 +253,15 @@ def test_login_rate_limiting_trusted_proxy_header(client, settings):
     )
     assert response.status_code == 200
     assert "Zu viele Fehlversuche" in response.content.decode("utf-8")
+
+
+@pytest.mark.django_db
+def test_login_attempt_locks_are_created_and_returned_in_sorted_unique_order():
+    from billing.kiosk_security import _locked_login_attempts
+
+    attempts = _locked_login_attempts(["user:z", "ip:a", "user:z"])
+
+    assert [attempt.client_key for attempt in attempts] == ["ip:a", "user:z"]
 
 
 @pytest.mark.django_db

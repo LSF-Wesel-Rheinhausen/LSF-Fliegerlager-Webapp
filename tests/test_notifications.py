@@ -7,14 +7,19 @@ from unittest.mock import patch
 
 import pytest
 import requests
+from django.contrib.auth.hashers import make_password
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.db.models import QuerySet
 from django.urls import reverse
 from django.utils import timezone
 from pywebpush import WebPushException
 from requests import Response
 
+from billing.kiosk_access import KIOSK_FAMILY_MEMBER_SESSION_KEY, KIOSK_MODE_SESSION_KEY, KIOSK_PARTICIPANT_SESSION_KEY
+from billing.kiosk_security import KIOSK_PIN_FINGERPRINT_SESSION_KEY, kiosk_pin_fingerprint
 from billing.models import (
+    AccountRecoveryToken,
     Charge,
     Expense,
     MealBookingOverride,
@@ -23,23 +28,407 @@ from billing.models import (
     Participant,
     ParticipantBookingLink,
     ParticipantFamilyMember,
+    ParticipantFamilyMemberPin,
+    ParticipantPin,
     PushMessage,
     PushSubscription,
     Shift,
     ShiftAssignment,
 )
 from billing.notifications import (
+    PushDeliveryResult,
     generate_scheduled_notifications,
     notify_booking_link,
     notify_expense_status,
     notify_expense_submitted,
     notify_linked_booking,
+    queue_account_recovery_push,
+    queue_information_push_batch,
     queue_participant_notification,
     send_due_push_messages,
 )
+from billing.recovery_tokens import (
+    create_account_recovery_token,
+    find_valid_account_recovery,
+    lock_push_subscription_registration,
+)
 from billing.services import approve_shared_expense
-from billing.views import KIOSK_MODE_SESSION_KEY, KIOSK_PARTICIPANT_SESSION_KEY
-from tests.factories import CampFactory, ParticipantFactory, UserFactory
+from tests.factories import CampFactory, ParticipantFactory, ParticipantFamilyMemberFactory, UserFactory
+
+
+@pytest.mark.django_db
+def test_deleting_recovery_token_cascades_queued_push_message():
+    user = UserFactory()
+    token = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    subscription = PushSubscription.objects.create(
+        user=user,
+        endpoint="https://push.example.test/recovery",
+        p256dh="key",
+        auth="secret",
+        categories=["security"],
+    )
+    message = PushMessage.objects.create(
+        subscription=subscription,
+        account_recovery=token,
+        category="security",
+        title="Passwort zurücksetzen",
+        body="Link",
+        target_url="/account-recovery/PLACEHOLDER/",
+        dedupe_key="account-recovery:1",
+    )
+
+    token.delete()
+
+    assert not PushMessage.objects.filter(pk=message.pk).exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("timeout_seconds", "expected_ttl"),
+    [(0, 1), (60, 60), (172800, 86400)],
+)
+@patch("billing.notifications.webpush")
+def test_recovery_push_ttl_does_not_exceed_configured_recovery_timeout(
+    webpush, settings, timeout_seconds, expected_ttl
+):
+    settings.WEB_PUSH_ENABLED = True
+    settings.ACCOUNT_RECOVERY_TIMEOUT_SECONDS = timeout_seconds
+    user = UserFactory()
+    subscription = PushSubscription.objects.create(
+        user=user,
+        endpoint="https://push.example.test/recovery-ttl",
+        p256dh="key",
+        auth="secret",
+        categories=[],
+    )
+
+    assert (
+        queue_account_recovery_push(
+            user,
+            kind=AccountRecoveryToken.Kind.USER_PASSWORD,
+            title="Passwort zurücksetzen",
+            body="Link",
+            target_url="/account-recovery/ACCOUNT_RECOVERY_TOKEN/",
+        )
+        == 1
+    )
+    send_due_push_messages()
+
+    assert webpush.call_args.kwargs["ttl"] == expected_ttl
+    assert PushMessage.objects.get(subscription=subscription).status == PushMessage.Status.SENT
+
+
+@pytest.mark.django_db
+@patch("billing.notifications.webpush")
+def test_push_worker_claims_recovery_message_before_token_activation(webpush):
+    user = UserFactory()
+    token = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    subscription = PushSubscription.objects.create(
+        user=user,
+        endpoint="https://push.example.test/recovery",
+        p256dh="key",
+        auth="secret",
+        categories=["account_security"],
+    )
+    message = PushMessage.objects.create(
+        subscription=subscription,
+        account_recovery=token,
+        category="account_security",
+        title="Passwort zurücksetzen",
+        body="Link",
+        target_url="/account-recovery/ACCOUNT_RECOVERY_TOKEN/",
+        dedupe_key="account-recovery:1",
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+    nested_results = []
+
+    def deliver_once(**_kwargs):
+        message.refresh_from_db()
+        assert message.status == PushMessage.Status.PROCESSING
+        nested_results.append(send_due_push_messages())
+        return None
+
+    webpush.side_effect = deliver_once
+
+    result = send_due_push_messages()
+
+    assert result.sent == 1
+    assert nested_results == [PushDeliveryResult()]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("raises", [False, True])
+@patch("billing.notifications.webpush")
+def test_push_worker_consumes_activated_recovery_when_subscription_is_deleted_during_delivery(webpush, raises):
+    user = UserFactory()
+    token = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    subscription = PushSubscription.objects.create(
+        user=user,
+        endpoint="https://push.example.test/deleted-during-delivery",
+        p256dh="key",
+        auth="secret",
+        categories=["account_security"],
+    )
+    PushMessage.objects.create(
+        subscription=subscription,
+        account_recovery=token,
+        category="account_security",
+        title="Passwort zurücksetzen",
+        body="Link",
+        target_url="/account-recovery/ACCOUNT_RECOVERY_TOKEN/",
+        dedupe_key="account-recovery:deleted-during-delivery",
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+
+    def delete_subscription(**_kwargs):
+        subscription.delete()
+        if raises:
+            raise WebPushException("delivery failed")
+        return None
+
+    webpush.side_effect = delete_subscription
+
+    result = send_due_push_messages()
+
+    token.refresh_from_db()
+    assert result == PushDeliveryResult(failed=1)
+    assert token.used_at is not None
+    assert token.token_digest is None
+    assert token.expires_at is None
+
+
+@pytest.mark.django_db
+@patch("billing.notifications.webpush")
+def test_push_worker_terminally_fails_recovery_when_participant_becomes_ineligible(webpush):
+    participant = ParticipantFactory()
+    subscription = PushSubscription.objects.create(
+        participant=participant,
+        identity_verified=True,
+        endpoint="https://push.example.test/recovery-ineligible",
+        p256dh="key",
+        auth="secret",
+        categories=["account_security"],
+    )
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.PARTICIPANT_PIN, owner=participant)
+    message = PushMessage.objects.create(
+        subscription=subscription,
+        account_recovery=recovery,
+        category="account_security",
+        title="PIN zurücksetzen",
+        body="Link",
+        target_url="/account-recovery/ACCOUNT_RECOVERY_TOKEN/",
+        dedupe_key="account-recovery:ineligible",
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+    participant.archived_at = timezone.now()
+    participant.save(update_fields=["archived_at"])
+
+    result = send_due_push_messages()
+
+    message.refresh_from_db()
+    recovery.refresh_from_db()
+    assert result.failed == 1
+    assert message.status == PushMessage.Status.FAILED
+    assert message.last_error_code == "recovery_unavailable"
+    assert recovery.token_digest is None
+    assert recovery.expires_at is None
+    assert recovery.used_at is not None
+    assert webpush.call_count == 0
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("authorization_change", ["inactive", "unverified", "reassigned"])
+@patch("billing.notifications.webpush")
+def test_push_worker_consumes_recovery_when_subscription_authorization_changes(webpush, authorization_change):
+    participant = ParticipantFactory()
+    other_participant = ParticipantFactory(camp=participant.camp)
+    subscription = PushSubscription.objects.create(
+        participant=participant,
+        identity_verified=True,
+        endpoint=f"https://push.example.test/recovery-{authorization_change}",
+        p256dh="key",
+        auth="secret",
+        categories=["account_security"],
+    )
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.PARTICIPANT_PIN, owner=participant)
+    message = PushMessage.objects.create(
+        subscription=subscription,
+        account_recovery=recovery,
+        category="account_security",
+        title="PIN zuruecksetzen",
+        body="Link",
+        target_url="/account-recovery/ACCOUNT_RECOVERY_TOKEN/",
+        dedupe_key=f"account-recovery:{authorization_change}",
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+    if authorization_change == "inactive":
+        PushSubscription.objects.filter(pk=subscription.pk).update(is_active=False)
+    elif authorization_change == "unverified":
+        PushSubscription.objects.filter(pk=subscription.pk).update(identity_verified=False)
+    else:
+        PushSubscription.objects.filter(pk=subscription.pk).update(participant=other_participant)
+
+    result = send_due_push_messages()
+
+    message.refresh_from_db()
+    recovery.refresh_from_db()
+    assert result == PushDeliveryResult(failed=1)
+    assert message.status == PushMessage.Status.FAILED
+    assert message.last_error_code == "recovery_unavailable"
+    assert message.attempts == 1
+    assert recovery.used_at is not None
+    assert recovery.token_digest is None
+    assert recovery.expires_at is None
+    webpush.assert_not_called()
+
+
+@pytest.mark.django_db
+@patch("billing.notifications.webpush")
+def test_push_worker_consumes_recovery_when_token_kind_does_not_match_subscription(webpush):
+    participant = ParticipantFactory()
+    user = UserFactory()
+    subscription = PushSubscription.objects.create(
+        participant=participant,
+        identity_verified=True,
+        endpoint="https://push.example.test/recovery-wrong-kind",
+        p256dh="key",
+        auth="secret",
+        categories=["account_security"],
+    )
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    message = PushMessage.objects.create(
+        subscription=subscription,
+        account_recovery=recovery,
+        category="account_security",
+        title="Passwort zuruecksetzen",
+        body="Link",
+        target_url="/account-recovery/ACCOUNT_RECOVERY_TOKEN/",
+        dedupe_key="account-recovery:wrong-kind",
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+
+    result = send_due_push_messages()
+
+    message.refresh_from_db()
+    recovery.refresh_from_db()
+    assert result == PushDeliveryResult(failed=1)
+    assert message.status == PushMessage.Status.FAILED
+    assert message.last_error_code == "recovery_unavailable"
+    assert recovery.used_at is not None
+    webpush.assert_not_called()
+
+
+@pytest.mark.django_db
+@patch("billing.notifications.webpush")
+def test_push_worker_terminally_fails_ordinary_message_when_participant_becomes_ineligible(webpush):
+    participant = ParticipantFactory()
+    subscription = PushSubscription.objects.create(
+        participant=participant,
+        identity_verified=True,
+        endpoint="https://push.example.test/ordinary-ineligible",
+        p256dh="key",
+        auth="secret",
+        categories=["shifts"],
+    )
+    message = PushMessage.objects.create(
+        subscription=subscription,
+        category="shifts",
+        title="Hinweis",
+        body="Text",
+        target_url="/kiosk/",
+        dedupe_key="ordinary:ineligible",
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+    participant.archived_at = timezone.now()
+    participant.save(update_fields=["archived_at"])
+
+    result = send_due_push_messages()
+
+    message.refresh_from_db()
+    assert result.failed == 1
+    assert message.status == PushMessage.Status.FAILED
+    assert message.last_error_code == "subscription_ineligible"
+    assert webpush.call_count == 0
+
+
+@pytest.mark.django_db
+@patch("billing.notifications.webpush")
+def test_push_worker_requeues_stale_processing_claim(webpush):
+    subscription = PushSubscription.objects.create(
+        user=UserFactory(),
+        endpoint="https://push.example.test/stale",
+        p256dh="key",
+        auth="secret",
+        categories=["security"],
+    )
+    message = PushMessage.objects.create(
+        subscription=subscription,
+        category="security",
+        title="Hinweis",
+        body="Text",
+        target_url="/",
+        dedupe_key="stale-claim:1",
+        status=PushMessage.Status.PROCESSING,
+        processing_started_at=timezone.now() - timedelta(minutes=16),
+    )
+
+    result = send_due_push_messages()
+
+    assert result.sent == 1
+    message.refresh_from_db()
+    assert message.status == PushMessage.Status.SENT
+    assert message.processing_started_at is None
+    assert webpush.call_count == 1
+
+
+@pytest.mark.django_db
+@patch("billing.notifications.webpush")
+def test_push_reclaim_after_provider_acceptance_reuses_original_capability(webpush, monkeypatch):
+    user = UserFactory()
+    subscription = PushSubscription.objects.create(
+        user=user,
+        endpoint="https://push.example.test/stale-recovery",
+        p256dh="key",
+        auth="secret",
+        categories=["account_security"],
+    )
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    message = PushMessage.objects.create(
+        subscription=subscription,
+        account_recovery=recovery,
+        category="account_security",
+        title="Reset",
+        body="Link",
+        target_url="/account/recovery/ACCOUNT_RECOVERY_TOKEN/",
+        dedupe_key="account-recovery:stale",
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+    payloads = []
+    webpush.side_effect = lambda **kwargs: payloads.append(kwargs["data"]) or None
+    original_save = PushMessage.save
+    crashed = False
+
+    def crash_after_sent(self, *args, **kwargs):
+        nonlocal crashed
+        if self.pk == message.pk and self.status == PushMessage.Status.SENT and not crashed:
+            crashed = True
+            raise RuntimeError("worker crashed after provider acceptance")
+        return original_save(self, *args, **kwargs)
+
+    monkeypatch.setattr(PushMessage, "save", crash_after_sent)
+    with pytest.raises(RuntimeError, match="provider acceptance"):
+        send_due_push_messages()
+    recovery.refresh_from_db()
+    first_expiry = recovery.expires_at
+    first_payload = payloads[-1]
+    message.refresh_from_db()
+    message.processing_started_at = timezone.now() - timedelta(minutes=16)
+    message.save(update_fields=["processing_started_at"])
+
+    assert send_due_push_messages().sent == 1
+    recovery.refresh_from_db()
+    assert recovery.expires_at == first_expiry
+    assert payloads[-1] == first_payload
 
 
 @pytest.fixture(autouse=True)
@@ -105,6 +494,8 @@ def test_admin_can_create_and_update_own_push_subscription(client):
         "categories": ["expenses_admin"],
         "last_success_at": None,
         "endpoint_fingerprint": hashlib.sha256(payload["endpoint"].encode()).hexdigest(),
+        "is_active": True,
+        "identity_verified": True,
     }
 
     payload = subscription_payload()
@@ -123,11 +514,100 @@ def test_admin_can_create_and_update_own_push_subscription(client):
 
 
 @pytest.mark.django_db
+def test_subscription_registration_locks_owner_tokens_then_subscription(client, monkeypatch):
+    user = UserFactory()
+    client.force_login(user)
+    create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    locked_models = []
+    fetch_all = QuerySet._fetch_all
+
+    def record_locks(queryset):
+        if queryset._result_cache is None and queryset.query.select_for_update:
+            locked_models.append(queryset.model.__name__)
+        fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", record_locks)
+    response = client.post(
+        reverse("notification-subscribe"),
+        data=json.dumps({**subscription_payload(), "categories": ["expenses_admin"]}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 201
+    assert locked_models.index("User") < locked_models.index("AccountRecoveryToken")
+    assert locked_models.index("AccountRecoveryToken") < locked_models.index("PushSubscription")
+
+
+@pytest.mark.django_db
+def test_admin_subscription_registration_rejects_password_rotation_after_session_check(client, monkeypatch):
+    user = UserFactory()
+    client.force_login(user)
+    original_lock = lock_push_subscription_registration
+
+    def rotate_then_lock(**kwargs):
+        user.__class__.objects.filter(pk=user.pk).update(password=make_password("replacement-password"))
+        return original_lock(**kwargs)
+
+    monkeypatch.setattr("billing.notification_views.lock_push_subscription_registration", rotate_then_lock)
+
+    response = client.post(
+        reverse("notification-subscribe"),
+        data=json.dumps({**subscription_payload(), "categories": ["expenses_admin"]}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 403
+    assert not PushSubscription.objects.exists()
+    assert "_auth_user_id" not in client.session
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("family_member", [False, True], ids=["participant", "family-member"])
+def test_kiosk_subscription_registration_rejects_pin_rotation_after_session_check(
+    kiosk_client, monkeypatch, family_member
+):
+    participant = ParticipantFactory()
+    identity = (
+        ParticipantFamilyMemberFactory(guardian=participant, role=ParticipantFamilyMember.Role.COMPANION)
+        if family_member
+        else participant
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_MODE_SESSION_KEY] = "private"
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(identity.pin.pin_hash)
+    if family_member:
+        session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = identity.pk
+    session.save()
+    original_lock = lock_push_subscription_registration
+
+    def rotate_then_lock(**kwargs):
+        pin_model = ParticipantFamilyMemberPin if family_member else ParticipantPin
+        owner_filter = {"family_member": identity} if family_member else {"participant": identity}
+        pin_model.objects.filter(**owner_filter).update(pin_hash=make_password("8642"))
+        return original_lock(**kwargs)
+
+    monkeypatch.setattr("billing.notification_views.lock_push_subscription_registration", rotate_then_lock)
+
+    response = kiosk_client.post(
+        reverse("kiosk-notification-subscribe"),
+        data=json.dumps(subscription_payload()),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 403
+    assert not PushSubscription.objects.exists()
+    assert KIOSK_PARTICIPANT_SESSION_KEY not in kiosk_client.session
+    assert KIOSK_FAMILY_MEMBER_SESSION_KEY not in kiosk_client.session
+
+
+@pytest.mark.django_db
 def test_private_participant_can_subscribe_but_central_endpoint_does_not_exist(kiosk_client):
     participant = ParticipantFactory()
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session[KIOSK_MODE_SESSION_KEY] = "private"
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(participant.pin.pin_hash)
     session.save()
 
     response = kiosk_client.post(
@@ -139,6 +619,450 @@ def test_private_participant_can_subscribe_but_central_endpoint_does_not_exist(k
     assert response.status_code == 201
     assert PushSubscription.objects.filter(participant=participant, user__isnull=True).exists()
     assert kiosk_client.get("/central/kiosk/notifications/").status_code == 404
+
+
+@pytest.mark.django_db
+def test_legacy_participant_device_is_active_but_not_eligible_for_recovery(kiosk_client):
+    participant = ParticipantFactory()
+    subscription = PushSubscription.objects.create(
+        participant=participant,
+        endpoint="https://push.example.test/legacy-recovery",
+        p256dh="key",
+        auth="auth",
+        categories=["shifts"],
+        identity_verified=False,
+    )
+    assert subscription.is_active is True
+    assert subscription.identity_verified is False
+    assert (
+        queue_account_recovery_push(
+            participant,
+            kind=AccountRecoveryToken.Kind.PARTICIPANT_PIN,
+            title="PIN zurücksetzen",
+            body="body",
+            target_url="/account-recovery/PLACEHOLDER/",
+        )
+        == 0
+    )
+
+
+@pytest.mark.django_db
+def test_legacy_unverified_participant_device_remains_eligible_for_normal_notifications():
+    participant = ParticipantFactory()
+    PushSubscription.objects.create(
+        participant=participant,
+        endpoint="https://push.example.test/legacy-normal",
+        p256dh="key",
+        auth="auth",
+        categories=["shifts"],
+        identity_verified=False,
+    )
+
+    assert (
+        queue_participant_notification(
+            participant,
+            category="shifts",
+            title="Schicht",
+            body="Neue Schicht",
+            target_url="/kiosk/",
+            dedupe_key="normal-legacy-device",
+        )
+        == 1
+    )
+    assert PushMessage.objects.filter(category="shifts").count() == 1
+
+
+@pytest.mark.django_db
+def test_legacy_unverified_participant_device_is_shown_active_with_recovery_limitation(kiosk_client):
+    participant = ParticipantFactory()
+    PushSubscription.objects.create(
+        participant=participant,
+        endpoint="https://push.example.test/legacy-settings",
+        p256dh="key",
+        auth="auth",
+        categories=["shifts"],
+        identity_verified=False,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_MODE_SESSION_KEY] = "private"
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(participant.pin.pin_hash)
+    session.save()
+
+    response = kiosk_client.get(reverse("kiosk-notification-settings"))
+
+    assert response.status_code == 200
+    assert "Aktiv – Kontowiederherstellung erst nach erneuter Registrierung" in response.content.decode()
+    assert "Inaktiv – bitte erneut registrieren" not in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_guardian_resubscribe_verifies_matching_legacy_device(kiosk_client):
+    participant = ParticipantFactory()
+    subscription = PushSubscription.objects.create(
+        participant=participant,
+        endpoint="https://push.example.test/legacy-claim",
+        p256dh="public-browser-key",
+        auth="auth-secret",
+        categories=["shifts"],
+        identity_verified=False,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_MODE_SESSION_KEY] = "private"
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(participant.pin.pin_hash)
+    session.save()
+    response = kiosk_client.post(
+        reverse("kiosk-notification-subscribe"),
+        data=json.dumps(subscription_payload(subscription.endpoint)),
+        content_type="application/json",
+    )
+    assert response.status_code == 200
+    subscription.refresh_from_db()
+    assert subscription.participant_id == participant.pk
+    assert subscription.identity_verified is True
+
+
+@pytest.mark.django_db
+def test_companion_can_claim_matching_unverified_legacy_device(kiosk_client):
+    participant = ParticipantFactory()
+    companion = ParticipantFamilyMemberFactory(guardian=participant, role=ParticipantFamilyMember.Role.COMPANION)
+    subscription = PushSubscription.objects.create(
+        participant=participant,
+        endpoint="https://push.example.test/legacy-companion-claim",
+        p256dh="public-browser-key",
+        auth="auth-secret",
+        categories=["shifts"],
+        identity_verified=False,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    session[KIOSK_MODE_SESSION_KEY] = "private"
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(companion.pin.pin_hash)
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-notification-subscribe"),
+        data=json.dumps(subscription_payload(subscription.endpoint)),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    subscription.refresh_from_db()
+    assert subscription.participant_id is None
+    assert subscription.family_member_id == companion.pk
+    assert subscription.identity_verified is True
+
+
+@pytest.mark.django_db
+def test_companion_legacy_claim_rejects_mismatched_keys(kiosk_client):
+    participant = ParticipantFactory()
+    companion = ParticipantFamilyMemberFactory(guardian=participant, role=ParticipantFamilyMember.Role.COMPANION)
+    subscription = PushSubscription.objects.create(
+        participant=participant,
+        endpoint="https://push.example.test/legacy-companion-claim",
+        p256dh="stored-key",
+        auth="stored-auth",
+        categories=["shifts"],
+        identity_verified=False,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    session[KIOSK_MODE_SESSION_KEY] = "private"
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(companion.pin.pin_hash)
+    session.save()
+    payload = subscription_payload(subscription.endpoint)
+    response = kiosk_client.post(
+        reverse("kiosk-notification-subscribe"), data=json.dumps(payload), content_type="application/json"
+    )
+    assert response.status_code == 409
+    subscription.refresh_from_db()
+    assert subscription.participant_id == participant.pk
+    assert subscription.family_member_id is None
+
+
+@pytest.mark.django_db
+def test_companion_subscription_is_owned_by_companion_and_recovery_stays_scoped(kiosk_client, settings):
+    settings.WEB_PUSH_ENABLED = True
+    participant = ParticipantFactory(email="guardian@example.test")
+    companion = ParticipantFamilyMemberFactory(
+        guardian=participant,
+        email="companion@example.test",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    companion.pin.set_pin("2468")
+    companion.pin.save()
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    session[KIOSK_MODE_SESSION_KEY] = "private"
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(companion.pin.pin_hash)
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-notification-subscribe"),
+        data=json.dumps(subscription_payload("https://push.example.test/companion")),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 201
+    subscription = PushSubscription.objects.get()
+    assert subscription.family_member_id == companion.pk
+    assert subscription.participant_id is None
+    response = kiosk_client.post(
+        reverse("kiosk-notification-subscribe"),
+        data=json.dumps(subscription_payload("https://push.example.test/companion")),
+        content_type="application/json",
+    )
+    assert response.status_code == 200
+    assert PushSubscription.objects.get(pk=subscription.pk).family_member_id == companion.pk
+    assert (
+        queue_account_recovery_push(
+            companion,
+            kind=AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN,
+            title="PIN zurücksetzen",
+            body="body",
+            target_url="/account-recovery/PLACEHOLDER/",
+        )
+        == 1
+    )
+    assert PushMessage.objects.filter(subscription=subscription).exists()
+
+
+@pytest.mark.django_db
+def test_companion_cannot_reassign_participant_device_on_pk_collision(kiosk_client, settings):
+    settings.WEB_PUSH_ENABLED = True
+    participant = ParticipantFactory()
+    companion = ParticipantFamilyMemberFactory(
+        guardian=participant,
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    assert participant.pk == companion.pk
+    subscription = PushSubscription.objects.create(
+        participant=participant,
+        endpoint="https://push.example.test/pk-collision",
+        p256dh="key",
+        auth="auth",
+        categories=["shifts"],
+        identity_verified=True,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = companion.pk
+    session[KIOSK_MODE_SESSION_KEY] = "private"
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(companion.pin.pin_hash)
+    session.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-notification-subscribe"),
+        data=json.dumps(subscription_payload("https://push.example.test/pk-collision")),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 409
+    subscription.refresh_from_db()
+    assert subscription.participant_id == participant.pk
+    assert subscription.family_member_id is None
+
+
+@pytest.mark.django_db
+def test_ordinary_participant_notifications_include_family_devices(settings):
+    settings.WEB_PUSH_ENABLED = True
+    guardian = ParticipantFactory()
+    companion = ParticipantFamilyMemberFactory(
+        guardian=guardian,
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    guardian_subscription = PushSubscription.objects.create(
+        participant=guardian,
+        endpoint="https://push.example.test/guardian-ordinary",
+        p256dh="key",
+        auth="auth",
+        categories=["shifts"],
+    )
+    companion_subscription = PushSubscription.objects.create(
+        family_member=companion,
+        endpoint="https://push.example.test/companion-ordinary",
+        p256dh="key",
+        auth="auth",
+        categories=["shifts"],
+    )
+    inactive_companion = ParticipantFamilyMemberFactory(
+        guardian=guardian,
+        role=ParticipantFamilyMember.Role.COMPANION,
+        is_active=False,
+    )
+    inactive_subscription = PushSubscription.objects.create(
+        family_member=inactive_companion,
+        endpoint="https://push.example.test/companion-inactive-ordinary",
+        p256dh="key",
+        auth="auth",
+        categories=["shifts"],
+    )
+
+    assert (
+        queue_participant_notification(
+            guardian,
+            category="shifts",
+            title="Dienst",
+            body="Erinnerung",
+            target_url="/kiosk/shifts/",
+            dedupe_key="ordinary-family",
+        )
+        == 2
+    )
+    assert set(PushMessage.objects.values_list("subscription_id", flat=True)) == {
+        guardian_subscription.pk,
+        companion_subscription.pk,
+    }
+    assert not PushMessage.objects.filter(subscription=inactive_subscription).exists()
+
+
+@pytest.mark.django_db
+def test_information_batch_includes_companion_devices_for_selected_participant(settings):
+    settings.WEB_PUSH_ENABLED = True
+    guardian = ParticipantFactory()
+    companion = ParticipantFamilyMemberFactory(
+        guardian=guardian,
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    guardian_subscription = PushSubscription.objects.create(
+        participant=guardian,
+        endpoint="https://push.example.test/guardian-information",
+        p256dh="key",
+        auth="auth",
+        categories=["shifts"],
+    )
+    companion_subscription = PushSubscription.objects.create(
+        family_member=companion,
+        endpoint="https://push.example.test/companion-information",
+        p256dh="key",
+        auth="auth",
+        categories=["shifts"],
+    )
+    inactive_companion = ParticipantFamilyMemberFactory(
+        guardian=guardian,
+        role=ParticipantFamilyMember.Role.COMPANION,
+        is_active=False,
+    )
+    inactive_subscription = PushSubscription.objects.create(
+        family_member=inactive_companion,
+        endpoint="https://push.example.test/companion-inactive-information",
+        p256dh="key",
+        auth="auth",
+        categories=["shifts"],
+    )
+
+    assert (
+        queue_information_push_batch(
+            camp=guardian.camp,
+            participant_ids=[guardian.pk],
+            title="Hinweis",
+            body="Information",
+        )
+        == 2
+    )
+    assert set(PushMessage.objects.values_list("subscription_id", flat=True)) == {
+        guardian_subscription.pk,
+        companion_subscription.pk,
+    }
+    assert not PushMessage.objects.filter(subscription=inactive_subscription).exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("method", "route", "payload"),
+    [
+        ("get", "kiosk-notification-settings", None),
+        ("post", "kiosk-notification-subscribe", subscription_payload()),
+    ],
+)
+@pytest.mark.parametrize("family_member_session", [False, True])
+def test_kiosk_notification_endpoints_reject_session_without_pin_fingerprint(
+    kiosk_client, method, route, payload, family_member_session
+):
+    participant = ParticipantFactory()
+    family_member = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Grace",
+        last_name="Hopper",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_MODE_SESSION_KEY] = "private"
+    if family_member_session:
+        session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = family_member.pk
+    session.save()
+
+    request = getattr(kiosk_client, method)
+    response = request(
+        reverse(route),
+        data=json.dumps(payload) if payload is not None else None,
+        content_type="application/json" if payload is not None else None,
+    )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("family_member_session", [False, True])
+def test_kiosk_notification_settings_reject_stale_pin_fingerprint(kiosk_client, family_member_session):
+    participant = ParticipantFactory()
+    family_member = ParticipantFamilyMember.objects.create(
+        guardian=participant,
+        first_name="Grace",
+        last_name="Hopper",
+        role=ParticipantFamilyMember.Role.COMPANION,
+    )
+    identity = family_member if family_member_session else participant
+    identity.pin.set_pin("2468")
+    identity.pin.save()
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_MODE_SESSION_KEY] = "private"
+    if family_member_session:
+        session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = family_member.pk
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(identity.pin.pin_hash)
+    session.save()
+
+    identity.pin.set_pin("1357")
+    identity.pin.save()
+
+    response = kiosk_client.get(reverse("kiosk-notification-settings"))
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_kiosk_notification_mutations_reject_stale_pin_fingerprint(kiosk_client):
+    participant = ParticipantFactory()
+    subscription = PushSubscription.objects.create(
+        participant=participant,
+        endpoint="https://push.example.test/stale-kiosk-session",
+        p256dh="key",
+        auth="secret",
+        categories=["shifts"],
+    )
+    session = kiosk_client.session
+    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    session[KIOSK_MODE_SESSION_KEY] = "private"
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(participant.pin.pin_hash)
+    session.save()
+    participant.pin.set_pin("1357")
+    participant.pin.save()
+
+    response = kiosk_client.post(
+        reverse("kiosk-notification-preferences", kwargs={"subscription_id": subscription.pk}),
+        data=json.dumps({"categories": ["meal_deadlines"]}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 403
+    subscription.refresh_from_db()
+    assert subscription.categories == ["shifts"]
 
 
 @pytest.mark.django_db
@@ -355,6 +1279,65 @@ def test_worker_sends_due_message_and_records_success(webpush):
 
 @pytest.mark.django_db
 @patch("billing.notifications.webpush")
+def test_worker_success_locks_subscription_before_message_after_provider_acceptance(webpush, monkeypatch):
+    subscription = PushSubscription.objects.create(
+        user=UserFactory(), endpoint="https://push.example.test/lock-order", p256dh="key", auth="secret"
+    )
+    PushMessage.objects.create(
+        subscription=subscription,
+        category="expenses_admin",
+        title="Neue Auslage",
+        body="Wartet.",
+        target_url="/camps/",
+        dedupe_key="lock-order:success",
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+    locked_models = []
+    fetch_all = QuerySet._fetch_all
+
+    def record_locks(queryset):
+        if queryset._result_cache is None and queryset.query.select_for_update:
+            locked_models.append(queryset.model.__name__)
+        fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", record_locks)
+    send_due_push_messages()
+
+    assert locked_models[-2:] == ["PushSubscription", "PushMessage"]
+
+
+@pytest.mark.django_db
+@patch("billing.notifications.webpush")
+def test_worker_failure_locks_subscription_before_message_after_provider_rejection(webpush, monkeypatch):
+    webpush.side_effect = requests.Timeout("timeout")
+    subscription = PushSubscription.objects.create(
+        user=UserFactory(), endpoint="https://push.example.test/lock-order-failure", p256dh="key", auth="secret"
+    )
+    PushMessage.objects.create(
+        subscription=subscription,
+        category="expenses_admin",
+        title="Neue Auslage",
+        body="Wartet.",
+        target_url="/camps/",
+        dedupe_key="lock-order:failure",
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+    locked_models = []
+    fetch_all = QuerySet._fetch_all
+
+    def record_locks(queryset):
+        if queryset._result_cache is None and queryset.query.select_for_update:
+            locked_models.append(queryset.model.__name__)
+        fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", record_locks)
+    send_due_push_messages()
+
+    assert locked_models[-2:] == ["PushSubscription", "PushMessage"]
+
+
+@pytest.mark.django_db
+@patch("billing.notifications.webpush")
 def test_worker_rechecks_legacy_endpoint_before_delivery(webpush):
     subscription = PushSubscription.objects.create(
         user=UserFactory(),
@@ -490,6 +1473,126 @@ def test_worker_deletes_gone_subscription(webpush):
 
 
 @pytest.mark.django_db
+@patch("billing.notifications.webpush")
+def test_worker_consumes_recovery_token_when_push_subscription_is_gone(webpush):
+    class GoneResponse:
+        status_code = 410
+
+    webpush.side_effect = WebPushException("gone", response=GoneResponse())
+    user = UserFactory()
+    subscription = PushSubscription.objects.create(
+        user=user,
+        endpoint="https://push.example.test/gone-recovery",
+        p256dh="key",
+        auth="secret",
+        categories=["account_security"],
+    )
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    PushMessage.objects.create(
+        subscription=subscription,
+        account_recovery=recovery,
+        category="account_security",
+        title="Passwort zuruecksetzen",
+        body="Link",
+        target_url="/account-recovery/ACCOUNT_RECOVERY_TOKEN/",
+        dedupe_key="account-recovery:gone",
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+
+    result = send_due_push_messages()
+
+    recovery.refresh_from_db()
+    assert result.removed_subscriptions == 1
+    assert recovery.used_at is not None
+    assert recovery.token_digest is None
+    assert recovery.expires_at is None
+
+
+@pytest.mark.django_db
+@patch("billing.notifications.webpush")
+def test_worker_consumes_recovery_token_when_retry_budget_is_exhausted(webpush):
+    class UnavailableResponse:
+        status_code = 503
+
+    webpush.side_effect = WebPushException("unavailable", response=UnavailableResponse())
+    user = UserFactory()
+    subscription = PushSubscription.objects.create(
+        user=user,
+        endpoint="https://push.example.test/exhausted-recovery",
+        p256dh="key",
+        auth="secret",
+        categories=["account_security"],
+    )
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    message = PushMessage.objects.create(
+        subscription=subscription,
+        account_recovery=recovery,
+        category="account_security",
+        title="Passwort zuruecksetzen",
+        body="Link",
+        target_url="/account-recovery/ACCOUNT_RECOVERY_TOKEN/",
+        dedupe_key="account-recovery:exhausted",
+        attempts=4,
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+
+    result = send_due_push_messages()
+
+    message.refresh_from_db()
+    recovery.refresh_from_db()
+    assert result.failed == 1
+    assert message.status == PushMessage.Status.FAILED
+    assert recovery.used_at is not None
+    assert recovery.token_digest is None
+    assert recovery.expires_at is None
+
+
+@pytest.mark.django_db
+@patch("billing.notifications.webpush")
+def test_recovery_push_ambiguous_failure_is_terminal_and_preserves_first_token(webpush, settings):
+    settings.WEB_PUSH_ENABLED = True
+    accepted_payloads = []
+
+    def accept_then_timeout(**kwargs):
+        accepted_payloads.append(kwargs["data"])
+        raise requests.Timeout("delivery outcome unknown")
+
+    webpush.side_effect = accept_then_timeout
+    user = UserFactory()
+    subscription = PushSubscription.objects.create(
+        user=user,
+        endpoint="https://push.example.test/ambiguous-recovery",
+        p256dh="key",
+        auth="secret",
+        categories=["account_security"],
+    )
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    message = PushMessage.objects.create(
+        subscription=subscription,
+        account_recovery=recovery,
+        category="account_security",
+        title="Passwort zuruecksetzen",
+        body="Link",
+        target_url="/account/recovery/ACCOUNT_RECOVERY_TOKEN/",
+        dedupe_key="account-recovery:ambiguous",
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+
+    result = send_due_push_messages()
+
+    message.refresh_from_db()
+    recovery.refresh_from_db()
+    assert result == PushDeliveryResult(failed=1)
+    assert message.status == PushMessage.Status.FAILED
+    assert recovery.used_at is None
+    assert recovery.token_digest is not None
+    assert recovery.expires_at is not None
+    accepted_url = json.loads(accepted_payloads[0])["url"]
+    accepted_token = accepted_url.rsplit("/", 2)[-2]
+    assert find_valid_account_recovery(accepted_token) == recovery
+
+
+@pytest.mark.django_db
 def test_notification_settings_show_only_current_owners_devices(client):
     user = UserFactory()
     other = UserFactory()
@@ -520,6 +1623,27 @@ def test_notification_settings_show_only_current_owners_devices(client):
     assert b"Neue Anmeldegenehmigungen" in response.content
     assert hashlib.sha256(b"https://push.example.test/mine").hexdigest().encode() in response.content
     assert b"https://push.example.test/mine" not in response.content
+
+
+@pytest.mark.django_db
+def test_notification_settings_exposes_revoked_device_as_inactive_without_endpoint(client):
+    user = UserFactory()
+    PushSubscription.objects.create(
+        user=user,
+        endpoint="https://push.example.test/revoked",
+        p256dh="key",
+        auth="secret",
+        is_active=False,
+        categories=["expenses_admin"],
+    )
+    client.force_login(user)
+
+    response = client.get(reverse("notification-settings"))
+
+    assert response.status_code == 200
+    assert b"Inaktiv" in response.content
+    assert b"bitte erneut registrieren" in response.content
+    assert b"https://push.example.test/revoked" not in response.content
 
 
 @pytest.mark.django_db
@@ -669,6 +1793,7 @@ def test_private_participant_can_rename_own_push_subscription(kiosk_client):
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session[KIOSK_MODE_SESSION_KEY] = "private"
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(participant.pin.pin_hash)
     session.save()
 
     response = kiosk_client.post(
@@ -730,6 +1855,7 @@ def test_private_participant_can_update_own_push_subscription_categories(kiosk_c
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session[KIOSK_MODE_SESSION_KEY] = "private"
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(participant.pin.pin_hash)
     session.save()
 
     response = kiosk_client.post(
@@ -855,6 +1981,7 @@ def test_private_participant_cannot_rename_foreign_push_subscription(kiosk_clien
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
     session[KIOSK_MODE_SESSION_KEY] = "private"
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(participant.pin.pin_hash)
     session.save()
 
     response = kiosk_client.post(
@@ -1342,6 +2469,7 @@ def test_linked_participant_quick_cancellation_passes_current_actor(
     )
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = cancelling_participant.pk
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(cancelling_participant.pin.pin_hash)
     session.save()
 
     with django_capture_on_commit_callbacks(execute=True):
@@ -1391,6 +2519,7 @@ def test_linked_participant_meal_retraction_passes_current_actor(
     )
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = cancelling_participant.pk
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(cancelling_participant.pin.pin_hash)
     session.save()
 
     with django_capture_on_commit_callbacks(execute=True):
@@ -1446,6 +2575,7 @@ def test_booking_invitation_view_queues_after_commit(kiosk_client, django_captur
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = inviter.pk
     session[KIOSK_MODE_SESSION_KEY] = "private"
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(inviter.pin.pin_hash)
     session.save()
 
     with django_capture_on_commit_callbacks(execute=True):
@@ -1486,6 +2616,7 @@ def test_linked_checkin_change_notifies_affected_partner(
     )
     session = kiosk_client.session
     session[KIOSK_PARTICIPANT_SESSION_KEY] = actor.pk
+    session[KIOSK_PIN_FINGERPRINT_SESSION_KEY] = kiosk_pin_fingerprint(actor.pin.pin_hash)
     session.save()
     page_response = kiosk_client.get(reverse("kiosk-home"))
     partner_token = f"participant-{partner.pk}"

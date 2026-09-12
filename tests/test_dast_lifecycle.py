@@ -94,6 +94,18 @@ def test_lifecycle_start_failure_is_nonzero(tmp_path: Path) -> None:
     assert result.returncode != 0
 
 
+def test_lifecycle_start_provides_the_canonical_recovery_origin(tmp_path: Path) -> None:
+    log = tmp_path / "docker-arguments.log"
+    os.environ["DAST_LOG"] = str(log)
+    try:
+        result = _run_lifecycle(tmp_path, "start", 'printf "%s\\n" "$*" > "$DAST_LOG"')
+    finally:
+        os.environ.pop("DAST_LOG", None)
+
+    assert result.returncode == 0
+    assert "ACCOUNT_RECOVERY_PUBLIC_ORIGIN=http://localhost" in log.read_text(encoding="utf-8")
+
+
 def test_lifecycle_cleanup_failure_is_nonzero(tmp_path: Path) -> None:
     state = tmp_path / "state"
     state.write_text("lsf-webapp\n", encoding="utf-8")

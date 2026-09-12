@@ -3,6 +3,7 @@ import logging
 from django.contrib import admin, messages
 from django.contrib.admin.widgets import AdminDateWidget, AdminSplitDateTime
 from django.contrib.auth.admin import UserAdmin
+from django.contrib.auth.forms import AdminPasswordChangeForm, PasswordChangeForm
 from django.contrib.auth.models import User
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import models, transaction
@@ -10,6 +11,7 @@ from django.utils import timezone
 
 from .forms import ExpenseAdminForm, ShiftAdminForm
 from .models import (
+    AccountRecoveryToken,
     BookingAuditLog,
     Camp,
     Charge,
@@ -39,6 +41,7 @@ from .models import (
     UserProfile,
 )
 from .permissions import is_admin
+from .recovery_tokens import revoke_owner_recovery_push_subscriptions
 from .services import (
     charge_audit_snapshot,
     create_booking_delete_audit_log,
@@ -53,6 +56,36 @@ from .services import (
 admin.site.unregister(User)
 
 logger = logging.getLogger(__name__)
+
+
+class _RecoveryRevokingPasswordChangeForm:
+    """Revoke recovery devices only after rotating an established password."""
+
+    def save(self, commit=True):
+        if not commit:
+            return super().save(commit=commit)
+        with transaction.atomic():
+            locked_user = User.objects.select_for_update().get(pk=self.user.pk)
+            had_usable_password = locked_user.has_usable_password()
+            self.user = locked_user
+            user = super().save(commit=True)
+            if had_usable_password:
+                revoke_owner_recovery_push_subscriptions(
+                    kind=AccountRecoveryToken.Kind.USER_PASSWORD,
+                    owner=user,
+                )
+        return user
+
+
+class RecoveryRevokingAdminPasswordChangeForm(_RecoveryRevokingPasswordChangeForm, AdminPasswordChangeForm):
+    """Use the recovery-safe form for one administrator changing another user."""
+
+
+class RecoveryRevokingPasswordChangeForm(_RecoveryRevokingPasswordChangeForm, PasswordChangeForm):
+    """Use the recovery-safe form for an administrator changing their own password."""
+
+
+admin.site.password_change_form = RecoveryRevokingPasswordChangeForm
 
 
 def _log_payment_restore_failure(payment_id: int | None, audit_log_id: int | None, reason: str) -> None:
@@ -121,6 +154,7 @@ class ProtectedUserAdmin(UserAdmin):
     """Keep Django privilege fields exclusive to existing superusers."""
 
     protected_fields = frozenset({"is_staff", "is_superuser", "groups", "user_permissions"})
+    change_password_form = RecoveryRevokingAdminPasswordChangeForm
 
     def get_fieldsets(self, request, obj=None):
         """Hide privilege-bearing fields from delegated user administrators."""
