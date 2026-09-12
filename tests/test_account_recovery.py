@@ -62,6 +62,93 @@ def _send_recovery_emails(*, expected_failed: int = 0):
     return result
 
 
+def _enable_recovery_email() -> None:
+    configuration = EmailConfiguration.load()
+    configuration.enabled = True
+    configuration.host = "smtp.example.test"
+    configuration.from_name = "Fliegerlager"
+    configuration.from_email = "lager@example.test"
+    configuration.save()
+
+
+@pytest.fixture(autouse=True)
+def enabled_recovery_email_configuration(db) -> None:
+    _enable_recovery_email()
+
+
+def _disable_recovery_email() -> None:
+    configuration = EmailConfiguration.load()
+    configuration.enabled = False
+    configuration.save(update_fields=["enabled", "updated_at"])
+
+
+@pytest.mark.django_db
+def test_disabled_email_only_recovery_does_not_create_email_or_recovery_artifacts(client):
+    _disable_recovery_email()
+    user = UserFactory(email="disabled-email-only@example.test")
+    client.post(reverse("account-recovery-request"), {"identifier": user.email})
+
+    assert send_due_account_recovery_requests() == 1
+    assert not AccountRecoveryDeliveryRequest.objects.exists()
+    assert not AccountRecoveryToken.objects.exists()
+    assert not EmailDelivery.objects.exists()
+    assert not EmailBatch.objects.filter(kind=EmailBatch.Kind.ACCOUNT_RECOVERY).exists()
+
+
+@pytest.mark.django_db
+def test_disabled_email_with_push_recovery_uses_push_without_email_artifacts(client, settings):
+    _disable_recovery_email()
+    settings.WEB_PUSH_ENABLED = True
+    user = UserFactory(email="disabled-email-push@example.test")
+    PushSubscription.objects.create(
+        user=user, endpoint="https://push.example.test/disabled-email-push", p256dh="key", auth="auth"
+    )
+    client.post(reverse("account-recovery-request"), {"identifier": user.email})
+
+    assert send_due_account_recovery_requests() == 1
+    recovery = AccountRecoveryToken.objects.get()
+    assert recovery.delivery_channel == AccountRecoveryToken.DeliveryChannel.PUSH
+    assert PushMessage.objects.count() == 1
+    assert not EmailDelivery.objects.exists()
+    assert not EmailBatch.objects.filter(kind=EmailBatch.Kind.ACCOUNT_RECOVERY).exists()
+
+
+@pytest.mark.django_db
+def test_enabled_email_recovery_still_queues_email_delivery(client):
+    _enable_recovery_email()
+    user = UserFactory(email="enabled-email@example.test")
+    client.post(reverse("account-recovery-request"), {"identifier": user.email})
+
+    assert send_due_account_recovery_requests() == 1
+    assert AccountRecoveryToken.objects.count() == 1
+    assert EmailDelivery.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_misconfigured_enabled_email_is_not_a_recovery_channel(client):
+    configuration = EmailConfiguration.load()
+    configuration.host = ""
+    configuration.save(update_fields=["host", "updated_at"])
+    user = UserFactory(email="misconfigured-email@example.test")
+    client.post(reverse("account-recovery-request"), {"identifier": user.email})
+
+    assert send_due_account_recovery_requests() == 1
+    assert not AccountRecoveryToken.objects.exists()
+    assert not EmailDelivery.objects.exists()
+
+
+@pytest.mark.django_db
+def test_disabled_email_recovery_worker_does_not_retain_pending_delivery_or_token(client):
+    _disable_recovery_email()
+    user = UserFactory(email="disabled-no-retention@example.test")
+    client.post(reverse("account-recovery-request"), {"identifier": user.email})
+
+    send_due_account_recovery_requests()
+
+    assert AccountRecoveryToken.objects.count() == 0
+    assert EmailDelivery.objects.count() == 0
+
+
 @pytest.mark.django_db
 def test_admin_recovery_request_queues_identical_durable_work_without_sync_delivery(client, settings):
     settings.WEB_PUSH_ENABLED = True

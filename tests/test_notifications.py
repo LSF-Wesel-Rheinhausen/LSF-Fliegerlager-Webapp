@@ -9,6 +9,7 @@ import pytest
 import requests
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.db.models import QuerySet
 from django.urls import reverse
 from django.utils import timezone
 from pywebpush import WebPushException
@@ -486,6 +487,8 @@ def test_admin_can_create_and_update_own_push_subscription(client):
         "categories": ["expenses_admin"],
         "last_success_at": None,
         "endpoint_fingerprint": hashlib.sha256(payload["endpoint"].encode()).hexdigest(),
+        "is_active": True,
+        "identity_verified": True,
     }
 
     payload = subscription_payload()
@@ -1131,6 +1134,65 @@ def test_worker_sends_due_message_and_records_success(webpush):
 
 @pytest.mark.django_db
 @patch("billing.notifications.webpush")
+def test_worker_success_locks_subscription_before_message_after_provider_acceptance(webpush, monkeypatch):
+    subscription = PushSubscription.objects.create(
+        user=UserFactory(), endpoint="https://push.example.test/lock-order", p256dh="key", auth="secret"
+    )
+    PushMessage.objects.create(
+        subscription=subscription,
+        category="expenses_admin",
+        title="Neue Auslage",
+        body="Wartet.",
+        target_url="/camps/",
+        dedupe_key="lock-order:success",
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+    locked_models = []
+    fetch_all = QuerySet._fetch_all
+
+    def record_locks(queryset):
+        if queryset._result_cache is None and queryset.query.select_for_update:
+            locked_models.append(queryset.model.__name__)
+        fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", record_locks)
+    send_due_push_messages()
+
+    assert locked_models[-2:] == ["PushSubscription", "PushMessage"]
+
+
+@pytest.mark.django_db
+@patch("billing.notifications.webpush")
+def test_worker_failure_locks_subscription_before_message_after_provider_rejection(webpush, monkeypatch):
+    webpush.side_effect = requests.Timeout("timeout")
+    subscription = PushSubscription.objects.create(
+        user=UserFactory(), endpoint="https://push.example.test/lock-order-failure", p256dh="key", auth="secret"
+    )
+    PushMessage.objects.create(
+        subscription=subscription,
+        category="expenses_admin",
+        title="Neue Auslage",
+        body="Wartet.",
+        target_url="/camps/",
+        dedupe_key="lock-order:failure",
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+    locked_models = []
+    fetch_all = QuerySet._fetch_all
+
+    def record_locks(queryset):
+        if queryset._result_cache is None and queryset.query.select_for_update:
+            locked_models.append(queryset.model.__name__)
+        fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", record_locks)
+    send_due_push_messages()
+
+    assert locked_models[-2:] == ["PushSubscription", "PushMessage"]
+
+
+@pytest.mark.django_db
+@patch("billing.notifications.webpush")
 def test_worker_rechecks_legacy_endpoint_before_delivery(webpush):
     subscription = PushSubscription.objects.create(
         user=UserFactory(),
@@ -1416,6 +1478,27 @@ def test_notification_settings_show_only_current_owners_devices(client):
     assert b"Neue Anmeldegenehmigungen" in response.content
     assert hashlib.sha256(b"https://push.example.test/mine").hexdigest().encode() in response.content
     assert b"https://push.example.test/mine" not in response.content
+
+
+@pytest.mark.django_db
+def test_notification_settings_exposes_revoked_device_as_inactive_without_endpoint(client):
+    user = UserFactory()
+    PushSubscription.objects.create(
+        user=user,
+        endpoint="https://push.example.test/revoked",
+        p256dh="key",
+        auth="secret",
+        is_active=False,
+        categories=["expenses_admin"],
+    )
+    client.force_login(user)
+
+    response = client.get(reverse("notification-settings"))
+
+    assert response.status_code == 200
+    assert b"Inaktiv" in response.content
+    assert b"bitte erneut registrieren" in response.content
+    assert b"https://push.example.test/revoked" not in response.content
 
 
 @pytest.mark.django_db

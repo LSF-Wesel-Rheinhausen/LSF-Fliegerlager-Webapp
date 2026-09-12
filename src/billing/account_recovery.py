@@ -17,7 +17,7 @@ from django.utils import timezone
 from django.utils.crypto import salted_hmac
 from django.views.decorators.debug import sensitive_post_parameters
 
-from .email_delivery import has_valid_recipient_email, queue_account_recovery_email
+from .email_delivery import has_valid_recipient_email, is_email_configuration_usable, queue_account_recovery_email
 from .forms import KioskLoginForm, _is_trivial_personal_pin, validate_personal_kiosk_pin
 from .kiosk_access import KIOSK_MODE_SESSION_KEY, clear_kiosk_identity_session
 from .kiosk_security import _recent_attempts, clear_login_rate_limit, kiosk_client_key
@@ -26,6 +26,7 @@ from .models import (
     AccountRecoveryDeliveryRequest,
     AccountRecoveryIdentifierAttempt,
     AccountRecoveryToken,
+    EmailConfiguration,
     Participant,
     ParticipantFamilyMember,
 )
@@ -189,10 +190,10 @@ def _rate_limited_response(request: HttpRequest, *, kiosk_mode: str = "private")
     return response
 
 
-def _has_delivery_channel(owner: Any) -> bool:
+def _has_delivery_channel(owner: Any, *, email_enabled: bool) -> bool:
     email = getattr(owner, "email", "")
     push_owner = owner
-    return bool(email and has_valid_recipient_email(email)) or (
+    return (email_enabled and bool(email and has_valid_recipient_email(email))) or (
         settings.WEB_PUSH_ENABLED and push_owner.push_subscriptions.filter(is_active=True).exists()
     )
 
@@ -207,7 +208,10 @@ def _deliver_recovery(
     body_intro: str,
     target_path: str | None = None,
 ) -> None:
-    if not _has_delivery_channel(owner):
+    configuration = EmailConfiguration.load()
+    configuration = EmailConfiguration.objects.select_for_update().get(pk=configuration.pk)
+    email_enabled = is_email_configuration_usable(configuration)
+    if not _has_delivery_channel(owner, email_enabled=email_enabled):
         return
     if kind == AccountRecoveryToken.Kind.PARTICIPANT_PIN:
         owner = Participant.objects.select_for_update().get(pk=owner.pk)
@@ -233,7 +237,7 @@ def _deliver_recovery(
         name = owner.full_name
     camp = owner.guardian.camp if kind == AccountRecoveryToken.Kind.FAMILY_MEMBER_PIN else getattr(owner, "camp", None)
     email = getattr(owner, "email", "")
-    if email and has_valid_recipient_email(email):
+    if email_enabled and email and has_valid_recipient_email(email):
         recovery = create_account_recovery_token(kind=kind, owner=owner)
         queue_account_recovery_email(
             recipient_email=email,

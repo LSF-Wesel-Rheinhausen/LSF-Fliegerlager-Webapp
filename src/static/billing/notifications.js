@@ -11,6 +11,7 @@
   let registration;
   let browserSubscription;
   let currentDeviceId;
+  let currentDeviceIsActive = false;
 
   const csrfToken = () => root.querySelector('input[name="csrfmiddlewaretoken"]')?.value || "";
   const isIos = () =>
@@ -166,6 +167,8 @@
     const item = document.createElement("li");
     item.dataset.notificationDevice = String(device.id);
     item.dataset.endpointFingerprint = device.endpoint_fingerprint;
+    item.dataset.deviceActive = String(device.is_active !== false);
+    item.dataset.deviceVerified = String(device.identity_verified !== false);
 
     const details = document.createElement("div");
     const name = document.createElement("span");
@@ -183,6 +186,12 @@
     lastSuccess.className = "hint";
     lastSuccess.textContent = formatLastSuccess(device.last_success_at);
     details.append(name, lastSuccess);
+    if (device.is_active === false || device.identity_verified === false) {
+      const inactive = document.createElement("span");
+      inactive.className = "status-badge";
+      inactive.textContent = "Inaktiv – bitte erneut registrieren";
+      details.append(inactive);
+    }
 
     const actions = document.createElement("div");
     actions.className = "actions";
@@ -282,6 +291,7 @@
     if (!item) return false;
     item.querySelector("[data-notification-current]").hidden = false;
     currentDeviceId = item.dataset.notificationDevice;
+    currentDeviceIsActive = item.dataset.deviceActive === "true" && item.dataset.deviceVerified === "true";
     syncActivationCategories(
       Array.from(item.querySelectorAll('[data-preferences-form] input[name="category"]:checked')).map(
         (checkbox) => checkbox.value,
@@ -311,7 +321,7 @@
     const worker = await serviceWorkerReady();
     browserSubscription = await worker.pushManager.getSubscription();
     const isCurrentDevice = await markCurrentDevice();
-    setStatus(isCurrentDevice ? "Aktiv" : "Nicht aktiv", isCurrentDevice);
+    setStatus(isCurrentDevice && currentDeviceIsActive ? "Aktiv" : "Nicht aktiv", isCurrentDevice && currentDeviceIsActive);
   };
 
   form?.addEventListener("submit", async (event) => {

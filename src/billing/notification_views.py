@@ -57,6 +57,8 @@ def _device_payload(subscription: PushSubscription) -> dict[str, Any]:
         "categories": list(subscription.categories),
         "last_success_at": subscription.last_success_at,
         "endpoint_fingerprint": _endpoint_fingerprint(subscription.endpoint),
+        "is_active": subscription.is_active,
+        "identity_verified": subscription.identity_verified,
     }
 
 

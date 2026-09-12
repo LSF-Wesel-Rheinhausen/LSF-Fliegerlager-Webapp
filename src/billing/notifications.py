@@ -34,9 +34,11 @@ from .push_endpoints import is_allowed_push_endpoint
 from .recovery_tokens import (
     RECOVERY_TOKEN_PLACEHOLDER,
     activate_account_recovery_push_token,
+    complete_account_recovery_push_delivery,
     consume_account_recovery_token,
     create_account_recovery_token,
     recovery_owner_is_active,
+    retry_account_recovery_push_delivery,
     terminally_fail_account_recovery_push_delivery,
 )
 
@@ -718,16 +720,27 @@ def send_due_push_messages(*, batch_size: int = 50) -> PushDeliveryResult:
                         },
                     )
                     continue
-                with transaction.atomic():
-                    locked_message = PushMessage.objects.select_for_update().filter(pk=message.pk).first()
-                    if locked_message is None:
-                        if recovery_id is not None:
-                            consume_account_recovery_token(recovery_id)
+                if recovery_id is not None:
+                    attempts = retry_account_recovery_push_delivery(
+                        recovery_id=recovery_id,
+                        subscription_id=subscription.pk,
+                        message_id=message.pk,
+                        error_code=error_code,
+                        next_attempt_at=now + timedelta(seconds=RETRY_DELAYS[message.attempts]),
+                    )
+                    if attempts is None:
                         failed += 1
-                        continue
+                    else:
+                        retried += 1
+                    continue
+                with transaction.atomic():
                     locked_subscription = (
                         PushSubscription.objects.select_for_update().filter(pk=subscription.pk).first()
                     )
+                    locked_message = PushMessage.objects.select_for_update().filter(pk=message.pk).first()
+                    if locked_message is None:
+                        failed += 1
+                        continue
                     if is_removed_subscription:
                         if locked_message.account_recovery_id is not None:
                             consume_account_recovery_token(locked_message.account_recovery_id)
@@ -769,17 +782,24 @@ def send_due_push_messages(*, batch_size: int = 50) -> PushDeliveryResult:
                 )
                 continue
 
+            if recovery_id is not None:
+                if complete_account_recovery_push_delivery(
+                    recovery_id=recovery_id,
+                    subscription_id=subscription.pk,
+                    message_id=message.pk,
+                    sent_at=now,
+                ):
+                    sent += 1
+                else:
+                    failed += 1
+                continue
             with transaction.atomic():
+                locked_subscription = PushSubscription.objects.select_for_update().filter(pk=subscription.pk).first()
                 locked_message = PushMessage.objects.select_for_update().filter(pk=message.pk).first()
                 if locked_message is None:
-                    if recovery_id is not None:
-                        consume_account_recovery_token(recovery_id)
                     failed += 1
                     continue
-                locked_subscription = PushSubscription.objects.select_for_update().filter(pk=subscription.pk).first()
                 if locked_subscription is None:
-                    if recovery_id is not None:
-                        consume_account_recovery_token(recovery_id)
                     failed += 1
                     continue
                 locked_message.status = PushMessage.Status.SENT

@@ -56,6 +56,13 @@ def has_valid_recipient_email(email: str) -> bool:
     return True
 
 
+def is_email_configuration_usable(configuration: EmailConfiguration) -> bool:
+    """Return whether configured SMTP settings can be used for delivery."""
+    return bool(
+        configuration.enabled and configuration.host.strip() and has_valid_recipient_email(configuration.from_email)
+    )
+
+
 def _information_dedupe_key(email: str) -> str:
     """Return a fixed-length, non-PII key for one normalized information recipient."""
     return f"information:{hashlib.sha256(email.encode()).hexdigest()}"

@@ -271,6 +271,78 @@ def terminally_fail_account_recovery_push_delivery(
     return False, message.attempts
 
 
+@transaction.atomic
+def retry_account_recovery_push_delivery(
+    *, recovery_id: int, subscription_id: int, message_id: int, error_code: str, next_attempt_at: Any
+) -> int | None:
+    """Retry a recovery push while acquiring owner/token/subscription/message locks in order."""
+    initial = _initial_recovery(recovery_id)
+    if initial is None:
+        return None
+    _lock_owner(initial)
+    recovery = AccountRecoveryToken.objects.select_for_update().filter(pk=recovery_id).first()
+    subscription = PushSubscription.objects.select_for_update().filter(pk=subscription_id).first()
+    message = PushMessage.objects.select_for_update().filter(pk=message_id).first()
+    if recovery is None:
+        return None
+    if subscription is None or message is None:
+        recovery.used_at = recovery.used_at or timezone.now()
+        recovery.token_digest = None
+        recovery.expires_at = None
+        recovery.save(update_fields=["used_at", "token_digest", "expires_at", "updated_at"])
+        return None
+    message.attempts += 1
+    message.processing_started_at = None
+    message.last_error_code = error_code
+    message.status = PushMessage.Status.PENDING
+    message.next_attempt_at = next_attempt_at
+    message.save(
+        update_fields=[
+            "attempts",
+            "last_error_code",
+            "status",
+            "processing_started_at",
+            "next_attempt_at",
+            "updated_at",
+        ]
+    )
+    return message.attempts
+
+
+@transaction.atomic
+def complete_account_recovery_push_delivery(
+    *, recovery_id: int, subscription_id: int, message_id: int, sent_at: Any
+) -> bool:
+    """Mark a recovery push sent while acquiring owner/token/subscription/message locks in order."""
+    initial = _initial_recovery(recovery_id)
+    if initial is None:
+        return False
+    _lock_owner(initial)
+    recovery = AccountRecoveryToken.objects.select_for_update().filter(pk=recovery_id).first()
+    subscription = PushSubscription.objects.select_for_update().filter(pk=subscription_id).first()
+    message = PushMessage.objects.select_for_update().filter(pk=message_id).first()
+    if recovery is None:
+        return False
+    if subscription is None or message is None:
+        recovery.used_at = recovery.used_at or timezone.now()
+        recovery.token_digest = None
+        recovery.expires_at = None
+        recovery.save(update_fields=["used_at", "token_digest", "expires_at", "updated_at"])
+        return False
+    message.status = PushMessage.Status.SENT
+    message.processing_started_at = None
+    message.sent_at = sent_at
+    message.attempts += 1
+    message.last_error_code = ""
+    message.save(
+        update_fields=["status", "processing_started_at", "sent_at", "attempts", "last_error_code", "updated_at"]
+    )
+    subscription.last_success_at = sent_at
+    subscription.failure_count = 0
+    subscription.save(update_fields=["last_success_at", "failure_count", "updated_at"])
+    return True
+
+
 def create_account_recovery_token(*, kind: str, owner: Any) -> AccountRecoveryToken:
     """Create an inactive token record that contains no bearer secret."""
     return AccountRecoveryToken.objects.create(

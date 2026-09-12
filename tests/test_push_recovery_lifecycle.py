@@ -1,16 +1,19 @@
 """Regression coverage for recovery push capabilities and credential rotations."""
 
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
 from django.db.models import QuerySet
 from django.urls import reverse
+from django.utils import timezone
 from pywebpush import WebPushException
 
 from billing.models import (
     AccountRecoveryToken,
     ParticipantFamilyMember,
     ParticipantFamilyMemberPin,
+    PushMessage,
     PushSubscription,
 )
 from billing.notifications import PushDeliveryResult, queue_account_recovery_push, send_due_push_messages
@@ -316,6 +319,38 @@ def test_recovery_push_activation_locks_owner_token_then_subscription(monkeypatc
 
     assert locked_models.index("User") < locked_models.index("AccountRecoveryToken")
     assert locked_models.index("AccountRecoveryToken") < locked_models.index("PushSubscription")
+
+
+@pytest.mark.django_db
+@patch("billing.notifications.webpush")
+def test_recovery_push_acceptance_locks_subscription_before_message(webpush, monkeypatch):
+    user = UserFactory()
+    subscription = PushSubscription.objects.create(
+        user=user, endpoint="https://push.example.test/recovery-lock-order", p256dh="key", auth="auth"
+    )
+    recovery = create_account_recovery_token(kind=AccountRecoveryToken.Kind.USER_PASSWORD, owner=user)
+    PushMessage.objects.create(
+        subscription=subscription,
+        account_recovery=recovery,
+        category="account_security",
+        title="Reset",
+        body="Link",
+        target_url="/account-recovery/ACCOUNT_RECOVERY_TOKEN/",
+        dedupe_key="recovery-lock-order",
+        scheduled_for=timezone.now() - timedelta(seconds=1),
+    )
+    locked_models = []
+    fetch_all = QuerySet._fetch_all
+
+    def record_locks(queryset):
+        if queryset._result_cache is None and queryset.query.select_for_update:
+            locked_models.append(queryset.model.__name__)
+        fetch_all(queryset)
+
+    monkeypatch.setattr(QuerySet, "_fetch_all", record_locks)
+    send_due_push_messages()
+
+    assert locked_models[-4:] == ["User", "AccountRecoveryToken", "PushSubscription", "PushMessage"]
 
 
 @pytest.mark.django_db

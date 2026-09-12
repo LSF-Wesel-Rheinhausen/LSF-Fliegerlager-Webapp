@@ -59,13 +59,14 @@
   <h2>Registrierte Geräte</h2>
   <ul class="device-list" data-notification-device-list>
     {% for subscription in subscriptions %}
-      <li data-notification-device="{{ subscription.id }}" data-endpoint-fingerprint="{{ subscription.endpoint_fingerprint }}">
+      <li data-notification-device="{{ subscription.id }}" data-endpoint-fingerprint="{{ subscription.endpoint_fingerprint }}" data-device-active="{{ subscription.is_active|yesno:'true,false' }}" data-device-verified="{{ subscription.identity_verified|yesno:'true,false' }}">
         <div>
           <span class="device-list__name">
             <strong data-notification-device-name>{{ subscription.device_name }}</strong>
             <span class="status-badge status-badge--ok" data-notification-current hidden>Dieses Gerät</span>
           </span>
           <span class="hint">{% if subscription.last_success_at %}Zuletzt erreicht: {{ subscription.last_success_at|date:"d.m.Y H:i" }}{% else %}Noch nicht erreicht{% endif %}</span>
+          {% if not subscription.is_active or not subscription.identity_verified %}<span class="status-badge">Inaktiv – bitte erneut registrieren</span>{% endif %}
         </div>
         <div class="actions">
           <button class="button button-secondary" type="button" data-preferences-subscription="{{ subscription.id }}">Nachrichten auswählen</button>
