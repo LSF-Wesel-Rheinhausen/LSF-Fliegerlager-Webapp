@@ -39,6 +39,14 @@ def bind_existing_email_recovery_tokens(apps, schema_editor):
         recovery.save(update_fields=["delivery_channel", "recipient_email_digest", "updated_at"])
 
 
+def invalidate_active_email_recovery_tokens(apps, schema_editor):
+    """Invalidate email bearers before removing their recipient binding."""
+    AccountRecoveryToken = apps.get_model("billing", "AccountRecoveryToken")
+    AccountRecoveryToken.objects.using(schema_editor.connection.alias).filter(
+        delivery_channel="email", used_at__isnull=True, token_digest__isnull=False
+    ).update(used_at=timezone.now(), token_digest=None, expires_at=None)
+
+
 class Migration(migrations.Migration):
     dependencies = [("billing", "0075_remove_pushsubscription_push_subscription_exactly_one_owner_and_more")]
 
@@ -53,7 +61,7 @@ class Migration(migrations.Migration):
             name="recipient_email_digest",
             field=models.CharField(blank=True, editable=False, max_length=64, null=True),
         ),
-        migrations.RunPython(bind_existing_email_recovery_tokens, migrations.RunPython.noop),
+        migrations.RunPython(bind_existing_email_recovery_tokens, invalidate_active_email_recovery_tokens),
         migrations.AddConstraint(
             model_name="accountrecoverytoken",
             constraint=models.CheckConstraint(

@@ -34,6 +34,9 @@ RECOVERY_BINDING_NEW_TARGET = [("billing", "0076_account_recovery_delivery_bindi
 PUSH_DELIVERY_BINDING_OLD_TARGET = [("billing", "0077_accountrecoveryidentifierattempt")]
 PUSH_DELIVERY_BINDING_NEW_TARGET = [("billing", "0078_recovery_push_delivery_subscription")]
 PUSH_DELIVERY_BOUND_TARGET = [("billing", "0079_recovery_push_delivery_bound")]
+RECOVERY_BINDING_ROLLBACK_TARGET = ACCOUNT_RECOVERY_NEW_TARGET
+KIOSK_MODE_OLD_TARGET = [("billing", "0080_accountrecoverydeliveryrequest")]
+KIOSK_MODE_NEW_TARGET = [("billing", "0081_accountrecoverytoken_kiosk_mode")]
 
 
 @pytest.mark.django_db(transaction=True)
@@ -355,6 +358,107 @@ def test_recovery_binding_migration_preserves_email_tokens_with_recipient_bindin
         assert len(migrated.recipient_email_digest) == 64
         assert migrated.used_at is None
         assert migrated.token_digest == "a" * 64
+    finally:
+        _restore_current_migration_state()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_recovery_binding_reverse_invalidates_active_email_tokens_before_unbinding() -> None:
+    try:
+        executor = MigrationExecutor(connection)
+        executor.migrate(RECOVERY_BINDING_NEW_TARGET)
+        apps_at_binding = executor.loader.project_state(RECOVERY_BINDING_NEW_TARGET).apps
+        User = apps_at_binding.get_model("auth", "User")
+        AccountRecoveryToken = apps_at_binding.get_model("billing", "AccountRecoveryToken")
+        user = User.objects.create(username="email-rollback")
+        email_recovery = AccountRecoveryToken.objects.create(
+            kind="user_password",
+            token_digest="e" * 64,
+            credential_fingerprint="f" * 64,
+            delivery_channel="email",
+            recipient_email_digest="a" * 64,
+            user=user,
+            expires_at=timezone.now() + timedelta(hours=1),
+        )
+        push_recovery = AccountRecoveryToken.objects.create(
+            kind="user_password",
+            token_digest="p" * 64,
+            credential_fingerprint="q" * 64,
+            delivery_channel="push",
+            user=user,
+            expires_at=timezone.now() + timedelta(hours=1),
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate(RECOVERY_BINDING_ROLLBACK_TARGET)
+        old_apps = executor.loader.project_state(RECOVERY_BINDING_ROLLBACK_TARGET).apps
+        OldRecovery = old_apps.get_model("billing", "AccountRecoveryToken")
+        rolled_back_email = OldRecovery.objects.get(pk=email_recovery.pk)
+        rolled_back_push = OldRecovery.objects.get(pk=push_recovery.pk)
+
+        assert rolled_back_email.token_digest is None
+        assert rolled_back_email.expires_at is None
+        assert rolled_back_email.used_at is not None
+        assert rolled_back_push.token_digest == "p" * 64
+        assert rolled_back_push.expires_at is not None
+        assert rolled_back_push.used_at is None
+    finally:
+        _restore_current_migration_state()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_kiosk_mode_reverse_invalidates_active_kiosk_tokens() -> None:
+    try:
+        executor = MigrationExecutor(connection)
+        executor.migrate(KIOSK_MODE_NEW_TARGET)
+        apps_at_kiosk_mode = executor.loader.project_state(KIOSK_MODE_NEW_TARGET).apps
+        User = apps_at_kiosk_mode.get_model("auth", "User")
+        Camp = apps_at_kiosk_mode.get_model("billing", "Camp")
+        Participant = apps_at_kiosk_mode.get_model("billing", "Participant")
+        AccountRecoveryToken = apps_at_kiosk_mode.get_model("billing", "AccountRecoveryToken")
+        user = User.objects.create(username="kiosk-rollback")
+        camp = Camp.objects.create(name="Kiosk rollback", year=2050)
+        participant = Participant.objects.create(camp=camp, first_name="Kiosk", last_name="Rollback")
+        central_kiosk = AccountRecoveryToken.objects.create(
+            kind="participant_pin",
+            token_digest="c" * 64,
+            credential_fingerprint="d" * 64,
+            participant=participant,
+            kiosk_mode="central",
+            expires_at=timezone.now() + timedelta(hours=1),
+        )
+        private_kiosk = AccountRecoveryToken.objects.create(
+            kind="participant_pin",
+            token_digest="k" * 64,
+            credential_fingerprint="l" * 64,
+            participant=participant,
+            kiosk_mode="private",
+            expires_at=timezone.now() + timedelta(hours=1),
+        )
+        user_password = AccountRecoveryToken.objects.create(
+            kind="user_password",
+            token_digest="u" * 64,
+            credential_fingerprint="v" * 64,
+            user=user,
+            kiosk_mode="central",
+            expires_at=timezone.now() + timedelta(hours=1),
+        )
+
+        executor.migrate(KIOSK_MODE_OLD_TARGET)
+        old_apps = executor.loader.project_state(KIOSK_MODE_OLD_TARGET).apps
+        OldRecovery = old_apps.get_model("billing", "AccountRecoveryToken")
+        rolled_back_central = OldRecovery.objects.get(pk=central_kiosk.pk)
+        rolled_back_private = OldRecovery.objects.get(pk=private_kiosk.pk)
+        rolled_back_user_password = OldRecovery.objects.get(pk=user_password.pk)
+
+        assert rolled_back_central.token_digest is None
+        assert rolled_back_central.expires_at is None
+        assert rolled_back_central.used_at is not None
+        assert rolled_back_private.token_digest is None
+        assert rolled_back_private.expires_at is None
+        assert rolled_back_private.used_at is not None
+        assert rolled_back_user_password.token_digest == "u" * 64
+        assert rolled_back_user_password.used_at is None
     finally:
         _restore_current_migration_state()
 
