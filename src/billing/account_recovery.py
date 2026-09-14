@@ -455,9 +455,9 @@ def _invalid_token_response(request: HttpRequest) -> HttpResponse:
 
 
 def _protect_token_response(response: HttpResponse) -> HttpResponse:
-    """Prevent recovery URLs from entering caches or same-origin referrer headers."""
+    """Prevent recovery URLs from entering caches or leaking their path via referrer headers."""
     response["Cache-Control"] = "no-store"
-    response["Referrer-Policy"] = "no-referrer"
+    response["Referrer-Policy"] = "strict-origin"
     return response
 
 
