@@ -96,8 +96,8 @@ def test_docker_workflow_uses_first_parent_version():
         "uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7\n        with:\n          fetch-depth: 0"
     ) in workflow
     assert 'echo "version=$(git rev-list --first-parent --count HEAD)"' in workflow
-    assert workflow.count("APP_VERSION=${{ steps.metadata.outputs.version }}") == 2
-    assert workflow.count("python scripts/build_changelog_manifest.py --max-bytes 60000") == 2
+    assert workflow.count("APP_VERSION=${{ steps.metadata.outputs.version }}") == 3
+    assert workflow.count("python scripts/build_changelog_manifest.py --max-bytes 60000") == 3
 
 
 RESOURCE_INTENSIVE_WORKFLOWS = ("ci.yml", "security.yml", "dast.yml")

@@ -120,12 +120,14 @@ GHCR_TOKEN = os.getenv("GHCR_TOKEN", "")
 REGISTRY_ALLOWED_HOSTS = os.getenv("UPDATE_REGISTRY_ALLOWED_HOSTS", "ghcr.io")
 HEALTH_TIMEOUT = int(os.getenv("UPDATE_HEALTH_TIMEOUT", "180"))
 STATE_FILE = Path(os.getenv("UPDATE_STATE_FILE", "/state/status.json"))
+UPDATE_ENVIRONMENT = os.getenv("UPDATE_ENVIRONMENT", "prod").strip().lower()
 MAX_AGENT_BODY_BYTES = positive_int_setting("MAX_AGENT_BODY_BYTES", "1048576")
 AGENT_READ_TIMEOUT_SECONDS = positive_float_setting("AGENT_READ_TIMEOUT_SECONDS", "10")
 MAX_AGENT_CONCURRENT_REQUESTS = positive_int_setting("MAX_AGENT_CONCURRENT_REQUESTS", "8")
 PORTAINER_STARTUP_TIMEOUT_SECONDS = positive_float_setting("PORTAINER_STARTUP_TIMEOUT_SECONDS", "30")
 PORTAINER_STARTUP_INITIAL_BACKOFF_SECONDS = positive_float_setting("PORTAINER_STARTUP_INITIAL_BACKOFF_SECONDS", "1")
 PORTAINER_STARTUP_MAX_BACKOFF_SECONDS = positive_float_setting("PORTAINER_STARTUP_MAX_BACKOFF_SECONDS", "5")
+PORTAINER_REQUEST_TIMEOUT_SECONDS = positive_float_setting("PORTAINER_REQUEST_TIMEOUT_SECONDS", "10")
 RECOVERY_CONVERGENCE_TIMEOUT_SECONDS = positive_float_setting("RECOVERY_CONVERGENCE_TIMEOUT_SECONDS", "30")
 RECOVERY_CONVERGENCE_INITIAL_BACKOFF_SECONDS = positive_float_setting(
     "RECOVERY_CONVERGENCE_INITIAL_BACKOFF_SECONDS", "1"
@@ -147,12 +149,98 @@ update_lock = threading.Lock()
 backup_lock = threading.Lock()
 state_lock = threading.Lock()
 
+PERSISTED_STATE_FIELDS = frozenset(
+    {
+        "phase",
+        "message",
+        "error",
+        "rollback_error",
+        "recovery",
+        "backup",
+        "approved_image",
+        "approved_digest",
+        "selected_catalog_id",
+        "candidate_environment",
+        "compatibility",
+        "risk_requires_acknowledgement",
+        "target_metadata",
+        "candidate_id",
+        "candidate_digest",
+        "candidate_base_digest",
+        "candidate_contract",
+        "candidate_invalidated_reason",
+        "candidate_consumed_at",
+        "update_available",
+        "checked_at",
+        "running",
+        "operation_started_at",
+        "operation_id",
+        "candidate_identity",
+        "recovery_contract",
+        "target_image",
+        "target_digest",
+        "rollback_image",
+        "target_put_started_at",
+        "rollback_put_started_at",
+        "recovery_outcome",
+        "completed_at",
+        "updated_at",
+    }
+)
+COMMON_STATE_FIELDS = frozenset(
+    {
+        "phase",
+        "message",
+        "error",
+        "rollback_error",
+        "recovery",
+        "backup",
+        "running",
+        "update_available",
+        "recovery_outcome",
+        "completed_at",
+        "updated_at",
+    }
+)
+CANDIDATE_STATE_FIELDS = frozenset(
+    {
+        "approved_image",
+        "approved_digest",
+        "selected_catalog_id",
+        "candidate_environment",
+        "compatibility",
+        "risk_requires_acknowledgement",
+        "target_metadata",
+        "candidate_id",
+        "candidate_digest",
+        "candidate_base_digest",
+        "candidate_contract",
+        "candidate_invalidated_reason",
+        "checked_at",
+    }
+)
+RECOVERY_STATE_FIELDS = frozenset(
+    {
+        "candidate_consumed_at",
+        "operation_started_at",
+        "operation_id",
+        "candidate_identity",
+        "recovery_contract",
+        "target_image",
+        "target_digest",
+        "rollback_image",
+        "target_put_started_at",
+        "rollback_put_started_at",
+    }
+)
+
 OCI_LABELS = {
     "version": "org.opencontainers.image.version",
     "revision": "org.opencontainers.image.revision",
     "build_date": "org.opencontainers.image.created",
     "change": "io.lsf-fliegerlager.change",
     "changelog": "io.lsf-fliegerlager.changelog",
+    "migrations": "io.lsf-fliegerlager.migrations",
 }
 MANIFEST_ACCEPT = ", ".join(
     [
@@ -166,6 +254,20 @@ IMAGE_MANIFEST_MEDIA_TYPES = {
     "application/vnd.oci.image.manifest.v1+json",
     "application/vnd.docker.distribution.manifest.v2+json",
 }
+
+ENVIRONMENT_CHANNELS = {
+    "prod": ("prod",),
+    "staging": ("prod", "staging"),
+    "dev": ("prod", "staging", "dev"),
+}
+
+
+def environment_channels(environment: str = UPDATE_ENVIRONMENT) -> tuple[str, ...]:
+    """Return the release channels visible to one configured environment."""
+    try:
+        return ENVIRONMENT_CHANNELS[environment]
+    except KeyError as error:
+        raise AgentConfigError("UPDATE_ENVIRONMENT muss prod, staging oder dev sein.") from error
 
 
 def require_env(name: str, value: str) -> str:
@@ -198,16 +300,99 @@ def load_state() -> dict[str, Any]:
         return {"phase": "idle", "message": "Noch kein Update ausgefuehrt."}
 
 
+def _bounded_metadata(value: Any, allowed: tuple[str, ...]) -> dict[str, str]:
+    """Return only short, scalar OCI metadata fields suitable for status.json."""
+    if not isinstance(value, dict):
+        return {}
+    return {
+        key: limit_output(str(value[key]), 512 if key == "image" else 256)
+        for key in allowed
+        if value.get(key) is not None
+    }
+
+
+def _bounded_compatibility(value: Any) -> dict[str, Any]:
+    """Return the small, presentation-safe migration risk summary."""
+    if not isinstance(value, dict):
+        return {}
+    risk = value.get("risk")
+    if risk not in {"identical", "forward", "downgrade", "divergent", "unknown"}:
+        risk = "unknown"
+    affected = value.get("affected_migrations")
+    migrations = (
+        [limit_output(item, 256) for item in affected[:20] if isinstance(item, str)]
+        if isinstance(affected, list)
+        else []
+    )
+    return {
+        "risk": risk,
+        "requires_acknowledgement": value.get("requires_acknowledgement") is True,
+        "affected_migrations": migrations,
+    }
+
+
 def save_state(**values: Any) -> dict[str, Any]:
     """Persist updater state atomically and return the merged state."""
     with state_lock:
         current = load_state()
+        next_phase = values.get("phase")
+        if next_phase == "checked":
+            for key in (
+                "operation_started_at",
+                "operation_id",
+                "candidate_identity",
+                "recovery_contract",
+                "target_image",
+                "target_digest",
+                "rollback_image",
+                "target_put_started_at",
+                "rollback_put_started_at",
+                "recovery_outcome",
+                "completed_at",
+            ):
+                current.pop(key, None)
+        elif next_phase == "installing" and current.get("phase") != "installing":
+            for key in ("rollback_put_started_at", "recovery_outcome", "completed_at"):
+                current.pop(key, None)
         current.update(values, updated_at=utc_now())
+        phase = str(current.get("phase", "idle"))
+        phase_fields = COMMON_STATE_FIELDS
+        if phase == "checked":
+            phase_fields |= CANDIDATE_STATE_FIELDS
+        elif phase in {"installing", "rollback", "complete", "failed", "recovery_required"}:
+            phase_fields |= RECOVERY_STATE_FIELDS
+        persisted = {key: value for key, value in current.items() if key in phase_fields}
+        for key in ("message", "error", "rollback_error", "candidate_invalidated_reason"):
+            if isinstance(persisted.get(key), str):
+                persisted[key] = limit_output(persisted[key], 2000)
+        if isinstance(persisted.get("recovery"), str):
+            persisted["recovery"] = limit_output(persisted["recovery"], 4000)
+        persisted["target_metadata"] = _bounded_metadata(
+            persisted.get("target_metadata"),
+            ("version", "revision", "build_date", "change"),
+        )
+        persisted["running"] = _bounded_metadata(
+            persisted.get("running"),
+            ("image", "version", "revision", "build_date", "change"),
+        )
+        persisted["compatibility"] = _bounded_compatibility(persisted.get("compatibility"))
+        for key in PERSISTED_STATE_FIELDS - {
+            "message",
+            "error",
+            "rollback_error",
+            "candidate_invalidated_reason",
+            "recovery",
+            "target_metadata",
+            "running",
+            "compatibility",
+        }:
+            if isinstance(persisted.get(key), str):
+                persisted[key] = limit_output(persisted[key], 512)
         STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
         temporary = STATE_FILE.with_suffix(".tmp")
-        temporary.write_text(json.dumps(current, ensure_ascii=True, indent=2), encoding="utf-8")
+        temporary.write_text(json.dumps(persisted, ensure_ascii=True, separators=(",", ":")), encoding="utf-8")
         temporary.replace(STATE_FILE)
-        return current
+        return persisted
 
 
 def limit_output(output: str, limit: int = 1200) -> str:
@@ -313,13 +498,20 @@ class PortainerClient:
             raise PortainerAPIError("Portainer API lieferte eine unerwartete Antwort.")
         return parsed
 
-    def docker_request(self, method: str, path: str, *, query: dict[str, str] | None = None) -> Any:
+    def docker_request(
+        self,
+        method: str,
+        path: str,
+        *,
+        query: dict[str, str] | None = None,
+        timeout: float = PORTAINER_REQUEST_TIMEOUT_SECONDS,
+    ) -> Any:
         """Call the Docker API through Portainer's endpoint proxy."""
-        return self.raw_request(method, f"/endpoints/{self.endpoint_id}/docker{path}", query=query)
+        return self.raw_request(method, f"/endpoints/{self.endpoint_id}/docker{path}", query=query, timeout=timeout)
 
     def get_stack(self) -> dict[str, Any]:
         """Return the configured Portainer stack."""
-        return self.request("GET", f"/stacks/{self.stack_id}")
+        return self.request("GET", f"/stacks/{self.stack_id}", timeout=PORTAINER_REQUEST_TIMEOUT_SECONDS)
 
     def get_stack_file_content(self, stack: dict[str, Any]) -> str:
         """Return the Compose content Portainer requires for stack updates."""
@@ -330,6 +522,7 @@ class PortainerClient:
             "GET",
             f"/stacks/{self.stack_id}/file",
             query={"endpointId": self.endpoint_id},
+            timeout=PORTAINER_REQUEST_TIMEOUT_SECONDS,
         )
         content = result.get("StackFileContent") or result.get("stackFileContent")
         if not isinstance(content, str) or not content.strip():
@@ -608,6 +801,16 @@ def latest_image_reference(image: str) -> str:
     elif not IMAGE_TAG_PATTERN.fullmatch(reference):
         raise RuntimeError("APP_IMAGE enthält keinen validen OCI-Tag.")
     return f"{registry}/{repository}:latest"
+
+
+def environment_image_reference(image: str, environment: str = UPDATE_ENVIRONMENT) -> str:
+    """Derive the mutable release pointer for one configured environment."""
+    registry, repository, _reference = parse_image_reference(image)
+    tag = {"prod": "prod", "staging": "latest", "dev": "dev"}.get(environment)
+    if tag is None:
+        environment_channels(environment)
+        raise AssertionError("unreachable")
+    return f"{registry}/{repository}:{tag}"
 
 
 def immutable_image_reference(image: str, digest: Any) -> str:
@@ -998,6 +1201,276 @@ def fetch_image_metadata(image: str) -> dict[str, Any]:
     )
 
 
+def _next_tags_page(headers: dict[str, str], *, registry: str, repository: str) -> str | None:
+    """Return a validated same-repository next-page URL from an OCI Link header."""
+    link = registry_header(headers, "Link")
+    if not link:
+        return None
+    matches = re.findall(r'<([^>]+)>\s*;\s*rel="?next"?', link)
+    if len(matches) != 1:
+        raise RegistryMetadataError("Registry-Tag-Pagination ist ungueltig.")
+    candidate = matches[0]
+    validate_registry_url(candidate, expected_authority=registry)
+    parsed = urllib.parse.urlsplit(candidate)
+    if parsed.path != f"/v2/{repository}/tags/list" or parsed.fragment:
+        raise RegistryMetadataError("Registry-Tag-Pagination verlaesst das Repository.")
+    query = urllib.parse.parse_qs(parsed.query, strict_parsing=True)
+    if set(query) - {"n", "last"} or any(len(values) != 1 for values in query.values()):
+        raise RegistryMetadataError("Registry-Tag-Pagination ist ungueltig.")
+    if query.get("n") != ["100"]:
+        raise RegistryMetadataError("Registry-Tag-Pagination hat eine ungueltige Seitengroesse.")
+    last = query.get("last", [""])[0]
+    if last and not IMAGE_TAG_PATTERN.fullmatch(last):
+        raise RegistryMetadataError("Registry-Tag-Pagination enthaelt einen ungueltigen Cursor.")
+    return candidate
+
+
+def list_registry_tags(image: str) -> list[str]:
+    """List validated tags for the configured image repository within response bounds."""
+    registry, repository, _reference = parse_image_reference(image)
+    next_url: str | None = f"https://{registry}/v2/{repository}/tags/list?n=100"
+    seen_urls: set[str] = set()
+    validated: list[str] = []
+    while next_url is not None:
+        if next_url in seen_urls or len(seen_urls) >= 100:
+            raise RegistryMetadataError("Registry-Tag-Pagination konvergiert nicht.")
+        seen_urls.add(next_url)
+        raw, headers = registry_request(next_url, accept="application/json")
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError as error:
+            raise RegistryMetadataError("Registry-Tagliste ist ungueltig.") from error
+        tags = payload.get("tags") if isinstance(payload, dict) else None
+        if tags is None:
+            tags = []
+        if not isinstance(tags, list) or len(tags) > 100:
+            raise RegistryMetadataError("Registry-Tagliste ist zu gross oder ungueltig.")
+        for tag in tags:
+            if not isinstance(tag, str) or not IMAGE_TAG_PATTERN.fullmatch(tag):
+                raise RegistryMetadataError("Registry-Tagliste enthaelt einen ungueltigen Tag.")
+            if tag not in validated:
+                validated.append(tag)
+        next_url = _next_tags_page(headers, registry=registry, repository=repository)
+    return validated
+
+
+def channel_for_tag(tag: str) -> str | None:
+    """Return the trusted release channel encoded by one repository tag."""
+    if tag == "prod" or re.fullmatch(r"prod-[0-9a-f]{40}", tag):
+        return "prod"
+    if tag == "latest" or re.fullmatch(r"staging-[0-9a-f]{40}", tag):
+        return "staging"
+    if tag == "dev" or re.fullmatch(r"dev-[1-9][0-9]*-[0-9a-f]{40}", tag):
+        return "dev"
+    return None
+
+
+def build_version_catalog(image: str, *, environment: str = UPDATE_ENVIRONMENT) -> list[dict[str, Any]]:
+    """Return at most twenty digest-verified image versions per allowed channel."""
+    allowed = environment_channels(environment)
+    registry, repository, _reference = parse_image_reference(image)
+    by_digest: dict[str, dict[str, Any]] = {}
+    for tag in list_registry_tags(image):
+        channel = channel_for_tag(tag)
+        if channel not in allowed:
+            continue
+        metadata = fetch_image_metadata(f"{registry}/{repository}:{tag}")
+        digest = metadata.get("id")
+        if not isinstance(digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(digest):
+            raise RegistryMetadataError("Katalog-Image enthaelt keinen validen Digest.")
+        entry = by_digest.setdefault(
+            digest,
+            {
+                **metadata,
+                "catalog_id": digest,
+                "image": f"{registry}/{repository}@{digest}",
+                "channels": [],
+            },
+        )
+        if channel not in entry["channels"]:
+            entry["channels"].append(channel)
+    channel_order = {channel: index for index, channel in enumerate(ENVIRONMENT_CHANNELS["dev"])}
+    versions = sorted(
+        by_digest.values(),
+        key=lambda entry: (str(entry.get("build_date", "")), str(entry.get("version", ""))),
+        reverse=True,
+    )
+    keep: set[str] = set()
+    for channel in allowed:
+        matching = [entry for entry in versions if channel in entry["channels"]][:20]
+        keep.update(str(entry["catalog_id"]) for entry in matching)
+    result = [entry for entry in versions if entry["catalog_id"] in keep]
+    for entry in result:
+        entry["channels"].sort(key=channel_order.__getitem__)
+    return result
+
+
+def _atomic_json_write(path: Path, payload: Any) -> None:
+    """Write one JSON cache file atomically."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
+    try:
+        temporary.write_text(json.dumps(payload, ensure_ascii=True, separators=(",", ":")), encoding="utf-8")
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _catalog_cache_path() -> Path:
+    return STATE_FILE.with_name("version-catalog.json")
+
+
+def _metadata_cache_path(digest: str) -> Path:
+    return STATE_FILE.with_name("version-metadata") / f"{digest.removeprefix('sha256:')}.json"
+
+
+def _version_summary(entry: dict[str, Any]) -> dict[str, Any]:
+    """Return presentation metadata without large changelog or migration bodies."""
+    return {
+        key: entry[key]
+        for key in ("catalog_id", "image", "id", "version", "revision", "build_date", "change", "channels")
+        if key in entry
+    }
+
+
+def _valid_cached_catalog(versions: Any, *, registry: str, repository: str) -> bool:
+    """Return whether cached summaries still satisfy the environment and digest contract."""
+    if not isinstance(versions, list) or len(versions) > 60:
+        return False
+    allowed_channels = set(environment_channels(UPDATE_ENVIRONMENT))
+    seen: set[str] = set()
+    for entry in versions:
+        if not isinstance(entry, dict):
+            return False
+        digest = entry.get("id")
+        catalog_id = entry.get("catalog_id")
+        image = entry.get("image")
+        channels = entry.get("channels")
+        if (
+            not isinstance(digest, str)
+            or not IMAGE_DIGEST_PATTERN.fullmatch(digest)
+            or catalog_id != digest
+            or digest in seen
+            or not isinstance(image, str)
+            or not isinstance(channels, list)
+            or not channels
+            or len(channels) > 3
+            or any(not isinstance(channel, str) or channel not in allowed_channels for channel in channels)
+        ):
+            return False
+        try:
+            cached_registry, cached_repository, cached_digest = parse_image_reference(image)
+        except RuntimeError:
+            return False
+        if (cached_registry, cached_repository, cached_digest) != (registry, repository, digest):
+            return False
+        seen.add(digest)
+    return True
+
+
+def _cache_metadata(entry: dict[str, Any]) -> None:
+    digest = entry.get("id")
+    if not isinstance(digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(digest):
+        raise RegistryMetadataError("Versionsmetadaten enthalten keinen validen Digest.")
+    _atomic_json_write(_metadata_cache_path(digest), entry)
+    cache_directory = _metadata_cache_path(digest).parent
+    cached = sorted(cache_directory.glob("*.json"), key=lambda path: (path.stat().st_mtime_ns, path.name), reverse=True)
+    for stale in cached[60:]:
+        stale.unlink(missing_ok=True)
+
+
+def cached_version_catalog(image: str, *, force: bool = False) -> list[dict[str, Any]]:
+    """Load the small five-minute catalog cache or refresh it from the registry."""
+    registry, repository, _reference = parse_image_reference(image)
+    repository_name = f"{registry}/{repository}"
+    cache_path = _catalog_cache_path()
+    if not force:
+        try:
+            cached = json.loads(cache_path.read_text(encoding="utf-8"))
+            age = time.time() - float(cached["fetched_at"])
+            versions = cached["versions"]
+            if (
+                cached.get("repository") == repository_name
+                and cached.get("environment") == UPDATE_ENVIRONMENT
+                and 0 <= age < 300
+                and _valid_cached_catalog(versions, registry=registry, repository=repository)
+            ):
+                return versions
+        except (FileNotFoundError, OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
+            pass
+    full_versions = build_version_catalog(image)
+    for entry in full_versions:
+        _cache_metadata(entry)
+    summaries = [_version_summary(entry) for entry in full_versions]
+    _atomic_json_write(
+        cache_path,
+        {
+            "fetched_at": time.time(),
+            "repository": repository_name,
+            "environment": UPDATE_ENVIRONMENT,
+            "versions": summaries,
+        },
+    )
+    return summaries
+
+
+def version_metadata(entry: dict[str, Any]) -> dict[str, Any]:
+    """Load digest-bound detail metadata from cache, refetching only that digest on miss."""
+    digest = entry.get("id")
+    image = entry.get("image")
+    if not isinstance(digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(digest) or not isinstance(image, str):
+        raise RegistryMetadataError("Katalogeintrag ist ungueltig.")
+    try:
+        cached = json.loads(_metadata_cache_path(digest).read_text(encoding="utf-8"))
+        if isinstance(cached, dict) and cached.get("id") == digest and cached.get("image") == image:
+            return cached
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        pass
+    metadata = fetch_image_metadata(image)
+    if metadata.get("id") != digest:
+        raise RegistryMetadataError("Katalog und Versionsmetadaten widersprechen sich.")
+    metadata.update(catalog_id=digest, channels=list(entry.get("channels", [])), image=image)
+    _cache_metadata(metadata)
+    return metadata
+
+
+def selected_catalog_entry(versions: list[dict[str, Any]], selected: Any = "") -> dict[str, Any]:
+    """Resolve only a digest that belongs to the current environment-limited catalog."""
+    if selected:
+        if not isinstance(selected, str) or not IMAGE_DIGEST_PATTERN.fullmatch(selected):
+            raise AgentRequestError(HTTPStatus.BAD_REQUEST, "invalid_catalog_selection")
+        match = next((entry for entry in versions if entry.get("catalog_id") == selected), None)
+        if match is None:
+            raise AgentRequestError(HTTPStatus.CONFLICT, "catalog_selection_not_allowed")
+        return match
+    own_channel = UPDATE_ENVIRONMENT
+    match = next((entry for entry in versions if own_channel in entry.get("channels", [])), None)
+    if match is None:
+        raise AgentRequestError(HTTPStatus.CONFLICT, "no_environment_release")
+    return match
+
+
+def deployment_versions(selected: Any = "") -> dict[str, Any]:
+    """Return the allowed catalog and selected digest-bound details for the admin UI."""
+    client = PortainerClient()
+    stack = client.get_stack()
+    running_image = stack_app_image(stack)
+    versions = cached_version_catalog(running_image)
+    selected_summary = selected_catalog_entry(versions, selected)
+    selected_details = version_metadata(selected_summary)
+    running_digest_image = immutable_running_image(client, running_image)
+    _running_repository, running_digest = validate_immutable_image_reference(running_digest_image)
+    running_metadata = version_metadata({"id": running_digest, "image": running_digest_image, "channels": []})
+    compatibility = migration_compatibility(running_metadata.get("migrations"), selected_details.get("migrations"))
+    selected_details = {**selected_details, "compatibility": compatibility}
+    return {
+        "environment": UPDATE_ENVIRONMENT,
+        "allowed_channels": list(environment_channels()),
+        "versions": versions,
+        "selected": selected_details,
+    }
+
+
 def normalized_changelog_entries(raw_changelog: Any) -> list[dict[str, str]]:
     """Return UI-safe changelog entries from an OCI label value."""
     if isinstance(raw_changelog, str):
@@ -1026,6 +1499,142 @@ def normalized_changelog_entries(raw_changelog: Any) -> list[dict[str, str]]:
     return entries
 
 
+def normalized_migration_manifest(raw_manifest: Any) -> dict[str, Any]:
+    """Return a bounded migration manifest from a digest-verified image label."""
+    if isinstance(raw_manifest, str):
+        try:
+            raw_manifest = json.loads(raw_manifest)
+        except json.JSONDecodeError:
+            return {}
+    if not isinstance(raw_manifest, dict):
+        return {}
+    raw_files = raw_manifest.get("files")
+    if not isinstance(raw_files, list) or len(raw_files) > 256:
+        return {}
+    files: list[dict[str, str]] = []
+    for item in raw_files:
+        if not isinstance(item, dict):
+            return {}
+        path = item.get("path")
+        digest = item.get("sha256")
+        if (
+            not isinstance(path, str)
+            or not re.fullmatch(r"[a-z][a-z0-9_]*/migrations/[0-9]{4}_[a-z0-9_]+\.py", path)
+            or not isinstance(digest, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", digest)
+        ):
+            return {}
+        files.append({"path": path, "sha256": digest})
+    if len({item["path"] for item in files}) != len(files):
+        return {}
+    raw_migrations = raw_manifest.get("migrations")
+    if not isinstance(raw_migrations, list) or len(raw_migrations) != len(files):
+        return {}
+    file_digests = {f"{Path(item['path']).parts[0]}.{Path(item['path']).stem}": item["sha256"] for item in files}
+    migrations: list[dict[str, Any]] = []
+    for item in raw_migrations:
+        if not isinstance(item, dict):
+            return {}
+        identifier = item.get("identifier")
+        dependencies = item.get("dependencies")
+        reversible = item.get("reversible")
+        digest = item.get("sha256")
+        if (
+            not isinstance(identifier, str)
+            or not re.fullmatch(r"[a-z][a-z0-9_]*\.[0-9]{4}_[a-z0-9_]+", identifier)
+            or identifier not in file_digests
+            or digest != file_digests[identifier]
+            or not isinstance(dependencies, list)
+            or len(dependencies) > 64
+            or not all(
+                isinstance(dependency, str)
+                and re.fullmatch(r"[a-z][a-z0-9_]*\.(?:[0-9]{4}_[a-z0-9_]+|__first__)", dependency)
+                for dependency in dependencies
+            )
+            or not isinstance(reversible, bool)
+        ):
+            return {}
+        migrations.append(
+            {
+                "identifier": identifier,
+                "dependencies": sorted(set(dependencies)),
+                "reversible": reversible,
+                "sha256": digest,
+            }
+        )
+    if len({item["identifier"] for item in migrations}) != len(migrations):
+        return {}
+    return {
+        "files": sorted(files, key=lambda item: item["path"]),
+        "migrations": sorted(migrations, key=lambda item: item["identifier"]),
+    }
+
+
+def _migration_graph_extends(base: dict[str, dict[str, Any]], extended: dict[str, dict[str, Any]]) -> bool:
+    """Return whether every added node descends from a leaf of the base graph."""
+    if not base.keys() <= extended.keys():
+        return False
+    if not base:
+        return True
+    depended_on = {
+        dependency for migration in base.values() for dependency in migration["dependencies"] if dependency in base
+    }
+    reachable = set(base) - depended_on
+    remaining = set(extended) - set(base)
+    while remaining:
+        connected = {
+            identifier
+            for identifier in remaining
+            if any(dependency in reachable for dependency in extended[identifier]["dependencies"])
+        }
+        if not connected:
+            return False
+        reachable.update(connected)
+        remaining -= connected
+    return True
+
+
+def migration_compatibility(current: Any, target: Any) -> dict[str, Any]:
+    """Classify migration ancestry conservatively without promising compatibility."""
+    current_manifest = normalized_migration_manifest(current)
+    target_manifest = normalized_migration_manifest(target)
+    if not current_manifest or not target_manifest:
+        return {"risk": "unknown", "requires_acknowledgement": True, "affected_migrations": []}
+    current_migrations = {item["identifier"]: item for item in current_manifest["migrations"]}
+    target_migrations = {item["identifier"]: item for item in target_manifest["migrations"]}
+    changed = sorted(
+        identifier
+        for identifier in current_migrations.keys() & target_migrations.keys()
+        if current_migrations[identifier] != target_migrations[identifier]
+    )
+    if changed:
+        risk = "divergent"
+        affected = changed
+    elif current_migrations == target_migrations:
+        risk = "identical"
+        affected = []
+    elif _migration_graph_extends(current_migrations, target_migrations):
+        risk = "forward"
+        affected = sorted(target_migrations.keys() - current_migrations.keys())
+    elif _migration_graph_extends(target_migrations, current_migrations):
+        risk = "downgrade"
+        affected = sorted(current_migrations.keys() - target_migrations.keys())
+    else:
+        risk = "divergent"
+        affected = sorted(current_migrations.keys() ^ target_migrations.keys())
+    return {
+        "risk": risk,
+        "requires_acknowledgement": risk not in {"identical", "forward"},
+        "affected_migrations": affected[:20],
+    }
+
+
+def ensure_risk_acknowledged(state: dict[str, Any], acknowledged: Any) -> None:
+    """Reject installation of a risky one-time candidate without explicit consent."""
+    if state.get("risk_requires_acknowledgement") is True and acknowledged is not True:
+        raise AgentRequestError(HTTPStatus.CONFLICT, "risk_acknowledgement_required")
+
+
 def image_metadata(image: Any) -> dict[str, Any]:
     """Normalize OCI image metadata from Docker-like objects or dict payloads."""
     if isinstance(image, dict):
@@ -1044,6 +1653,7 @@ def image_metadata(image: Any) -> dict[str, Any]:
         "build_date": str(labels.get(OCI_LABELS["build_date"], "unknown")),
         "change": str(labels.get(OCI_LABELS["change"], "Unbekannter Change")),
         "changelog": normalized_changelog_entries(labels.get(OCI_LABELS["changelog"], "[]")),
+        "migrations": normalized_migration_manifest(labels.get(OCI_LABELS["migrations"], "{}")),
     }
 
 
@@ -1129,15 +1739,13 @@ def deployment_status() -> dict[str, Any]:
     running_image = stack_app_image(stack)
     result = load_state()
     result["running"] = {"image": running_image}
-    if "update_available" not in result:
-        latest_id = result.get("latest", {}).get("id")
-        installed_id = result.get("installed", {}).get("id")
-        result["update_available"] = bool(latest_id and latest_id != installed_id)
+    result["environment"] = UPDATE_ENVIRONMENT
+    result.setdefault("update_available", False)
     return result
 
 
 def check_update(payload: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Check GHCR metadata and compare it with current Django build metadata."""
+    """Bind one environment-allowed registry image to the running stack digest."""
     if not update_lock.acquire(blocking=False):
         raise AgentRequestError(HTTPStatus.CONFLICT, "update_in_progress")
     try:
@@ -1148,30 +1756,45 @@ def check_update(payload: dict[str, Any] | None = None) -> dict[str, Any]:
         validate_active_stack_contract(client, stack)
         running_digest_image = immutable_running_image(client, running_image)
         _running_repository, running_digest = validate_immutable_image_reference(running_digest_image)
-        discovery_image = latest_image_reference(running_image)
-        latest = fetch_image_metadata(discovery_image)
+        requested_catalog_id = payload.get("catalog_id", "") if isinstance(payload, dict) else ""
+        if requested_catalog_id:
+            versions = cached_version_catalog(running_image, force=True)
+            selected = selected_catalog_entry(versions, requested_catalog_id)
+            latest = version_metadata(selected)
+            discovery_image = str(latest["image"])
+        else:
+            discovery_image = environment_image_reference(running_image)
+            latest = fetch_image_metadata(discovery_image)
         approved_image = immutable_image_reference(str(latest.get("image") or discovery_image), latest.get("id"))
         approved_digest = str(latest["id"])
         current = current_metadata_from_payload(payload)
-        update_available = has_update(latest, current, running_image)
-        changelog = changelog_between_versions(latest, current)
+        update_available = approved_digest != running_digest
+        if latest.get("migrations"):
+            running_metadata = fetch_image_metadata(running_digest_image)
+            compatibility = migration_compatibility(running_metadata.get("migrations"), latest.get("migrations"))
+        else:
+            compatibility = migration_compatibility({}, {})
         candidate_id = secrets.token_urlsafe(32) if update_available else ""
+        target_metadata = {key: latest[key] for key in ("version", "revision", "build_date", "change") if key in latest}
         return save_state(
             phase="checked",
             message="Image-Pruefung abgeschlossen.",
             error="",
             rollback_error="",
             recovery="",
-            latest=latest,
+            target_metadata=target_metadata,
             approved_image=approved_image,
             approved_digest=approved_digest,
+            selected_catalog_id=requested_catalog_id or approved_digest,
+            candidate_environment=UPDATE_ENVIRONMENT,
+            compatibility=compatibility,
+            risk_requires_acknowledgement=compatibility["requires_acknowledgement"],
             candidate_id=candidate_id,
             candidate_digest=approved_digest if update_available else "",
             candidate_base_digest=running_digest,
             candidate_contract=CANDIDATE_CONTRACT_VERSION,
             running={"image": running_image, **current},
             update_available=update_available,
-            changelog=changelog,
             checked_at=utc_now(),
         )
     finally:
@@ -1200,11 +1823,13 @@ def checked_install_candidate(candidate_id: Any) -> tuple[str, dict[str, Any]]:
         raise AgentRequestError(HTTPStatus.CONFLICT, "candidate_mismatch") from error
     if state.get("approved_digest") != approved_digest or state.get("candidate_digest") != approved_digest:
         raise AgentRequestError(HTTPStatus.CONFLICT, "candidate_mismatch")
+    if state.get("candidate_environment", UPDATE_ENVIRONMENT) != UPDATE_ENVIRONMENT:
+        raise AgentRequestError(HTTPStatus.CONFLICT, "candidate_mismatch")
     candidate_base_digest = state.get("candidate_base_digest")
     if not isinstance(candidate_base_digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(candidate_base_digest):
         raise AgentRequestError(HTTPStatus.CONFLICT, "candidate_mismatch")
     latest = state.get("latest")
-    if not isinstance(latest, dict) or latest.get("id") != approved_digest:
+    if latest is not None and (not isinstance(latest, dict) or latest.get("id") != approved_digest):
         raise AgentRequestError(HTTPStatus.CONFLICT, "candidate_mismatch")
     return candidate_id, state
 
@@ -1604,6 +2229,16 @@ def reconcile_interrupted_update() -> dict[str, Any]:
                 completed_at=utc_now(),
             )
 
+        # A rollback PUT is an externally visible mutation. Once its start was
+        # persisted, its outcome is uncertain and must never be retried after
+        # restart; fail closed until an operator resolves the runtime.
+        if state.get("rollback_put_started_at"):
+            logger.error("Rollback ist bereits gestartet; kein weiterer Rollback-PUT, Operation %s", operation_id)
+            return _recovery_required(
+                error="Rollback wurde bereits gestartet, sein Ergebnis ist aber nicht verifiziert.",
+                outcome="rollback_failed",
+            )
+
         save_state(
             phase="rollback",
             message="Unterbrochenes Update wird kontrolliert zurueckgesetzt.",
@@ -1675,8 +2310,10 @@ def perform_update(checked_state: dict[str, Any]) -> None:
         if checked_state.get("approved_digest") != approved_digest:
             raise RuntimeError("Der freigegebene Image-Digest passt nicht zum Update-Status.")
         latest = checked_state.get("latest")
-        if not isinstance(latest, dict) or latest.get("id") != approved_digest:
+        if latest is not None and (not isinstance(latest, dict) or latest.get("id") != approved_digest):
             raise RuntimeError("Der freigegebene Image-Digest passt nicht zu den geprüften Metadaten.")
+        if not isinstance(latest, dict):
+            latest = {}
         client = PortainerClient()
         step = "Rollback-Image ermitteln"
         old_image = immutable_running_image(client, approved_image)
@@ -1842,21 +2479,29 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.respond(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
             return
         try:
-            if self.command == "GET" and self.path == "/healthz":
+            parsed_path = urllib.parse.urlsplit(self.path)
+            if self.command == "GET" and parsed_path.path == "/healthz":
                 self.respond(HTTPStatus.OK, {"status": "ok"})
-            elif self.command == "GET" and self.path == "/status":
+            elif self.command == "GET" and parsed_path.path == "/status":
                 self.respond(HTTPStatus.OK, deployment_status())
-            elif self.command == "POST" and self.path == "/check":
+            elif self.command == "GET" and parsed_path.path == "/versions":
+                values = urllib.parse.parse_qs(parsed_path.query, strict_parsing=True) if parsed_path.query else {}
+                if set(values) - {"selected"} or any(len(items) != 1 for items in values.values()):
+                    raise AgentRequestError(HTTPStatus.BAD_REQUEST, "invalid_catalog_selection")
+                self.respond(HTTPStatus.OK, deployment_versions(values.get("selected", [""])[0]))
+            elif self.command == "POST" and parsed_path.path == "/check":
                 self.respond(HTTPStatus.OK, check_update(read_json_body(self)))
-            elif self.command == "POST" and self.path == "/install":
+            elif self.command == "POST" and parsed_path.path == "/install":
                 if not update_lock.acquire(blocking=False):
                     self.respond(HTTPStatus.CONFLICT, {"error": "update_in_progress"})
                     return
                 lock_handed_to_thread = False
                 try:
                     ensure_update_mutations_allowed()
-                    request_candidate_id = read_json_body(self).get("candidate_id")
-                    checked_install_candidate(request_candidate_id)
+                    request_payload = read_json_body(self)
+                    request_candidate_id = request_payload.get("candidate_id")
+                    _candidate_id, candidate_state = checked_install_candidate(request_candidate_id)
+                    ensure_risk_acknowledged(candidate_state, request_payload.get("risk_acknowledged", False))
                     client = PortainerClient()
                     stack = client.get_stack()
                     validate_active_stack_contract(client, stack)
@@ -1889,7 +2534,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                     if not lock_handed_to_thread:
                         update_lock.release()
                 self.respond(HTTPStatus.ACCEPTED, {"status": "accepted"})
-            elif self.command == "POST" and self.path == "/backup":
+            elif self.command == "POST" and parsed_path.path == "/backup" and not parsed_path.query:
                 payload = read_json_body(self)
                 backup_name = create_backup_archive(
                     str(payload.get("staging_dir", "")),
@@ -1972,9 +2617,11 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
 
 def run_agent() -> None:
     """Reconcile persisted update work before accepting mutating agent requests."""
+    environment_channels()
     wait_for_portainer_startup(PortainerClient())
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    save_state()
     reconcile_interrupted_update()
     server = BoundedThreadingHTTPServer(
         ("0.0.0.0", 8080),

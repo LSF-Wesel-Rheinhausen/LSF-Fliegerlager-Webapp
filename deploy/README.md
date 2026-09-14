@@ -25,6 +25,21 @@ Pflichtvariablen für den Update-Agent:
 - `PORTAINER_API_KEY`: API-Key eines dedizierten technischen Portainer-Benutzers.
 - `PORTAINER_ENDPOINT_ID`: Portainer Environment/Endpoint-ID des Ziel-Stacks.
 - `PORTAINER_STACK_ID`: Portainer Stack-ID des Ziel-Stacks.
+- `UPDATE_ENVIRONMENT`: Umgebung des Ziel-Stacks (`dev`, `staging` oder `prod`); für produktive Portainer-Stacks auf
+  `prod` setzen. Prod sieht ausschließlich Prod-Releases, Staging zusätzlich Staging-Releases und Dev alle drei Kanäle.
+
+## Release-Kanäle
+
+Pull Requests aus diesem Repository veröffentlichen nach erfolgreichen Tests `dev-<PR>-<SHA>` und den beweglichen
+Kanal `dev`. Fork-Pull-Requests werden niemals nach GHCR veröffentlicht. Ein erfolgreicher `main`-Build veröffentlicht
+beide Images als `staging-<SHA>` und `latest`. Die geschützte manuelle Prod-Pipeline nimmt nur eine bereits gebaute
+Staging-Revision, prüft die identischen OCI-Revisionslabels von App und Updater und promotet deren unveränderliche
+Digests nach `prod-<SHA>` und `prod`; sie führt keinen Neubau aus und verändert den Staging-Zeiger `latest` nicht.
+
+In Portainer müssen `APP_IMAGE` und `UPDATER_IMAGE` auf die gewünschten Kanal-Tags oder — für reproduzierbare
+Rollouts — auf vollständige `repo@sha256:...`-Digests zeigen. `UPDATE_ENVIRONMENT=prod` allein erteilt keine
+Registry- oder Portainer-Rechte. Der Updater erhält diese Zugangsdaten ausschließlich über den `updater`-Service;
+Runtime-App-Container bekommen kein GHCR-Schreibrecht.
 
 ## Service-spezifische Umgebungsvariablen
 
