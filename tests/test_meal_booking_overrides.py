@@ -8,11 +8,11 @@ from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
 
-from billing.kiosk_access import KIOSK_PARTICIPANT_SESSION_KEY
 from billing.models import Camp, Charge, MealBookingOverride, MealOrder, MealSignup, PriceRule
 from billing.permissions import HUEBERS_GROUP
 from billing.services import meal_booking_state
 from tests.factories import CampFactory, GroupFactory, ParticipantFactory, PriceRuleFactory, UserFactory
+from tests.kiosk_helpers import authenticate_kiosk_session
 
 
 @pytest.mark.django_db
@@ -44,7 +44,7 @@ def test_meal_manager_can_reopen_tomorrow_after_cutoff_per_meal(kiosk_client, mo
 
     assert override.changed_by == manager
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     response = kiosk_client.get(reverse("kiosk-home"))
     assert response.status_code == 200
@@ -268,7 +268,7 @@ def test_booking_rechecks_manual_close_after_acquiring_camp_lock(kiosk_client, m
         unit_price=Decimal("7.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     original_fetch_all = QuerySet._fetch_all
     override_injected = False
@@ -336,7 +336,7 @@ def test_retraction_rechecks_manual_close_after_acquiring_camp_lock(kiosk_client
         charge=charge,
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
     original_fetch_all = QuerySet._fetch_all
     override_injected = False

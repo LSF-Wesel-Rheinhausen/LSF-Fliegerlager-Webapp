@@ -9,7 +9,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from billing.kiosk_access import KIOSK_ACCESS_COOKIE_NAME, KIOSK_PARTICIPANT_SESSION_KEY, set_kiosk_access_cookie
+from billing.kiosk_access import KIOSK_ACCESS_COOKIE_NAME, set_kiosk_access_cookie
 from billing.models import BookingAuditLog, Camp, CampKioskAccess, Charge, Expense, Participant, Payment, PriceRule
 from billing.permissions import EDITOR_GROUP, HUEBERS_GROUP
 from tests.factories import (
@@ -21,6 +21,7 @@ from tests.factories import (
     SuperUserFactory,
     UserFactory,
 )
+from tests.kiosk_helpers import authenticate_kiosk_session
 
 
 @pytest.fixture
@@ -220,7 +221,7 @@ def test_unauthorized_receipt_requests_do_not_reveal_receipt_existence(client, c
         set_kiosk_access_cookie(cookie_response, access)
         client.cookies[KIOSK_ACCESS_COOKIE_NAME] = cookie_response.cookies[KIOSK_ACCESS_COOKIE_NAME].value
         session = client.session
-        session[KIOSK_PARTICIPANT_SESSION_KEY] = stranger.pk
+        authenticate_kiosk_session(session, stranger)
         session.save()
 
     try:
@@ -259,7 +260,7 @@ def test_unauthorized_kiosk_receipt_requests_do_not_reveal_expense_row_existence
     set_kiosk_access_cookie(cookie_response, access)
     client.cookies[KIOSK_ACCESS_COOKIE_NAME] = cookie_response.cookies[KIOSK_ACCESS_COOKIE_NAME].value
     session = client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = stranger.pk
+    authenticate_kiosk_session(session, stranger)
     session.save()
 
     try:

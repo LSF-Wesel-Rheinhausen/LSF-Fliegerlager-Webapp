@@ -9,6 +9,7 @@ from django.urls import reverse
 
 from billing.views import KIOSK_PARTICIPANT_SESSION_KEY
 from tests.factories import CampFactory, ParticipantFactory, UserFactory
+from tests.kiosk_helpers import authenticate_kiosk_session
 
 
 @pytest.mark.django_db
@@ -132,7 +133,7 @@ def test_central_kiosk_login_enforces_short_autologout(kiosk_client):
 def test_switching_kiosk_modes_clears_participant_session(kiosk_client):
     participant = ParticipantFactory(camp=CampFactory(is_active=True))
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session["kiosk_mode"] = "private"
     session.save()
 

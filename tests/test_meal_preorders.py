@@ -4,9 +4,9 @@ from decimal import Decimal
 import pytest
 from django.urls import reverse
 
-from billing.kiosk_access import KIOSK_PARTICIPANT_SESSION_KEY
 from billing.models import MealOrder, MealSignup, PriceRule
 from tests.factories import CampFactory, GroupFactory, ParticipantFactory, SuperUserFactory, UserFactory
+from tests.kiosk_helpers import authenticate_kiosk_session
 
 
 @pytest.mark.django_db
@@ -95,7 +95,7 @@ def test_kiosk_offers_only_admin_released_preorder_action_before_camp(kiosk_clie
             unit_price=Decimal("5.00"),
         )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -134,7 +134,7 @@ def test_pre_camp_kiosk_renders_only_released_preorder_ui(kiosk_client, monkeypa
             unit_price=Decimal("5.00"),
         )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -184,7 +184,7 @@ def test_kiosk_books_each_released_meal_before_camp(kiosk_client, monkeypatch, m
         unit_price=Decimal("5.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -229,7 +229,7 @@ def test_kiosk_keeps_sent_dinner_preorder_locked_but_breakfast_bookable(kiosk_cl
         unit_price=Decimal("5.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -288,7 +288,7 @@ def test_kiosk_rejects_meal_booking_outside_camp_before_camp(kiosk_client, monke
         unit_price=Decimal("5.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(
@@ -322,7 +322,7 @@ def test_kiosk_rejects_unreleased_meal_post_before_camp(kiosk_client, monkeypatc
         unit_price=Decimal("5.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.post(

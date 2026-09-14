@@ -23,6 +23,7 @@ services:
     environment:
       AUTHELIA_SSO_EMAIL_HEADER: ${AUTHELIA_SSO_EMAIL_HEADER:-Remote-Email}
       AUTHELIA_SSO_ENABLED: ${AUTHELIA_SSO_ENABLED:-0}
+      ACCOUNT_RECOVERY_PUBLIC_ORIGIN: ${ACCOUNT_RECOVERY_PUBLIC_ORIGIN:?ACCOUNT_RECOVERY_PUBLIC_ORIGIN must be set in .env}
       BACKUP_DIR: /backups
       CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set in .env}
@@ -134,6 +135,7 @@ services:
     image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}
     restart: unless-stopped
     environment:
+      ACCOUNT_RECOVERY_PUBLIC_ORIGIN: ${ACCOUNT_RECOVERY_PUBLIC_ORIGIN:?ACCOUNT_RECOVERY_PUBLIC_ORIGIN must be set in .env}
       BACKUP_DIR: /backups
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set in .env}
       DAILY_SETTLEMENT_BACKUP_INTERVAL_SECONDS: ${DAILY_SETTLEMENT_BACKUP_INTERVAL_SECONDS:-300}
@@ -160,6 +162,7 @@ services:
     image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}
     restart: unless-stopped
     environment:
+      ACCOUNT_RECOVERY_PUBLIC_ORIGIN: ${ACCOUNT_RECOVERY_PUBLIC_ORIGIN:?ACCOUNT_RECOVERY_PUBLIC_ORIGIN must be set in .env}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set in .env}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
       DJANGO_DEBUG: ${DJANGO_DEBUG:-0}
@@ -189,6 +192,7 @@ services:
     image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}
     restart: unless-stopped
     environment:
+      ACCOUNT_RECOVERY_PUBLIC_ORIGIN: ${ACCOUNT_RECOVERY_PUBLIC_ORIGIN:?ACCOUNT_RECOVERY_PUBLIC_ORIGIN must be set in .env}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set in .env}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
       DJANGO_DEBUG: ${DJANGO_DEBUG:-0}
@@ -203,6 +207,34 @@ services:
         condition: service_healthy
     networks:
       - frontend
+      - backend
+
+  account-recovery-worker:
+    image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}
+    restart: unless-stopped
+    environment:
+      ACCOUNT_RECOVERY_PUBLIC_ORIGIN: ${ACCOUNT_RECOVERY_PUBLIC_ORIGIN:?ACCOUNT_RECOVERY_PUBLIC_ORIGIN must be set in .env}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set in .env}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-0}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?DJANGO_SECRET_KEY must be set in .env}
+      WEB_PUSH_ALLOWED_ORIGINS: ${WEB_PUSH_ALLOWED_ORIGINS:-}
+      WEB_PUSH_ENABLED: ${WEB_PUSH_ENABLED:-0}
+      WEB_PUSH_KEY_DIR: /run/secrets/webpush
+      WEB_PUSH_VAPID_PRIVATE_KEY: ${WEB_PUSH_VAPID_PRIVATE_KEY:-}
+      WEB_PUSH_VAPID_PUBLIC_KEY: ${WEB_PUSH_VAPID_PUBLIC_KEY:-}
+      WEB_PUSH_VAPID_SUBJECT: ${WEB_PUSH_VAPID_SUBJECT:-mailto:admin@example.invalid}
+    command: ["python", "manage.py", "run_account_recovery_worker", "--loop"]
+    healthcheck:
+      disable: true
+    depends_on:
+      db:
+        condition: service_healthy
+      app:
+        condition: service_healthy
+    volumes:
+      - ${PERSISTENCE_DIR:-./data}/secrets/webpush:/run/secrets/webpush:ro
+    networks:
       - backend
 
 volumes:

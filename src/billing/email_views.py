@@ -118,9 +118,9 @@ def email_settings(request):
         {
             "form": form,
             "configuration": configuration,
-            "recent_batches": EmailBatch.objects.select_related("camp", "created_by").annotate(
-                delivery_count=Count("deliveries")
-            )[:20],
+            "recent_batches": EmailBatch.objects.exclude(kind=EmailBatch.Kind.ACCOUNT_RECOVERY)
+            .select_related("camp", "created_by")
+            .annotate(delivery_count=Count("deliveries"))[:20],
             "recent_test_logs": EmailTestLog.objects.select_related("requested_by")[:10],
         },
     )
@@ -363,7 +363,10 @@ def settlement_email_compose(request, run_id):
 @admin_required
 def email_batch_detail(request, batch_id):
     """Show the recipient-level status of a manually confirmed batch."""
-    batch = get_object_or_404(EmailBatch.objects.select_related("camp", "created_by"), pk=batch_id)
+    batch = get_object_or_404(
+        EmailBatch.objects.exclude(kind=EmailBatch.Kind.ACCOUNT_RECOVERY).select_related("camp", "created_by"),
+        pk=batch_id,
+    )
     deliveries = batch.deliveries.select_related("settlement", "settlement__run").defer("attachment_content")
     counts = deliveries.aggregate(
         pending=Count("pk", filter=Q(status=EmailDelivery.Status.PENDING)),
@@ -387,7 +390,10 @@ def email_batch_detail(request, batch_id):
 @require_POST
 def email_delivery_retry(request, delivery_id):
     """Requeue one failed delivery after an explicit administrator action."""
-    delivery = get_object_or_404(EmailDelivery.objects.select_related("batch"), pk=delivery_id)
+    delivery = get_object_or_404(
+        EmailDelivery.objects.exclude(batch__kind=EmailBatch.Kind.ACCOUNT_RECOVERY).select_related("batch"),
+        pk=delivery_id,
+    )
     try:
         requeue_failed_email_delivery(delivery)
     except ValueError as error:

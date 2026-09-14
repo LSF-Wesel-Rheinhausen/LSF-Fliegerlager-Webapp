@@ -5,10 +5,10 @@ import pytest
 from django.template.loader import render_to_string
 from django.urls import reverse
 
-from billing.kiosk_access import KIOSK_PARTICIPANT_SESSION_KEY
 from billing.models import AttendanceDay
 from billing.profile_forms import ParticipantProfileForm
 from tests.factories import CampFactory, ParticipantFactory
+from tests.kiosk_helpers import authenticate_kiosk_session
 
 
 @pytest.mark.django_db
@@ -108,7 +108,7 @@ def test_kiosk_home_explains_missing_camp_dates(kiosk_client):
     camp = CampFactory(starts_on=None, ends_on=None)
     participant = ParticipantFactory(camp=camp)
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))

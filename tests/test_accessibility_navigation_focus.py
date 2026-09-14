@@ -3,8 +3,8 @@ from html.parser import HTMLParser
 import pytest
 from django.urls import reverse
 
-from billing.views import KIOSK_PARTICIPANT_SESSION_KEY
 from tests.factories import CampFactory, ParticipantFactory, SuperUserFactory
+from tests.kiosk_helpers import authenticate_kiosk_session
 
 
 class _HeadingAndNavParser(HTMLParser):
@@ -83,7 +83,7 @@ def test_kiosk_home_mobile_nav_has_aria_current(kiosk_client):
     participant = ParticipantFactory(camp=CampFactory(is_active=True))
     session = kiosk_client.session
     session["kiosk_mode"] = "private"
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))

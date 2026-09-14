@@ -44,6 +44,7 @@ start() {
     -p 8000:8000 \
     -e DJANGO_DEBUG=0 \
     -e DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1 \
+    -e ACCOUNT_RECOVERY_PUBLIC_ORIGIN=http://localhost \
     -e DJANGO_SECRET_KEY=test-only-zap-secret-with-more-than-fifty-characters-1234567890 \
     "$image" >/dev/null
   write_state
