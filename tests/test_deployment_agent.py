@@ -1822,7 +1822,7 @@ def test_catalog_cache_uses_fresh_compact_summaries_without_registry(monkeypatch
     build.assert_not_called()
 
 
-def test_catalog_cache_refreshes_corrupt_file_and_excludes_large_details(monkeypatch, tmp_path):
+def test_catalog_cache_refreshes_corrupt_file_and_excludes_large_details(monkeypatch, tmp_path, caplog):
     monkeypatch.setattr(deployment_agent, "STATE_FILE", tmp_path / "status.json")
     (tmp_path / "version-catalog.json").write_text("not-json", encoding="utf-8")
     digest = image_digest("b")
@@ -1840,9 +1840,11 @@ def test_catalog_cache_refreshes_corrupt_file_and_excludes_large_details(monkeyp
     }
     monkeypatch.setattr(deployment_agent, "build_version_catalog", lambda _image: [full_entry])
 
-    result = deployment_agent.cached_version_catalog(TEST_TARGET_IMAGE)
+    with caplog.at_level("WARNING", logger="deployment-agent"):
+        result = deployment_agent.cached_version_catalog(TEST_TARGET_IMAGE)
 
     assert result == [deployment_agent._version_summary(full_entry)]
+    assert "Versionskatalog-Cache ist unbrauchbar (JSONDecodeError)" in caplog.text
     cached = json.loads((tmp_path / "version-catalog.json").read_text(encoding="utf-8"))
     assert "changelog" not in cached["versions"][0]
     assert "migrations" not in cached["versions"][0]
@@ -1870,6 +1872,29 @@ def test_detail_cache_rejects_entry_bound_to_a_different_image(monkeypatch, tmp_
     assert result["change"] == "trusted"
     assert result["image"] == entry["image"]
     fetch.assert_called_once_with(entry["image"])
+
+
+def test_detail_cache_refreshes_corrupt_file_and_logs_safe_reason(monkeypatch, tmp_path, caplog):
+    monkeypatch.setattr(deployment_agent, "STATE_FILE", tmp_path / "status.json")
+    digest = image_digest("d")
+    entry = {
+        "catalog_id": digest,
+        "id": digest,
+        "image": target_digest_reference(digest),
+        "channels": ["prod"],
+    }
+    cache_path = deployment_agent._metadata_cache_path(digest)
+    cache_path.parent.mkdir(parents=True)
+    cache_path.write_text("not-json", encoding="utf-8")
+    fetch = Mock(return_value={"id": digest, "image": entry["image"], "change": "trusted"})
+    monkeypatch.setattr(deployment_agent, "fetch_image_metadata", fetch)
+
+    with caplog.at_level("WARNING", logger="deployment-agent"):
+        result = deployment_agent.version_metadata(entry)
+
+    assert result["change"] == "trusted"
+    assert "Versionsdetail-Cache ist unbrauchbar (JSONDecodeError)" in caplog.text
+    assert "not-json" not in caplog.text
 
 
 def test_detail_cache_prunes_deterministically_to_sixty_digests(monkeypatch, tmp_path):

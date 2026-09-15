@@ -1396,8 +1396,13 @@ def cached_version_catalog(image: str, *, force: bool = False) -> list[dict[str,
                 and _valid_cached_catalog(versions, registry=registry, repository=repository)
             ):
                 return versions
-        except (FileNotFoundError, OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
-            pass
+        except FileNotFoundError:
+            logger.debug("Versionskatalog-Cache fehlt; Registry wird abgefragt.")
+        except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as error:
+            logger.warning(
+                "Versionskatalog-Cache ist unbrauchbar (%s); Registry wird abgefragt.",
+                type(error).__name__,
+            )
     full_versions = build_version_catalog(image)
     for entry in full_versions:
         _cache_metadata(entry)
@@ -1424,8 +1429,13 @@ def version_metadata(entry: dict[str, Any]) -> dict[str, Any]:
         cached = json.loads(_metadata_cache_path(digest).read_text(encoding="utf-8"))
         if isinstance(cached, dict) and cached.get("id") == digest and cached.get("image") == image:
             return cached
-    except (FileNotFoundError, OSError, json.JSONDecodeError):
-        pass
+    except FileNotFoundError:
+        logger.debug("Versionsdetail-Cache fehlt; Registry wird abgefragt.")
+    except (OSError, json.JSONDecodeError) as error:
+        logger.warning(
+            "Versionsdetail-Cache ist unbrauchbar (%s); Registry wird abgefragt.",
+            type(error).__name__,
+        )
     metadata = fetch_image_metadata(image)
     if metadata.get("id") != digest:
         raise RegistryMetadataError("Katalog und Versionsmetadaten widersprechen sich.")
