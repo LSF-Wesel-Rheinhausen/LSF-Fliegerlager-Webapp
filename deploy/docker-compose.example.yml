@@ -2,7 +2,7 @@ name: ${COMPOSE_PROJECT_NAME:-fliegerlager}
 
 services:
   storage-migrate:
-    image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}
+    image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:prod}
     user: "0:0"
     restart: "no"
     entrypoint: ["python", "-m", "config.persistence_migration"]
@@ -18,7 +18,7 @@ services:
       - ${BACKUP_DIR:-./backups}:/legacy/backups:ro
 
   app:
-    image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}
+    image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:prod}
     restart: unless-stopped
     environment:
       AUTHELIA_SSO_EMAIL_HEADER: ${AUTHELIA_SSO_EMAIL_HEADER:-Remote-Email}
@@ -86,7 +86,7 @@ services:
     networks: [backend]
 
   updater:
-    image: ${UPDATER_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater:latest}
+    image: ${UPDATER_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater:prod}
     restart: unless-stopped
     environment:
       UPDATE_AGENT_TOKEN: ${UPDATE_AGENT_TOKEN:?UPDATE_AGENT_TOKEN must be set in .env}
@@ -97,6 +97,7 @@ services:
       PORTAINER_STACK_ID: ${PORTAINER_STACK_ID:?PORTAINER_STACK_ID must be set in .env}
       APP_HEALTH_URL: ${APP_HEALTH_URL:-http://app:8000/healthz/}
       TARGET_SERVICE: ${TARGET_SERVICE:-app}
+      UPDATE_ENVIRONMENT: ${UPDATE_ENVIRONMENT:-prod}
       GHCR_TOKEN: ${GHCR_TOKEN:-}
       UPDATE_REGISTRY_ALLOWED_HOSTS: ${UPDATE_REGISTRY_ALLOWED_HOSTS:-ghcr.io}
       UPDATE_HEALTH_TIMEOUT: ${UPDATE_HEALTH_TIMEOUT:-180}
@@ -127,7 +128,7 @@ services:
     networks: [frontend, backend]
 
   daily-settlement-backup:
-    image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}
+    image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:prod}
     restart: unless-stopped
     environment:
       ACCOUNT_RECOVERY_PUBLIC_ORIGIN: ${ACCOUNT_RECOVERY_PUBLIC_ORIGIN:?ACCOUNT_RECOVERY_PUBLIC_ORIGIN must be set in .env}
@@ -153,7 +154,7 @@ services:
     networks: [backend]
 
   push-worker:
-    image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}
+    image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:prod}
     restart: unless-stopped
     environment:
       ACCOUNT_RECOVERY_PUBLIC_ORIGIN: ${ACCOUNT_RECOVERY_PUBLIC_ORIGIN:?ACCOUNT_RECOVERY_PUBLIC_ORIGIN must be set in .env}
@@ -181,7 +182,7 @@ services:
     networks: [frontend, backend]
 
   email-worker:
-    image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}
+    image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:prod}
     restart: unless-stopped
     environment:
       ACCOUNT_RECOVERY_PUBLIC_ORIGIN: ${ACCOUNT_RECOVERY_PUBLIC_ORIGIN:?ACCOUNT_RECOVERY_PUBLIC_ORIGIN must be set in .env}

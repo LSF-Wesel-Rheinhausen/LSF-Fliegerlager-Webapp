@@ -1,5 +1,14 @@
 FROM python:3.13-alpine
 
+ARG APP_REVISION=unknown
+ARG APP_BUILD_DATE=unknown
+ARG MIGRATION_MANIFEST="{}"
+
+LABEL org.opencontainers.image.title="LSF Fliegerlager Updater" \
+      org.opencontainers.image.revision="${APP_REVISION}" \
+      org.opencontainers.image.created="${APP_BUILD_DATE}" \
+      io.lsf-fliegerlager.migrations="${MIGRATION_MANIFEST}"
+
 RUN apk add --no-cache postgresql-client
 
 COPY requirements-updater.txt /tmp/requirements-updater.txt

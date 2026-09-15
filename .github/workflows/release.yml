@@ -1,0 +1,60 @@
+name: Promote production images
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io/lsf-wesel-rheinhausen
+  APP: lsf-fliegerlager-webapp
+  UPDATER: lsf-fliegerlager-webapp-updater
+
+jobs:
+  promote-prod:
+    name: Promote tested staging digests
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout protected main branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve and validate current staging images
+        run: |
+          set -euo pipefail
+          APP_SOURCE="$REGISTRY/$APP:latest"
+          UPDATER_SOURCE="$REGISTRY/$UPDATER:latest"
+          APP_DIGEST="$(docker buildx imagetools inspect "$APP_SOURCE" --format '{{.Manifest.Digest}}')"
+          UPDATER_DIGEST="$(docker buildx imagetools inspect "$UPDATER_SOURCE" --format '{{.Manifest.Digest}}')"
+          docker pull --platform linux/amd64 "$APP_SOURCE"
+          docker pull --platform linux/amd64 "$UPDATER_SOURCE"
+          APP_REVISION="$(docker image inspect "$APP_SOURCE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+          UPDATER_REVISION="$(docker image inspect "$UPDATER_SOURCE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+          MAIN_REVISION="$(git rev-parse HEAD)"
+          test "$APP_REVISION" = "$UPDATER_REVISION"
+          test "$APP_REVISION" = "$MAIN_REVISION"
+          test -n "$APP_DIGEST"
+          test -n "$UPDATER_DIGEST"
+          docker buildx imagetools create --tag "$REGISTRY/$APP:prod-$APP_REVISION" "$REGISTRY/$APP@$APP_DIGEST"
+          docker buildx imagetools create --tag "$REGISTRY/$APP:prod" "$REGISTRY/$APP@$APP_DIGEST"
+          docker buildx imagetools create --tag "$REGISTRY/$UPDATER:prod-$UPDATER_REVISION" "$REGISTRY/$UPDATER@$UPDATER_DIGEST"
+          docker buildx imagetools create --tag "$REGISTRY/$UPDATER:prod" "$REGISTRY/$UPDATER@$UPDATER_DIGEST"

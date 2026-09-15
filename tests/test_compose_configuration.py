@@ -7,7 +7,7 @@ import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DJANGO_ALLOWED_HOSTS = "${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}"
-APP_IMAGE_EXPRESSION = "${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}"
+APP_IMAGE_EXPRESSION = "${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:prod}"
 
 FORBIDDEN_NON_UPDATER_ENVIRONMENT_KEYS = {
     "PORTAINER_URL",
@@ -109,7 +109,8 @@ def test_updater_configuration_is_independent_from_app_image(compose_path: str) 
     updater = services["updater"]
 
     assert "APP_IMAGE" not in updater["environment"]
-    assert updater["image"] == "${UPDATER_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater:latest}"
+    assert updater["image"] == "${UPDATER_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater:prod}"
+    assert updater["environment"]["UPDATE_ENVIRONMENT"] == "${UPDATE_ENVIRONMENT:-prod}"
 
     def resolved_hash(service: dict, app_image: str) -> str:
         serialized = json.dumps(service, sort_keys=True).replace(APP_IMAGE_EXPRESSION, app_image)
