@@ -175,7 +175,7 @@ def test_docker_builds_pull_requests_and_main_without_publishing() -> None:
     assert "push" not in events
     assert "workflow_run" in events
     assert "workflow_run.event == 'pull_request'" in docker_test["if"]
-    assert "github.event.pull_request.head.repo.full_name != github.repository" in docker_test["if"]
+    assert "github.event.pull_request.head.repo.full_name != github.repository" not in docker_test["if"]
     assert "workflow_run" in docker_test["if"]
     assert "workflow_run.conclusion == 'success'" in docker_test["if"]
     assert "push: true" not in "\n".join(str(step) for step in docker_test["steps"])

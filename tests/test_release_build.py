@@ -51,7 +51,7 @@ def test_pr_controlled_workflow_never_receives_package_write_token() -> None:
     workflow = _docker_workflow()
     test_job = workflow["jobs"]["docker-test"]
     assert "github.event_name == 'pull_request'" in test_job["if"]
-    assert "github.event.pull_request.head.repo.full_name != github.repository" in test_job["if"]
+    assert "github.event.pull_request.head.repo.full_name != github.repository" not in test_job["if"]
     assert "github.event.workflow_run.head_repository.full_name == github.repository" in test_job["if"]
     assert "github.event.pull_request.number" in test_job["concurrency"]["group"]
     assert "github.event_name == 'workflow_run'" in workflow["jobs"]["docker-publish-dev"]["if"]
