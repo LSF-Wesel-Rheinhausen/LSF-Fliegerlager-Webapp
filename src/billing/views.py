@@ -801,6 +801,7 @@ def deployment_update(request: HttpRequest) -> HttpResponse:
     """Show image metadata and the latest deployment-agent state."""
     status: dict[str, Any] | None = None
     version_catalog: dict[str, Any] = {"versions": []}
+    candidate_matches_selection = False
     agent_error = ""
     try:
         status = deployment_status()
@@ -814,6 +815,14 @@ def deployment_update(request: HttpRequest) -> HttpResponse:
             version_catalog = deployment_versions(selected)
         except UpdateAgentError as error:
             agent_error = str(error)
+        else:
+            selected_details = version_catalog.get("selected")
+            selected_catalog_id = selected_details.get("catalog_id") if isinstance(selected_details, dict) else None
+            candidate_matches_selection = bool(
+                status.get("update_available")
+                and isinstance(selected_catalog_id, str)
+                and selected_catalog_id == status.get("selected_catalog_id")
+            )
     current = {
         "version": settings.APP_VERSION,
         "revision": settings.APP_REVISION,
@@ -833,6 +842,7 @@ def deployment_update(request: HttpRequest) -> HttpResponse:
         {
             "deployment_status": status,
             "version_catalog": version_catalog,
+            "candidate_matches_selection": candidate_matches_selection,
             "agent_error": agent_error,
             "current": current,
             "daily_backup_form": backup_form,

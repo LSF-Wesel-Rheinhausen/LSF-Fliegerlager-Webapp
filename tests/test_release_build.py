@@ -24,19 +24,42 @@ def test_pull_request_release_publishes_only_tested_same_repo_dev_tags() -> None
     workflow = _docker_workflow()
     job = workflow["jobs"]["docker-publish-dev"]
 
-    assert "pull_request" in workflow["on"]
+    assert set(workflow["on"]) == {"pull_request", "workflow_run"}
     assert job["needs"] == "docker-test"
     assert "needs.docker-test.result == 'success'" in job["if"]
-    assert "github.event.pull_request.head.repo.full_name == github.repository" in job["if"]
+    assert "github.event_name == 'workflow_run'" in job["if"]
+    assert "github.event.workflow_run.event == 'pull_request'" in job["if"]
+    assert "github.event.workflow_run.head_repository.full_name == github.repository" in job["if"]
     text = str(job)
-    assert "dev-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}" in text
-    publish_steps = [step for step in job["steps"] if "build-push-action@" in step.get("uses", "")]
-    assert all(":dev\n" not in step["with"]["tags"] + "\n" for step in publish_steps)
+    assert "dev-$PR_NUMBER-$REVISION" in text
+    assert "github.event.pull_request.head.sha" not in text
+    assert "docker load" in text
+    assert "docker push" in text
+    assert "docker/build-push-action@" not in text
+    assert "actions/checkout@" not in text
     promotion = next(step for step in job["steps"] if step.get("name") == "Promote newest development revision")
-    assert "CANDIDATE_UPDATED_AT" in str(promotion)
+    assert "CANDIDATE_CREATED" in promotion["run"]
+    assert "docker image inspect lsf-webapp:test" in promotion["run"]
     assert "CURRENT_CREATED" in promotion["run"]
     assert ':dev"' in promotion["run"]
-    assert all(step["with"]["push"] == "true" for step in job["steps"] if "build-push-action@" in step.get("uses", ""))
+    test_job = workflow["jobs"]["docker-test"]
+    assert "docker save" in str(test_job)
+    assert "actions/upload-artifact@" in str(test_job)
+
+
+def test_pr_controlled_workflow_never_receives_package_write_token() -> None:
+    workflow = _docker_workflow()
+    test_job = workflow["jobs"]["docker-test"]
+    assert "github.event_name == 'pull_request'" in test_job["if"]
+    assert "github.event.pull_request.head.repo.full_name != github.repository" in test_job["if"]
+    assert "github.event.workflow_run.head_repository.full_name == github.repository" in test_job["if"]
+    assert "github.event.pull_request.number" in test_job["concurrency"]["group"]
+    assert "github.event_name == 'workflow_run'" in workflow["jobs"]["docker-publish-dev"]["if"]
+    for job in workflow["jobs"].values():
+        condition = str(job.get("if", ""))
+        if "github.event_name == 'pull_request'" in condition:
+            assert job.get("permissions", {}).get("packages") != "write"
+            assert "secrets.GITHUB_TOKEN" not in str(job)
 
 
 def test_main_release_builds_staging_sha_and_latest_without_rebuilding_for_latest() -> None:
@@ -70,6 +93,10 @@ def test_prod_workflow_promotes_matching_existing_digests_and_rejects_mixed_revi
     assert "APP_REVISION" in text
     assert "UPDATER_REVISION" in text
     assert 'test "$APP_REVISION" = "$UPDATER_REVISION"' in text
+    assert 'docker pull --platform linux/amd64 "$REGISTRY/$APP@$APP_DIGEST"' in text
+    assert 'docker pull --platform linux/amd64 "$REGISTRY/$UPDATER@$UPDATER_DIGEST"' in text
+    assert 'docker image inspect "$REGISTRY/$APP@$APP_DIGEST"' in text
+    assert 'docker image inspect "$REGISTRY/$UPDATER@$UPDATER_DIGEST"' in text
     assert "docker/build-push-action@" not in text
     assert '--tag "$REGISTRY/$APP:latest"' not in text
     assert '--tag "$REGISTRY/$UPDATER:latest"' not in text

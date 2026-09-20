@@ -171,10 +171,11 @@ def test_docker_builds_pull_requests_and_main_without_publishing() -> None:
     docker_test = dict(jobs["docker-test"])
     publish = dict(jobs["docker-publish"])
 
-    assert "pull_request" in events
+    assert set(events) == {"pull_request", "workflow_run"}
     assert "push" not in events
     assert "workflow_run" in events
-    assert "pull_request" in docker_test["if"]
+    assert "workflow_run.event == 'pull_request'" in docker_test["if"]
+    assert "github.event.pull_request.head.repo.full_name != github.repository" in docker_test["if"]
     assert "workflow_run" in docker_test["if"]
     assert "workflow_run.conclusion == 'success'" in docker_test["if"]
     assert "push: true" not in "\n".join(str(step) for step in docker_test["steps"])
@@ -218,9 +219,14 @@ def test_docker_test_and_publish_share_the_exact_sha_for_pr_and_workflow_run() -
         step for step in docker_test["steps"] if "Build application image" in dict(step).get("name", "")
     )
     build_args = dict(application_build["with"])["build-args"]
-    expected_sha = "${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}"
+    expected_sha = "${{ steps.metadata.outputs.revision }}"
 
-    assert dict(checkout["with"])["ref"] == expected_sha
+    assert "github.event.pull_request.head.sha" in dict(checkout["with"])["ref"]
+    assert "github.event.workflow_run.head_sha" in dict(checkout["with"])["ref"]
+    assert "github.event.pull_request.head.repo.full_name" in dict(checkout["with"])["repository"]
+    assert "github.event.workflow_run.head_repository.full_name" in dict(checkout["with"])["repository"]
+    metadata = next(step for step in docker_test["steps"] if dict(step).get("name") == "Read build metadata")
+    assert "git rev-parse HEAD" in metadata["run"]
     assert f"APP_REVISION={expected_sha}" in build_args
 
 

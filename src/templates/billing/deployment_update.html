@@ -123,7 +123,7 @@
       </span>
     </section>
 
-    {% if deployment_status.update_available and deployment_status.phase != "installing" and deployment_status.phase != "preparing" and deployment_status.phase != "rollback" %}
+    {% if deployment_status.update_available and candidate_matches_selection and deployment_status.phase != "installing" and deployment_status.phase != "preparing" and deployment_status.phase != "rollback" %}
       <section class="panel update-action">
         <div>
           <h2>Update installieren</h2>
@@ -136,7 +136,7 @@
     {% if version_catalog.selected.changelog or deployment_status.changelog %}
       <section class="panel stack">
         <div>
-          <h2>{% if deployment_status.phase == "complete" %}Installierte Änderungen{% else %}Änderungen seit installierter Version{% endif %}</h2>
+          <h2>Änderungen seit installierter Version</h2>
           <p>Kompakte Übersicht aller Änderungen zwischen installierter und verfügbarer Version. Klicke auf einen Eintrag für Details.</p>
         </div>
         <div class="changelog-list">

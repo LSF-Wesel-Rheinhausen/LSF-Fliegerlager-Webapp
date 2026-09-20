@@ -1265,12 +1265,96 @@ def channel_for_tag(tag: str) -> str | None:
     return None
 
 
+def list_package_versions(image: str) -> list[dict[str, Any]]:
+    """List GHCR package versions with authenticated, bounded GitHub API pagination.
+
+    The API supplies build timestamps without fetching every OCI manifest. Its
+    digest is used only as a binding hint; registry bytes are verified later.
+    """
+    registry, repository, _reference = parse_image_reference(image)
+    parts = repository.split("/", 1)
+    if registry != "ghcr.io" or len(parts) != 2:
+        raise RegistryMetadataError("Versionskatalog erfordert ein GHCR-Image mit Organisation und Paket.")
+    if not GHCR_TOKEN:
+        raise AgentConfigError("GHCR_TOKEN mit read:packages ist fuer den Versionskatalog erforderlich.")
+    organization, package = parts
+    encoded_organization = urllib.parse.quote(organization, safe="")
+    encoded_package = urllib.parse.quote(package, safe="")
+    endpoint = f"https://api.github.com/orgs/{encoded_organization}/packages/container/{encoded_package}/versions"
+    versions: list[dict[str, Any]] = []
+    for page in range(1, 101):
+        request = urllib.request.Request(
+            f"{endpoint}?per_page=100&page={page}",
+            headers={
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {GHCR_TOKEN}",
+                "X-GitHub-Api-Version": "2026-03-10",
+            },
+        )
+        try:
+            with registry_urlopen(request, timeout=30) as response:
+                payload = json.loads(read_registry_body(response))
+        except urllib.error.HTTPError as error:
+            if error.code in {HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN}:
+                raise RegistryMetadataError("GHCR_TOKEN benoetigt read:packages fuer den Versionskatalog.") from error
+            raise RegistryMetadataError("GitHub-Paketversionen konnten nicht geladen werden.") from error
+        except (OSError, TimeoutError, json.JSONDecodeError) as error:
+            raise RegistryMetadataError("GitHub-Paketversionen konnten nicht geladen werden.") from error
+        if not isinstance(payload, list) or len(payload) > 100:
+            raise RegistryMetadataError("GitHub-Paketversionen sind ungueltig oder zu gross.")
+        for item in payload:
+            if not isinstance(item, dict):
+                raise RegistryMetadataError("GitHub-Paketversion ist ungueltig.")
+            digest = item.get("name")
+            created_at = item.get("created_at")
+            metadata = item.get("metadata")
+            container = metadata.get("container") if isinstance(metadata, dict) else None
+            tags = container.get("tags") if isinstance(container, dict) else None
+            if (
+                not isinstance(digest, str)
+                or not IMAGE_DIGEST_PATTERN.fullmatch(digest)
+                or not isinstance(created_at, str)
+                or not isinstance(tags, list)
+                or len(tags) > 100
+                or any(not isinstance(tag, str) or not IMAGE_TAG_PATTERN.fullmatch(tag) for tag in tags)
+            ):
+                raise RegistryMetadataError("GitHub-Paketversion enthaelt ungueltige Metadaten.")
+            try:
+                timestamp = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            except ValueError as error:
+                raise RegistryMetadataError("GitHub-Paketversion enthaelt kein gueltiges Builddatum.") from error
+            if timestamp.tzinfo is None:
+                raise RegistryMetadataError("GitHub-Paketversion enthaelt kein gueltiges Builddatum.")
+            versions.append({"digest": digest, "created_at": timestamp.astimezone(UTC).isoformat(), "tags": tags})
+        if len(payload) < 100:
+            return versions
+    raise RegistryMetadataError("GitHub-Paketversionen ueberschreiten das Paginierungslimit.")
+
+
+def catalog_candidate_tags(versions: list[dict[str, Any]], allowed_channels: tuple[str, ...]) -> list[tuple[str, str]]:
+    """Select at most twenty newest version tags per channel by build timestamp."""
+    selected: list[tuple[str, str]] = []
+    newest_first = sorted(versions, key=lambda version: version["created_at"], reverse=True)
+    for channel in allowed_channels:
+        count = 0
+        for version in newest_first:
+            matching = [tag for tag in version["tags"] if channel_for_tag(tag) == channel]
+            if not matching:
+                continue
+            immutable = sorted(tag for tag in matching if tag not in {"prod", "latest", "dev"})
+            selected.append(((immutable or matching)[0], version["digest"]))
+            count += 1
+            if count == 20:
+                break
+    return selected
+
+
 def build_version_catalog(image: str, *, environment: str = UPDATE_ENVIRONMENT) -> list[dict[str, Any]]:
     """Return at most twenty digest-verified image versions per allowed channel."""
     allowed = environment_channels(environment)
     registry, repository, _reference = parse_image_reference(image)
     by_digest: dict[str, dict[str, Any]] = {}
-    for tag in list_registry_tags(image):
+    for tag, expected_digest in catalog_candidate_tags(list_package_versions(image), allowed):
         channel = channel_for_tag(tag)
         if channel not in allowed:
             continue
@@ -1278,6 +1362,8 @@ def build_version_catalog(image: str, *, environment: str = UPDATE_ENVIRONMENT) 
         digest = metadata.get("id")
         if not isinstance(digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(digest):
             raise RegistryMetadataError("Katalog-Image enthaelt keinen validen Digest.")
+        if digest != expected_digest:
+            raise RegistryMetadataError("Katalog-Tag und GitHub-Paketversion haben unterschiedliche Digests.")
         entry = by_digest.setdefault(
             digest,
             {
@@ -1446,15 +1532,28 @@ def version_metadata(entry: dict[str, Any]) -> dict[str, Any]:
 
 def selected_catalog_entry(versions: list[dict[str, Any]], selected: Any = "") -> dict[str, Any]:
     """Resolve only a digest that belongs to the current environment-limited catalog."""
+    allowed = set(environment_channels(UPDATE_ENVIRONMENT))
+    valid = [
+        entry
+        for entry in versions
+        if isinstance(entry, dict)
+        and isinstance(entry.get("catalog_id"), str)
+        and IMAGE_DIGEST_PATTERN.fullmatch(entry["catalog_id"])
+        and isinstance(entry.get("channels"), list)
+        and bool(entry["channels"])
+        and all(isinstance(channel, str) and channel in allowed for channel in entry["channels"])
+    ]
     if selected:
         if not isinstance(selected, str) or not IMAGE_DIGEST_PATTERN.fullmatch(selected):
             raise AgentRequestError(HTTPStatus.BAD_REQUEST, "invalid_catalog_selection")
-        match = next((entry for entry in versions if entry.get("catalog_id") == selected), None)
+        match = next((entry for entry in valid if entry["catalog_id"] == selected), None)
         if match is None:
             raise AgentRequestError(HTTPStatus.CONFLICT, "catalog_selection_not_allowed")
         return match
     own_channel = UPDATE_ENVIRONMENT
-    match = next((entry for entry in versions if own_channel in entry.get("channels", [])), None)
+    match = next((entry for entry in valid if own_channel in entry["channels"]), None)
+    if match is None and valid:
+        match = valid[0]
     if match is None:
         raise AgentRequestError(HTTPStatus.CONFLICT, "no_environment_release")
     return match
@@ -1472,7 +1571,11 @@ def deployment_versions(selected: Any = "") -> dict[str, Any]:
     _running_repository, running_digest = validate_immutable_image_reference(running_digest_image)
     running_metadata = version_metadata({"id": running_digest, "image": running_digest_image, "channels": []})
     compatibility = migration_compatibility(running_metadata.get("migrations"), selected_details.get("migrations"))
-    selected_details = {**selected_details, "compatibility": compatibility}
+    selected_details = {
+        **selected_details,
+        "changelog": changelog_between_versions(selected_details, running_metadata),
+        "compatibility": compatibility,
+    }
     return {
         "environment": UPDATE_ENVIRONMENT,
         "allowed_channels": list(environment_channels()),

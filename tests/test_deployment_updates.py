@@ -413,16 +413,27 @@ def test_deployment_page_renders_update_changelog(client, superuser):
 @pytest.mark.django_db
 def test_deployment_page_renders_update_dialog_script_as_external_asset(client, superuser):
     client.force_login(superuser)
+    checked_digest = "sha256:" + "a" * 64
 
-    with patch(
-        "billing.views.deployment_status",
-        return_value={
-            "phase": "checked",
-            "message": "Update verfügbar",
-            "update_available": True,
-            "candidate_id": "checked-candidate-token",
-            "latest": {"version": "1.2.4", "revision": "newrev", "build_date": "2026-07-08"},
-        },
+    with (
+        patch(
+            "billing.views.deployment_status",
+            return_value={
+                "phase": "checked",
+                "message": "Update verfügbar",
+                "update_available": True,
+                "candidate_id": "checked-candidate-token",
+                "selected_catalog_id": checked_digest,
+            },
+        ),
+        patch(
+            "billing.views.deployment_versions",
+            return_value={
+                "environment": "prod",
+                "versions": [{"catalog_id": checked_digest}],
+                "selected": {"catalog_id": checked_digest, "version": "1.2.4"},
+            },
+        ),
     ):
         response = client.get(reverse("deployment-update"))
 
@@ -433,6 +444,38 @@ def test_deployment_page_renders_update_dialog_script_as_external_asset(client, 
     assert 'name="candidate_id" value="checked-candidate-token"' in content
     assert 'data-cfasync="false" defer src="/static/billing/deployment_update.js"' in content
     assert 'document.querySelectorAll("[data-dialog-open]")' not in content
+
+
+@pytest.mark.django_db
+def test_deployment_page_hides_install_for_selection_other_than_checked_candidate(client, superuser):
+    client.force_login(superuser)
+    checked_digest = "sha256:" + "a" * 64
+    displayed_digest = "sha256:" + "b" * 64
+    with (
+        patch(
+            "billing.views.deployment_status",
+            return_value={
+                "phase": "checked",
+                "message": "Update verfügbar",
+                "update_available": True,
+                "candidate_id": "checked-candidate-token",
+                "selected_catalog_id": checked_digest,
+            },
+        ),
+        patch(
+            "billing.views.deployment_versions",
+            return_value={
+                "environment": "prod",
+                "versions": [],
+                "selected": {"catalog_id": displayed_digest, "version": "2"},
+            },
+        ),
+    ):
+        response = client.get(reverse("deployment-update"), {"version": displayed_digest})
+
+    content = response.content.decode("utf-8")
+    assert response.status_code == 200
+    assert 'data-dialog-open="update-confirmation"' not in content
 
 
 @override_settings(UPDATE_AGENT_URL="http://updater:8080", UPDATE_AGENT_TOKEN="secret-token")

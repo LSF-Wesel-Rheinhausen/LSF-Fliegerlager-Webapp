@@ -1737,7 +1737,15 @@ def test_build_version_catalog_limits_channels_and_deduplicates_digests(monkeypa
         "staging-" + "b" * 40,
         "dev-12-" + "c" * 40,
     ]
-    monkeypatch.setattr(deployment_agent, "list_registry_tags", lambda _image: tags)
+    package_versions = [
+        {
+            "digest": image_digest({"a": "1", "b": "2", "c": "3"}[tag.rsplit("-", 1)[-1][0]]),
+            "created_at": "2026-09-15T10:00:00+00:00",
+            "tags": [tag],
+        }
+        for tag in tags
+    ]
+    monkeypatch.setattr(deployment_agent, "list_package_versions", lambda _image: package_versions)
 
     def metadata(image):
         revision = image.rsplit("-", 1)[-1]
@@ -1761,6 +1769,171 @@ def test_build_version_catalog_limits_channels_and_deduplicates_digests(monkeypa
     assert versions[1]["channels"] == ["prod", "staging"]
     assert all("dev" not in entry["channels"] for entry in versions)
     assert all(len(entry["catalog_id"]) == 71 for entry in versions)
+
+
+def test_build_version_catalog_bounds_metadata_fetches_before_inspecting_tags(monkeypatch):
+    tags = ["prod", "latest", "dev"]
+    tags.extend(f"prod-{index:040x}" for index in range(200))
+    tags.extend(f"staging-{index:040x}" for index in range(200))
+    tags.extend(f"dev-{index + 1}-{index:040x}" for index in range(200))
+    package_versions = [
+        {
+            "digest": image_digest(hashlib.sha256(f"ghcr.io/example/app:{tag}".encode()).hexdigest()[0]),
+            "created_at": "2026-09-15T00:00:00+00:00",
+            "tags": [tag],
+        }
+        for tag in tags
+    ]
+    monkeypatch.setattr(deployment_agent, "list_package_versions", lambda _image: package_versions)
+    fetch = Mock(
+        side_effect=lambda image: {
+            "id": image_digest(hashlib.sha256(image.encode()).hexdigest()[0]),
+            "image": image,
+            "version": "1",
+            "revision": "a" * 40,
+            "build_date": "2026-09-15T00:00:00Z",
+        }
+    )
+    monkeypatch.setattr(deployment_agent, "fetch_image_metadata", fetch)
+
+    deployment_agent.build_version_catalog("ghcr.io/example/app:dev", environment="dev")
+
+    assert fetch.call_count <= 60
+    fetched = {call.args[0].rsplit(":", 1)[-1] for call in fetch.call_args_list}
+    assert {"prod", "latest", "dev"} <= fetched
+
+
+def test_catalog_selects_newest_by_package_build_time_not_tag_text(monkeypatch):
+    old = [
+        {
+            "digest": f"sha256:{index:064x}",
+            "created_at": f"2026-08-{index + 1:02d}T00:00:00+00:00",
+            "tags": [f"prod-{(1 << 160) - 1 - index:040x}"],
+        }
+        for index in range(20)
+    ]
+    newest = {
+        "digest": image_digest("a"),
+        "created_at": "2026-09-20T00:00:00+00:00",
+        "tags": [f"prod-{'0' * 40}"],
+    }
+    monkeypatch.setattr(deployment_agent, "list_package_versions", lambda _image: old + [newest])
+    fetched: list[str] = []
+
+    def metadata(image):
+        fetched.append(image.rsplit(":", 1)[-1])
+        tag = fetched[-1]
+        expected = next(version for version in old + [newest] if tag in version["tags"])
+        return {"id": expected["digest"], "version": tag, "build_date": expected["created_at"]}
+
+    monkeypatch.setattr(deployment_agent, "fetch_image_metadata", metadata)
+
+    catalog = deployment_agent.build_version_catalog("ghcr.io/example/app:prod", environment="prod")
+
+    assert len(catalog) == 20
+    assert newest["tags"][0] in fetched
+    assert old[0]["tags"][0] not in fetched
+
+
+def test_catalog_rejects_package_and_registry_digest_disagreement(monkeypatch):
+    monkeypatch.setattr(
+        deployment_agent,
+        "list_package_versions",
+        lambda _image: [{"digest": image_digest("a"), "created_at": "2026-09-20T00:00:00+00:00", "tags": ["prod"]}],
+    )
+    monkeypatch.setattr(deployment_agent, "fetch_image_metadata", lambda _image: {"id": image_digest("b")})
+
+    with pytest.raises(deployment_agent.RegistryMetadataError, match="Digest"):
+        deployment_agent.build_version_catalog("ghcr.io/example/app:prod", environment="prod")
+
+
+def test_package_versions_require_read_only_token_before_network(monkeypatch):
+    monkeypatch.setattr(deployment_agent, "GHCR_TOKEN", "")
+    with patch.object(deployment_agent, "registry_urlopen") as urlopen:
+        with pytest.raises(deployment_agent.AgentConfigError, match="GHCR_TOKEN"):
+            deployment_agent.list_package_versions("ghcr.io/example/app:prod")
+    urlopen.assert_not_called()
+
+
+def test_package_versions_use_fixed_github_api_host_and_paginate(monkeypatch):
+    monkeypatch.setattr(deployment_agent, "GHCR_TOKEN", "read-only-token")
+    first = [
+        {
+            "name": f"sha256:{index:064x}",
+            "created_at": "2026-09-20T00:00:00Z",
+            "metadata": {"package_type": "container", "container": {"tags": [f"prod-{index:040x}"]}},
+        }
+        for index in range(100)
+    ]
+    second = [
+        {
+            "name": image_digest("a"),
+            "created_at": "2026-09-19T00:00:00Z",
+            "metadata": {"package_type": "container", "container": {"tags": ["prod"]}},
+        }
+    ]
+    responses = []
+    for data in (first, second):
+        response = Mock()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        response.headers = {}
+        response.read.return_value = json.dumps(data).encode()
+        responses.append(response)
+    with patch.object(deployment_agent, "registry_urlopen", side_effect=responses) as urlopen:
+        versions = deployment_agent.list_package_versions("ghcr.io/example/app:prod")
+
+    assert len(versions) == 101
+    assert [entry["digest"] for entry in versions[-1:]] == [image_digest("a")]
+    assert [call.args[0].full_url for call in urlopen.call_args_list] == [
+        "https://api.github.com/orgs/example/packages/container/app/versions?per_page=100&page=1",
+        "https://api.github.com/orgs/example/packages/container/app/versions?per_page=100&page=2",
+    ]
+    assert all(call.args[0].get_header("Authorization") == "Bearer read-only-token" for call in urlopen.call_args_list)
+
+
+def test_package_versions_reject_unauthorized_response_without_leaking_token(monkeypatch):
+    monkeypatch.setattr(deployment_agent, "GHCR_TOKEN", "read-only-token")
+    error = urllib.error.HTTPError("https://api.github.com/", 403, "Forbidden", {}, None)
+    with patch.object(deployment_agent, "registry_urlopen", side_effect=error):
+        with pytest.raises(deployment_agent.RegistryMetadataError, match="read:packages") as failure:
+            deployment_agent.list_package_versions("ghcr.io/example/app:prod")
+    assert "read-only-token" not in str(failure.value)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"message": "not a list"},
+        [{"name": image_digest("a"), "created_at": "yesterday", "metadata": {"container": {"tags": ["prod"]}}}],
+        [
+            {
+                "name": image_digest("a"),
+                "created_at": "2026-09-20T00:00:00Z",
+                "metadata": {"container": {"tags": ["../prod"]}},
+            }
+        ],
+        [{"name": "sha256:bad", "created_at": "2026-09-20T00:00:00Z", "metadata": {"container": {"tags": ["prod"]}}}],
+    ],
+)
+def test_package_versions_reject_invalid_api_data(monkeypatch, payload):
+    monkeypatch.setattr(deployment_agent, "GHCR_TOKEN", "read-only-token")
+    response = Mock()
+    response.__enter__ = Mock(return_value=response)
+    response.__exit__ = Mock(return_value=False)
+    response.headers = {}
+    response.read.return_value = json.dumps(payload).encode()
+    with patch.object(deployment_agent, "registry_urlopen", return_value=response):
+        with pytest.raises(deployment_agent.RegistryMetadataError, match="GitHub-Paketversion"):
+            deployment_agent.list_package_versions("ghcr.io/example/app:prod")
+
+
+def test_package_versions_reject_non_ghcr_registry_before_network(monkeypatch):
+    monkeypatch.setattr(deployment_agent, "GHCR_TOKEN", "read-only-token")
+    with patch.object(deployment_agent, "registry_urlopen") as urlopen:
+        with pytest.raises(deployment_agent.RegistryMetadataError, match="GHCR"):
+            deployment_agent.list_package_versions("registry.example.org/example/app:prod")
+    urlopen.assert_not_called()
 
 
 def test_registry_tag_listing_follows_valid_same_repository_pagination(monkeypatch):
@@ -1926,6 +2099,72 @@ def test_default_catalog_selection_prefers_own_environment_channel(monkeypatch):
     monkeypatch.setattr(deployment_agent, "UPDATE_ENVIRONMENT", "staging")
 
     assert deployment_agent.selected_catalog_entry([prod, staging]) == staging
+
+
+def test_default_catalog_selection_falls_back_to_newest_inherited_channel(monkeypatch):
+    prod = {"catalog_id": image_digest("a"), "channels": ["prod"]}
+    monkeypatch.setattr(deployment_agent, "UPDATE_ENVIRONMENT", "staging")
+
+    assert deployment_agent.selected_catalog_entry([prod]) == prod
+
+
+def test_default_catalog_selection_rejects_malformed_channel_data(monkeypatch):
+    monkeypatch.setattr(deployment_agent, "UPDATE_ENVIRONMENT", "staging")
+
+    with pytest.raises(deployment_agent.AgentRequestError) as error:
+        deployment_agent.selected_catalog_entry([{"catalog_id": image_digest("a"), "channels": None}])
+
+    assert error.value.public_code == "no_environment_release"
+
+
+@pytest.mark.parametrize(
+    ("running_metadata", "expected_titles"),
+    [
+        ({"version": "10", "revision": "rev10", "migrations": {}}, ["Eleven", "Twelve"]),
+        ({"version": "13", "revision": "rev13", "migrations": {}}, []),
+        ({"version": "unknown", "revision": "unknown", "migrations": {}}, []),
+    ],
+)
+def test_deployment_versions_exposes_only_changelog_delta_from_running_image(
+    monkeypatch, running_metadata, expected_titles
+):
+    target_digest = image_digest("b")
+    running_digest = image_digest("a")
+    target_summary = {
+        "catalog_id": target_digest,
+        "id": target_digest,
+        "image": target_digest_reference(target_digest),
+        "channels": ["prod"],
+    }
+    target_metadata = {
+        **target_summary,
+        "version": "12",
+        "revision": "rev12",
+        "migrations": {},
+        "changelog": [
+            {"version": "10", "revision": "rev10", "title": "Ten", "body": ""},
+            {"version": "11", "revision": "rev11", "title": "Eleven", "body": ""},
+            {"version": "12", "revision": "rev12", "title": "Twelve", "body": ""},
+        ],
+    }
+    client = Mock()
+    client.get_stack.return_value = active_stack(TEST_TARGET_IMAGE)
+    monkeypatch.setattr(deployment_agent, "PortainerClient", lambda: client)
+    monkeypatch.setattr(deployment_agent, "cached_version_catalog", lambda _image: [target_summary])
+    monkeypatch.setattr(
+        deployment_agent,
+        "immutable_running_image",
+        lambda *_args: target_digest_reference(running_digest),
+    )
+    monkeypatch.setattr(
+        deployment_agent,
+        "version_metadata",
+        lambda entry: target_metadata if entry["id"] == target_digest else running_metadata,
+    )
+
+    result = deployment_agent.deployment_versions()
+
+    assert [entry["title"] for entry in result["selected"]["changelog"]] == expected_titles
 
 
 def test_catalog_selection_rejects_digest_outside_allowed_catalog():
