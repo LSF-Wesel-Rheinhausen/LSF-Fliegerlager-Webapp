@@ -139,6 +139,8 @@ RECOVERY_CONVERGENCE_INITIAL_BACKOFF_SECONDS = positive_float_setting(
 RECOVERY_CONVERGENCE_MAX_BACKOFF_SECONDS = positive_float_setting("RECOVERY_CONVERGENCE_MAX_BACKOFF_SECONDS", "5")
 MAX_REGISTRY_RESPONSE_BYTES = positive_int_setting("MAX_REGISTRY_RESPONSE_BYTES", "16777216")
 MAX_REGISTRY_REDIRECTS = 3
+MAX_GITHUB_PACKAGE_VERSION_PAGES = 3
+GITHUB_PACKAGE_REQUEST_TIMEOUT_SECONDS = 5
 BACKUP_STAGING_PATTERN = re.compile(r"^staging/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 BACKUP_ARCHIVE_PREFIX_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$")
 CONTENT_LENGTH_PATTERN = re.compile(r"^[0-9]+$")
@@ -1271,11 +1273,13 @@ def channel_for_tag(tag: str) -> str | None:
     return None
 
 
-def list_package_versions(image: str) -> list[dict[str, Any]]:
+def list_package_versions(image: str, allowed_channels: tuple[str, ...]) -> list[dict[str, Any]]:
     """List GHCR package versions with authenticated, bounded GitHub API pagination.
 
     The API supplies build timestamps without fetching every OCI manifest. Its
     digest is used only as a binding hint; registry bytes are verified later.
+    Pagination stops once twenty versions per requested channel have been seen
+    or after a small fixed request budget, returning a bounded partial catalog.
     """
     registry, repository, _reference = parse_image_reference(image)
     parts = repository.split("/", 1)
@@ -1288,7 +1292,8 @@ def list_package_versions(image: str) -> list[dict[str, Any]]:
     encoded_package = urllib.parse.quote(package, safe="")
     endpoint = f"https://api.github.com/orgs/{encoded_organization}/packages/container/{encoded_package}/versions"
     versions: list[dict[str, Any]] = []
-    for page in range(1, 101):
+    channel_counts = dict.fromkeys(allowed_channels, 0)
+    for page in range(1, MAX_GITHUB_PACKAGE_VERSION_PAGES + 1):
         request = urllib.request.Request(
             f"{endpoint}?per_page=100&page={page}",
             headers={
@@ -1298,7 +1303,7 @@ def list_package_versions(image: str) -> list[dict[str, Any]]:
             },
         )
         try:
-            with registry_urlopen(request, timeout=30) as response:
+            with registry_urlopen(request, timeout=GITHUB_PACKAGE_REQUEST_TIMEOUT_SECONDS) as response:
                 payload = json.loads(read_registry_body(response))
         except urllib.error.HTTPError as error:
             if error.code in {HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN}:
@@ -1332,9 +1337,12 @@ def list_package_versions(image: str) -> list[dict[str, Any]]:
             if timestamp.tzinfo is None:
                 raise RegistryMetadataError("GitHub-Paketversion enthaelt kein gueltiges Builddatum.")
             versions.append({"digest": digest, "created_at": timestamp.astimezone(UTC).isoformat(), "tags": tags})
-        if len(payload) < 100:
+            channels = {channel_for_tag(tag) for tag in tags}
+            for channel in channels.intersection(channel_counts):
+                channel_counts[channel] += 1
+        if len(payload) < 100 or all(count >= 20 for count in channel_counts.values()):
             return versions
-    raise RegistryMetadataError("GitHub-Paketversionen ueberschreiten das Paginierungslimit.")
+    return versions
 
 
 def catalog_candidate_tags(versions: list[dict[str, Any]], allowed_channels: tuple[str, ...]) -> list[tuple[str, str]]:
@@ -1364,7 +1372,7 @@ def catalog_candidates(image: str, allowed_channels: tuple[str, ...]) -> list[tu
     """
     registry, _repository, _reference = parse_image_reference(image)
     if registry == "ghcr.io":
-        return catalog_candidate_tags(list_package_versions(image), allowed_channels)
+        return catalog_candidate_tags(list_package_versions(image, allowed_channels), allowed_channels)
     channel_tags = {"prod": "prod", "staging": "latest", "dev": "dev"}
     return [(channel_tags[channel], None) for channel in allowed_channels]
 

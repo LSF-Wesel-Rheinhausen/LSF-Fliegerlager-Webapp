@@ -48,7 +48,7 @@ jobs:
           echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "version=$(git rev-list --first-parent --count HEAD)" >> "$GITHUB_OUTPUT"
           echo "change=$(git log -1 --pretty=%s)" >> "$GITHUB_OUTPUT"
-          echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "created=$(git show -s --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
           {
             echo "changelog<<EOF"
             python scripts/build_changelog_manifest.py --max-bytes 60000
@@ -157,7 +157,7 @@ jobs:
         run: |
           echo "version=$(git rev-list --first-parent --count HEAD)" >> "$GITHUB_OUTPUT"
           echo "change=$(git log -1 --pretty=%s)" >> "$GITHUB_OUTPUT"
-          echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "created=$(git show -s --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
           {
             echo "changelog<<EOF"
             python scripts/build_changelog_manifest.py --max-bytes 60000
@@ -336,18 +336,32 @@ jobs:
         env:
           PR_NUMBER: ${{ steps.pr.outputs.number }}
           REVISION: ${{ github.event.workflow_run.head_sha }}
+          TEST_RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
           set -euo pipefail
           APP_REPOSITORY="ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp"
           UPDATER_REPOSITORY="ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater"
-          CANDIDATE_CREATED="$(docker image inspect lsf-webapp:test --format '{{index .Config.Labels "org.opencontainers.image.created"}}')"
-          CURRENT_CREATED=""
-          if docker pull --platform linux/amd64 "$APP_REPOSITORY:dev"; then
-            CURRENT_CREATED="$(docker image inspect "$APP_REPOSITORY:dev" --format '{{index .Config.Labels "org.opencontainers.image.created"}}')"
+          if [[ ! "$TEST_RUN_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo "The triggering test workflow has an invalid run ID." >&2
+            exit 1
           fi
-          if [[ -n "$CURRENT_CREATED" && "$CANDIDATE_CREATED" < "$CURRENT_CREATED" ]]; then
+          CURRENT_TEST_RUN_ID=""
+          if current_manifest="$(docker buildx imagetools inspect "$APP_REPOSITORY:dev" --raw 2>/dev/null)"; then
+            CURRENT_TEST_RUN_ID="$(jq -r '.annotations["io.lsf-fliegerlager.test-workflow-run-id"] // empty' <<<"$current_manifest")"
+            if [[ -n "$CURRENT_TEST_RUN_ID" && ! "$CURRENT_TEST_RUN_ID" =~ ^[1-9][0-9]*$ ]]; then
+              echo "The current development tag has an invalid trusted workflow-run annotation." >&2
+              exit 1
+            fi
+          fi
+          if [[ -n "$CURRENT_TEST_RUN_ID" ]] && (( TEST_RUN_ID < CURRENT_TEST_RUN_ID )); then
             echo "A newer development build is already promoted; immutable images remain available."
             exit 0
           fi
-          docker buildx imagetools create --tag "$APP_REPOSITORY:dev" "$APP_REPOSITORY:dev-$PR_NUMBER-$REVISION"
-          docker buildx imagetools create --tag "$UPDATER_REPOSITORY:dev" "$UPDATER_REPOSITORY:dev-$PR_NUMBER-$REVISION"
+          docker buildx imagetools create \
+            --annotation "index:io.lsf-fliegerlager.test-workflow-run-id=$TEST_RUN_ID" \
+            --tag "$APP_REPOSITORY:dev" \
+            "$APP_REPOSITORY:dev-$PR_NUMBER-$REVISION"
+          docker buildx imagetools create \
+            --annotation "index:io.lsf-fliegerlager.test-workflow-run-id=$TEST_RUN_ID" \
+            --tag "$UPDATER_REPOSITORY:dev" \
+            "$UPDATER_REPOSITORY:dev-$PR_NUMBER-$REVISION"

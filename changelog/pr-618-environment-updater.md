@@ -8,3 +8,6 @@
 - Warnt vor Downgrades oder abweichenden Migrationen und verlangt dafür eine ausdrückliche Risikobestätigung.
 - Behandelt gelöschte Manifeste laufender Images sowie unbekannte Migrationsmanifest-Versionen konservativ als bestätigungspflichtiges Risiko.
 - Veröffentlicht geprüfte PR-Builds über einen vertrauenswürdigen Folge-Workflow als Dev, erfolgreiche Main-Builds als Staging und promotet exakt verifizierte Prod-Digests nur manuell.
+- Begrenzt GHCR-Katalogabfragen auf ein festes Zeit- und Seitenbudget und beendet sie, sobald je erlaubtem Kanal genügend Versionen vorliegen.
+- Ordnet Dev-Promotionen über die vertrauenswürdige Test-Workflow-Run-ID statt über vom PR kontrollierte Image-Zeitstempel.
+- Verwendet für Container-Builds den deterministischen Commit-Zeitstempel, damit erneute Builds derselben Revision keine zeitabhängigen Metadaten erzeugen.

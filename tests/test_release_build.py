@@ -38,9 +38,12 @@ def test_pull_request_release_publishes_only_tested_same_repo_dev_tags() -> None
     assert "docker/build-push-action@" not in text
     assert "actions/checkout@" not in text
     promotion = next(step for step in job["steps"] if step.get("name") == "Promote newest development revision")
-    assert "CANDIDATE_CREATED" in promotion["run"]
-    assert "docker image inspect lsf-webapp:test" in promotion["run"]
-    assert "CURRENT_CREATED" in promotion["run"]
+    assert promotion["env"]["TEST_RUN_ID"] == "${{ github.event.workflow_run.id }}"
+    assert "org.opencontainers.image.created" not in promotion["run"]
+    assert "io.lsf-fliegerlager.test-workflow-run-id" in promotion["run"]
+    assert "docker buildx imagetools inspect" in promotion["run"]
+    assert "^[1-9][0-9]*$" in promotion["run"]
+    assert promotion["run"].count("--annotation") == 2
     assert ':dev"' in promotion["run"]
     test_job = workflow["jobs"]["docker-test"]
     assert "docker save" in str(test_job)
@@ -72,6 +75,17 @@ def test_main_release_builds_staging_sha_and_latest_without_rebuilding_for_lates
     assert "latest" in text
     assert text.count("docker/build-push-action@") == 2
     assert sum(step.get("with", {}).get("push") == "true" for step in job["steps"]) == 2
+
+
+def test_container_build_dates_are_deterministic_for_the_tested_commit() -> None:
+    workflow = _docker_workflow()
+
+    for job_name in ("docker-test", "docker-publish"):
+        metadata = next(
+            step for step in workflow["jobs"][job_name]["steps"] if step.get("name") == "Read build metadata"
+        )
+        assert "git show -s --format=%cI HEAD" in metadata["run"]
+        assert "date -u" not in metadata["run"]
 
 
 def test_prod_workflow_promotes_matching_existing_digests_and_rejects_mixed_revisions() -> None:

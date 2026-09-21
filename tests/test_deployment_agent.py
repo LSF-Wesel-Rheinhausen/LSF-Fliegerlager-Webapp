@@ -1774,7 +1774,7 @@ def test_build_version_catalog_limits_channels_and_deduplicates_digests(monkeypa
         }
         for tag in tags
     ]
-    monkeypatch.setattr(deployment_agent, "list_package_versions", lambda _image: package_versions)
+    monkeypatch.setattr(deployment_agent, "list_package_versions", lambda _image, _channels: package_versions)
 
     def metadata(image):
         revision = image.rsplit("-", 1)[-1]
@@ -1843,7 +1843,7 @@ def test_build_version_catalog_bounds_metadata_fetches_before_inspecting_tags(mo
         }
         for tag in tags
     ]
-    monkeypatch.setattr(deployment_agent, "list_package_versions", lambda _image: package_versions)
+    monkeypatch.setattr(deployment_agent, "list_package_versions", lambda _image, _channels: package_versions)
     fetch = Mock(
         side_effect=lambda image: {
             "id": image_digest(hashlib.sha256(image.encode()).hexdigest()[0]),
@@ -1876,7 +1876,7 @@ def test_catalog_selects_newest_by_package_build_time_not_tag_text(monkeypatch):
         "created_at": "2026-09-20T00:00:00+00:00",
         "tags": [f"prod-{'0' * 40}"],
     }
-    monkeypatch.setattr(deployment_agent, "list_package_versions", lambda _image: old + [newest])
+    monkeypatch.setattr(deployment_agent, "list_package_versions", lambda _image, _channels: old + [newest])
     fetched: list[str] = []
 
     def metadata(image):
@@ -1898,7 +1898,9 @@ def test_catalog_rejects_package_and_registry_digest_disagreement(monkeypatch):
     monkeypatch.setattr(
         deployment_agent,
         "list_package_versions",
-        lambda _image: [{"digest": image_digest("a"), "created_at": "2026-09-20T00:00:00+00:00", "tags": ["prod"]}],
+        lambda _image, _channels: [
+            {"digest": image_digest("a"), "created_at": "2026-09-20T00:00:00+00:00", "tags": ["prod"]}
+        ],
     )
     monkeypatch.setattr(deployment_agent, "fetch_image_metadata", lambda _image: {"id": image_digest("b")})
 
@@ -1910,7 +1912,7 @@ def test_package_versions_require_read_only_token_before_network(monkeypatch):
     monkeypatch.setattr(deployment_agent, "GHCR_TOKEN", "")
     with patch.object(deployment_agent, "registry_urlopen") as urlopen:
         with pytest.raises(deployment_agent.AgentConfigError, match="GHCR_TOKEN"):
-            deployment_agent.list_package_versions("ghcr.io/example/app:prod")
+            deployment_agent.list_package_versions("ghcr.io/example/app:prod", ("prod",))
     urlopen.assert_not_called()
 
 
@@ -1920,7 +1922,10 @@ def test_package_versions_use_fixed_github_api_host_and_paginate(monkeypatch):
         {
             "name": f"sha256:{index:064x}",
             "created_at": "2026-09-20T00:00:00Z",
-            "metadata": {"package_type": "container", "container": {"tags": [f"prod-{index:040x}"]}},
+            "metadata": {
+                "package_type": "container",
+                "container": {"tags": [f"prod-{index:040x}" if index < 19 else f"other-{index}"]},
+            },
         }
         for index in range(100)
     ]
@@ -1940,7 +1945,7 @@ def test_package_versions_use_fixed_github_api_host_and_paginate(monkeypatch):
         response.read.return_value = json.dumps(data).encode()
         responses.append(response)
     with patch.object(deployment_agent, "registry_urlopen", side_effect=responses) as urlopen:
-        versions = deployment_agent.list_package_versions("ghcr.io/example/app:prod")
+        versions = deployment_agent.list_package_versions("ghcr.io/example/app:prod", ("prod",))
 
     assert len(versions) == 101
     assert [entry["digest"] for entry in versions[-1:]] == [image_digest("a")]
@@ -1951,12 +1956,71 @@ def test_package_versions_use_fixed_github_api_host_and_paginate(monkeypatch):
     assert all(call.args[0].get_header("Authorization") == "Bearer read-only-token" for call in urlopen.call_args_list)
 
 
+def test_package_versions_stop_after_twenty_versions_for_each_requested_channel(monkeypatch):
+    monkeypatch.setattr(deployment_agent, "GHCR_TOKEN", "read-only-token")
+    payload = [
+        {
+            "name": f"sha256:{index:064x}",
+            "created_at": "2026-09-20T00:00:00Z",
+            "metadata": {
+                "package_type": "container",
+                "container": {"tags": [f"prod-{index:040x}" if index < 20 else f"other-{index}"]},
+            },
+        }
+        for index in range(100)
+    ]
+    response = Mock()
+    response.__enter__ = Mock(return_value=response)
+    response.__exit__ = Mock(return_value=False)
+    response.headers = {}
+    response.read.return_value = json.dumps(payload).encode()
+    with patch.object(
+        deployment_agent,
+        "registry_urlopen",
+        side_effect=[response, AssertionError("unnecessary second GitHub API page")],
+    ) as urlopen:
+        versions = deployment_agent.list_package_versions("ghcr.io/example/app:prod", ("prod",))
+
+    assert len(versions) == 100
+    urlopen.assert_called_once()
+    assert urlopen.call_args.kwargs["timeout"] == deployment_agent.GITHUB_PACKAGE_REQUEST_TIMEOUT_SECONDS
+
+
+def test_package_versions_return_bounded_partial_catalog_for_sparse_channel(monkeypatch):
+    monkeypatch.setattr(deployment_agent, "GHCR_TOKEN", "read-only-token")
+
+    def response_for_page(page: int) -> Mock:
+        response = Mock()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        response.headers = {}
+        response.read.return_value = json.dumps(
+            [
+                {
+                    "name": f"sha256:{page * 100 + index:064x}",
+                    "created_at": "2026-09-20T00:00:00Z",
+                    "metadata": {"package_type": "container", "container": {"tags": [f"other-{index}"]}},
+                }
+                for index in range(100)
+            ]
+        ).encode()
+        return response
+
+    responses = [response_for_page(page) for page in range(3)]
+    with patch.object(deployment_agent, "registry_urlopen", side_effect=responses) as urlopen:
+        versions = deployment_agent.list_package_versions("ghcr.io/example/app:prod", ("prod",))
+
+    assert len(versions) == 300
+    assert urlopen.call_count == 3
+    assert urlopen.call_args_list[-1].args[0].full_url.endswith("page=3")
+
+
 def test_package_versions_reject_unauthorized_response_without_leaking_token(monkeypatch):
     monkeypatch.setattr(deployment_agent, "GHCR_TOKEN", "read-only-token")
     error = urllib.error.HTTPError("https://api.github.com/", 403, "Forbidden", {}, None)
     with patch.object(deployment_agent, "registry_urlopen", side_effect=error):
         with pytest.raises(deployment_agent.RegistryMetadataError, match="read:packages") as failure:
-            deployment_agent.list_package_versions("ghcr.io/example/app:prod")
+            deployment_agent.list_package_versions("ghcr.io/example/app:prod", ("prod",))
     assert "read-only-token" not in str(failure.value)
 
 
@@ -1984,14 +2048,14 @@ def test_package_versions_reject_invalid_api_data(monkeypatch, payload):
     response.read.return_value = json.dumps(payload).encode()
     with patch.object(deployment_agent, "registry_urlopen", return_value=response):
         with pytest.raises(deployment_agent.RegistryMetadataError, match="GitHub-Paketversion"):
-            deployment_agent.list_package_versions("ghcr.io/example/app:prod")
+            deployment_agent.list_package_versions("ghcr.io/example/app:prod", ("prod",))
 
 
 def test_package_versions_reject_non_ghcr_registry_before_network(monkeypatch):
     monkeypatch.setattr(deployment_agent, "GHCR_TOKEN", "read-only-token")
     with patch.object(deployment_agent, "registry_urlopen") as urlopen:
         with pytest.raises(deployment_agent.RegistryMetadataError, match="GHCR"):
-            deployment_agent.list_package_versions("registry.example.org/example/app:prod")
+            deployment_agent.list_package_versions("registry.example.org/example/app:prod", ("prod",))
     urlopen.assert_not_called()
 
 
