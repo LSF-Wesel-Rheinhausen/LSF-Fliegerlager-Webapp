@@ -8,6 +8,9 @@ from config.wsgi import application as django_application
 
 def application(environ: dict[str, Any], start_response: Callable[..., Any]) -> list[bytes]:
     """Read the probe body or delegate normal requests to Django."""
+    if environ.get("PATH_INFO", "").startswith("/account/recovery/confirm/"):
+        raise RuntimeError("probe WSGI failure")
+
     if environ.get("PATH_INFO") != "/chunk-probe":
         return django_application(environ, start_response)
 

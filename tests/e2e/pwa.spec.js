@@ -1,5 +1,6 @@
 const { expect, test } = require("./fixtures");
 const { openKiosk } = require("./kioskAccess");
+const { createHash } = require("node:crypto");
 
 async function expectInstallGuide(browser, baseURL, userAgent, expectedInstructions) {
   const context = await browser.newContext({ baseURL, userAgent });
@@ -221,6 +222,78 @@ test("Notification enrollment updates the current page without reload", async ({
 
   await page.getByRole("button", { name: "Entfernen" }).click();
   await expect(page.locator("[data-notification-device-list]")).toContainText("Noch kein Gerät registriert.");
+});
+
+test("A revoked current notification device stays inactive until it is registered again", async ({ page }) => {
+  const endpoint = "https://push.example.test/revoked-browser-device";
+  const fingerprint = createHash("sha256").update(endpoint).digest("hex");
+  await page.setContent(`
+    <section
+      data-notification-settings
+      data-public-key="AQ"
+      data-subscribe-url="/notifications/subscriptions/"
+      data-subscription-base-url="/notifications/subscriptions/"
+    >
+      <span data-notification-status>Wird geprüft</span>
+      <form data-notification-subscribe-form>
+        <input name="csrfmiddlewaretoken" value="test-csrf">
+        <input name="device_name" value="Mein Smartphone">
+        <label><input type="checkbox" name="category" value="shifts" checked>Dienste</label>
+        <button type="submit" data-notification-submit>Benachrichtigungen aktivieren</button>
+      </form>
+      <ul data-notification-device-list>
+        <li data-notification-device="42" data-endpoint-fingerprint="${fingerprint}"
+          data-device-active="false" data-device-verified="false">
+          <div>
+            <span class="device-list__name">
+              <strong data-notification-device-name>Mein Smartphone</strong>
+              <span class="status-badge status-badge--ok" data-notification-current hidden>Dieses Gerät</span>
+            </span>
+            <span class="status-badge">Inaktiv – bitte erneut registrieren</span>
+          </div>
+        </li>
+      </ul>
+      <p data-notification-error hidden></p>
+    </section>
+  `);
+  await page.evaluate((subscriptionEndpoint) => {
+    const subscription = {
+      endpoint: subscriptionEndpoint,
+      toJSON: () => ({
+        endpoint: subscriptionEndpoint,
+        keys: { p256dh: "browser-key", auth: "browser-secret" },
+      }),
+    };
+    Object.defineProperty(window, "Notification", {
+      configurable: true,
+      value: { permission: "granted", requestPermission: async () => "granted" },
+    });
+    Object.defineProperty(navigator, "serviceWorker", {
+      configurable: true,
+      value: { ready: Promise.resolve({ pushManager: { getSubscription: async () => subscription } }) },
+    });
+    Object.defineProperty(window, "PushManager", { configurable: true, value: function PushManager() {} });
+    window.fetch = async () => new Response(JSON.stringify({
+      device: {
+        id: 42,
+        device_name: "Mein Smartphone",
+        categories: ["shifts"],
+        last_success_at: null,
+        endpoint_fingerprint: "unused-after-registration",
+        is_active: true,
+        identity_verified: true,
+      },
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  }, endpoint);
+  await page.addScriptTag({ path: "src/static/billing/notifications.js" });
+
+  await expect(page.locator("[data-notification-status]")).toHaveText("Nicht aktiv");
+  await expect(page.locator("[data-notification-device-list]")).toContainText("bitte erneut registrieren");
+
+  await page.getByRole("button", { name: "Benachrichtigungen aktivieren" }).click();
+
+  await expect(page.locator("[data-notification-status]")).toHaveText("Aktiv");
+  await expect(page.locator("[data-notification-device-list]")).not.toContainText("bitte erneut registrieren");
 });
 
 test("Notification setup guidance distinguishes desktop and iOS installation state", async ({ browser }) => {

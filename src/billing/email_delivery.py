@@ -16,7 +16,21 @@ from django.utils import timezone
 from django.utils.html import escape
 
 from .exporters import settlement_snapshot_pdf_bytes
-from .models import Camp, EmailBatch, EmailConfiguration, EmailDelivery, Participant, Settlement, SettlementRun
+from .models import (
+    AccountRecoveryToken,
+    Camp,
+    EmailBatch,
+    EmailConfiguration,
+    EmailDelivery,
+    Participant,
+    Settlement,
+    SettlementRun,
+)
+from .recovery_tokens import (
+    RECOVERY_TOKEN_PLACEHOLDER,
+    activate_account_recovery_token,
+    bind_account_recovery_email_recipient,
+)
 
 logger = logging.getLogger(__name__)
 EMAIL_RETRY_DELAYS = (60, 300, 1800, 7200, 21600)
@@ -42,6 +56,13 @@ def has_valid_recipient_email(email: str) -> bool:
     return True
 
 
+def is_email_configuration_usable(configuration: EmailConfiguration) -> bool:
+    """Return whether configured SMTP settings can be used for delivery."""
+    return bool(
+        configuration.enabled and configuration.host.strip() and has_valid_recipient_email(configuration.from_email)
+    )
+
+
 def _information_dedupe_key(email: str) -> str:
     """Return a fixed-length, non-PII key for one normalized information recipient."""
     return f"information:{hashlib.sha256(email.encode()).hexdigest()}"
@@ -54,6 +75,10 @@ class EmailDeliveryResult:
     sent: int = 0
     retried: int = 0
     failed: int = 0
+
+
+class AccountRecoveryDeliveryError(ValueError):
+    """Report that a queued recovery capability is no longer deliverable."""
 
 
 @dataclass(frozen=True)
@@ -219,6 +244,38 @@ def queue_information_email_batch(
         ]
     )
     return batch
+
+
+@transaction.atomic
+def queue_account_recovery_email(
+    *,
+    recipient_email: str,
+    recipient_name: str,
+    subject: str,
+    body: str,
+    account_recovery: AccountRecoveryToken,
+    camp: Camp | None = None,
+) -> EmailDelivery:
+    """Queue one system-generated credential-recovery email."""
+    normalized_email = normalize_recipient_email(recipient_email)
+    bind_account_recovery_email_recipient(account_recovery, normalized_email)
+    clean_subject, clean_body = _validate_message(subject, body)
+    batch = EmailBatch.objects.create(
+        camp=camp,
+        kind=EmailBatch.Kind.ACCOUNT_RECOVERY,
+        subject=clean_subject,
+        body=clean_body,
+        created_by=None,
+    )
+    return EmailDelivery.objects.create(
+        batch=batch,
+        recipient_email=normalized_email,
+        recipient_names=[recipient_name],
+        dedupe_key=f"account-recovery:{hashlib.sha256(clean_body.encode()).hexdigest()}",
+        subject=clean_subject,
+        body_text=clean_body,
+        account_recovery=account_recovery,
+    )
 
 
 @transaction.atomic
@@ -392,15 +449,24 @@ def _send_delivery(
     configuration: EmailConfiguration,
     connection: Any,
 ) -> str:
+    body_text = delivery.body_text
+    if delivery.account_recovery_id is not None:
+        raw_token = activate_account_recovery_token(
+            delivery.account_recovery_id,
+            recipient_email=delivery.recipient_email,
+        )
+        if raw_token is None or RECOVERY_TOKEN_PLACEHOLDER not in body_text:
+            raise AccountRecoveryDeliveryError("Account recovery is no longer deliverable")
+        body_text = body_text.replace(RECOVERY_TOKEN_PLACEHOLDER, raw_token)
     message = EmailMultiAlternatives(
         subject=delivery.subject,
-        body=delivery.body_text,
+        body=body_text,
         from_email=formataddr((configuration.from_name, configuration.from_email)),
         to=[delivery.recipient_email],
         reply_to=[configuration.reply_to] if configuration.reply_to else None,
         connection=connection,
     )
-    message.attach_alternative(_html_body(delivery.body_text), "text/html")
+    message.attach_alternative(_html_body(body_text), "text/html")
     attachment_sha256 = delivery.attachment_sha256
     if delivery.settlement_id is not None:
         attachment = bytes(delivery.attachment_content or b"")
@@ -449,17 +515,19 @@ def send_due_email_deliveries(*, batch_size: int = 25, connection: Any | None = 
     sent = retried = failed = 0
     try:
         for delivery_id in delivery_ids:
+            claim_time = timezone.now()
             claimed = EmailDelivery.objects.filter(
                 pk=delivery_id,
                 status=EmailDelivery.Status.PENDING,
                 next_attempt_at__lte=now,
             ).update(
                 status=EmailDelivery.Status.PROCESSING,
-                processing_started_at=now,
+                processing_started_at=claim_time,
             )
             if not claimed:
                 continue
             delivery = EmailDelivery.objects.select_related(
+                "account_recovery",
                 "settlement",
                 "settlement__run",
                 "settlement__run__camp",
@@ -472,11 +540,35 @@ def send_due_email_deliveries(*, batch_size: int = 25, connection: Any | None = 
                     configuration=configuration,
                     connection=mail_connection,
                 )
+            except AccountRecoveryDeliveryError:
+                delivery.attempts += 1
+                delivery.status = EmailDelivery.Status.FAILED
+                delivery.processing_started_at = None
+                delivery.last_error_code = "recovery_unavailable"
+                delivery.save(
+                    update_fields=[
+                        "attempts",
+                        "status",
+                        "processing_started_at",
+                        "last_error_code",
+                        "updated_at",
+                    ]
+                )
+                failed += 1
+                continue
             except (smtplib.SMTPException, OSError) as error:
                 delivery.attempts += 1
                 smtp_code = _smtp_status_code(error)
                 permanent = _is_permanent_smtp_failure(error, smtp_code)
-                if permanent or delivery.attempts > len(EMAIL_RETRY_DELAYS):
+                ambiguous_recovery_delivery = bool(
+                    delivery.account_recovery_id
+                    and smtp_code is None
+                    and AccountRecoveryToken.objects.filter(
+                        pk=delivery.account_recovery_id,
+                        token_digest__isnull=False,
+                    ).exists()
+                )
+                if ambiguous_recovery_delivery or permanent or delivery.attempts > len(EMAIL_RETRY_DELAYS):
                     delivery.status = EmailDelivery.Status.FAILED
                     failed += 1
                 else:

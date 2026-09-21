@@ -8,6 +8,7 @@ from django.conf import settings
 from django.http import HttpResponse
 from openpyxl import Workbook
 from reportlab.lib.pagesizes import A4
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
 from .models import Charge, DrinkEntry, Participant, Settlement, SettlementRun
@@ -18,12 +19,17 @@ PDF_CONTENT_BOTTOM = 55
 PDF_LINE_HEIGHT = 18
 PDF_META_LINE_HEIGHT = 11
 PDF_BOOKING_REFERENCES_PER_LINE = 6
+PDF_FIRST_PAGE_TABLE_TOP_OFFSET = 235
+PDF_TABLE_HEADER_SPACING = 22
 PDF_SUMMARY_TOP_SPACING = 10
 PDF_SUMMARY_FINAL_SPACING = 4
-PDF_PAYMENT_TOP_SPACING = 30
+PDF_PAYMENT_TOP_SPACING = 14
 PDF_PAYMENT_DEBIT_BOX_HEIGHT = 65
 PDF_PAYMENT_CREDIT_BOX_HEIGHT = 70
 PDF_PREVIEW_CONTENT_SECURITY_POLICY = "default-src 'none'; frame-ancestors 'self'"
+PDF_BRAND_BLUE = (0.12, 0.38, 0.68)
+PDF_TEXT_DARK = (0.12, 0.14, 0.17)
+PDF_TEXT_MUTED = (0.38, 0.42, 0.47)
 
 
 def safe_csv_cell(value: Any) -> Any:
@@ -501,65 +507,176 @@ def camp_workbook_response(camp):
     return response
 
 
-def _draw_page_framework(pdf, title, subtitle, participant_name):
+def _draw_fitted_text(
+    pdf,
+    text: str,
+    x: float,
+    y: float,
+    *,
+    max_width: float,
+    font_name: str,
+    font_size: float,
+    minimum_font_size: float = 8,
+    align_right: bool = False,
+) -> None:
+    """Draw one line within a fixed column without clipping long account names."""
+    fitted_size = font_size
+    while fitted_size > minimum_font_size and stringWidth(text, font_name, fitted_size) > max_width:
+        fitted_size -= 0.5
+    fitted_text = text
+    if stringWidth(fitted_text, font_name, fitted_size) > max_width:
+        ellipsis = "..."
+        while fitted_text and stringWidth(f"{fitted_text}{ellipsis}", font_name, fitted_size) > max_width:
+            fitted_text = fitted_text[:-1]
+        fitted_text = f"{fitted_text.rstrip()}{ellipsis}"
+    pdf.setFont(font_name, fitted_size)
+    if align_right:
+        pdf.drawRightString(x, y, fitted_text)
+    else:
+        pdf.drawString(x, y, fitted_text)
+
+
+def _draw_invoice_table_header(pdf, y: float) -> float:
+    width, _ = A4
+    pdf.setFillColorRGB(*PDF_BRAND_BLUE)
+    pdf.rect(50, y - 7, width - 100, 22, stroke=0, fill=1)
+    pdf.setFillColorRGB(1, 1, 1)
+    pdf.setFont("Helvetica-Bold", 9)
+    pdf.drawString(58, y, "POSITION")
+    pdf.drawRightString(width - 120, y, "MENGE")
+    pdf.drawRightString(width - 58, y, "SUMME")
+    pdf.setFillColorRGB(*PDF_TEXT_DARK)
+    return y - PDF_TABLE_HEADER_SPACING
+
+
+def _draw_invoice_footer(pdf) -> None:
+    width, _ = A4
+    footer_y = 30
+    pdf.setStrokeColorRGB(0.82, 0.85, 0.88)
+    pdf.line(50, 55, width - 115, 55)
+    pdf.setStrokeColorRGB(0, 0, 0)
+    pdf.setFont("Helvetica", 8)
+    pdf.setFillColorRGB(*PDF_TEXT_MUTED)
+    pdf.drawString(50, footer_y, "Erstellt mit der Fliegerlagerabrechnung | Luftsportfreunde Wesel-Rheinhausen e.V.")
+    pdf.drawRightString(width - 50, footer_y, f"Seite {pdf.getPageNumber()}")
+    pdf.setFillColorRGB(*PDF_TEXT_DARK)
+
+
+def _draw_page_framework(pdf, document_context, subtitle, participant_name, *, continuation=False):
     width, height = A4
 
-    logo_path = settings.BASE_DIR / "static" / "billing" / "logo.jpg"
-    if logo_path.exists():
-        pdf.drawImage(
-            str(logo_path), 50, height - 150, width=250, height=100, preserveAspectRatio=True, anchor="nw", mask="auto"
+    if continuation:
+        pdf.setFillColorRGB(*PDF_TEXT_MUTED)
+        pdf.setFont("Helvetica-Bold", 8)
+        pdf.drawString(50, height - 43, "LUFTSPORTFREUNDE WESEL-RHEINHAUSEN E.V.")
+        pdf.setFillColorRGB(*PDF_BRAND_BLUE)
+        pdf.drawRightString(width - 50, height - 43, "EINZELABRECHNUNG - FORTSETZUNG")
+        pdf.setStrokeColorRGB(*PDF_BRAND_BLUE)
+        pdf.line(50, height - 55, width - 50, height - 55)
+        pdf.setStrokeColorRGB(0, 0, 0)
+        pdf.setFillColorRGB(*PDF_TEXT_DARK)
+        _draw_fitted_text(
+            pdf,
+            participant_name,
+            50,
+            height - 76,
+            max_width=225,
+            font_name="Helvetica-Bold",
+            font_size=10,
+        )
+        _draw_fitted_text(
+            pdf,
+            document_context,
+            width - 50,
+            height - 76,
+            max_width=225,
+            font_name="Helvetica",
+            font_size=9,
+            align_right=True,
+        )
+        detail_y = height - 91 if subtitle else height - 87
+        if subtitle:
+            pdf.setFillColorRGB(*PDF_TEXT_MUTED)
+            pdf.setFont("Helvetica", 8)
+            pdf.drawRightString(width - 50, detail_y, subtitle)
+        pdf.setFillColorRGB(*PDF_TEXT_DARK)
+        y = height - 112
+    else:
+        logo_path = settings.BASE_DIR / "static" / "billing" / "logo.jpg"
+        if logo_path.exists():
+            pdf.drawImage(
+                str(logo_path),
+                50,
+                height - 118,
+                width=78,
+                height=74,
+                preserveAspectRatio=True,
+                anchor="c",
+                mask="auto",
+            )
+
+        pdf.setFillColorRGB(*PDF_TEXT_DARK)
+        pdf.setFont("Helvetica-Bold", 10)
+        pdf.drawRightString(width - 50, height - 52, "LUFTSPORTFREUNDE WESEL-RHEINHAUSEN E.V.")
+        pdf.setFillColorRGB(*PDF_TEXT_MUTED)
+        pdf.setFont("Helvetica", 9)
+        pdf.drawRightString(width - 50, height - 68, "Postfach 100240 | 46462 Wesel")
+        pdf.setStrokeColorRGB(*PDF_BRAND_BLUE)
+        pdf.setLineWidth(1.5)
+        pdf.line(145, height - 82, width - 50, height - 82)
+        pdf.setLineWidth(1)
+
+        pdf.setFillColorRGB(*PDF_TEXT_MUTED)
+        pdf.setFont("Helvetica", 7)
+        pdf.drawString(
+            50,
+            height - 145,
+            "Luftsportfreunde Wesel-Rheinhausen e.V. | Postfach 100240 | 46462 Wesel",
         )
 
-    pdf.setFont("Helvetica", 8)
-    pdf.setFillColorRGB(0.3, 0.3, 0.3)
-    pdf.drawString(50, height - 165, "Luftsportfreunde Wesel-Rheinhausen e.V. · Postfach 100240 · 46462 Wesel")
-    pdf.setFillColorRGB(0, 0, 0)
+        pdf.setFillColorRGB(*PDF_BRAND_BLUE)
+        pdf.setFont("Helvetica-Bold", 8)
+        pdf.drawString(50, height - 181, "RECHNUNG AN")
+        pdf.drawRightString(width - 50, height - 181, "EINZELABRECHNUNG")
+        pdf.setFillColorRGB(*PDF_TEXT_DARK)
+        _draw_fitted_text(
+            pdf,
+            participant_name,
+            50,
+            height - 203,
+            max_width=225,
+            font_name="Helvetica-Bold",
+            font_size=13,
+        )
+        _draw_fitted_text(
+            pdf,
+            document_context,
+            width - 50,
+            height - 203,
+            max_width=225,
+            font_name="Helvetica-Bold",
+            font_size=13,
+            align_right=True,
+        )
+        if subtitle:
+            pdf.setFillColorRGB(*PDF_TEXT_MUTED)
+            pdf.setFont("Helvetica", 8)
+            pdf.drawRightString(width - 50, height - 219, subtitle)
+        pdf.setFillColorRGB(*PDF_TEXT_DARK)
+        y = height - PDF_FIRST_PAGE_TABLE_TOP_OFFSET
 
-    pdf.setFont("Helvetica", 10)
-    pdf.drawString(50, height - 200, "An:")
-    pdf.setFont("Helvetica-Bold", 12)
-    pdf.drawString(50, height - 215, participant_name)
-
-    pdf.setFont("Helvetica-Bold", 16)
-    pdf.drawRightString(width - 50, height - 70, title)
-
-    if subtitle:
-        pdf.setFont("Helvetica", 10)
-        pdf.setFillColorRGB(0.3, 0.3, 0.3)
-        pdf.drawRightString(width - 50, height - 90, subtitle)
-        pdf.setFillColorRGB(0, 0, 0)
-
-    y = height - 260
-
-    pdf.setFillColorRGB(0.95, 0.95, 0.95)
-    pdf.rect(50, y - 6, width - 100, 20, stroke=0, fill=1)
-    pdf.setFillColorRGB(0, 0, 0)
-
-    pdf.setFont("Helvetica-Bold", 10)
-    pdf.drawString(55, y, "Position")
-    pdf.drawRightString(width - 120, y, "Menge")
-    pdf.drawRightString(width - 55, y, "Summe")
-    y -= 15
-
-    footer_y = 30
-    pdf.setFont("Helvetica", 8)
-    pdf.setFillColorRGB(0.5, 0.5, 0.5)
-    pdf.drawCentredString(
-        width / 2.0, footer_y, "Erstellt mit der Fliegerlagerabrechnung | Luftsportfreunde Wesel-Rheinhausen e.V."
-    )
-    pdf.drawRightString(width - 50, footer_y, f"Seite {pdf.getPageNumber()}")
-    pdf.setFillColorRGB(0, 0, 0)
-
+    y = _draw_invoice_table_header(pdf, y)
+    _draw_invoice_footer(pdf)
     return y
 
 
-def _ensure_invoice_space(pdf, y, required_height, title, subtitle, participant_name):
+def _ensure_invoice_space(pdf, y, required_height, document_context, subtitle, participant_name):
     """Start a continuation page when a complete invoice block would cross the footer."""
     if y - required_height >= PDF_CONTENT_BOTTOM:
         return y
 
     pdf.showPage()
-    y = _draw_page_framework(pdf, title, subtitle, participant_name)
+    y = _draw_page_framework(pdf, document_context, subtitle, participant_name, continuation=True)
     pdf.setFont("Helvetica", 10)
     return y
 
@@ -775,8 +892,8 @@ def participant_pdf_response(participant):
     pdf = canvas.Canvas(output, pagesize=A4)
     width, _ = A4
 
-    title = f"Einzelabrechnung {participant.camp.name} {participant.camp.year}"
-    y = _draw_page_framework(pdf, title, "", participant.full_name)
+    document_context = f"{participant.camp.name} {participant.camp.year}"
+    y = _draw_page_framework(pdf, document_context, "", participant.full_name)
 
     pdf.setFont("Helvetica", 10)
     for line in result.lines:
@@ -785,7 +902,7 @@ def participant_pdf_response(participant):
             pdf,
             y,
             line_height,
-            title,
+            document_context,
             "",
             participant.full_name,
         )
@@ -812,7 +929,7 @@ def participant_pdf_response(participant):
         participant.camp,
         result.balance,
     )
-    y = _ensure_invoice_space(pdf, y, closing_height, title, "", participant.full_name)
+    y = _ensure_invoice_space(pdf, y, closing_height, document_context, "", participant.full_name)
     y = _draw_sum_block(pdf, y, summary_items)
 
     _draw_payment_instructions(pdf, y, participant.camp, result.balance)
@@ -902,9 +1019,9 @@ def settlement_snapshot_pdf_bytes(snapshot: Settlement) -> bytes:
     pdf = canvas.Canvas(output, pagesize=A4)
     width, _ = A4
 
-    title = f"Einzelabrechnung {run.camp.name} {run.camp.year}"
+    document_context = f"{run.camp.name} {run.camp.year}"
     subtitle = f"Version {run.version} vom {run.created_at:%d.%m.%Y %H:%M}"
-    y = _draw_page_framework(pdf, title, subtitle, snapshot.participant_name)
+    y = _draw_page_framework(pdf, document_context, subtitle, snapshot.participant_name)
 
     pdf.setFont("Helvetica", 10)
     for line in snapshot.data.get("lines", []):
@@ -915,7 +1032,7 @@ def settlement_snapshot_pdf_bytes(snapshot: Settlement) -> bytes:
             pdf,
             y,
             line_height,
-            title,
+            document_context,
             subtitle,
             snapshot.participant_name,
         )
@@ -950,7 +1067,7 @@ def settlement_snapshot_pdf_bytes(snapshot: Settlement) -> bytes:
         run.camp,
         snapshot.balance,
     )
-    y = _ensure_invoice_space(pdf, y, closing_height, title, subtitle, snapshot.participant_name)
+    y = _ensure_invoice_space(pdf, y, closing_height, document_context, subtitle, snapshot.participant_name)
     y = _draw_sum_block(pdf, y, summary_items)
 
     _draw_payment_instructions(pdf, y, run.camp, snapshot.balance)

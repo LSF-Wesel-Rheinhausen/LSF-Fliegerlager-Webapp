@@ -6,8 +6,9 @@ from django.urls import reverse
 from django.utils import timezone
 
 from billing.models import Charge, Expense, ParticipantFamilyMember, Settlement, SettlementRun
-from billing.views import KIOSK_MODE_SESSION_KEY, KIOSK_PARTICIPANT_SESSION_KEY
+from billing.views import KIOSK_MODE_SESSION_KEY
 from tests.factories import CampFactory, ExpenseFactory, ParticipantFactory, PriceRuleFactory, SuperUserFactory
+from tests.kiosk_helpers import authenticate_kiosk_session
 
 
 @pytest.mark.django_db
@@ -35,7 +36,7 @@ def test_kiosk_pre_camp_renders_countdown_and_rejects_date_updates(kiosk_client)
     participant = ParticipantFactory(camp=camp, arrival_date=camp.starts_on, departure_date=camp.ends_on)
 
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session[KIOSK_MODE_SESSION_KEY] = "private"
     session.save()
 
@@ -81,7 +82,7 @@ def test_kiosk_post_camp_renders_screen_and_settlement_archive(kiosk_client):
     )
 
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session[KIOSK_MODE_SESSION_KEY] = "private"
     session.save()
 
@@ -119,7 +120,7 @@ def test_kiosk_post_camp_renders_one_read_only_invoice_area(kiosk_client):
         balance=Decimal("100.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session[KIOSK_MODE_SESSION_KEY] = "private"
     session.save()
 
@@ -150,7 +151,7 @@ def test_kiosk_post_camp_hides_invoice_actions_when_admin_disabled_them(kiosk_cl
     )
     participant = ParticipantFactory(camp=camp)
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = kiosk_client.get(reverse("kiosk-home"))
@@ -187,7 +188,7 @@ def test_kiosk_post_camp_rejects_every_home_write_action(kiosk_client, kiosk_mod
     participant = ParticipantFactory(camp=camp)
     PriceRuleFactory(camp=camp)
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session[KIOSK_MODE_SESSION_KEY] = kiosk_mode
     session.save()
 
@@ -206,7 +207,7 @@ def test_kiosk_post_camp_keeps_checkin_available_during_attendance_buffer(kiosk_
     camp = CampFactory(is_active=True, starts_on=today - timedelta(days=20), ends_on=today - timedelta(days=1))
     participant = ParticipantFactory(camp=camp)
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session[KIOSK_MODE_SESSION_KEY] = kiosk_mode
     session.save()
 
@@ -231,7 +232,7 @@ def test_kiosk_post_camp_blocks_separate_write_workflows(kiosk_client, route_nam
     camp = CampFactory(is_active=True, starts_on=today - timedelta(days=20), ends_on=today - timedelta(days=1))
     participant = ParticipantFactory(camp=camp)
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session.save()
 
     response = getattr(kiosk_client, method)(reverse(route_name), follow=True)
@@ -267,7 +268,7 @@ def test_kiosk_settlement_pdf_download_permissions(kiosk_client):
     )
 
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session[KIOSK_MODE_SESSION_KEY] = "private"
     session.save()
 
@@ -329,7 +330,7 @@ def test_kiosk_settlement_pdf_rejects_attribute_based_identity_matches(kiosk_cli
         balance=Decimal("75.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session[KIOSK_MODE_SESSION_KEY] = "private"
     session.save()
 
@@ -386,7 +387,7 @@ def test_kiosk_home_lists_only_exact_participant_settlements(kiosk_client, ident
         balance=Decimal("75.00"),
     )
     session = kiosk_client.session
-    session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+    authenticate_kiosk_session(session, participant)
     session[KIOSK_MODE_SESSION_KEY] = "private"
     session.save()
 

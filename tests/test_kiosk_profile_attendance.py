@@ -30,6 +30,7 @@ from tests.factories import (
     SuperUserFactory,
     UserFactory,
 )
+from tests.kiosk_helpers import authenticate_kiosk_session
 
 
 def _set_kiosk_identity(client, *, participant=None, family_member=None):
@@ -37,9 +38,7 @@ def _set_kiosk_identity(client, *, participant=None, family_member=None):
     if family_member is not None and participant is None:
         participant = family_member.guardian
     if participant is not None:
-        session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
-    if family_member is not None:
-        session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = family_member.pk
+        authenticate_kiosk_session(session, participant, family_member=family_member)
     session.save()
 
 

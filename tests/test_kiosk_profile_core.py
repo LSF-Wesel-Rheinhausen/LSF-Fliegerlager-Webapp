@@ -6,18 +6,18 @@ from django.test import RequestFactory
 from django.utils import timezone
 
 import billing.profile_forms as profile_forms
-from billing.kiosk_access import KIOSK_FAMILY_MEMBER_SESSION_KEY, KIOSK_PARTICIPANT_SESSION_KEY
 from billing.models import KioskActionAuditLog, Participant, ParticipantFamilyMember
 from tests.factories import ParticipantFactory, ParticipantFamilyMemberFactory
+from tests.kiosk_helpers import authenticate_kiosk_session
 
 
 def _request(method, path, *, data, participant=None, family_member=None):
     request = getattr(RequestFactory(), method)(path, data=data)
     request.session = {}
     if participant is not None:
-        request.session[KIOSK_PARTICIPANT_SESSION_KEY] = participant.pk
+        authenticate_kiosk_session(request.session, participant)
     if family_member is not None:
-        request.session[KIOSK_FAMILY_MEMBER_SESSION_KEY] = family_member.pk
+        authenticate_kiosk_session(request.session, participant, family_member=family_member)
     return request
 
 
