@@ -1873,6 +1873,20 @@ def test_custom_registry_catalog_keeps_non_not_found_failures_fatal(monkeypatch)
         )
 
 
+def test_custom_registry_catalog_is_empty_when_all_optional_channel_pointers_are_missing(monkeypatch):
+    monkeypatch.setattr(deployment_agent, "REGISTRY_ALLOWED_HOSTS", "ghcr.io,registry.example.org:5443")
+    fetch = Mock(side_effect=deployment_agent.RegistryManifestNotFoundError("manifest not found"))
+    monkeypatch.setattr(deployment_agent, "fetch_image_metadata", fetch)
+
+    catalog = deployment_agent.build_version_catalog(
+        "registry.example.org:5443/example/app:dev",
+        environment="dev",
+    )
+
+    assert catalog == []
+    assert [call.args[0].rsplit(":", 1)[-1] for call in fetch.call_args_list] == ["prod", "latest", "dev"]
+
+
 def test_build_version_catalog_bounds_metadata_fetches_before_inspecting_tags(monkeypatch):
     tags = ["prod", "latest", "dev"]
     tags.extend(f"prod-{index:040x}" for index in range(200))
