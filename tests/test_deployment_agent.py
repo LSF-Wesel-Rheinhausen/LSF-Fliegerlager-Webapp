@@ -1830,6 +1830,49 @@ def test_custom_registry_catalog_uses_only_bounded_environment_channel_pointers(
     assert {entry["channels"][0] for entry in catalog} == {"prod", "staging", "dev"}
 
 
+def test_custom_registry_catalog_skips_only_missing_optional_channel_pointers(monkeypatch):
+    monkeypatch.setattr(deployment_agent, "REGISTRY_ALLOWED_HOSTS", "ghcr.io,registry.example.org:5443")
+    digest = image_digest("b")
+
+    def metadata(image):
+        if image.endswith(":latest"):
+            return {
+                "id": digest,
+                "image": image,
+                "version": "staging",
+                "revision": "b" * 40,
+                "build_date": "2026-09-20T00:00:00Z",
+            }
+        raise deployment_agent.RegistryManifestNotFoundError("manifest not found")
+
+    fetch = Mock(side_effect=metadata)
+    monkeypatch.setattr(deployment_agent, "fetch_image_metadata", fetch)
+
+    catalog = deployment_agent.build_version_catalog(
+        "registry.example.org:5443/example/app:dev",
+        environment="dev",
+    )
+
+    assert [entry["catalog_id"] for entry in catalog] == [digest]
+    assert catalog[0]["channels"] == ["staging"]
+    assert [call.args[0].rsplit(":", 1)[-1] for call in fetch.call_args_list] == ["prod", "latest", "dev"]
+
+
+def test_custom_registry_catalog_keeps_non_not_found_failures_fatal(monkeypatch):
+    monkeypatch.setattr(deployment_agent, "REGISTRY_ALLOWED_HOSTS", "ghcr.io,registry.example.org:5443")
+    monkeypatch.setattr(
+        deployment_agent,
+        "fetch_image_metadata",
+        Mock(side_effect=deployment_agent.RegistryMetadataError("registry unavailable")),
+    )
+
+    with pytest.raises(deployment_agent.RegistryMetadataError, match="unavailable"):
+        deployment_agent.build_version_catalog(
+            "registry.example.org:5443/example/app:dev",
+            environment="dev",
+        )
+
+
 def test_build_version_catalog_bounds_metadata_fetches_before_inspecting_tags(monkeypatch):
     tags = ["prod", "latest", "dev"]
     tags.extend(f"prod-{index:040x}" for index in range(200))
@@ -1862,7 +1905,7 @@ def test_build_version_catalog_bounds_metadata_fetches_before_inspecting_tags(mo
     assert {"prod", "latest", "dev"} <= fetched
 
 
-def test_catalog_selects_newest_by_package_build_time_not_tag_text(monkeypatch):
+def test_catalog_selects_newest_by_package_publication_time_not_tag_text(monkeypatch):
     old = [
         {
             "digest": f"sha256:{index:064x}",
@@ -1892,6 +1935,38 @@ def test_catalog_selects_newest_by_package_build_time_not_tag_text(monkeypatch):
     assert len(catalog) == 20
     assert newest["tags"][0] in fetched
     assert old[0]["tags"][0] not in fetched
+
+
+def test_catalog_orders_and_selects_by_trusted_package_publication_time(monkeypatch):
+    older_digest = image_digest("a")
+    newer_digest = image_digest("b")
+    versions = [
+        {
+            "digest": older_digest,
+            "created_at": "2026-09-19T00:00:00+00:00",
+            "tags": [f"dev-1-{'a' * 40}"],
+        },
+        {
+            "digest": newer_digest,
+            "created_at": "2026-09-20T00:00:00+00:00",
+            "tags": [f"dev-2-{'b' * 40}"],
+        },
+    ]
+    monkeypatch.setattr(deployment_agent, "list_package_versions", lambda _image, _channels: versions)
+    monkeypatch.setattr(deployment_agent, "UPDATE_ENVIRONMENT", "dev")
+
+    def metadata(image):
+        tag = image.rsplit(":", 1)[-1]
+        if tag.startswith("dev-1-"):
+            return {"id": older_digest, "version": "older", "build_date": "2099-01-01T00:00:00Z"}
+        return {"id": newer_digest, "version": "newer", "build_date": "2020-01-01T00:00:00Z"}
+
+    monkeypatch.setattr(deployment_agent, "fetch_image_metadata", metadata)
+
+    catalog = deployment_agent.build_version_catalog("ghcr.io/example/app:dev", environment="dev")
+
+    assert [entry["catalog_id"] for entry in catalog] == [newer_digest, older_digest]
+    assert deployment_agent.selected_catalog_entry(catalog)["catalog_id"] == newer_digest
 
 
 def test_catalog_rejects_package_and_registry_digest_disagreement(monkeypatch):

@@ -53,8 +53,8 @@ Prozess benötigten Variablen:
   Push-Origins und das Worker-Intervall.
 - `email-worker`: Django-Secret, Django-Host-Allowlist und Datenbank-URL. SMTP-Zugangsdaten liegen verschlüsselt in
   PostgreSQL; Web-Push-Schlüssel werden diesem Dienst nicht bereitgestellt.
-- `updater`: Update-Agent-Token, Datenbank-/Backup-Konfiguration, Portainer-Zugangsdaten, Registry-Allowlist und
-  `GHCR_TOKEN` mit ausschließlich `read:packages`.
+- `updater`: Update-Agent-Token, Datenbank-/Backup-Konfiguration, Portainer-Zugangsdaten, Registry-Allowlist und bei
+  einem GHCR-App-Image `GHCR_TOKEN` mit ausschließlich `read:packages`.
 
 `PORTAINER_URL`, `PORTAINER_API_KEY`, `PORTAINER_ENDPOINT_ID`, `PORTAINER_STACK_ID` und `GHCR_TOKEN` dürfen nur im
 `updater`-Service vorkommen. Änderungen an der Allowlist müssen durch die Compose-Konfigurationstests abgesichert
@@ -78,8 +78,9 @@ Optionale Variablen mit Defaults:
 - `PERSISTENCE_DIR`: absoluter Host-Pfad für alle persistenten Daten; für Portainer wird `/srv/fliegerlager` empfohlen.
 - `BACKUP_DIR`: bisheriger Host-Pfad der Backups; dient nur als Quelle bei der einmaligen Speichermigration.
 - `PORTAINER_VERIFY_SSL`: Portainer-Zertifikatsprüfung; Default `true`. Für interne Portainer-Instanzen mit Self-Signed-Zertifikat `false` setzen.
-- `GHCR_TOKEN`: erforderlich für den nach Veröffentlichungszeit sortierten Versionskatalog. In Portainer als
-  Updater-Secret mit ausschließlich `read:packages` setzen; weder App noch andere Dienste erhalten es.
+- `GHCR_TOKEN`: erforderlich für den nach Veröffentlichungszeit sortierten Versionskatalog, wenn `APP_IMAGE` auf
+  GHCR liegt. In Portainer als Updater-Secret mit ausschließlich `read:packages` setzen; weder App noch andere
+  Dienste erhalten es. Bei einer ausschließlich benutzerdefinierten Registry bleibt die Variable leer.
 - `UPDATE_REGISTRY_ALLOWED_HOSTS`: komma-separierte Liste exakter Registry-Hosts mit optionalem Port; Default
   `ghcr.io`. Erlaubt sind ausschließlich `Host[:Port]` ohne Schema, Pfad, Userinfo, Wildcards oder abschließenden
   Punkt. Benutzerdefinierte Registries müssen hier explizit eingetragen werden, zum Beispiel
@@ -284,10 +285,11 @@ sind nur nötig, falls Portainer sie für den Redeploy des Stacks verlangt. Nich
 Admin-Rechte, User-/Team-Verwaltung sowie Zugriff auf andere Environments oder Stacks.
 
 GHCR ist für dieses Projekt öffentlich lesbar. Die GitHub-Package-Versionen-API verlangt dennoch `read:packages`;
-deshalb benötigt der Update-Agent `GHCR_TOKEN` für den chronologisch korrekten Katalog. Er sendet dieses Credential
-ausschließlich an `api.github.com` für die fest konstruierte Package-Versionen-URL und an den exakt validierten Host
-`ghcr.io` für Registry-Lesezugriffe. Ohne Token ist kein Versionskatalog abrufbar; der Updater führt dadurch kein
-Update auf Basis einer unvollständigen oder falsch sortierten Liste aus.
+deshalb benötigt der Update-Agent für GHCR-App-Images `GHCR_TOKEN` für den chronologisch korrekten Katalog. Er sendet
+dieses Credential ausschließlich an `api.github.com` für die fest konstruierte Package-Versionen-URL und an den exakt validierten Host
+`ghcr.io` für Registry-Lesezugriffe. Ohne Token ist für ein GHCR-App-Image kein Versionskatalog abrufbar; der Updater
+führt dadurch kein Update auf Basis einer unvollständigen oder falsch sortierten Liste aus. Benutzerdefinierte
+Registries verwenden ausschließlich ihre digestgeprüften Kanalzeiger und benötigen dieses GitHub-Credential nicht.
 Discovery-Requests verwenden nur HTTPS und ausschließlich Hosts aus `UPDATE_REGISTRY_ALLOWED_HOSTS`; private,
 reservierte und anderweitig spezielle IP-Literale sowie nicht exakt erlaubte Hosts werden ohne DNS-Vertrauensprüfung
 abgewiesen. Registry- und Token-Endpunkte dürfen nicht redirecten, sodass Credentials und Bearer-Tokens den geprüften

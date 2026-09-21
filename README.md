@@ -160,7 +160,7 @@ Optionale Update-Variablen:
 - `APP_HEALTH_URL`: Healthcheck-URL, die der Update-Agent nach einem Portainer-Redeploy abfragt.
 - `TARGET_SERVICE`: Compose-Service des App-Containers, standardmäßig `app`; wird für den immutable Rollback-Digest genutzt.
 - `PORTAINER_VERIFY_SSL`: `true` prüft Portainer-HTTPS-Zertifikate. Für interne Portainer-Instanzen mit Self-Signed-Zertifikat kann `false` gesetzt werden.
-- `GHCR_TOKEN`: erforderlich für den Versionskatalog; GitHub-Token ausschließlich mit `read:packages`, nur im Updater setzen.
+- `GHCR_TOKEN`: für den Versionskatalog erforderlich, wenn `APP_IMAGE` auf GHCR liegt; GitHub-Token ausschließlich mit `read:packages` und nur im Updater setzen. Bei einer ausschließlich benutzerdefinierten Registry bleibt die Variable leer.
 
 Bei `DJANGO_DEBUG=0` startet die Anwendung nur mit einem mindestens 50 Zeichen langen `DJANGO_SECRET_KEY` und expliziten `DJANGO_ALLOWED_HOSTS`.
 

@@ -11,3 +11,6 @@
 - Begrenzt GHCR-Katalogabfragen auf ein festes Zeit- und Seitenbudget und beendet sie, sobald je erlaubtem Kanal genügend Versionen vorliegen.
 - Ordnet Dev-Promotionen über die vertrauenswürdige Test-Workflow-Run-ID statt über vom PR kontrollierte Image-Zeitstempel.
 - Verwendet für Container-Builds den deterministischen Commit-Zeitstempel, damit erneute Builds derselben Revision keine zeitabhängigen Metadaten erzeugen.
+- Behält die vertrauenswürdige GitHub-Publikationsreihenfolge bis zur Katalogauswahl bei, statt Image-Zeitstempel zur Sortierung zu verwenden.
+- Überspringt fehlende optionale Kanalzeiger benutzerdefinierter Registries, ohne andere Registry-Fehler zu verschlucken.
+- Verlangt `GHCR_TOKEN` nur für GHCR-App-Images; reine Custom-Registry-Installationen starten ohne GitHub-Credential.

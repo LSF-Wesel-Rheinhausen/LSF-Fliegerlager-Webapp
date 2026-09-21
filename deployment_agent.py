@@ -1345,9 +1345,11 @@ def list_package_versions(image: str, allowed_channels: tuple[str, ...]) -> list
     return versions
 
 
-def catalog_candidate_tags(versions: list[dict[str, Any]], allowed_channels: tuple[str, ...]) -> list[tuple[str, str]]:
-    """Select at most twenty newest version tags per channel by build timestamp."""
-    selected: list[tuple[str, str]] = []
+def catalog_candidate_tags(
+    versions: list[dict[str, Any]], allowed_channels: tuple[str, ...]
+) -> list[tuple[str, str, str]]:
+    """Select at most twenty newest tags per channel with their trusted publication time."""
+    selected: list[tuple[str, str, str]] = []
     newest_first = sorted(versions, key=lambda version: version["created_at"], reverse=True)
     for channel in allowed_channels:
         count = 0
@@ -1356,14 +1358,14 @@ def catalog_candidate_tags(versions: list[dict[str, Any]], allowed_channels: tup
             if not matching:
                 continue
             immutable = sorted(tag for tag in matching if tag not in {"prod", "latest", "dev"})
-            selected.append(((immutable or matching)[0], version["digest"]))
+            selected.append(((immutable or matching)[0], version["digest"], version["created_at"]))
             count += 1
             if count == 20:
                 break
     return selected
 
 
-def catalog_candidates(image: str, allowed_channels: tuple[str, ...]) -> list[tuple[str, str | None]]:
+def catalog_candidates(image: str, allowed_channels: tuple[str, ...]) -> list[tuple[str, str | None, str | None]]:
     """Return bounded catalog tags and optional API-provided digest bindings.
 
     GHCR exposes chronologically sortable package versions. Other explicitly
@@ -1374,7 +1376,7 @@ def catalog_candidates(image: str, allowed_channels: tuple[str, ...]) -> list[tu
     if registry == "ghcr.io":
         return catalog_candidate_tags(list_package_versions(image, allowed_channels), allowed_channels)
     channel_tags = {"prod": "prod", "staging": "latest", "dev": "dev"}
-    return [(channel_tags[channel], None) for channel in allowed_channels]
+    return [(channel_tags[channel], None, None) for channel in allowed_channels]
 
 
 def build_version_catalog(image: str, *, environment: str = UPDATE_ENVIRONMENT) -> list[dict[str, Any]]:
@@ -1382,11 +1384,16 @@ def build_version_catalog(image: str, *, environment: str = UPDATE_ENVIRONMENT) 
     allowed = environment_channels(environment)
     registry, repository, _reference = parse_image_reference(image)
     by_digest: dict[str, dict[str, Any]] = {}
-    for tag, expected_digest in catalog_candidates(image, allowed):
+    for tag, expected_digest, published_at in catalog_candidates(image, allowed):
         channel = channel_for_tag(tag)
         if channel not in allowed:
             continue
-        metadata = fetch_image_metadata(f"{registry}/{repository}:{tag}")
+        try:
+            metadata = fetch_image_metadata(f"{registry}/{repository}:{tag}")
+        except RegistryManifestNotFoundError:
+            if expected_digest is None:
+                continue
+            raise
         digest = metadata.get("id")
         if not isinstance(digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(digest):
             raise RegistryMetadataError("Katalog-Image enthaelt keinen validen Digest.")
@@ -1399,14 +1406,18 @@ def build_version_catalog(image: str, *, environment: str = UPDATE_ENVIRONMENT) 
                 "catalog_id": digest,
                 "image": f"{registry}/{repository}@{digest}",
                 "channels": [],
+                "_catalog_sort_date": published_at or str(metadata.get("build_date", "")),
             },
         )
+        candidate_sort_date = published_at or str(metadata.get("build_date", ""))
+        if candidate_sort_date > str(entry["_catalog_sort_date"]):
+            entry["_catalog_sort_date"] = candidate_sort_date
         if channel not in entry["channels"]:
             entry["channels"].append(channel)
     channel_order = {channel: index for index, channel in enumerate(ENVIRONMENT_CHANNELS["dev"])}
     versions = sorted(
         by_digest.values(),
-        key=lambda entry: (str(entry.get("build_date", "")), str(entry.get("version", ""))),
+        key=lambda entry: (str(entry["_catalog_sort_date"]), str(entry.get("version", ""))),
         reverse=True,
     )
     keep: set[str] = set()
@@ -1415,6 +1426,7 @@ def build_version_catalog(image: str, *, environment: str = UPDATE_ENVIRONMENT) 
         keep.update(str(entry["catalog_id"]) for entry in matching)
     result = [entry for entry in versions if entry["catalog_id"] in keep]
     for entry in result:
+        entry.pop("_catalog_sort_date")
         entry["channels"].sort(key=channel_order.__getitem__)
     return result
 

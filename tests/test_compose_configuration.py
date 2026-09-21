@@ -125,12 +125,10 @@ def test_example_environment_documents_registry_allowlist_default() -> None:
 
 
 @pytest.mark.parametrize("compose_path", ["docker-compose.yml", "deploy/docker-compose.example.yml"])
-def test_updater_requires_ghcr_catalog_token(compose_path: str) -> None:
+def test_updater_allows_custom_registry_without_ghcr_catalog_token(compose_path: str) -> None:
     configuration = yaml.safe_load((PROJECT_ROOT / compose_path).read_text(encoding="utf-8"))
 
-    assert configuration["services"]["updater"]["environment"]["GHCR_TOKEN"] == (
-        "${GHCR_TOKEN:?GHCR_TOKEN with read:packages must be set in .env}"
-    )
+    assert configuration["services"]["updater"]["environment"]["GHCR_TOKEN"] == "${GHCR_TOKEN:-}"
 
 
 @pytest.mark.parametrize("example_path", [".env.example", "deploy/.env.example"])
