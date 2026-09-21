@@ -1628,6 +1628,7 @@ def test_migration_compatibility_classifies_digest_bound_manifests(
     def manifest(files):
         ordered = sorted(files)
         return {
+            "version": 1,
             "files": [{"path": path, "sha256": files[path] * 64} for path in ordered],
             "migrations": [
                 {
@@ -1652,6 +1653,7 @@ def test_migration_compatibility_classifies_digest_bound_manifests(
 def test_migration_compatibility_rejects_added_branch_that_does_not_extend_current_leaf():
     digest = "a" * 64
     current = {
+        "version": 1,
         "files": [
             {"path": "billing/migrations/0001_initial.py", "sha256": digest},
             {"path": "billing/migrations/0002_current.py", "sha256": digest},
@@ -1667,6 +1669,7 @@ def test_migration_compatibility_rejects_added_branch_that_does_not_extend_curre
         ],
     }
     target = {
+        "version": 1,
         "files": [
             *current["files"],
             {"path": "billing/migrations/0002_branch.py", "sha256": digest},
@@ -1690,6 +1693,32 @@ def test_migration_compatibility_rejects_added_branch_that_does_not_extend_curre
 
 def test_migration_compatibility_treats_missing_metadata_as_unknown_risk():
     result = deployment_agent.migration_compatibility({}, {})
+
+    assert result == {
+        "risk": "unknown",
+        "requires_acknowledgement": True,
+        "affected_migrations": [],
+    }
+
+
+@pytest.mark.parametrize("version", [None, 0, "1", 2, True])
+def test_migration_compatibility_treats_unsupported_manifest_versions_as_unknown(version):
+    digest = "a" * 64
+    manifest = {
+        "files": [{"path": "billing/migrations/0001_initial.py", "sha256": digest}],
+        "migrations": [
+            {
+                "identifier": "billing.0001_initial",
+                "dependencies": [],
+                "reversible": True,
+                "sha256": digest,
+            }
+        ],
+    }
+    if version is not None:
+        manifest["version"] = version
+
+    result = deployment_agent.migration_compatibility(manifest, manifest)
 
     assert result == {
         "risk": "unknown",
@@ -1769,6 +1798,36 @@ def test_build_version_catalog_limits_channels_and_deduplicates_digests(monkeypa
     assert versions[1]["channels"] == ["prod", "staging"]
     assert all("dev" not in entry["channels"] for entry in versions)
     assert all(len(entry["catalog_id"]) == 71 for entry in versions)
+
+
+def test_custom_registry_catalog_uses_only_bounded_environment_channel_pointers(monkeypatch):
+    monkeypatch.setattr(deployment_agent, "REGISTRY_ALLOWED_HOSTS", "ghcr.io,registry.example.org:5443")
+    package_versions = Mock()
+    monkeypatch.setattr(deployment_agent, "list_package_versions", package_versions)
+    digests = {"prod": image_digest("a"), "latest": image_digest("b"), "dev": image_digest("c")}
+    fetch = Mock(
+        side_effect=lambda image: {
+            "id": digests[image.rsplit(":", 1)[-1]],
+            "image": image,
+            "version": image.rsplit(":", 1)[-1],
+            "revision": "a" * 40,
+            "build_date": "2026-09-20T00:00:00Z",
+        }
+    )
+    monkeypatch.setattr(deployment_agent, "fetch_image_metadata", fetch)
+
+    catalog = deployment_agent.build_version_catalog(
+        "registry.example.org:5443/example/app:dev",
+        environment="dev",
+    )
+
+    package_versions.assert_not_called()
+    assert [call.args[0] for call in fetch.call_args_list] == [
+        "registry.example.org:5443/example/app:prod",
+        "registry.example.org:5443/example/app:latest",
+        "registry.example.org:5443/example/app:dev",
+    ]
+    assert {entry["channels"][0] for entry in catalog} == {"prod", "staging", "dev"}
 
 
 def test_build_version_catalog_bounds_metadata_fetches_before_inspecting_tags(monkeypatch):
@@ -2167,6 +2226,49 @@ def test_deployment_versions_exposes_only_changelog_delta_from_running_image(
     assert [entry["title"] for entry in result["selected"]["changelog"]] == expected_titles
 
 
+def test_deployment_versions_treats_deleted_running_manifest_as_unknown(monkeypatch):
+    target_digest = image_digest("b")
+    running_digest = image_digest("a")
+    target_summary = {
+        "catalog_id": target_digest,
+        "id": target_digest,
+        "image": target_digest_reference(target_digest),
+        "channels": ["prod"],
+    }
+    target_metadata = {
+        **target_summary,
+        "version": "12",
+        "revision": "rev12",
+        "migrations": {"version": 1, "files": [], "migrations": []},
+        "changelog": [{"version": "12", "revision": "rev12", "title": "Twelve", "body": ""}],
+    }
+    client = Mock()
+    client.get_stack.return_value = active_stack(TEST_TARGET_IMAGE)
+    monkeypatch.setattr(deployment_agent, "PortainerClient", lambda: client)
+    monkeypatch.setattr(deployment_agent, "cached_version_catalog", lambda _image: [target_summary])
+    monkeypatch.setattr(
+        deployment_agent,
+        "immutable_running_image",
+        lambda *_args: target_digest_reference(running_digest),
+    )
+
+    def metadata(entry):
+        if entry["id"] == target_digest:
+            return target_metadata
+        raise deployment_agent.RegistryManifestNotFoundError("manifest not found")
+
+    monkeypatch.setattr(deployment_agent, "version_metadata", metadata)
+
+    result = deployment_agent.deployment_versions()
+
+    assert result["selected"]["compatibility"] == {
+        "risk": "unknown",
+        "requires_acknowledgement": True,
+        "affected_migrations": [],
+    }
+    assert result["selected"]["changelog"] == []
+
+
 def test_catalog_selection_rejects_digest_outside_allowed_catalog():
     with pytest.raises(deployment_agent.AgentRequestError) as error:
         deployment_agent.selected_catalog_entry([], image_digest("d"))
@@ -2210,6 +2312,96 @@ def test_check_update_binds_only_selected_environment_catalog_digest(monkeypatch
     assert result["selected_catalog_id"] == target_digest
     assert result["candidate_environment"] == "prod"
     assert result["risk_requires_acknowledgement"] is True
+
+
+def test_check_update_treats_deleted_running_manifest_as_unknown_migration_risk(monkeypatch):
+    target_digest = image_digest("b")
+    running_digest = image_digest("a")
+    target_image = target_digest_reference(target_digest)
+    migration_digest = "c" * 64
+    client = Mock()
+    client.get_stack.return_value = active_stack(TEST_TARGET_IMAGE)
+    entry = {
+        "catalog_id": target_digest,
+        "id": target_digest,
+        "image": target_image,
+        "channels": ["prod"],
+    }
+    target_metadata = {
+        **entry,
+        "version": "43",
+        "revision": "new",
+        "migrations": {
+            "version": 1,
+            "files": [{"path": "billing/migrations/0001_initial.py", "sha256": migration_digest}],
+            "migrations": [
+                {
+                    "identifier": "billing.0001_initial",
+                    "dependencies": [],
+                    "reversible": True,
+                    "sha256": migration_digest,
+                }
+            ],
+        },
+    }
+    monkeypatch.setattr(deployment_agent, "PortainerClient", lambda: client)
+    monkeypatch.setattr(
+        deployment_agent,
+        "immutable_running_image",
+        lambda *_args: target_digest_reference(running_digest),
+    )
+    monkeypatch.setattr(deployment_agent, "cached_version_catalog", lambda *_args, **_kwargs: [entry])
+    monkeypatch.setattr(deployment_agent, "version_metadata", lambda _entry: target_metadata)
+    monkeypatch.setattr(
+        deployment_agent,
+        "fetch_image_metadata",
+        Mock(side_effect=deployment_agent.RegistryManifestNotFoundError("manifest not found")),
+    )
+    monkeypatch.setattr(deployment_agent, "save_state", lambda **values: values)
+
+    result = deployment_agent.check_update({"catalog_id": target_digest, "current": {"version": "42"}})
+
+    assert result["update_available"] is True
+    assert result["compatibility"] == {
+        "risk": "unknown",
+        "requires_acknowledgement": True,
+        "affected_migrations": [],
+    }
+    assert result["risk_requires_acknowledgement"] is True
+    assert result["candidate_id"]
+
+
+def test_check_update_keeps_running_manifest_transport_failures_fatal(monkeypatch):
+    target_digest = image_digest("b")
+    running_digest = image_digest("a")
+    target_image = target_digest_reference(target_digest)
+    client = Mock()
+    client.get_stack.return_value = active_stack(TEST_TARGET_IMAGE)
+    entry = {"catalog_id": target_digest, "id": target_digest, "image": target_image, "channels": ["prod"]}
+    target_metadata = {
+        **entry,
+        "version": "43",
+        "revision": "new",
+        "migrations": {"version": 1, "files": [], "migrations": []},
+    }
+    monkeypatch.setattr(deployment_agent, "PortainerClient", lambda: client)
+    monkeypatch.setattr(
+        deployment_agent,
+        "immutable_running_image",
+        lambda *_args: target_digest_reference(running_digest),
+    )
+    monkeypatch.setattr(deployment_agent, "cached_version_catalog", lambda *_args, **_kwargs: [entry])
+    monkeypatch.setattr(deployment_agent, "version_metadata", lambda _entry: target_metadata)
+    monkeypatch.setattr(
+        deployment_agent, "fetch_image_metadata", Mock(side_effect=RuntimeError("registry unavailable"))
+    )
+    save_state = Mock()
+    monkeypatch.setattr(deployment_agent, "save_state", save_state)
+
+    with pytest.raises(RuntimeError, match="registry unavailable"):
+        deployment_agent.check_update({"catalog_id": target_digest, "current": {"version": "42"}})
+
+    save_state.assert_not_called()
 
 
 def test_create_backup_uses_database_url_without_leaking_password(monkeypatch, tmp_path):
@@ -2771,6 +2963,23 @@ def test_registry_request_keeps_explicitly_allowlisted_global_ip_literals(monkey
         )
 
     urlopen.assert_called_once()
+
+
+def test_registry_request_preserves_not_found_as_distinct_metadata_error():
+    not_found = urllib.error.HTTPError(
+        "https://ghcr.io/v2/owner/app/manifests/sha256:missing",
+        HTTPStatus.NOT_FOUND,
+        "Not Found",
+        {},
+        None,
+    )
+
+    with patch.object(deployment_agent, "registry_urlopen", side_effect=not_found):
+        with pytest.raises(deployment_agent.RegistryManifestNotFoundError):
+            deployment_agent.registry_request(
+                "https://ghcr.io/v2/owner/app/manifests/sha256:missing",
+                accept="application/json",
+            )
 
 
 def test_registry_token_rejects_cross_host_realm_without_credentials_or_network(monkeypatch):

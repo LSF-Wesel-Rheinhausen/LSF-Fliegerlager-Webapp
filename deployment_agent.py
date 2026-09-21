@@ -49,6 +49,10 @@ class RegistryMetadataError(RuntimeError):
     """Raised when registry metadata cannot be trusted for an immutable update."""
 
 
+class RegistryManifestNotFoundError(RegistryMetadataError):
+    """Raised when an immutable registry resource no longer exists."""
+
+
 class BackupArtifactCategory(Enum):
     """Internal backup categories with fixed filesystem naming components."""
 
@@ -1039,6 +1043,8 @@ def registry_request(
     except urllib.error.HTTPError as error:
         if HTTPStatus.MULTIPLE_CHOICES <= error.code < HTTPStatus.BAD_REQUEST:
             raise RegistryMetadataError("Registry-Redirects sind nicht erlaubt.") from error
+        if error.code == HTTPStatus.NOT_FOUND:
+            raise RegistryManifestNotFoundError("Registry-Ressource wurde nicht gefunden.") from error
         if error.code != HTTPStatus.UNAUTHORIZED or token:
             raise RuntimeError("Registry-Abfrage fehlgeschlagen.") from error
         bearer_token = fetch_registry_token(
@@ -1349,12 +1355,26 @@ def catalog_candidate_tags(versions: list[dict[str, Any]], allowed_channels: tup
     return selected
 
 
+def catalog_candidates(image: str, allowed_channels: tuple[str, ...]) -> list[tuple[str, str | None]]:
+    """Return bounded catalog tags and optional API-provided digest bindings.
+
+    GHCR exposes chronologically sortable package versions. Other explicitly
+    allowlisted registries use only the three release-channel pointers so the
+    fallback stays deterministic and never scans an unbounded tag history.
+    """
+    registry, _repository, _reference = parse_image_reference(image)
+    if registry == "ghcr.io":
+        return catalog_candidate_tags(list_package_versions(image), allowed_channels)
+    channel_tags = {"prod": "prod", "staging": "latest", "dev": "dev"}
+    return [(channel_tags[channel], None) for channel in allowed_channels]
+
+
 def build_version_catalog(image: str, *, environment: str = UPDATE_ENVIRONMENT) -> list[dict[str, Any]]:
     """Return at most twenty digest-verified image versions per allowed channel."""
     allowed = environment_channels(environment)
     registry, repository, _reference = parse_image_reference(image)
     by_digest: dict[str, dict[str, Any]] = {}
-    for tag, expected_digest in catalog_candidate_tags(list_package_versions(image), allowed):
+    for tag, expected_digest in catalog_candidates(image, allowed):
         channel = channel_for_tag(tag)
         if channel not in allowed:
             continue
@@ -1362,7 +1382,7 @@ def build_version_catalog(image: str, *, environment: str = UPDATE_ENVIRONMENT) 
         digest = metadata.get("id")
         if not isinstance(digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(digest):
             raise RegistryMetadataError("Katalog-Image enthaelt keinen validen Digest.")
-        if digest != expected_digest:
+        if expected_digest is not None and digest != expected_digest:
             raise RegistryMetadataError("Katalog-Tag und GitHub-Paketversion haben unterschiedliche Digests.")
         entry = by_digest.setdefault(
             digest,
@@ -1569,7 +1589,14 @@ def deployment_versions(selected: Any = "") -> dict[str, Any]:
     selected_details = version_metadata(selected_summary)
     running_digest_image = immutable_running_image(client, running_image)
     _running_repository, running_digest = validate_immutable_image_reference(running_digest_image)
-    running_metadata = version_metadata({"id": running_digest, "image": running_digest_image, "channels": []})
+    try:
+        running_metadata = version_metadata({"id": running_digest, "image": running_digest_image, "channels": []})
+    except RegistryManifestNotFoundError:
+        logger.warning(
+            "Das Manifest des laufenden Images ist nicht mehr in der Registry vorhanden; "
+            "Versions- und Migrationsdetails werden als unbekannt behandelt."
+        )
+        running_metadata = {"version": "unknown", "revision": "unknown", "migrations": {}}
     compatibility = migration_compatibility(running_metadata.get("migrations"), selected_details.get("migrations"))
     selected_details = {
         **selected_details,
@@ -1619,7 +1646,11 @@ def normalized_migration_manifest(raw_manifest: Any) -> dict[str, Any]:
             raw_manifest = json.loads(raw_manifest)
         except json.JSONDecodeError:
             return {}
-    if not isinstance(raw_manifest, dict):
+    if (
+        not isinstance(raw_manifest, dict)
+        or type(raw_manifest.get("version")) is not int
+        or raw_manifest["version"] != 1
+    ):
         return {}
     raw_files = raw_manifest.get("files")
     if not isinstance(raw_files, list) or len(raw_files) > 256:
@@ -1678,6 +1709,7 @@ def normalized_migration_manifest(raw_manifest: Any) -> dict[str, Any]:
     if len({item["identifier"] for item in migrations}) != len(migrations):
         return {}
     return {
+        "version": 1,
         "files": sorted(files, key=lambda item: item["path"]),
         "migrations": sorted(migrations, key=lambda item: item["identifier"]),
     }
@@ -1883,8 +1915,16 @@ def check_update(payload: dict[str, Any] | None = None) -> dict[str, Any]:
         current = current_metadata_from_payload(payload)
         update_available = approved_digest != running_digest
         if latest.get("migrations"):
-            running_metadata = fetch_image_metadata(running_digest_image)
-            compatibility = migration_compatibility(running_metadata.get("migrations"), latest.get("migrations"))
+            try:
+                running_metadata = fetch_image_metadata(running_digest_image)
+                running_migrations = running_metadata.get("migrations")
+            except RegistryManifestNotFoundError:
+                logger.warning(
+                    "Das Manifest des laufenden Images ist nicht mehr in der Registry vorhanden; "
+                    "die Migrationskompatibilitaet wird als unbekannt behandelt."
+                )
+                running_migrations = {}
+            compatibility = migration_compatibility(running_migrations, latest.get("migrations"))
         else:
             compatibility = migration_compatibility({}, {})
         candidate_id = secrets.token_urlsafe(32) if update_available else ""

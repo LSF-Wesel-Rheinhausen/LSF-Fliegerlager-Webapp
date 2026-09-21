@@ -83,7 +83,9 @@ Optionale Variablen mit Defaults:
 - `UPDATE_REGISTRY_ALLOWED_HOSTS`: komma-separierte Liste exakter Registry-Hosts mit optionalem Port; Default
   `ghcr.io`. Erlaubt sind ausschließlich `Host[:Port]` ohne Schema, Pfad, Userinfo, Wildcards oder abschließenden
   Punkt. Benutzerdefinierte Registries müssen hier explizit eingetragen werden, zum Beispiel
-  `ghcr.io,registry.example.org:5443`.
+  `ghcr.io,registry.example.org:5443`. Da nur GHCR chronologisch sortierbare Package-Metadaten bereitstellt, zeigt
+  der Katalog für andere erlaubte Registries ausschließlich die digestgeprüften Kanalzeiger `prod`, `latest` und
+  `dev`, soweit sie in der konfigurierten Umgebung sichtbar sind.
 - `TZ`: Zeitzone des Updaters; Default `Europe/Berlin`.
 
 Der Compose-Service `storage-migrate` legt die Zielstruktur an und setzt die schreibbaren App-Verzeichnisse auf

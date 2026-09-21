@@ -125,6 +125,23 @@ def test_example_environment_documents_registry_allowlist_default() -> None:
 
 
 @pytest.mark.parametrize("compose_path", ["docker-compose.yml", "deploy/docker-compose.example.yml"])
+def test_updater_requires_ghcr_catalog_token(compose_path: str) -> None:
+    configuration = yaml.safe_load((PROJECT_ROOT / compose_path).read_text(encoding="utf-8"))
+
+    assert configuration["services"]["updater"]["environment"]["GHCR_TOKEN"] == (
+        "${GHCR_TOKEN:?GHCR_TOKEN with read:packages must be set in .env}"
+    )
+
+
+@pytest.mark.parametrize("example_path", [".env.example", "deploy/.env.example"])
+def test_example_environment_requires_nonempty_ghcr_catalog_token(example_path: str) -> None:
+    example = (PROJECT_ROOT / example_path).read_text(encoding="utf-8")
+
+    assert "GHCR_TOKEN=replace-with-github-token-with-read-packages" in example
+    assert "Optional. Public GHCR images do not need a token." not in example
+
+
+@pytest.mark.parametrize("compose_path", ["docker-compose.yml", "deploy/docker-compose.example.yml"])
 def test_background_workers_disable_inherited_http_healthcheck(compose_path: str) -> None:
     configuration = yaml.safe_load((PROJECT_ROOT / compose_path).read_text(encoding="utf-8"))
 
