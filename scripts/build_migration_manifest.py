@@ -5,8 +5,11 @@ from __future__ import annotations
 import argparse
 import ast
 import hashlib
+import importlib
 import json
+import os
 import re
+import sys
 from pathlib import Path
 
 MIGRATION_NAME = re.compile(r"^(?P<name>\d+_[a-z0-9_]+)\.py$")
@@ -118,11 +121,36 @@ def render_manifest(paths: list[Path]) -> str:
     )
 
 
+def installed_migration_paths() -> list[Path]:
+    """Return migration modules for every installed Django app that ships them."""
+    source_root = Path(__file__).resolve().parents[1] / "src"
+    if str(source_root) not in sys.path:
+        sys.path.insert(0, str(source_root))
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+    import django
+    from django.apps import apps
+
+    django.setup()
+    paths: list[Path] = []
+    for app_config in apps.get_app_configs():
+        module_name = f"{app_config.name}.migrations"
+        try:
+            migration_module = importlib.import_module(module_name)
+        except ModuleNotFoundError as error:
+            if error.name == module_name:
+                continue
+            raise
+        for directory in getattr(migration_module, "__path__", ()):
+            paths.extend(Path(directory).glob("*.py"))
+    return paths
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--root", type=Path, default=Path("src/billing/migrations"))
+    parser.add_argument("--root", type=Path)
     args = parser.parse_args()
-    print(render_manifest(list(args.root.glob("*.py"))), end="")
+    paths = list(args.root.glob("*.py")) if args.root is not None else installed_migration_paths()
+    print(render_manifest(paths), end="")
 
 
 if __name__ == "__main__":

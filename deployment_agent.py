@@ -53,6 +53,14 @@ class RegistryManifestNotFoundError(RegistryMetadataError):
     """Raised when an immutable registry resource no longer exists."""
 
 
+class RegistryTagNotFoundError(RegistryManifestNotFoundError):
+    """Raised when the initially requested image tag or digest does not exist."""
+
+
+class GitHubPackageNotFoundError(RegistryMetadataError):
+    """Raised when one GitHub owner-kind endpoint does not contain the package."""
+
+
 class BackupArtifactCategory(Enum):
     """Internal backup categories with fixed filesystem naming components."""
 
@@ -148,7 +156,7 @@ IMAGE_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 IMAGE_TAG_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
 REGISTRY_HOST_LABEL_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 CANDIDATE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{16,128}$")
-CANDIDATE_CONTRACT_VERSION = 2
+CANDIDATE_CONTRACT_VERSION = 3
 RECOVERY_CONTRACT_VERSION = 1
 
 update_lock = threading.Lock()
@@ -1166,7 +1174,10 @@ def fetch_image_metadata(image: str) -> dict[str, Any]:
     """Read OCI labels and digest metadata for an image from its registry."""
     registry, repository, reference = parse_image_reference(image)
     manifest_url = f"https://{registry}/v2/{repository}/manifests/{reference}"
-    raw_manifest, headers = registry_request(manifest_url, accept=MANIFEST_ACCEPT)
+    try:
+        raw_manifest, headers = registry_request(manifest_url, accept=MANIFEST_ACCEPT)
+    except RegistryManifestNotFoundError as error:
+        raise RegistryTagNotFoundError(str(error)) from error
     installation_digest = manifest_digest(raw_manifest, headers)
     if reference.startswith("sha256:") and installation_digest != reference:
         raise RegistryMetadataError("Angefordertes Image stimmt nicht mit dem Manifest ueberein.")
@@ -1273,24 +1284,8 @@ def channel_for_tag(tag: str) -> str | None:
     return None
 
 
-def list_package_versions(image: str, allowed_channels: tuple[str, ...]) -> list[dict[str, Any]]:
-    """List GHCR package versions with authenticated, bounded GitHub API pagination.
-
-    The API supplies build timestamps without fetching every OCI manifest. Its
-    digest is used only as a binding hint; registry bytes are verified later.
-    Pagination stops once twenty versions per requested channel have been seen
-    or after a small fixed request budget, returning a bounded partial catalog.
-    """
-    registry, repository, _reference = parse_image_reference(image)
-    parts = repository.split("/", 1)
-    if registry != "ghcr.io" or len(parts) != 2:
-        raise RegistryMetadataError("Versionskatalog erfordert ein GHCR-Image mit Organisation und Paket.")
-    if not GHCR_TOKEN:
-        raise AgentConfigError("GHCR_TOKEN mit read:packages ist fuer den Versionskatalog erforderlich.")
-    organization, package = parts
-    encoded_organization = urllib.parse.quote(organization, safe="")
-    encoded_package = urllib.parse.quote(package, safe="")
-    endpoint = f"https://api.github.com/orgs/{encoded_organization}/packages/container/{encoded_package}/versions"
+def _package_versions_from_endpoint(endpoint: str, allowed_channels: tuple[str, ...]) -> list[dict[str, Any]]:
+    """Return bounded package versions from one GitHub organization or user endpoint."""
     versions: list[dict[str, Any]] = []
     channel_counts = dict.fromkeys(allowed_channels, 0)
     for page in range(1, MAX_GITHUB_PACKAGE_VERSION_PAGES + 1):
@@ -1306,6 +1301,8 @@ def list_package_versions(image: str, allowed_channels: tuple[str, ...]) -> list
             with registry_urlopen(request, timeout=GITHUB_PACKAGE_REQUEST_TIMEOUT_SECONDS) as response:
                 payload = json.loads(read_registry_body(response))
         except urllib.error.HTTPError as error:
+            if error.code == HTTPStatus.NOT_FOUND:
+                raise GitHubPackageNotFoundError("GitHub-Paket wurde fuer diesen Owner-Typ nicht gefunden.") from error
             if error.code in {HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN}:
                 raise RegistryMetadataError("GHCR_TOKEN benoetigt read:packages fuer den Versionskatalog.") from error
             raise RegistryMetadataError("GitHub-Paketversionen konnten nicht geladen werden.") from error
@@ -1343,6 +1340,32 @@ def list_package_versions(image: str, allowed_channels: tuple[str, ...]) -> list
         if len(payload) < 100 or all(count >= 20 for count in channel_counts.values()):
             return versions
     return versions
+
+
+def list_package_versions(image: str, allowed_channels: tuple[str, ...]) -> list[dict[str, Any]]:
+    """List GHCR package versions for organization- or user-owned namespaces.
+
+    The API supplies build timestamps without fetching every OCI manifest. Its
+    digest is used only as a binding hint; registry bytes are verified later.
+    Pagination stops once twenty versions per requested channel have been seen
+    or after a small fixed request budget, returning a bounded partial catalog.
+    """
+    registry, repository, _reference = parse_image_reference(image)
+    parts = repository.split("/", 1)
+    if registry != "ghcr.io" or len(parts) != 2:
+        raise RegistryMetadataError("Versionskatalog erfordert ein GHCR-Image mit Owner und Paket.")
+    if not GHCR_TOKEN:
+        raise AgentConfigError("GHCR_TOKEN mit read:packages ist fuer den Versionskatalog erforderlich.")
+    owner, package = parts
+    encoded_owner = urllib.parse.quote(owner, safe="")
+    encoded_package = urllib.parse.quote(package, safe="")
+    for owner_kind in ("orgs", "users"):
+        endpoint = f"https://api.github.com/{owner_kind}/{encoded_owner}/packages/container/{encoded_package}/versions"
+        try:
+            return _package_versions_from_endpoint(endpoint, allowed_channels)
+        except GitHubPackageNotFoundError:
+            continue
+    raise RegistryMetadataError("GitHub-Paketversionen konnten nicht geladen werden.")
 
 
 def catalog_candidate_tags(
@@ -1390,7 +1413,7 @@ def build_version_catalog(image: str, *, environment: str = UPDATE_ENVIRONMENT) 
             continue
         try:
             metadata = fetch_image_metadata(f"{registry}/{repository}:{tag}")
-        except RegistryManifestNotFoundError:
+        except RegistryTagNotFoundError:
             if expected_digest is None:
                 continue
             raise
@@ -1996,7 +2019,7 @@ def checked_install_candidate(candidate_id: Any) -> tuple[str, dict[str, Any]]:
         raise AgentRequestError(HTTPStatus.CONFLICT, "candidate_mismatch") from error
     if state.get("approved_digest") != approved_digest or state.get("candidate_digest") != approved_digest:
         raise AgentRequestError(HTTPStatus.CONFLICT, "candidate_mismatch")
-    if state.get("candidate_environment", UPDATE_ENVIRONMENT) != UPDATE_ENVIRONMENT:
+    if state.get("candidate_environment") != UPDATE_ENVIRONMENT:
         raise AgentRequestError(HTTPStatus.CONFLICT, "candidate_mismatch")
     candidate_base_digest = state.get("candidate_base_digest")
     if not isinstance(candidate_base_digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(candidate_base_digest):

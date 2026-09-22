@@ -171,6 +171,14 @@ def test_background_workers_disable_inherited_http_healthcheck(compose_path: str
 
 
 @pytest.mark.parametrize("compose_path", ["docker-compose.yml", "deploy/docker-compose.example.yml"])
+def test_all_application_services_default_to_the_production_image(compose_path: str) -> None:
+    configuration = yaml.safe_load((PROJECT_ROOT / compose_path).read_text(encoding="utf-8"))
+
+    for service_name in ("app", *EXPECTED_SERVICE_ENVIRONMENT_KEYS):
+        assert configuration["services"][service_name]["image"] == APP_IMAGE_EXPRESSION
+
+
+@pytest.mark.parametrize("compose_path", ["docker-compose.yml", "deploy/docker-compose.example.yml"])
 def test_all_django_services_receive_canonical_recovery_origin(compose_path: str) -> None:
     configuration = yaml.safe_load((PROJECT_ROOT / compose_path).read_text(encoding="utf-8"))
 

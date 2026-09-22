@@ -201,7 +201,7 @@ services:
     networks: [frontend, backend]
 
   account-recovery-worker:
-    image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}
+    image: ${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:prod}
     restart: unless-stopped
     environment:
       ACCOUNT_RECOVERY_PUBLIC_ORIGIN: ${ACCOUNT_RECOVERY_PUBLIC_ORIGIN:?ACCOUNT_RECOVERY_PUBLIC_ORIGIN must be set in .env}

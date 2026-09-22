@@ -116,6 +116,15 @@ def test_prod_workflow_promotes_matching_existing_digests_and_rejects_mixed_revi
     assert '--tag "$REGISTRY/$UPDATER:latest"' not in text
 
 
+def test_prod_workflow_serializes_complete_image_pair_promotions() -> None:
+    workflow = _release_workflow()
+
+    assert workflow["concurrency"] == {
+        "group": "production-image-promotion",
+        "cancel-in-progress": "false",
+    }
+
+
 @pytest.mark.parametrize("dockerfile", ["Dockerfile", "Dockerfile.updater"])
 def test_images_expose_shared_revision_build_and_migration_labels(dockerfile: str) -> None:
     content = (ROOT / dockerfile).read_text(encoding="utf-8")
@@ -173,3 +182,30 @@ def test_migration_manifest_marks_runpython_without_reverse_as_irreversible(tmp_
     payload = yaml.safe_load(build_migration_manifest.render_manifest([migration]))
 
     assert payload["migrations"][0]["reversible"] is False
+
+
+def test_default_migration_manifest_includes_all_installed_migrated_apps(monkeypatch) -> None:
+    from scripts import build_migration_manifest
+
+    monkeypatch.syspath_prepend(str(ROOT / "src"))
+    paths = build_migration_manifest.installed_migration_paths()
+    rendered = build_migration_manifest.render_manifest(paths)
+    identifiers = {entry["identifier"] for entry in yaml.safe_load(rendered)["migrations"]}
+
+    assert "billing.0001_initial" in identifiers
+    assert "auth.0001_initial" in identifiers
+    assert "contenttypes.0001_initial" in identifiers
+    assert "sessions.0001_initial" in identifiers
+
+
+def test_docker_metadata_jobs_install_django_before_building_migration_manifest() -> None:
+    workflow = _docker_workflow()
+
+    for job_name in ("docker-test", "docker-publish"):
+        steps = workflow["jobs"][job_name]["steps"]
+        names = [step.get("name") for step in steps]
+        metadata_index = names.index("Read build metadata")
+        assert names.index("Setup Python") < metadata_index
+        assert names.index("Install migration manifest dependencies") < metadata_index
+        install = next(step for step in steps if step.get("name") == "Install migration manifest dependencies")
+        assert install["run"] == "pip install -r requirements.txt"

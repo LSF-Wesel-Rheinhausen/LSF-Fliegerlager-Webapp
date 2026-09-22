@@ -69,6 +69,7 @@ def checked_candidate_state(
     update_available: bool = True,
     candidate_contract: int | None = TEST_CANDIDATE_CONTRACT,
     candidate_base_digest: str | None = None,
+    candidate_environment: str | None = "prod",
 ) -> dict:
     """Return a complete installable candidate state for state-machine tests."""
     approved_digest = digest or image_digest("a")
@@ -83,6 +84,8 @@ def checked_candidate_state(
         "latest": {"id": approved_digest, "version": "43", "revision": "new-revision"},
         "changelog": [],
     }
+    if candidate_environment is not None:
+        state["candidate_environment"] = candidate_environment
     if candidate_contract is not None:
         state["candidate_contract"] = candidate_contract
     return state
@@ -755,6 +758,41 @@ def test_fetch_image_metadata_keeps_index_digest_for_installation(monkeypatch):
     metadata = deployment_agent.fetch_image_metadata(TEST_TARGET_IMAGE)
 
     assert metadata["id"] == index_digest
+
+
+def test_fetch_image_metadata_marks_only_missing_initial_tag_as_optional(monkeypatch):
+    monkeypatch.setattr(
+        deployment_agent,
+        "registry_request",
+        Mock(side_effect=deployment_agent.RegistryManifestNotFoundError("manifest not found")),
+    )
+
+    with pytest.raises(deployment_agent.RegistryTagNotFoundError):
+        deployment_agent.fetch_image_metadata(TEST_TARGET_IMAGE)
+
+
+def test_fetch_image_metadata_keeps_missing_child_manifest_fatal(monkeypatch):
+    child_digest = image_digest("b")
+    index = {
+        "mediaType": "application/vnd.oci.image.index.v1+json",
+        "manifests": [
+            {
+                "digest": child_digest,
+                "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                "platform": {"os": "linux", "architecture": "amd64"},
+            }
+        ],
+    }
+    requests = Mock(
+        side_effect=[
+            (manifest_bytes(index), {}),
+            deployment_agent.RegistryManifestNotFoundError("child manifest not found"),
+        ]
+    )
+    monkeypatch.setattr(deployment_agent, "registry_request", requests)
+
+    with pytest.raises(deployment_agent.RegistryManifestNotFoundError, match="child manifest"):
+        deployment_agent.fetch_image_metadata(TEST_TARGET_IMAGE)
 
 
 def test_fetch_image_metadata_rejects_child_bytes_not_matching_index_digest(monkeypatch):
@@ -1843,7 +1881,7 @@ def test_custom_registry_catalog_skips_only_missing_optional_channel_pointers(mo
                 "revision": "b" * 40,
                 "build_date": "2026-09-20T00:00:00Z",
             }
-        raise deployment_agent.RegistryManifestNotFoundError("manifest not found")
+        raise deployment_agent.RegistryTagNotFoundError("manifest not found")
 
     fetch = Mock(side_effect=metadata)
     monkeypatch.setattr(deployment_agent, "fetch_image_metadata", fetch)
@@ -1873,9 +1911,24 @@ def test_custom_registry_catalog_keeps_non_not_found_failures_fatal(monkeypatch)
         )
 
 
+def test_custom_registry_catalog_keeps_nested_missing_resources_fatal(monkeypatch):
+    monkeypatch.setattr(deployment_agent, "REGISTRY_ALLOWED_HOSTS", "ghcr.io,registry.example.org:5443")
+    monkeypatch.setattr(
+        deployment_agent,
+        "fetch_image_metadata",
+        Mock(side_effect=deployment_agent.RegistryManifestNotFoundError("config blob not found")),
+    )
+
+    with pytest.raises(deployment_agent.RegistryManifestNotFoundError, match="config blob"):
+        deployment_agent.build_version_catalog(
+            "registry.example.org:5443/example/app:dev",
+            environment="dev",
+        )
+
+
 def test_custom_registry_catalog_is_empty_when_all_optional_channel_pointers_are_missing(monkeypatch):
     monkeypatch.setattr(deployment_agent, "REGISTRY_ALLOWED_HOSTS", "ghcr.io,registry.example.org:5443")
-    fetch = Mock(side_effect=deployment_agent.RegistryManifestNotFoundError("manifest not found"))
+    fetch = Mock(side_effect=deployment_agent.RegistryTagNotFoundError("manifest not found"))
     monkeypatch.setattr(deployment_agent, "fetch_image_metadata", fetch)
 
     catalog = deployment_agent.build_version_catalog(
@@ -2043,6 +2096,34 @@ def test_package_versions_use_fixed_github_api_host_and_paginate(monkeypatch):
         "https://api.github.com/orgs/example/packages/container/app/versions?per_page=100&page=2",
     ]
     assert all(call.args[0].get_header("Authorization") == "Bearer read-only-token" for call in urlopen.call_args_list)
+
+
+def test_package_versions_fall_back_to_user_owned_ghcr_namespace(monkeypatch):
+    monkeypatch.setattr(deployment_agent, "GHCR_TOKEN", "read-only-token")
+    org_url = "https://api.github.com/orgs/example/packages/container/app/versions?per_page=100&page=1"
+    not_an_org = urllib.error.HTTPError(org_url, HTTPStatus.NOT_FOUND, "not found", {}, None)
+    response = Mock()
+    response.__enter__ = Mock(return_value=response)
+    response.__exit__ = Mock(return_value=False)
+    response.headers = {}
+    response.read.return_value = json.dumps(
+        [
+            {
+                "name": image_digest("a"),
+                "created_at": "2026-09-20T00:00:00Z",
+                "metadata": {"package_type": "container", "container": {"tags": ["prod"]}},
+            }
+        ]
+    ).encode()
+
+    with patch.object(deployment_agent, "registry_urlopen", side_effect=[not_an_org, response]) as urlopen:
+        versions = deployment_agent.list_package_versions("ghcr.io/example/app:prod", ("prod",))
+
+    assert [entry["digest"] for entry in versions] == [image_digest("a")]
+    assert [call.args[0].full_url for call in urlopen.call_args_list] == [
+        org_url,
+        "https://api.github.com/users/example/packages/container/app/versions?per_page=100&page=1",
+    ]
 
 
 def test_package_versions_stop_after_twenty_versions_for_each_requested_channel(monkeypatch):
@@ -3709,6 +3790,16 @@ def test_install_rejects_legacy_candidate_without_runtime_base(monkeypatch, tmp_
     handler.dispatch()
 
     handler.respond.assert_called_once_with(HTTPStatus.CONFLICT, {"error": "candidate_mismatch"})
+
+
+def test_install_rejects_legacy_candidate_without_environment_binding(monkeypatch, tmp_path):
+    monkeypatch.setattr(deployment_agent, "STATE_FILE", tmp_path / "status.json")
+    deployment_agent.save_state(**checked_candidate_state(candidate_environment=None))
+
+    with pytest.raises(deployment_agent.AgentRequestError) as error:
+        deployment_agent.checked_install_candidate(TEST_CANDIDATE_ID)
+
+    assert error.value.public_code == "candidate_mismatch"
 
 
 def test_install_accepts_candidate_when_runtime_base_is_unchanged_and_is_target(monkeypatch, tmp_path):

@@ -6,6 +6,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: production-image-promotion
+  cancel-in-progress: false
+
 env:
   REGISTRY: ghcr.io/lsf-wesel-rheinhausen
   APP: lsf-fliegerlager-webapp
