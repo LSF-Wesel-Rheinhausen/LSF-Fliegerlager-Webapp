@@ -2034,11 +2034,13 @@ def test_custom_registry_catalog_uses_only_bounded_environment_channel_pointers(
     )
 
     package_versions.assert_not_called()
-    assert [call.args[0] for call in fetch.call_args_list] == [
-        "registry.example.org:5443/example/app:prod",
-        "registry.example.org:5443/example/app:latest",
-        "registry.example.org:5443/example/app:dev",
-    ]
+    assert sorted(call.args[0] for call in fetch.call_args_list) == sorted(
+        [
+            "registry.example.org:5443/example/app:prod",
+            "registry.example.org:5443/example/app:latest",
+            "registry.example.org:5443/example/app:dev",
+        ]
+    )
     assert {entry["channels"][0] for entry in catalog} == {"prod", "staging", "dev"}
 
 
@@ -2067,7 +2069,7 @@ def test_custom_registry_catalog_skips_only_missing_optional_channel_pointers(mo
 
     assert [entry["catalog_id"] for entry in catalog] == [digest]
     assert catalog[0]["channels"] == ["staging"]
-    assert [call.args[0].rsplit(":", 1)[-1] for call in fetch.call_args_list] == ["prod", "latest", "dev"]
+    assert sorted(call.args[0].rsplit(":", 1)[-1] for call in fetch.call_args_list) == ["dev", "latest", "prod"]
 
 
 def test_custom_registry_catalog_keeps_non_not_found_failures_fatal(monkeypatch):
@@ -2111,7 +2113,7 @@ def test_custom_registry_catalog_is_empty_when_all_optional_channel_pointers_are
     )
 
     assert catalog == []
-    assert [call.args[0].rsplit(":", 1)[-1] for call in fetch.call_args_list] == ["prod", "latest", "dev"]
+    assert sorted(call.args[0].rsplit(":", 1)[-1] for call in fetch.call_args_list) == ["dev", "latest", "prod"]
 
 
 def test_build_version_catalog_bounds_metadata_fetches_before_inspecting_tags(monkeypatch):

@@ -98,7 +98,9 @@ def test_docker_workflow_uses_first_parent_version():
     assert 'echo "version=$(git rev-list --first-parent --count HEAD)"' in workflow
     assert workflow.count("APP_VERSION=${{ steps.metadata.outputs.version }}") == 2
     assert workflow.count("python scripts/build_changelog_manifest.py --max-bytes 60000") == 2
-    assert "docker load -i tested-pr-images.tar" in workflow
+    for image in ("app", "updater"):
+        for architecture in ("amd64", "arm64"):
+            assert f"docker load -i tested-pr-images/{image}-linux-{architecture}.tar" in workflow
 
 
 RESOURCE_INTENSIVE_WORKFLOWS = ("ci.yml", "security.yml", "dast.yml")
