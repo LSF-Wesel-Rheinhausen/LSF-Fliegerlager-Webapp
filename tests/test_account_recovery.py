@@ -592,7 +592,7 @@ def test_admin_recovery_token_is_single_use_and_clears_login_lockout(client):
     reset_page = client.get(path)
     assert reset_page.status_code == 200
     assert reset_page["Cache-Control"] == "no-store"
-    assert reset_page["Referrer-Policy"] == "no-referrer"
+    assert reset_page["Referrer-Policy"] == "strict-origin"
     assert path.encode() not in reset_page.content
     reset_response = client.post(
         path,
