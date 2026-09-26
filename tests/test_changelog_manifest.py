@@ -98,6 +98,7 @@ def test_docker_workflow_uses_first_parent_version():
     assert 'echo "version=$(git rev-list --first-parent --count HEAD)"' in workflow
     assert workflow.count("APP_VERSION=${{ steps.metadata.outputs.version }}") == 2
     assert workflow.count("python scripts/build_changelog_manifest.py --max-bytes 60000") == 2
+    assert "docker load -i tested-pr-images.tar" in workflow
 
 
 RESOURCE_INTENSIVE_WORKFLOWS = ("ci.yml", "security.yml", "dast.yml")
@@ -118,10 +119,15 @@ def test_docker_publish_is_serialized_without_cancelling_an_active_pair():
     workflow = (Path(__file__).parents[1] / ".github" / "workflows" / "docker.yml").read_text(encoding="utf-8")
 
     assert "\nconcurrency:\n  group: " not in workflow
-    assert "    concurrency:\n      group: docker-test-${{ github.ref }}\n      cancel-in-progress: true" in workflow
+    assert (
+        "    concurrency:\n      group: docker-test-${{ github.event_name }}-"
+        "${{ github.event.workflow_run.id || github.event.pull_request.number }}\n      cancel-in-progress: true"
+        in workflow
+    )
     assert (
         "    concurrency:\n      group: docker-publish-${{ github.ref }}\n      cancel-in-progress: false" in workflow
     )
+    assert "    concurrency:\n      group: docker-publish-dev\n      cancel-in-progress: false" in workflow
 
 
 def test_playwright_system_dependencies_are_documented_as_uncacheable():

@@ -16,12 +16,14 @@ ARG APP_REVISION=unknown
 ARG APP_BUILD_DATE=unknown
 ARG APP_CHANGE="Unbekannter Build"
 ARG APP_CHANGELOG="[]"
+ARG MIGRATION_MANIFEST="{}"
 
 LABEL org.opencontainers.image.title="LSF Fliegerlager Webapp" \
       org.opencontainers.image.source="https://github.com/LSF-Wesel-Rheinhausen/LSF-Fliegerlager-Webapp" \
       org.opencontainers.image.version="${APP_VERSION}" \
       org.opencontainers.image.revision="${APP_REVISION}" \
       org.opencontainers.image.created="${APP_BUILD_DATE}" \
+      io.lsf-fliegerlager.migrations="${MIGRATION_MANIFEST}" \
       io.lsf-fliegerlager.change="${APP_CHANGE}" \
       io.lsf-fliegerlager.changelog="${APP_CHANGELOG}"
 

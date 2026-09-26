@@ -13,6 +13,7 @@ from billing.deployment_updates import (
     agent_request,
     check_for_update,
     create_backup_archive,
+    deployment_versions,
     install_update,
 )
 from billing.models import DailySettlementBackupSettings
@@ -62,6 +63,19 @@ def test_update_check_requires_post_and_reports_available_image(client, superuse
 
 
 @pytest.mark.django_db
+def test_update_check_forwards_selected_catalog_version(client, superuser):
+    client.force_login(superuser)
+    with patch("billing.views.check_for_update", return_value={"update_available": True}) as check:
+        response = client.post(
+            reverse("deployment-update-check"),
+            {"catalog_id": "selected-build"},
+        )
+
+    assert response.status_code == 302
+    check.assert_called_once_with("selected-build")
+
+
+@pytest.mark.django_db
 def test_update_check_maps_invalid_registry_metadata_to_operator_message(client, superuser):
     client.force_login(superuser)
     error = UpdateAgentError("Registry/Image prüfen und erneut versuchen.", public_code="invalid_registry_metadata")
@@ -98,6 +112,91 @@ def test_update_install_starts_agent(client, superuser):
     assert "Update gestartet. Die Anwendung wird in Kürze neu gestartet." in [
         str(message) for message in response.context["messages"]
     ]
+
+
+@pytest.mark.django_db
+def test_update_install_forwards_explicit_risk_acknowledgement(client, superuser):
+    client.force_login(superuser)
+    with patch("billing.views.install_update", return_value={"status": "accepted"}) as install:
+        response = client.post(
+            reverse("deployment-update-install"),
+            {"candidate_id": "checked-candidate-token", "risk_acknowledged": "on"},
+        )
+
+    assert response.status_code == 302
+    install.assert_called_once_with("checked-candidate-token", risk_acknowledged=True)
+
+
+@pytest.mark.django_db
+def test_deployment_page_renders_environment_limited_version_dropdown(client, superuser):
+    client.force_login(superuser)
+    catalog = {
+        "environment": "staging",
+        "versions": [
+            {
+                "catalog_id": "digest-one",
+                "version": "301",
+                "revision": "abc123",
+                "build_date": "2026-09-14T10:00:00Z",
+                "change": "feat: staged build",
+                "channels": ["prod", "staging"],
+            }
+        ],
+        "selected": {"catalog_id": "digest-one", "compatibility": {"risk": "forward"}},
+    }
+    with (
+        patch("billing.views.deployment_status", return_value={"phase": "idle", "message": "Bereit"}),
+        patch("billing.views.deployment_versions", return_value=catalog),
+    ):
+        response = client.get(reverse("deployment-update"))
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert "Umgebung: Staging" in content
+    assert 'name="catalog_id"' in content
+    assert 'value="digest-one"' in content
+    assert "v301" in content
+    assert "Prod, Staging" in content
+
+
+@pytest.mark.django_db
+def test_deployment_page_explains_risky_migration_selection(client, superuser):
+    client.force_login(superuser)
+    catalog = {
+        "environment": "dev",
+        "versions": [],
+        "selected": {
+            "catalog_id": "digest-one",
+            "version": "299",
+            "revision": "abc123",
+            "build_date": "2026-09-14T10:00:00Z",
+            "change": "fix: older build",
+            "channels": ["dev"],
+            "compatibility": {
+                "risk": "downgrade",
+                "requires_acknowledgement": True,
+                "affected_migrations": ["billing/migrations/0073_camp_meal_notification_settings.py"],
+            },
+        },
+    }
+    status = {
+        "phase": "checked",
+        "message": "Bereit",
+        "update_available": True,
+        "candidate_id": "checked-candidate-token",
+        "risk_requires_acknowledgement": True,
+    }
+    with (
+        patch("billing.views.deployment_status", return_value=status),
+        patch("billing.views.deployment_versions", return_value=catalog),
+    ):
+        response = client.get(reverse("deployment-update"))
+
+    content = response.content.decode()
+    assert "Downgrade mit entfallenden Migrationen" in content
+    assert "0073_camp_meal_notification_settings.py" in content
+    assert "Datenbankzustand nicht automatisch zurückgesetzt" in content
+    assert 'name="risk_acknowledged"' in content
 
 
 @pytest.mark.django_db
@@ -169,6 +268,35 @@ def test_check_for_update_sends_current_build_metadata():
     assert result == {"update_available": True}
 
 
+@override_settings(
+    UPDATE_AGENT_URL="http://updater:8080",
+    UPDATE_AGENT_TOKEN="secret-token",
+    APP_VERSION="1.2.3",
+    APP_REVISION="abc123",
+    APP_BUILD_DATE="2026-06-09T12:00:00Z",
+    APP_CHANGE="feat: deployment updates",
+)
+def test_check_for_update_binds_selected_catalog_version():
+    response = Mock()
+    response.__enter__ = Mock(return_value=io.BytesIO(json.dumps({"update_available": True}).encode()))
+    response.__exit__ = Mock(return_value=False)
+
+    with patch("urllib.request.urlopen", return_value=response) as urlopen:
+        result = check_for_update("catalog-entry-42")
+
+    request = urlopen.call_args.args[0]
+    assert json.loads(request.data.decode()) == {
+        "catalog_id": "catalog-entry-42",
+        "current": {
+            "version": "1.2.3",
+            "revision": "abc123",
+            "build_date": "2026-06-09T12:00:00Z",
+            "change": "feat: deployment updates",
+        },
+    }
+    assert result == {"update_available": True}
+
+
 @override_settings(UPDATE_AGENT_URL="http://updater:8080", UPDATE_AGENT_TOKEN="secret-token")
 def test_install_update_sends_only_checked_candidate_id():
     response = Mock()
@@ -182,6 +310,36 @@ def test_install_update_sends_only_checked_candidate_id():
     assert request.full_url == "http://updater:8080/install"
     assert json.loads(request.data.decode()) == {"candidate_id": "checked-candidate-token"}
     assert result == {"status": "accepted"}
+
+
+@override_settings(UPDATE_AGENT_URL="http://updater:8080", UPDATE_AGENT_TOKEN="secret-token")
+def test_install_update_sends_explicit_risk_acknowledgement():
+    response = Mock()
+    response.__enter__ = Mock(return_value=io.BytesIO(json.dumps({"status": "accepted"}).encode()))
+    response.__exit__ = Mock(return_value=False)
+
+    with patch("urllib.request.urlopen", return_value=response) as urlopen:
+        result = install_update("checked-candidate-token", risk_acknowledged=True)
+
+    request = urlopen.call_args.args[0]
+    assert json.loads(request.data.decode()) == {
+        "candidate_id": "checked-candidate-token",
+        "risk_acknowledged": True,
+    }
+    assert result == {"status": "accepted"}
+
+
+@override_settings(UPDATE_AGENT_URL="http://updater:8080", UPDATE_AGENT_TOKEN="secret-token")
+def test_deployment_versions_requests_only_url_encoded_catalog_identifier():
+    response = Mock()
+    response.__enter__ = Mock(return_value=io.BytesIO(json.dumps({"environment": "staging"}).encode()))
+    response.__exit__ = Mock(return_value=False)
+
+    with patch("urllib.request.urlopen", return_value=response) as urlopen:
+        result = deployment_versions("sha256:abc/def")
+
+    assert urlopen.call_args.args[0].full_url == ("http://updater:8080/versions?selected=sha256%3Aabc%2Fdef")
+    assert result == {"environment": "staging"}
 
 
 @override_settings(UPDATE_AGENT_URL="http://updater:8080", UPDATE_AGENT_TOKEN="secret-token")
@@ -255,16 +413,27 @@ def test_deployment_page_renders_update_changelog(client, superuser):
 @pytest.mark.django_db
 def test_deployment_page_renders_update_dialog_script_as_external_asset(client, superuser):
     client.force_login(superuser)
+    checked_digest = "sha256:" + "a" * 64
 
-    with patch(
-        "billing.views.deployment_status",
-        return_value={
-            "phase": "checked",
-            "message": "Update verfügbar",
-            "update_available": True,
-            "candidate_id": "checked-candidate-token",
-            "latest": {"version": "1.2.4", "revision": "newrev", "build_date": "2026-07-08"},
-        },
+    with (
+        patch(
+            "billing.views.deployment_status",
+            return_value={
+                "phase": "checked",
+                "message": "Update verfügbar",
+                "update_available": True,
+                "candidate_id": "checked-candidate-token",
+                "selected_catalog_id": checked_digest,
+            },
+        ),
+        patch(
+            "billing.views.deployment_versions",
+            return_value={
+                "environment": "prod",
+                "versions": [{"catalog_id": checked_digest}],
+                "selected": {"catalog_id": checked_digest, "version": "1.2.4"},
+            },
+        ),
     ):
         response = client.get(reverse("deployment-update"))
 
@@ -275,6 +444,38 @@ def test_deployment_page_renders_update_dialog_script_as_external_asset(client, 
     assert 'name="candidate_id" value="checked-candidate-token"' in content
     assert 'data-cfasync="false" defer src="/static/billing/deployment_update.js"' in content
     assert 'document.querySelectorAll("[data-dialog-open]")' not in content
+
+
+@pytest.mark.django_db
+def test_deployment_page_hides_install_for_selection_other_than_checked_candidate(client, superuser):
+    client.force_login(superuser)
+    checked_digest = "sha256:" + "a" * 64
+    displayed_digest = "sha256:" + "b" * 64
+    with (
+        patch(
+            "billing.views.deployment_status",
+            return_value={
+                "phase": "checked",
+                "message": "Update verfügbar",
+                "update_available": True,
+                "candidate_id": "checked-candidate-token",
+                "selected_catalog_id": checked_digest,
+            },
+        ),
+        patch(
+            "billing.views.deployment_versions",
+            return_value={
+                "environment": "prod",
+                "versions": [],
+                "selected": {"catalog_id": displayed_digest, "version": "2"},
+            },
+        ),
+    ):
+        response = client.get(reverse("deployment-update"), {"version": displayed_digest})
+
+    content = response.content.decode("utf-8")
+    assert response.status_code == 200
+    assert 'data-dialog-open="update-confirmation"' not in content
 
 
 @override_settings(UPDATE_AGENT_URL="http://updater:8080", UPDATE_AGENT_TOKEN="secret-token")
@@ -311,7 +512,13 @@ def test_deployment_update_status_json_returns_status_for_superuser(client, supe
     client.force_login(superuser)
     with patch(
         "billing.views.deployment_status",
-        return_value={"phase": "installing", "message": "Wird installiert...", "error": ""},
+        return_value={
+            "phase": "installing",
+            "message": "Wird installiert...",
+            "error": "",
+            "candidate_id": "must-not-leak",
+            "changelog": [{"body": "large"}],
+        },
     ):
         response = client.get(reverse("deployment-update-status-json"))
 

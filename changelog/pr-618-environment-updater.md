@@ -1,0 +1,26 @@
+### Sicherer Portainer-Updater mit Release-Kanälen
+
+- Behebt den wiederholten Rollback nach einem Neustart des Updaters durch eine idempotente Recovery-Zustandsmaschine.
+- Hält den operativen Update-Status klein und speichert Versionskatalog, Changelogs und Migrationsdaten in begrenzten Caches.
+- Ergänzt umgebungsgebundene Prod-, Staging- und Dev-Kanäle mit auswählbaren, digestgebundenen Versionen.
+- Sortiert den Versionskatalog anhand der GitHub-Package-Zeitstempel; dafür benötigt nur der Updater ein Lesetoken mit `read:packages`.
+- Unterstützt explizit erlaubte Nicht-GHCR-Registries über einen begrenzten Katalog ihrer verifizierten Kanalzeiger.
+- Warnt vor Downgrades oder abweichenden Migrationen und verlangt dafür eine ausdrückliche Risikobestätigung.
+- Behandelt gelöschte Manifeste laufender Images sowie unbekannte Migrationsmanifest-Versionen konservativ als bestätigungspflichtiges Risiko.
+- Veröffentlicht geprüfte PR-Builds über einen vertrauenswürdigen Folge-Workflow als Dev, erfolgreiche Main-Builds als Staging und promotet exakt verifizierte Prod-Digests nur manuell.
+- Begrenzt GHCR-Katalogabfragen auf ein festes Zeit- und Seitenbudget und beendet sie, sobald je erlaubtem Kanal genügend Versionen vorliegen.
+- Ordnet Dev-Promotionen über die vertrauenswürdige Test-Workflow-Run-ID statt über vom PR kontrollierte Image-Zeitstempel.
+- Verwendet für Container-Builds den deterministischen Commit-Zeitstempel, damit erneute Builds derselben Revision keine zeitabhängigen Metadaten erzeugen.
+- Behält die vertrauenswürdige GitHub-Publikationsreihenfolge bis zur Katalogauswahl bei, statt Image-Zeitstempel zur Sortierung zu verwenden.
+- Überspringt fehlende optionale Kanalzeiger benutzerdefinierter Registries, ohne andere Registry-Fehler zu verschlucken.
+- Verlangt `GHCR_TOKEN` nur für GHCR-App-Images; reine Custom-Registry-Installationen starten ohne GitHub-Credential.
+- Bindet Installationskandidaten strikt an die konfigurierte Umgebung und verwirft ältere Kandidaten ohne diese Bindung.
+- Unterscheidet fehlende optionale Registry-Kanalzeiger von beschädigten Child-Manifests oder Config-Blobs.
+- Unterstützt GHCR-Pakete sowohl in Organisations- als auch in persönlichen Namespaces.
+- Erfasst im OCI-Migrationsmanifest die Migrationen aller installierten Django-Apps und nicht nur die der Abrechnungs-App.
+- Serialisiert manuelle Produktionsfreigaben, damit App und Updater auch bei parallelen Auslösungen als geprüftes Paar promotet werden.
+- Verwendet für sämtliche Django-Dienste einschließlich Recovery-Worker standardmäßig ausschließlich das Prod-Image.
+- Veröffentlicht Dev-Images für AMD64 und ARM64 und verhindert das Überschreiben bereits belegter revisionsgebundener Tags.
+- Bricht Dev-Promotionen bei nicht prüfbarem Kanalzeiger ab und verwendet den verifizierten Kanalzeiger für die Standardauswahl.
+- Begrenzt Katalogabrufe zeitlich und parallel sowie Versionsdetails und Changelogs durch feste Größenlimits.
+- Prüft Produktionsfreigaben als Digest-Paar und stellt bei Teilfehlern das vorherige Paar kompensierend wieder her.

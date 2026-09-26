@@ -1,7 +1,7 @@
 name: Docker
 
 on:
-  pull_request: {}
+  pull_request:
   workflow_run:
     workflows:
       - Tests
@@ -18,13 +18,14 @@ jobs:
       ${{ github.event_name == 'pull_request' ||
           (github.event_name == 'workflow_run' &&
            github.event.workflow_run.conclusion == 'success' &&
-           github.event.workflow_run.event == 'push' &&
-           github.event.workflow_run.head_branch == 'main' &&
-           github.event.workflow_run.head_repository.full_name == github.repository) }}
+           github.event.workflow_run.head_repository.full_name == github.repository &&
+           (github.event.workflow_run.event == 'pull_request' ||
+            (github.event.workflow_run.event == 'push' &&
+             github.event.workflow_run.head_branch == 'main'))) }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     concurrency:
-      group: docker-test-${{ github.ref }}
+      group: docker-test-${{ github.event_name }}-${{ github.event.workflow_run.id || github.event.pull_request.number }}
       cancel-in-progress: true
     permissions:
       contents: read
@@ -34,22 +35,38 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.event.workflow_run.head_repository.full_name }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
 
+      - name: Setup Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install migration manifest dependencies
+        run: pip install -r requirements.txt
+
       - name: Read build metadata
         id: metadata
         run: |
+          echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "version=$(git rev-list --first-parent --count HEAD)" >> "$GITHUB_OUTPUT"
           echo "change=$(git log -1 --pretty=%s)" >> "$GITHUB_OUTPUT"
-          echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "created=$(git show -s --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
           {
             echo "changelog<<EOF"
             python scripts/build_changelog_manifest.py --max-bytes 60000
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
+          echo "migration=$(python scripts/build_migration_manifest.py | tr -d '\n')" >> "$GITHUB_OUTPUT"
 
       - name: Build application image for tests
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
@@ -59,12 +76,13 @@ jobs:
           tags: lsf-webapp:test
           build-args: |
             APP_VERSION=${{ steps.metadata.outputs.version }}
-            APP_REVISION=${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+            APP_REVISION=${{ steps.metadata.outputs.revision }}
             APP_BUILD_DATE=${{ steps.metadata.outputs.created }}
             APP_CHANGE=${{ steps.metadata.outputs.change }}
             APP_CHANGELOG=${{ steps.metadata.outputs.changelog }}
+            MIGRATION_MANIFEST=${{ steps.metadata.outputs.migration }}
           cache-from: type=gha,scope=app
-          cache-to: type=gha,mode=max,scope=app
+          cache-to: ${{ github.event_name == 'workflow_run' && 'type=gha,mode=max,scope=app' || '' }}
 
       - name: Build updater image for tests
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
@@ -73,8 +91,12 @@ jobs:
           file: Dockerfile.updater
           load: true
           tags: lsf-webapp-updater:test
+          build-args: |
+            APP_REVISION=${{ steps.metadata.outputs.revision }}
+            APP_BUILD_DATE=${{ steps.metadata.outputs.created }}
+            MIGRATION_MANIFEST=${{ steps.metadata.outputs.migration }}
           cache-from: type=gha,scope=updater
-          cache-to: type=gha,mode=max,scope=updater
+          cache-to: ${{ github.event_name == 'workflow_run' && 'type=gha,mode=max,scope=updater' || '' }}
 
       - name: Test application image
         run: >-
@@ -90,6 +112,54 @@ jobs:
           cp deploy/.env.example deploy/.env
           cp deploy/docker-compose.example.yml deploy/docker-compose.yml
           docker compose --project-directory deploy config --quiet
+
+      - name: Export PR multi-architecture images
+        if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' }}
+        env:
+          APP_VERSION: ${{ steps.metadata.outputs.version }}
+          APP_REVISION: ${{ steps.metadata.outputs.revision }}
+          APP_BUILD_DATE: ${{ steps.metadata.outputs.created }}
+          APP_CHANGE: ${{ steps.metadata.outputs.change }}
+          APP_CHANGELOG: ${{ steps.metadata.outputs.changelog }}
+          MIGRATION_MANIFEST: ${{ steps.metadata.outputs.migration }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/tested-pr-images
+          test "$(docker image inspect lsf-webapp:test --format '{{.Architecture}}')" = "amd64"
+          test "$(docker image inspect lsf-webapp-updater:test --format '{{.Architecture}}')" = "amd64"
+          docker tag lsf-webapp:test lsf-webapp:test-linux-amd64
+          docker tag lsf-webapp-updater:test lsf-webapp-updater:test-linux-amd64
+          docker save lsf-webapp:test-linux-amd64 -o /tmp/tested-pr-images/app-linux-amd64.tar
+          docker save lsf-webapp-updater:test-linux-amd64 -o /tmp/tested-pr-images/updater-linux-amd64.tar
+          docker buildx build \
+            --platform linux/arm64 \
+            --tag lsf-webapp:test-linux-arm64 \
+            --output type=docker,dest=/tmp/tested-pr-images/app-linux-arm64.tar \
+            --build-arg "APP_VERSION=$APP_VERSION" \
+            --build-arg "APP_REVISION=$APP_REVISION" \
+            --build-arg "APP_BUILD_DATE=$APP_BUILD_DATE" \
+            --build-arg "APP_CHANGE=$APP_CHANGE" \
+            --build-arg "APP_CHANGELOG=$APP_CHANGELOG" \
+            --build-arg "MIGRATION_MANIFEST=$MIGRATION_MANIFEST" \
+            .
+          docker buildx build \
+            --platform linux/arm64 \
+            --tag lsf-webapp-updater:test-linux-arm64 \
+            --output type=docker,dest=/tmp/tested-pr-images/updater-linux-arm64.tar \
+            --build-arg "APP_REVISION=$APP_REVISION" \
+            --build-arg "APP_BUILD_DATE=$APP_BUILD_DATE" \
+            --build-arg "MIGRATION_MANIFEST=$MIGRATION_MANIFEST" \
+            --file Dockerfile.updater \
+            .
+
+      - name: Upload tested PR images
+        if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tested-pr-images
+          path: /tmp/tested-pr-images
+          if-no-files-found: error
+          retention-days: 1
 
   docker-publish:
     name: Publish containers
@@ -125,20 +195,33 @@ jobs:
           actual_sha="$(git ls-remote --exit-code origin refs/heads/main | cut -f1)"
           test "$actual_sha" = "$TESTED_SHA"
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+
+      - name: Setup Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install migration manifest dependencies
+        run: pip install -r requirements.txt
 
       - name: Read build metadata
         id: metadata
         run: |
           echo "version=$(git rev-list --first-parent --count HEAD)" >> "$GITHUB_OUTPUT"
           echo "change=$(git log -1 --pretty=%s)" >> "$GITHUB_OUTPUT"
-          echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "created=$(git show -s --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
           {
             echo "changelog<<EOF"
             python scripts/build_changelog_manifest.py --max-bytes 60000
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
+          echo "migration=$(python scripts/build_migration_manifest.py | tr -d '\n')" >> "$GITHUB_OUTPUT"
 
       - name: Log in to the Container registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -156,19 +239,20 @@ jobs:
           test "$actual_sha" = "$TESTED_SHA"
 
       - name: Publish application image
+        id: app-build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: |
-            ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:${{ github.event.workflow_run.head_sha }}
+          tags: ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:build-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.event.workflow_run.head_sha }}
           build-args: |
             APP_VERSION=${{ steps.metadata.outputs.version }}
             APP_REVISION=${{ github.event.workflow_run.head_sha }}
             APP_BUILD_DATE=${{ steps.metadata.outputs.created }}
             APP_CHANGE=${{ steps.metadata.outputs.change }}
             APP_CHANGELOG=${{ steps.metadata.outputs.changelog }}
+            MIGRATION_MANIFEST=${{ steps.metadata.outputs.migration }}
           cache-from: type=gha,scope=app
           cache-to: type=gha,mode=max,scope=app
 
@@ -181,16 +265,76 @@ jobs:
           test "$actual_sha" = "$TESTED_SHA"
 
       - name: Publish updater image
+        id: updater-build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           file: Dockerfile.updater
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: |
-            ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater:${{ github.event.workflow_run.head_sha }}
+          tags: ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater:build-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.event.workflow_run.head_sha }}
+          build-args: |
+            APP_REVISION=${{ github.event.workflow_run.head_sha }}
+            APP_BUILD_DATE=${{ steps.metadata.outputs.created }}
+            MIGRATION_MANIFEST=${{ steps.metadata.outputs.migration }}
           cache-from: type=gha,scope=updater
           cache-to: type=gha,mode=max,scope=updater
+
+      - name: Publish immutable revision tags
+        env:
+          APP_DIGEST: ${{ steps.app-build.outputs.digest }}
+          UPDATER_DIGEST: ${{ steps.updater-build.outputs.digest }}
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          APP_REPOSITORY="ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp"
+          UPDATER_REPOSITORY="ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater"
+
+          inspect_digest() {
+            local reference="$1" inspect_error inspect_status digest
+            inspect_error="$(mktemp)"
+            if digest="$(docker buildx imagetools inspect "$reference" --format '{{.Manifest.Digest}}' 2>"$inspect_error")"; then
+              rm -f "$inspect_error"
+              [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || return 1
+              printf '%s' "$digest"
+              return 0
+            else
+              inspect_status=$?
+            fi
+            if grep -Fq "404 Not Found" "$inspect_error"; then
+              rm -f "$inspect_error"
+              return 44
+            fi
+            cat "$inspect_error" >&2
+            rm -f "$inspect_error"
+            return "$inspect_status"
+          }
+
+          ensure_immutable_tag() {
+            local repository="$1" tag="$2" expected_digest="$3" existing_digest inspect_status
+            if existing_digest="$(inspect_digest "$repository:$tag")"; then
+              if [[ "$existing_digest" != "$expected_digest" ]]; then
+                echo "$repository:$tag already exists with digest $existing_digest, expected $expected_digest." >&2
+                return 1
+              fi
+              return 0
+            else
+              inspect_status=$?
+            fi
+            if [[ "$inspect_status" -ne 44 ]]; then
+              return "$inspect_status"
+            fi
+            [[ "${VALIDATE_ONLY:-0}" = 1 ]] && return 0
+            docker buildx imagetools create --tag "$repository:$tag" "$repository@$expected_digest"
+            test "$(inspect_digest "$repository:$tag")" = "$expected_digest"
+          }
+
+          for VALIDATE_ONLY in 1 0; do
+            ensure_immutable_tag "$APP_REPOSITORY" "$TESTED_SHA" "$APP_DIGEST"
+            ensure_immutable_tag "$APP_REPOSITORY" "staging-$TESTED_SHA" "$APP_DIGEST"
+            ensure_immutable_tag "$UPDATER_REPOSITORY" "$TESTED_SHA" "$UPDATER_DIGEST"
+            ensure_immutable_tag "$UPDATER_REPOSITORY" "staging-$TESTED_SHA" "$UPDATER_DIGEST"
+          done
 
       - name: Verify main has not moved before latest promotion
         env:
@@ -215,3 +359,198 @@ jobs:
           docker buildx imagetools create
           --tag ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater:latest
           ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater:${TESTED_SHA}
+
+  docker-publish-dev:
+    name: Publish development containers
+    needs: docker-test
+    if: >-
+      ${{ needs.docker-test.result == 'success' &&
+          github.event_name == 'workflow_run' &&
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'pull_request' &&
+          github.event.workflow_run.head_repository.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    concurrency:
+      group: docker-publish-dev
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+      actions: read
+      pull-requests: read
+
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+
+      - name: Validate current same-repository PR revision
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          test "$PR_NUMBER" -gt 0
+          response="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")"
+          test "$(jq -r '.head.repo.full_name' <<<"$response")" = "$GITHUB_REPOSITORY"
+          test "$(jq -r '.head.sha' <<<"$response")" = "$TESTED_SHA"
+          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+
+      - name: Download tested PR images
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name tested-pr-images --dir tested-pr-images
+
+      - name: Load and validate tested PR images
+        env:
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          docker load -i tested-pr-images/app-linux-amd64.tar
+          docker load -i tested-pr-images/app-linux-arm64.tar
+          docker load -i tested-pr-images/updater-linux-amd64.tar
+          docker load -i tested-pr-images/updater-linux-arm64.tar
+          for image in \
+            lsf-webapp:test-linux-amd64 \
+            lsf-webapp:test-linux-arm64 \
+            lsf-webapp-updater:test-linux-amd64 \
+            lsf-webapp-updater:test-linux-arm64; do
+            revision="$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+            test "$revision" = "$TESTED_SHA"
+            test "$(docker image inspect "$image" --format '{{.Os}}/{{.Architecture}}')" = "linux/${image##*-}"
+          done
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish tested development images
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          REVISION: ${{ github.event.workflow_run.head_sha }}
+          TEST_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          APP_REPOSITORY="ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp"
+          UPDATER_REPOSITORY="ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater"
+
+          inspect_digest() {
+            local reference="$1" inspect_error inspect_status digest
+            inspect_error="$(mktemp)"
+            if digest="$(docker buildx imagetools inspect "$reference" --format '{{.Manifest.Digest}}' 2>"$inspect_error")"; then
+              rm -f "$inspect_error"
+              [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || return 1
+              printf '%s' "$digest"
+              return 0
+            else
+              inspect_status=$?
+            fi
+            if grep -Fq "404 Not Found" "$inspect_error"; then
+              rm -f "$inspect_error"
+              return 44
+            fi
+            cat "$inspect_error" >&2
+            rm -f "$inspect_error"
+            return "$inspect_status"
+          }
+
+          ensure_immutable_tag() {
+            local repository="$1" tag="$2" expected_digest="$3" existing_digest inspect_status
+            if existing_digest="$(inspect_digest "$repository:$tag")"; then
+              if [[ "$existing_digest" != "$expected_digest" ]]; then
+                echo "$repository:$tag already exists with digest $existing_digest, expected $expected_digest." >&2
+                return 1
+              fi
+              return 0
+            else
+              inspect_status=$?
+            fi
+            if [[ "$inspect_status" -ne 44 ]]; then
+              return "$inspect_status"
+            fi
+            [[ "${VALIDATE_ONLY:-0}" = 1 ]] && return 0
+            docker buildx imagetools create --tag "$repository:$tag" "$repository@$expected_digest"
+            test "$(inspect_digest "$repository:$tag")" = "$expected_digest"
+          }
+
+          for architecture in linux-amd64 linux-arm64; do
+            docker tag "lsf-webapp:test-$architecture" "$APP_REPOSITORY:dev-build-$TEST_RUN_ID-$architecture"
+            docker tag "lsf-webapp-updater:test-$architecture" "$UPDATER_REPOSITORY:dev-build-$TEST_RUN_ID-$architecture"
+            docker push "$APP_REPOSITORY:dev-build-$TEST_RUN_ID-$architecture"
+            docker push "$UPDATER_REPOSITORY:dev-build-$TEST_RUN_ID-$architecture"
+          done
+          docker buildx imagetools create \
+            --annotation "index:io.lsf-fliegerlager.test-workflow-run-id=$TEST_RUN_ID" \
+            --tag "$APP_REPOSITORY:dev-build-$TEST_RUN_ID" \
+            "$APP_REPOSITORY:dev-build-$TEST_RUN_ID-linux-amd64" \
+            "$APP_REPOSITORY:dev-build-$TEST_RUN_ID-linux-arm64"
+          docker buildx imagetools create \
+            --annotation "index:io.lsf-fliegerlager.test-workflow-run-id=$TEST_RUN_ID" \
+            --tag "$UPDATER_REPOSITORY:dev-build-$TEST_RUN_ID" \
+            "$UPDATER_REPOSITORY:dev-build-$TEST_RUN_ID-linux-amd64" \
+            "$UPDATER_REPOSITORY:dev-build-$TEST_RUN_ID-linux-arm64"
+          APP_INDEX_DIGEST="$(inspect_digest "$APP_REPOSITORY:dev-build-$TEST_RUN_ID")"
+          UPDATER_INDEX_DIGEST="$(inspect_digest "$UPDATER_REPOSITORY:dev-build-$TEST_RUN_ID")"
+          for VALIDATE_ONLY in 1 0; do
+            ensure_immutable_tag "$APP_REPOSITORY" "dev-$PR_NUMBER-$REVISION" "$APP_INDEX_DIGEST"
+            ensure_immutable_tag "$UPDATER_REPOSITORY" "dev-$PR_NUMBER-$REVISION" "$UPDATER_INDEX_DIGEST"
+          done
+
+      - name: Verify PR head has not moved before dev promotion
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          current_sha="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '.head.sha')"
+          test "$current_sha" = "$TESTED_SHA"
+
+      - name: Promote newest development revision
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          REVISION: ${{ github.event.workflow_run.head_sha }}
+          TEST_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          APP_REPOSITORY="ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp"
+          UPDATER_REPOSITORY="ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater"
+          if [[ ! "$TEST_RUN_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo "The triggering test workflow has an invalid run ID." >&2
+            exit 1
+          fi
+          CURRENT_TEST_RUN_ID=""
+          inspect_error="$(mktemp)"
+          if current_manifest="$(docker buildx imagetools inspect "$APP_REPOSITORY:dev" --raw 2>"$inspect_error")"; then
+            rm -f "$inspect_error"
+            CURRENT_TEST_RUN_ID="$(jq -r '.annotations["io.lsf-fliegerlager.test-workflow-run-id"] // empty' <<<"$current_manifest")"
+            if [[ ! "$CURRENT_TEST_RUN_ID" =~ ^[1-9][0-9]*$ ]]; then
+              echo "The current development tag has an invalid trusted workflow-run annotation." >&2
+              exit 1
+            fi
+          else
+            inspect_status=$?
+            if ! grep -Fq "404 Not Found" "$inspect_error"; then
+              cat "$inspect_error" >&2
+              rm -f "$inspect_error"
+              exit "$inspect_status"
+            fi
+            rm -f "$inspect_error"
+          fi
+          if [[ -n "$CURRENT_TEST_RUN_ID" ]] && (( TEST_RUN_ID < CURRENT_TEST_RUN_ID )); then
+            echo "A newer development build is already promoted; immutable images remain available."
+            exit 0
+          fi
+          docker buildx imagetools create \
+            --annotation "index:io.lsf-fliegerlager.test-workflow-run-id=$TEST_RUN_ID" \
+            --tag "$APP_REPOSITORY:dev" \
+            "$APP_REPOSITORY:dev-$PR_NUMBER-$REVISION"
+          docker buildx imagetools create \
+            --annotation "index:io.lsf-fliegerlager.test-workflow-run-id=$TEST_RUN_ID" \
+            --tag "$UPDATER_REPOSITORY:dev" \
+            "$UPDATER_REPOSITORY:dev-$PR_NUMBER-$REVISION"

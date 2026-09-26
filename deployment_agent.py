@@ -22,6 +22,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from datetime import UTC, datetime
 from enum import Enum
 from http import HTTPStatus
@@ -47,6 +48,22 @@ class PortainerTransientError(PortainerAPIError):
 
 class RegistryMetadataError(RuntimeError):
     """Raised when registry metadata cannot be trusted for an immutable update."""
+
+
+class CatalogBudgetExpired(TimeoutError):
+    """Raised internally when no catalog refresh I/O budget remains."""
+
+
+class RegistryManifestNotFoundError(RegistryMetadataError):
+    """Raised when an immutable registry resource no longer exists."""
+
+
+class RegistryTagNotFoundError(RegistryManifestNotFoundError):
+    """Raised when the initially requested image tag or digest does not exist."""
+
+
+class GitHubPackageNotFoundError(RegistryMetadataError):
+    """Raised when one GitHub owner-kind endpoint does not contain the package."""
 
 
 class BackupArtifactCategory(Enum):
@@ -106,6 +123,17 @@ def positive_float_setting(name: str, default: str) -> float:
     return value
 
 
+def _remaining_io_timeout(maximum: float, *, deadline: float | None = None) -> float:
+    """Return a positive I/O timeout capped by the active catalog deadline."""
+    active_deadline = deadline if deadline is not None else getattr(catalog_request_context, "deadline", None)
+    if active_deadline is None:
+        return maximum
+    remaining = active_deadline - time.monotonic()
+    if remaining <= 0:
+        raise CatalogBudgetExpired("Versionskatalog-Zeitbudget ist abgelaufen.")
+    return min(maximum, remaining)
+
+
 TOKEN = os.environ["UPDATE_AGENT_TOKEN"]
 TARGET_SERVICE = os.getenv("TARGET_SERVICE", "app")
 PORTAINER_URL = os.getenv("PORTAINER_URL", "").rstrip("/")
@@ -120,12 +148,14 @@ GHCR_TOKEN = os.getenv("GHCR_TOKEN", "")
 REGISTRY_ALLOWED_HOSTS = os.getenv("UPDATE_REGISTRY_ALLOWED_HOSTS", "ghcr.io")
 HEALTH_TIMEOUT = int(os.getenv("UPDATE_HEALTH_TIMEOUT", "180"))
 STATE_FILE = Path(os.getenv("UPDATE_STATE_FILE", "/state/status.json"))
+UPDATE_ENVIRONMENT = os.getenv("UPDATE_ENVIRONMENT", "prod").strip().lower()
 MAX_AGENT_BODY_BYTES = positive_int_setting("MAX_AGENT_BODY_BYTES", "1048576")
 AGENT_READ_TIMEOUT_SECONDS = positive_float_setting("AGENT_READ_TIMEOUT_SECONDS", "10")
 MAX_AGENT_CONCURRENT_REQUESTS = positive_int_setting("MAX_AGENT_CONCURRENT_REQUESTS", "8")
 PORTAINER_STARTUP_TIMEOUT_SECONDS = positive_float_setting("PORTAINER_STARTUP_TIMEOUT_SECONDS", "30")
 PORTAINER_STARTUP_INITIAL_BACKOFF_SECONDS = positive_float_setting("PORTAINER_STARTUP_INITIAL_BACKOFF_SECONDS", "1")
 PORTAINER_STARTUP_MAX_BACKOFF_SECONDS = positive_float_setting("PORTAINER_STARTUP_MAX_BACKOFF_SECONDS", "5")
+PORTAINER_REQUEST_TIMEOUT_SECONDS = positive_float_setting("PORTAINER_REQUEST_TIMEOUT_SECONDS", "10")
 RECOVERY_CONVERGENCE_TIMEOUT_SECONDS = positive_float_setting("RECOVERY_CONVERGENCE_TIMEOUT_SECONDS", "30")
 RECOVERY_CONVERGENCE_INITIAL_BACKOFF_SECONDS = positive_float_setting(
     "RECOVERY_CONVERGENCE_INITIAL_BACKOFF_SECONDS", "1"
@@ -133,6 +163,13 @@ RECOVERY_CONVERGENCE_INITIAL_BACKOFF_SECONDS = positive_float_setting(
 RECOVERY_CONVERGENCE_MAX_BACKOFF_SECONDS = positive_float_setting("RECOVERY_CONVERGENCE_MAX_BACKOFF_SECONDS", "5")
 MAX_REGISTRY_RESPONSE_BYTES = positive_int_setting("MAX_REGISTRY_RESPONSE_BYTES", "16777216")
 MAX_REGISTRY_REDIRECTS = 3
+MAX_GITHUB_PACKAGE_VERSION_PAGES = 3
+GITHUB_PACKAGE_REQUEST_TIMEOUT_SECONDS = 5
+CATALOG_REFRESH_BUDGET_SECONDS = 24.0
+CATALOG_REFRESH_WORKERS = 4
+MAX_VERSION_SUMMARY_BYTES = 4096
+MAX_VERSION_DETAIL_BYTES = 131072
+MAX_CHANGELOG_BYTES = 65536
 BACKUP_STAGING_PATTERN = re.compile(r"^staging/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 BACKUP_ARCHIVE_PREFIX_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$")
 CONTENT_LENGTH_PATTERN = re.compile(r"^[0-9]+$")
@@ -140,12 +177,104 @@ IMAGE_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 IMAGE_TAG_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
 REGISTRY_HOST_LABEL_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 CANDIDATE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{16,128}$")
-CANDIDATE_CONTRACT_VERSION = 2
+CANDIDATE_CONTRACT_VERSION = 3
 RECOVERY_CONTRACT_VERSION = 1
 
 update_lock = threading.Lock()
 backup_lock = threading.Lock()
 state_lock = threading.Lock()
+catalog_request_context = threading.local()
+catalog_executor = ThreadPoolExecutor(
+    max_workers=CATALOG_REFRESH_WORKERS,
+    thread_name_prefix="version-catalog",
+)
+version_request_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="version-request")
+version_request_slots = threading.BoundedSemaphore(2)
+
+PERSISTED_STATE_FIELDS = frozenset(
+    {
+        "phase",
+        "message",
+        "error",
+        "rollback_error",
+        "recovery",
+        "backup",
+        "approved_image",
+        "approved_digest",
+        "selected_catalog_id",
+        "candidate_environment",
+        "compatibility",
+        "risk_requires_acknowledgement",
+        "target_metadata",
+        "candidate_id",
+        "candidate_digest",
+        "candidate_base_digest",
+        "candidate_contract",
+        "candidate_invalidated_reason",
+        "candidate_consumed_at",
+        "update_available",
+        "checked_at",
+        "running",
+        "operation_started_at",
+        "operation_id",
+        "candidate_identity",
+        "recovery_contract",
+        "target_image",
+        "target_digest",
+        "rollback_image",
+        "target_put_started_at",
+        "rollback_put_started_at",
+        "recovery_outcome",
+        "completed_at",
+        "updated_at",
+    }
+)
+COMMON_STATE_FIELDS = frozenset(
+    {
+        "phase",
+        "message",
+        "error",
+        "rollback_error",
+        "recovery",
+        "backup",
+        "running",
+        "update_available",
+        "recovery_outcome",
+        "completed_at",
+        "updated_at",
+    }
+)
+CANDIDATE_STATE_FIELDS = frozenset(
+    {
+        "approved_image",
+        "approved_digest",
+        "selected_catalog_id",
+        "candidate_environment",
+        "compatibility",
+        "risk_requires_acknowledgement",
+        "target_metadata",
+        "candidate_id",
+        "candidate_digest",
+        "candidate_base_digest",
+        "candidate_contract",
+        "candidate_invalidated_reason",
+        "checked_at",
+    }
+)
+RECOVERY_STATE_FIELDS = frozenset(
+    {
+        "candidate_consumed_at",
+        "operation_started_at",
+        "operation_id",
+        "candidate_identity",
+        "recovery_contract",
+        "target_image",
+        "target_digest",
+        "rollback_image",
+        "target_put_started_at",
+        "rollback_put_started_at",
+    }
+)
 
 OCI_LABELS = {
     "version": "org.opencontainers.image.version",
@@ -153,6 +282,7 @@ OCI_LABELS = {
     "build_date": "org.opencontainers.image.created",
     "change": "io.lsf-fliegerlager.change",
     "changelog": "io.lsf-fliegerlager.changelog",
+    "migrations": "io.lsf-fliegerlager.migrations",
 }
 MANIFEST_ACCEPT = ", ".join(
     [
@@ -166,6 +296,20 @@ IMAGE_MANIFEST_MEDIA_TYPES = {
     "application/vnd.oci.image.manifest.v1+json",
     "application/vnd.docker.distribution.manifest.v2+json",
 }
+
+ENVIRONMENT_CHANNELS = {
+    "prod": ("prod",),
+    "staging": ("prod", "staging"),
+    "dev": ("prod", "staging", "dev"),
+}
+
+
+def environment_channels(environment: str = UPDATE_ENVIRONMENT) -> tuple[str, ...]:
+    """Return the release channels visible to one configured environment."""
+    try:
+        return ENVIRONMENT_CHANNELS[environment]
+    except KeyError as error:
+        raise AgentConfigError("UPDATE_ENVIRONMENT muss prod, staging oder dev sein.") from error
 
 
 def require_env(name: str, value: str) -> str:
@@ -198,16 +342,99 @@ def load_state() -> dict[str, Any]:
         return {"phase": "idle", "message": "Noch kein Update ausgefuehrt."}
 
 
+def _bounded_metadata(value: Any, allowed: tuple[str, ...]) -> dict[str, str]:
+    """Return only short, scalar OCI metadata fields suitable for status.json."""
+    if not isinstance(value, dict):
+        return {}
+    return {
+        key: limit_output(str(value[key]), 512 if key == "image" else 256)
+        for key in allowed
+        if value.get(key) is not None
+    }
+
+
+def _bounded_compatibility(value: Any) -> dict[str, Any]:
+    """Return the small, presentation-safe migration risk summary."""
+    if not isinstance(value, dict):
+        return {}
+    risk = value.get("risk")
+    if risk not in {"identical", "forward", "downgrade", "divergent", "unknown"}:
+        risk = "unknown"
+    affected = value.get("affected_migrations")
+    migrations = (
+        [limit_output(item, 256) for item in affected[:20] if isinstance(item, str)]
+        if isinstance(affected, list)
+        else []
+    )
+    return {
+        "risk": risk,
+        "requires_acknowledgement": value.get("requires_acknowledgement") is True,
+        "affected_migrations": migrations,
+    }
+
+
 def save_state(**values: Any) -> dict[str, Any]:
     """Persist updater state atomically and return the merged state."""
     with state_lock:
         current = load_state()
+        next_phase = values.get("phase")
+        if next_phase == "checked":
+            for key in (
+                "operation_started_at",
+                "operation_id",
+                "candidate_identity",
+                "recovery_contract",
+                "target_image",
+                "target_digest",
+                "rollback_image",
+                "target_put_started_at",
+                "rollback_put_started_at",
+                "recovery_outcome",
+                "completed_at",
+            ):
+                current.pop(key, None)
+        elif next_phase == "installing" and current.get("phase") != "installing":
+            for key in ("rollback_put_started_at", "recovery_outcome", "completed_at"):
+                current.pop(key, None)
         current.update(values, updated_at=utc_now())
+        phase = str(current.get("phase", "idle"))
+        phase_fields = COMMON_STATE_FIELDS
+        if phase == "checked":
+            phase_fields |= CANDIDATE_STATE_FIELDS
+        elif phase in {"installing", "rollback", "complete", "failed", "recovery_required"}:
+            phase_fields |= RECOVERY_STATE_FIELDS
+        persisted = {key: value for key, value in current.items() if key in phase_fields}
+        for key in ("message", "error", "rollback_error", "candidate_invalidated_reason"):
+            if isinstance(persisted.get(key), str):
+                persisted[key] = limit_output(persisted[key], 2000)
+        if isinstance(persisted.get("recovery"), str):
+            persisted["recovery"] = limit_output(persisted["recovery"], 4000)
+        persisted["target_metadata"] = _bounded_metadata(
+            persisted.get("target_metadata"),
+            ("version", "revision", "build_date", "change"),
+        )
+        persisted["running"] = _bounded_metadata(
+            persisted.get("running"),
+            ("image", "version", "revision", "build_date", "change"),
+        )
+        persisted["compatibility"] = _bounded_compatibility(persisted.get("compatibility"))
+        for key in PERSISTED_STATE_FIELDS - {
+            "message",
+            "error",
+            "rollback_error",
+            "candidate_invalidated_reason",
+            "recovery",
+            "target_metadata",
+            "running",
+            "compatibility",
+        }:
+            if isinstance(persisted.get(key), str):
+                persisted[key] = limit_output(persisted[key], 512)
         STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
         temporary = STATE_FILE.with_suffix(".tmp")
-        temporary.write_text(json.dumps(current, ensure_ascii=True, indent=2), encoding="utf-8")
+        temporary.write_text(json.dumps(persisted, ensure_ascii=True, separators=(",", ":")), encoding="utf-8")
         temporary.replace(STATE_FILE)
-        return current
+        return persisted
 
 
 def limit_output(output: str, limit: int = 1200) -> str:
@@ -283,7 +510,11 @@ class PortainerClient:
             },
         )
         try:
-            with urllib.request.urlopen(request, timeout=timeout, context=self.ssl_context()) as response:
+            with urllib.request.urlopen(
+                request,
+                timeout=_remaining_io_timeout(timeout),
+                context=self.ssl_context(),
+            ) as response:
                 if response.status == HTTPStatus.NO_CONTENT:
                     return {}
                 raw = response.read()
@@ -313,13 +544,20 @@ class PortainerClient:
             raise PortainerAPIError("Portainer API lieferte eine unerwartete Antwort.")
         return parsed
 
-    def docker_request(self, method: str, path: str, *, query: dict[str, str] | None = None) -> Any:
+    def docker_request(
+        self,
+        method: str,
+        path: str,
+        *,
+        query: dict[str, str] | None = None,
+        timeout: float = PORTAINER_REQUEST_TIMEOUT_SECONDS,
+    ) -> Any:
         """Call the Docker API through Portainer's endpoint proxy."""
-        return self.raw_request(method, f"/endpoints/{self.endpoint_id}/docker{path}", query=query)
+        return self.raw_request(method, f"/endpoints/{self.endpoint_id}/docker{path}", query=query, timeout=timeout)
 
     def get_stack(self) -> dict[str, Any]:
         """Return the configured Portainer stack."""
-        return self.request("GET", f"/stacks/{self.stack_id}")
+        return self.request("GET", f"/stacks/{self.stack_id}", timeout=PORTAINER_REQUEST_TIMEOUT_SECONDS)
 
     def get_stack_file_content(self, stack: dict[str, Any]) -> str:
         """Return the Compose content Portainer requires for stack updates."""
@@ -330,6 +568,7 @@ class PortainerClient:
             "GET",
             f"/stacks/{self.stack_id}/file",
             query={"endpointId": self.endpoint_id},
+            timeout=PORTAINER_REQUEST_TIMEOUT_SECONDS,
         )
         content = result.get("StackFileContent") or result.get("stackFileContent")
         if not isinstance(content, str) or not content.strip():
@@ -610,6 +849,16 @@ def latest_image_reference(image: str) -> str:
     return f"{registry}/{repository}:latest"
 
 
+def environment_image_reference(image: str, environment: str = UPDATE_ENVIRONMENT) -> str:
+    """Derive the mutable release pointer for one configured environment."""
+    registry, repository, _reference = parse_image_reference(image)
+    tag = {"prod": "prod", "staging": "latest", "dev": "dev"}.get(environment)
+    if tag is None:
+        environment_channels(environment)
+        raise AssertionError("unreachable")
+    return f"{registry}/{repository}:{tag}"
+
+
 def immutable_image_reference(image: str, digest: Any) -> str:
     """Return a validated registry/repository reference bound to one manifest digest."""
     if not isinstance(digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(digest):
@@ -831,16 +1080,23 @@ def registry_request(
             headers["Authorization"] = authorization
     request = urllib.request.Request(url, headers=headers)
     try:
-        with registry_urlopen(request, timeout=timeout, allow_blob_redirect=allow_blob_redirect) as response:
+        with registry_urlopen(
+            request,
+            timeout=_remaining_io_timeout(timeout),
+            allow_blob_redirect=allow_blob_redirect,
+        ) as response:
             return read_registry_body(response), dict(response.headers)
     except urllib.error.HTTPError as error:
         if HTTPStatus.MULTIPLE_CHOICES <= error.code < HTTPStatus.BAD_REQUEST:
             raise RegistryMetadataError("Registry-Redirects sind nicht erlaubt.") from error
+        if error.code == HTTPStatus.NOT_FOUND:
+            raise RegistryManifestNotFoundError("Registry-Ressource wurde nicht gefunden.") from error
         if error.code != HTTPStatus.UNAUTHORIZED or token:
             raise RuntimeError("Registry-Abfrage fehlgeschlagen.") from error
         bearer_token = fetch_registry_token(
             error.headers.get("WWW-Authenticate", ""),
             registry_host=registry_authority,
+            timeout=timeout,
         )
         return registry_request(
             url,
@@ -850,6 +1106,8 @@ def registry_request(
             allow_blob_redirect=allow_blob_redirect,
             expected_blob_digest=expected_blob_digest,
         )
+    except CatalogBudgetExpired:
+        raise
     except (OSError, TimeoutError) as error:
         raise RuntimeError("Registry ist nicht erreichbar.") from error
 
@@ -874,7 +1132,7 @@ def manifest_digest(raw_manifest: bytes, headers: dict[str, str]) -> str:
     return advertised
 
 
-def fetch_registry_token(auth_header: str, *, registry_host: str = "ghcr.io") -> str:
+def fetch_registry_token(auth_header: str, *, registry_host: str = "ghcr.io", timeout: float = 30) -> str:
     """Fetch a bearer token from a registry WWW-Authenticate challenge."""
     canonical_host = canonical_registry_authority(registry_host)
     if canonical_host not in allowed_registry_authorities():
@@ -894,12 +1152,14 @@ def fetch_registry_token(auth_header: str, *, registry_host: str = "ghcr.io") ->
         headers["Authorization"] = authorization
     request = urllib.request.Request(url, headers=headers)
     try:
-        with registry_urlopen(request, timeout=30) as response:
+        with registry_urlopen(request, timeout=_remaining_io_timeout(timeout)) as response:
             payload = json.loads(read_registry_body(response))
     except urllib.error.HTTPError as error:
         if HTTPStatus.MULTIPLE_CHOICES <= error.code < HTTPStatus.BAD_REQUEST:
             raise RegistryMetadataError("Registry-Redirects sind nicht erlaubt.") from error
         raise RuntimeError("Registry-Token konnte nicht geladen werden.") from error
+    except CatalogBudgetExpired:
+        raise
     except (OSError, TimeoutError, json.JSONDecodeError) as error:
         raise RuntimeError("Registry-Token konnte nicht geladen werden.") from error
     token = payload.get("token") or payload.get("access_token")
@@ -955,7 +1215,10 @@ def fetch_image_metadata(image: str) -> dict[str, Any]:
     """Read OCI labels and digest metadata for an image from its registry."""
     registry, repository, reference = parse_image_reference(image)
     manifest_url = f"https://{registry}/v2/{repository}/manifests/{reference}"
-    raw_manifest, headers = registry_request(manifest_url, accept=MANIFEST_ACCEPT)
+    try:
+        raw_manifest, headers = registry_request(manifest_url, accept=MANIFEST_ACCEPT)
+    except RegistryManifestNotFoundError as error:
+        raise RegistryTagNotFoundError(str(error)) from error
     installation_digest = manifest_digest(raw_manifest, headers)
     if reference.startswith("sha256:") and installation_digest != reference:
         raise RegistryMetadataError("Angefordertes Image stimmt nicht mit dem Manifest ueberein.")
@@ -998,6 +1261,621 @@ def fetch_image_metadata(image: str) -> dict[str, Any]:
     )
 
 
+def _next_tags_page(headers: dict[str, str], *, registry: str, repository: str) -> str | None:
+    """Return a validated same-repository next-page URL from an OCI Link header."""
+    link = registry_header(headers, "Link")
+    if not link:
+        return None
+    matches = re.findall(r'<([^>]+)>\s*;\s*rel="?next"?', link)
+    if len(matches) != 1:
+        raise RegistryMetadataError("Registry-Tag-Pagination ist ungueltig.")
+    candidate = matches[0]
+    validate_registry_url(candidate, expected_authority=registry)
+    parsed = urllib.parse.urlsplit(candidate)
+    if parsed.path != f"/v2/{repository}/tags/list" or parsed.fragment:
+        raise RegistryMetadataError("Registry-Tag-Pagination verlaesst das Repository.")
+    query = urllib.parse.parse_qs(parsed.query, strict_parsing=True)
+    if set(query) - {"n", "last"} or any(len(values) != 1 for values in query.values()):
+        raise RegistryMetadataError("Registry-Tag-Pagination ist ungueltig.")
+    if query.get("n") != ["100"]:
+        raise RegistryMetadataError("Registry-Tag-Pagination hat eine ungueltige Seitengroesse.")
+    last = query.get("last", [""])[0]
+    if last and not IMAGE_TAG_PATTERN.fullmatch(last):
+        raise RegistryMetadataError("Registry-Tag-Pagination enthaelt einen ungueltigen Cursor.")
+    return candidate
+
+
+def list_registry_tags(image: str) -> list[str]:
+    """List validated tags for the configured image repository within response bounds."""
+    registry, repository, _reference = parse_image_reference(image)
+    next_url: str | None = f"https://{registry}/v2/{repository}/tags/list?n=100"
+    seen_urls: set[str] = set()
+    validated: list[str] = []
+    while next_url is not None:
+        if next_url in seen_urls or len(seen_urls) >= 100:
+            raise RegistryMetadataError("Registry-Tag-Pagination konvergiert nicht.")
+        seen_urls.add(next_url)
+        raw, headers = registry_request(next_url, accept="application/json")
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError as error:
+            raise RegistryMetadataError("Registry-Tagliste ist ungueltig.") from error
+        tags = payload.get("tags") if isinstance(payload, dict) else None
+        if tags is None:
+            tags = []
+        if not isinstance(tags, list) or len(tags) > 100:
+            raise RegistryMetadataError("Registry-Tagliste ist zu gross oder ungueltig.")
+        for tag in tags:
+            if not isinstance(tag, str) or not IMAGE_TAG_PATTERN.fullmatch(tag):
+                raise RegistryMetadataError("Registry-Tagliste enthaelt einen ungueltigen Tag.")
+            if tag not in validated:
+                validated.append(tag)
+        next_url = _next_tags_page(headers, registry=registry, repository=repository)
+    return validated
+
+
+def channel_for_tag(tag: str) -> str | None:
+    """Return the trusted release channel encoded by one repository tag."""
+    if tag == "prod" or re.fullmatch(r"prod-[0-9a-f]{40}", tag):
+        return "prod"
+    if tag == "latest" or re.fullmatch(r"staging-[0-9a-f]{40}", tag):
+        return "staging"
+    if tag == "dev" or re.fullmatch(r"dev-[1-9][0-9]*-[0-9a-f]{40}", tag):
+        return "dev"
+    return None
+
+
+def _package_versions_from_endpoint(
+    endpoint: str,
+    allowed_channels: tuple[str, ...],
+    *,
+    deadline: float | None = None,
+) -> list[dict[str, Any]]:
+    """Return bounded package versions from one GitHub organization or user endpoint."""
+    versions: list[dict[str, Any]] = []
+    channel_counts = dict.fromkeys(allowed_channels, 0)
+    for page in range(1, MAX_GITHUB_PACKAGE_VERSION_PAGES + 1):
+        request = urllib.request.Request(
+            f"{endpoint}?per_page=100&page={page}",
+            headers={
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {GHCR_TOKEN}",
+                "X-GitHub-Api-Version": "2026-03-10",
+            },
+        )
+        try:
+            with registry_urlopen(
+                request,
+                timeout=_remaining_io_timeout(GITHUB_PACKAGE_REQUEST_TIMEOUT_SECONDS, deadline=deadline),
+            ) as response:
+                payload = json.loads(read_registry_body(response))
+        except CatalogBudgetExpired:
+            return versions
+        except urllib.error.HTTPError as error:
+            if error.code == HTTPStatus.NOT_FOUND:
+                raise GitHubPackageNotFoundError("GitHub-Paket wurde fuer diesen Owner-Typ nicht gefunden.") from error
+            if error.code in {HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN}:
+                raise RegistryMetadataError("GHCR_TOKEN benoetigt read:packages fuer den Versionskatalog.") from error
+            raise RegistryMetadataError("GitHub-Paketversionen konnten nicht geladen werden.") from error
+        except (OSError, TimeoutError, json.JSONDecodeError) as error:
+            raise RegistryMetadataError("GitHub-Paketversionen konnten nicht geladen werden.") from error
+        if not isinstance(payload, list) or len(payload) > 100:
+            raise RegistryMetadataError("GitHub-Paketversionen sind ungueltig oder zu gross.")
+        for item in payload:
+            if not isinstance(item, dict):
+                raise RegistryMetadataError("GitHub-Paketversion ist ungueltig.")
+            digest = item.get("name")
+            created_at = item.get("created_at")
+            metadata = item.get("metadata")
+            container = metadata.get("container") if isinstance(metadata, dict) else None
+            tags = container.get("tags") if isinstance(container, dict) else None
+            if (
+                not isinstance(digest, str)
+                or not IMAGE_DIGEST_PATTERN.fullmatch(digest)
+                or not isinstance(created_at, str)
+                or not isinstance(tags, list)
+                or len(tags) > 100
+                or any(not isinstance(tag, str) or not IMAGE_TAG_PATTERN.fullmatch(tag) for tag in tags)
+            ):
+                raise RegistryMetadataError("GitHub-Paketversion enthaelt ungueltige Metadaten.")
+            try:
+                timestamp = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            except ValueError as error:
+                raise RegistryMetadataError("GitHub-Paketversion enthaelt kein gueltiges Builddatum.") from error
+            if timestamp.tzinfo is None:
+                raise RegistryMetadataError("GitHub-Paketversion enthaelt kein gueltiges Builddatum.")
+            versions.append({"digest": digest, "created_at": timestamp.astimezone(UTC).isoformat(), "tags": tags})
+            channels = {channel_for_tag(tag) for tag in tags}
+            for channel in channels.intersection(channel_counts):
+                channel_counts[channel] += 1
+        if len(payload) < 100 or all(count >= 20 for count in channel_counts.values()):
+            return versions
+    return versions
+
+
+def list_package_versions(
+    image: str,
+    allowed_channels: tuple[str, ...],
+    *,
+    deadline: float | None = None,
+) -> list[dict[str, Any]]:
+    """List GHCR package versions for organization- or user-owned namespaces.
+
+    The API supplies build timestamps without fetching every OCI manifest. Its
+    digest is used only as a binding hint; registry bytes are verified later.
+    Pagination stops once twenty versions per requested channel have been seen
+    or after a small fixed request budget, returning a bounded partial catalog.
+    """
+    registry, repository, _reference = parse_image_reference(image)
+    parts = repository.split("/", 1)
+    if registry != "ghcr.io" or len(parts) != 2:
+        raise RegistryMetadataError("Versionskatalog erfordert ein GHCR-Image mit Owner und Paket.")
+    if not GHCR_TOKEN:
+        raise AgentConfigError("GHCR_TOKEN mit read:packages ist fuer den Versionskatalog erforderlich.")
+    owner, package = parts
+    encoded_owner = urllib.parse.quote(owner, safe="")
+    encoded_package = urllib.parse.quote(package, safe="")
+    for owner_kind in ("orgs", "users"):
+        endpoint = f"https://api.github.com/{owner_kind}/{encoded_owner}/packages/container/{encoded_package}/versions"
+        try:
+            return _package_versions_from_endpoint(endpoint, allowed_channels, deadline=deadline)
+        except GitHubPackageNotFoundError:
+            continue
+    raise RegistryMetadataError("GitHub-Paketversionen konnten nicht geladen werden.")
+
+
+def catalog_candidate_tags(
+    versions: list[dict[str, Any]], allowed_channels: tuple[str, ...], *, environment: str = UPDATE_ENVIRONMENT
+) -> list[tuple[str, str, str, bool]]:
+    """Select at most twenty newest tags per channel with their trusted publication time."""
+    selected: list[tuple[str, str, str, bool]] = []
+    newest_first = sorted(versions, key=lambda version: version["created_at"], reverse=True)
+    channel_pointers = {"prod": "prod", "staging": "latest", "dev": "dev"}
+    for channel in allowed_channels:
+        matching_versions = [
+            version for version in newest_first if any(channel_for_tag(tag) == channel for tag in version["tags"])
+        ]
+        pointer_version = next(
+            (version for version in matching_versions if channel_pointers[channel] in version["tags"]),
+            None,
+        )
+        chosen_versions = matching_versions[:20]
+        if pointer_version is not None and pointer_version not in chosen_versions:
+            chosen_versions[-1:] = [pointer_version]
+        for version in chosen_versions:
+            matching = [tag for tag in version["tags"] if channel_for_tag(tag) == channel]
+            immutable = sorted(tag for tag in matching if tag not in {"prod", "latest", "dev"})
+            is_pointer = channel_pointers[channel] in matching
+            selected.append(
+                (
+                    channel_pointers[channel] if is_pointer else (immutable or matching)[0],
+                    version["digest"],
+                    version["created_at"],
+                    is_pointer,
+                )
+            )
+    own_pointer = {"prod": "prod", "staging": "latest", "dev": "dev"}.get(environment)
+    selected.sort(key=lambda candidate: candidate[0] != own_pointer)
+    return selected
+
+
+def catalog_candidates(
+    image: str,
+    allowed_channels: tuple[str, ...],
+    *,
+    deadline: float | None = None,
+    environment: str = UPDATE_ENVIRONMENT,
+) -> list[tuple[str, str | None, str | None, bool]]:
+    """Return bounded catalog tags and optional API-provided digest bindings.
+
+    GHCR exposes chronologically sortable package versions. Other explicitly
+    allowlisted registries use only the three release-channel pointers so the
+    fallback stays deterministic and never scans an unbounded tag history.
+    """
+    registry, _repository, _reference = parse_image_reference(image)
+    if registry == "ghcr.io":
+        return catalog_candidate_tags(
+            list_package_versions(image, allowed_channels, deadline=deadline),
+            allowed_channels,
+            environment=environment,
+        )
+    channel_tags = {"prod": "prod", "staging": "latest", "dev": "dev"}
+    return [(channel_tags[channel], None, None, True) for channel in allowed_channels]
+
+
+def build_version_catalog(image: str, *, environment: str = UPDATE_ENVIRONMENT) -> list[dict[str, Any]]:
+    """Return digest-verified versions within one fixed, bounded refresh budget."""
+    allowed = environment_channels(environment)
+    registry, repository, _reference = parse_image_reference(image)
+    deadline = getattr(catalog_request_context, "deadline", None)
+    if deadline is None:
+        deadline = time.monotonic() + CATALOG_REFRESH_BUDGET_SECONDS
+    catalog_deadline = min(deadline, time.monotonic() + CATALOG_REFRESH_BUDGET_SECONDS * 2 / 3)
+    candidates = catalog_candidates(image, allowed, deadline=catalog_deadline, environment=environment)
+
+    def fetch_candidate(
+        candidate: tuple[str, str | None, str | None, bool],
+    ) -> tuple[dict[str, Any], str, str | None, str | None, bool] | None:
+        tag, expected_digest, published_at, is_pointer = candidate
+        catalog_request_context.deadline = catalog_deadline
+        try:
+            try:
+                metadata = fetch_image_metadata(f"{registry}/{repository}:{tag}")
+            except RegistryTagNotFoundError:
+                if expected_digest is None:
+                    return None
+                raise
+            return metadata, tag, expected_digest, published_at, is_pointer
+        finally:
+            catalog_request_context.__dict__.pop("deadline", None)
+
+    completed_candidates: list[tuple[dict[str, Any], str, str | None, str | None, bool]] = []
+    executor = catalog_executor
+    pending: dict[Future[Any], int] = {}
+    next_index = 0
+
+    def submit_available() -> None:
+        nonlocal next_index
+        while next_index < len(candidates) and len(pending) < CATALOG_REFRESH_WORKERS:
+            if time.monotonic() >= catalog_deadline:
+                return
+            pending[executor.submit(fetch_candidate, candidates[next_index])] = next_index
+            next_index += 1
+
+    try:
+        submit_available()
+        while pending:
+            remaining = catalog_deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            done, _not_done = wait(pending, timeout=remaining, return_when=FIRST_COMPLETED)
+            if not done or time.monotonic() >= catalog_deadline:
+                break
+            for future in sorted(done, key=pending.__getitem__):
+                pending.pop(future)
+                try:
+                    result = future.result()
+                except CatalogBudgetExpired:
+                    continue
+                if result is not None:
+                    completed_candidates.append(result)
+            submit_available()
+    finally:
+        for future in pending:
+            future.cancel()
+        # The shared executor bounds lingering I/O threads across refresh requests.
+
+    by_digest: dict[str, dict[str, Any]] = {}
+    channel_pointers = {"prod": "prod", "staging": "latest", "dev": "dev"}
+    for metadata, tag, expected_digest, published_at, is_pointer in completed_candidates:
+        channel = channel_for_tag(tag)
+        if channel not in allowed:
+            continue
+        digest = metadata.get("id")
+        if not isinstance(digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(digest):
+            raise RegistryMetadataError("Katalog-Image enthaelt keinen validen Digest.")
+        if expected_digest is not None and digest != expected_digest:
+            raise RegistryMetadataError("Katalog-Tag und GitHub-Paketversion haben unterschiedliche Digests.")
+        entry = by_digest.setdefault(
+            digest,
+            {
+                **metadata,
+                "catalog_id": digest,
+                "image": f"{registry}/{repository}@{digest}",
+                "channels": [],
+                "channel_pointers": [],
+                "_catalog_sort_date": published_at or str(metadata.get("build_date", "")),
+            },
+        )
+        candidate_sort_date = published_at or str(metadata.get("build_date", ""))
+        if candidate_sort_date > str(entry["_catalog_sort_date"]):
+            entry["_catalog_sort_date"] = candidate_sort_date
+        if channel not in entry["channels"]:
+            entry["channels"].append(channel)
+        if is_pointer and channel_pointers[channel] not in entry["channel_pointers"]:
+            entry["channel_pointers"].append(channel_pointers[channel])
+    channel_order = {channel: index for index, channel in enumerate(ENVIRONMENT_CHANNELS["dev"])}
+    versions = sorted(
+        by_digest.values(),
+        key=lambda entry: (str(entry["_catalog_sort_date"]), str(entry.get("version", ""))),
+        reverse=True,
+    )
+    keep: set[str] = set()
+    channel_pointers = {"prod": "prod", "staging": "latest", "dev": "dev"}
+    for channel in allowed:
+        matching = [entry for entry in versions if channel in entry["channels"]]
+        pointer_entry = next(
+            (entry for entry in matching if channel_pointers[channel] in entry["channel_pointers"]),
+            None,
+        )
+        matching = matching[:20]
+        if pointer_entry is not None and pointer_entry not in matching:
+            matching[-1:] = [pointer_entry]
+        keep.update(str(entry["catalog_id"]) for entry in matching)
+    result = [entry for entry in versions if entry["catalog_id"] in keep]
+    for entry in result:
+        entry.pop("_catalog_sort_date")
+        entry["channels"].sort(key=channel_order.__getitem__)
+        entry["channel_pointers"].sort(key=lambda pointer: channel_order[channel_for_tag(pointer) or "prod"])
+    return result
+
+
+def _atomic_json_write(path: Path, payload: Any) -> None:
+    """Write one JSON cache file atomically."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
+    try:
+        temporary.write_text(json.dumps(payload, ensure_ascii=True, separators=(",", ":")), encoding="utf-8")
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _catalog_cache_path() -> Path:
+    return STATE_FILE.with_name("version-catalog.json")
+
+
+def _metadata_cache_path(digest: str) -> Path:
+    return STATE_FILE.with_name("version-metadata") / f"{digest.removeprefix('sha256:')}.json"
+
+
+def _version_summary(entry: dict[str, Any]) -> dict[str, Any]:
+    """Return presentation metadata without large changelog or migration bodies."""
+    normalized = _normalized_cache_metadata(entry)
+    summary = {
+        key: normalized[key]
+        for key in (
+            "catalog_id",
+            "image",
+            "id",
+            "version",
+            "revision",
+            "build_date",
+            "change",
+            "channels",
+            "channel_pointers",
+        )
+        if key in normalized
+    }
+    if _serialized_size(summary) > MAX_VERSION_SUMMARY_BYTES:
+        raise RegistryMetadataError("Versionszusammenfassung ueberschreitet das Groessenlimit.")
+    return summary
+
+
+def _valid_cached_catalog(versions: Any, *, registry: str, repository: str) -> bool:
+    """Return whether cached summaries still satisfy the environment and digest contract."""
+    if not isinstance(versions, list) or len(versions) > 60:
+        return False
+    allowed_channels = set(environment_channels(UPDATE_ENVIRONMENT))
+    seen: set[str] = set()
+    for entry in versions:
+        if not isinstance(entry, dict):
+            return False
+        try:
+            if _version_summary(entry) != entry:
+                return False
+        except RegistryMetadataError:
+            return False
+        digest = entry.get("id")
+        catalog_id = entry.get("catalog_id")
+        image = entry.get("image")
+        channels = entry.get("channels")
+        channel_pointers = entry.get("channel_pointers", [])
+        if (
+            not isinstance(digest, str)
+            or not IMAGE_DIGEST_PATTERN.fullmatch(digest)
+            or catalog_id != digest
+            or digest in seen
+            or not isinstance(image, str)
+            or not isinstance(channels, list)
+            or not channels
+            or len(channels) > 3
+            or any(not isinstance(channel, str) or channel not in allowed_channels for channel in channels)
+            or not isinstance(channel_pointers, list)
+            or len(channel_pointers) > 3
+            or any(
+                not isinstance(pointer, str) or channel_for_tag(pointer) not in allowed_channels
+                for pointer in channel_pointers
+            )
+            or _serialized_size(entry) > MAX_VERSION_SUMMARY_BYTES
+        ):
+            return False
+        try:
+            cached_registry, cached_repository, cached_digest = parse_image_reference(image)
+        except RuntimeError:
+            return False
+        if (cached_registry, cached_repository, cached_digest) != (registry, repository, digest):
+            return False
+        seen.add(digest)
+    return True
+
+
+def _cache_metadata(entry: dict[str, Any]) -> None:
+    normalized = _normalized_cache_metadata(entry)
+    digest = normalized["id"]
+    _remaining_io_timeout(30)
+    _atomic_json_write(_metadata_cache_path(digest), normalized)
+    cache_directory = _metadata_cache_path(digest).parent
+    cached = sorted(cache_directory.glob("*.json"), key=lambda path: (path.stat().st_mtime_ns, path.name), reverse=True)
+    for stale in cached[60:]:
+        stale.unlink(missing_ok=True)
+
+
+def cached_version_catalog(image: str, *, force: bool = False) -> list[dict[str, Any]]:
+    """Load the small five-minute catalog cache or refresh it from the registry."""
+    registry, repository, _reference = parse_image_reference(image)
+    repository_name = f"{registry}/{repository}"
+    cache_path = _catalog_cache_path()
+    if not force:
+        try:
+            with cache_path.open("rb") as cache_file:
+                raw_cache = cache_file.read(MAX_VERSION_SUMMARY_BYTES * 60 + 1)
+            if len(raw_cache) > MAX_VERSION_SUMMARY_BYTES * 60:
+                raise RegistryMetadataError("Versionskatalog-Cache ueberschreitet das Groessenlimit.")
+            cached = json.loads(raw_cache)
+            age = time.time() - float(cached["fetched_at"])
+            versions = cached["versions"]
+            if (
+                cached.get("repository") == repository_name
+                and cached.get("environment") == UPDATE_ENVIRONMENT
+                and 0 <= age < 300
+                and _valid_cached_catalog(versions, registry=registry, repository=repository)
+            ):
+                return versions
+        except FileNotFoundError:
+            logger.debug("Versionskatalog-Cache fehlt; Registry wird abgefragt.")
+        except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError, RegistryMetadataError) as error:
+            logger.warning(
+                "Versionskatalog-Cache ist unbrauchbar (%s); Registry wird abgefragt.",
+                type(error).__name__,
+            )
+    full_versions = build_version_catalog(image)
+    for entry in full_versions:
+        _cache_metadata(entry)
+    summaries = [_version_summary(entry) for entry in full_versions]
+    _remaining_io_timeout(30)
+    _atomic_json_write(
+        cache_path,
+        {
+            "fetched_at": time.time(),
+            "repository": repository_name,
+            "environment": UPDATE_ENVIRONMENT,
+            "versions": summaries,
+        },
+    )
+    return summaries
+
+
+def version_metadata(entry: dict[str, Any]) -> dict[str, Any]:
+    """Load digest-bound detail metadata from cache, refetching only that digest on miss."""
+    digest = entry.get("id")
+    image = entry.get("image")
+    if not isinstance(digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(digest) or not isinstance(image, str):
+        raise RegistryMetadataError("Katalogeintrag ist ungueltig.")
+    try:
+        with _metadata_cache_path(digest).open("rb") as cache_file:
+            raw_cached = cache_file.read(MAX_VERSION_DETAIL_BYTES + 1)
+        if len(raw_cached) > MAX_VERSION_DETAIL_BYTES:
+            raise RegistryMetadataError("Versionsdetails-Cache ueberschreitet das Groessenlimit.")
+        cached = json.loads(raw_cached)
+        if isinstance(cached, dict) and cached.get("id") == digest and cached.get("image") == image:
+            try:
+                return _normalized_cache_metadata(cached)
+            except RegistryMetadataError:
+                logger.warning("Versionsdetail-Cache ist ungueltig; Registry wird abgefragt.")
+    except FileNotFoundError:
+        logger.debug("Versionsdetail-Cache fehlt; Registry wird abgefragt.")
+    except (OSError, json.JSONDecodeError, RegistryMetadataError) as error:
+        logger.warning(
+            "Versionsdetail-Cache ist unbrauchbar (%s); Registry wird abgefragt.",
+            type(error).__name__,
+        )
+    metadata = fetch_image_metadata(image)
+    if metadata.get("id") != digest:
+        raise RegistryMetadataError("Katalog und Versionsmetadaten widersprechen sich.")
+    metadata.update(
+        catalog_id=digest,
+        channels=list(entry.get("channels", [])),
+        channel_pointers=list(entry.get("channel_pointers", [])),
+        image=image,
+    )
+    metadata = _normalized_cache_metadata(metadata)
+    _cache_metadata(metadata)
+    return metadata
+
+
+def selected_catalog_entry(versions: list[dict[str, Any]], selected: Any = "") -> dict[str, Any]:
+    """Resolve only a digest that belongs to the current environment-limited catalog."""
+    allowed = set(environment_channels(UPDATE_ENVIRONMENT))
+    valid = [
+        entry
+        for entry in versions
+        if isinstance(entry, dict)
+        and isinstance(entry.get("catalog_id"), str)
+        and IMAGE_DIGEST_PATTERN.fullmatch(entry["catalog_id"])
+        and isinstance(entry.get("channels"), list)
+        and bool(entry["channels"])
+        and all(isinstance(channel, str) and channel in allowed for channel in entry["channels"])
+    ]
+    if selected:
+        if not isinstance(selected, str) or not IMAGE_DIGEST_PATTERN.fullmatch(selected):
+            raise AgentRequestError(HTTPStatus.BAD_REQUEST, "invalid_catalog_selection")
+        match = next((entry for entry in valid if entry["catalog_id"] == selected), None)
+        if match is None:
+            raise AgentRequestError(HTTPStatus.CONFLICT, "catalog_selection_not_allowed")
+        return match
+    own_channel = UPDATE_ENVIRONMENT
+    own_pointer = {"prod": "prod", "staging": "latest", "dev": "dev"}[own_channel]
+    match = next(
+        (
+            entry
+            for entry in valid
+            if isinstance(entry.get("channel_pointers", []), list) and own_pointer in entry.get("channel_pointers", [])
+        ),
+        None,
+    )
+    if match is None:
+        raise AgentRequestError(HTTPStatus.CONFLICT, "no_environment_release")
+    return match
+
+
+def deployment_versions(selected: Any = "") -> dict[str, Any]:
+    """Bound the entire versions response, including stalled remote response bodies."""
+    if not version_request_slots.acquire(blocking=False):
+        raise RegistryMetadataError("Versionsabfragen sind ausgelastet; bitte erneut versuchen.")
+    deadline = time.monotonic() + CATALOG_REFRESH_BUDGET_SECONDS
+
+    def collect() -> dict[str, Any]:
+        catalog_request_context.deadline = deadline
+        try:
+            return _deployment_versions_with_deadline(selected)
+        finally:
+            catalog_request_context.__dict__.pop("deadline", None)
+
+    try:
+        future = version_request_executor.submit(collect)
+    except RuntimeError:
+        version_request_slots.release()
+        raise
+    future.add_done_callback(lambda _future: version_request_slots.release())
+    try:
+        return future.result(timeout=max(0, deadline - time.monotonic()))
+    except TimeoutError as error:
+        future.cancel()
+        raise RegistryMetadataError("Versionsabfrage hat ihr Zeitbudget ueberschritten.") from error
+
+
+def _deployment_versions_with_deadline(selected: Any = "") -> dict[str, Any]:
+    client = PortainerClient()
+    stack = client.get_stack()
+    running_image = stack_app_image(stack)
+    versions = cached_version_catalog(running_image)
+    selected_summary = selected_catalog_entry(versions, selected)
+    selected_details = version_metadata(selected_summary)
+    running_digest_image = immutable_running_image(client, running_image)
+    _running_repository, running_digest = validate_immutable_image_reference(running_digest_image)
+    try:
+        running_metadata = version_metadata({"id": running_digest, "image": running_digest_image, "channels": []})
+    except RegistryManifestNotFoundError:
+        logger.warning(
+            "Das Manifest des laufenden Images ist nicht mehr in der Registry vorhanden; "
+            "Versions- und Migrationsdetails werden als unbekannt behandelt."
+        )
+        running_metadata = {"version": "unknown", "revision": "unknown", "migrations": {}}
+    compatibility = migration_compatibility(running_metadata.get("migrations"), selected_details.get("migrations"))
+    selected_details = {
+        **selected_details,
+        "changelog": changelog_between_versions(selected_details, running_metadata),
+        "compatibility": compatibility,
+    }
+    return {
+        "environment": UPDATE_ENVIRONMENT,
+        "allowed_channels": list(environment_channels()),
+        "versions": versions,
+        "selected": selected_details,
+    }
+
+
 def normalized_changelog_entries(raw_changelog: Any) -> list[dict[str, str]]:
     """Return UI-safe changelog entries from an OCI label value."""
     if isinstance(raw_changelog, str):
@@ -1008,43 +1886,326 @@ def normalized_changelog_entries(raw_changelog: Any) -> list[dict[str, str]]:
     if not isinstance(raw_changelog, list):
         return []
 
-    entries = []
+    entries: list[dict[str, str]] = []
     for item in raw_changelog:
+        if len(entries) >= 100:
+            break
         if not isinstance(item, dict):
             continue
-        revision = str(item.get("revision", "")).strip()
-        version = str(item.get("version", "")).strip()
-        title = str(item.get("title", "")).strip()
-        body = str(item.get("body", "")).strip()
-        path = str(item.get("path", "")).strip()
-        if not revision or not title:
+        revision = item.get("revision", "")
+        version = item.get("version", "")
+        title = item.get("title", "")
+        body = item.get("body", "")
+        path = item.get("path", "")
+        if (
+            not isinstance(revision, str)
+            or not revision.strip()
+            or len(revision.strip()) > 64
+            or not isinstance(version, str)
+            or len(version.strip()) > 32
+            or not isinstance(title, str)
+            or not title.strip()
+            or not isinstance(body, str)
+            or not isinstance(path, str)
+        ):
             continue
-        entry = {"revision": revision, "title": title, "body": body, "path": path}
+        revision = revision.strip()
+        version = version.strip()
+        entry = {
+            "revision": revision,
+            "title": title.strip()[:280],
+            "body": body.strip()[:4000],
+            "path": path.strip()[:240],
+        }
         if version:
             entry["version"] = version
-        entries.append(entry)
+        candidate = [*entries, entry]
+        if _serialized_size(candidate) <= MAX_CHANGELOG_BYTES:
+            entries.append(entry)
+            continue
+        low = 0
+        high = len(entry["body"])
+        while low < high:
+            midpoint = (low + high + 1) // 2
+            shortened = {**entry, "body": entry["body"][:midpoint]}
+            if _serialized_size([*entries, shortened]) <= MAX_CHANGELOG_BYTES:
+                low = midpoint
+            else:
+                high = midpoint - 1
+        shortened = {**entry, "body": entry["body"][:low]}
+        if _serialized_size([*entries, shortened]) <= MAX_CHANGELOG_BYTES:
+            entries.append(shortened)
+        break
     return entries
+
+
+def normalized_migration_manifest(raw_manifest: Any) -> dict[str, Any]:
+    """Return a bounded migration manifest from a digest-verified image label."""
+    if isinstance(raw_manifest, str):
+        try:
+            raw_manifest = json.loads(raw_manifest)
+        except json.JSONDecodeError:
+            return {}
+    if (
+        not isinstance(raw_manifest, dict)
+        or type(raw_manifest.get("version")) is not int
+        or raw_manifest["version"] != 1
+    ):
+        return {}
+    raw_files = raw_manifest.get("files")
+    if not isinstance(raw_files, list) or len(raw_files) > 256:
+        return {}
+    files: list[dict[str, str]] = []
+    for item in raw_files:
+        if not isinstance(item, dict):
+            return {}
+        path = item.get("path")
+        digest = item.get("sha256")
+        if (
+            not isinstance(path, str)
+            or not re.fullmatch(r"[a-z][a-z0-9_]*/migrations/[0-9]{4}_[a-z0-9_]+\.py", path)
+            or not isinstance(digest, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", digest)
+        ):
+            return {}
+        files.append({"path": path, "sha256": digest})
+    if len({item["path"] for item in files}) != len(files):
+        return {}
+    raw_migrations = raw_manifest.get("migrations")
+    if not isinstance(raw_migrations, list) or len(raw_migrations) != len(files):
+        return {}
+    file_digests = {f"{Path(item['path']).parts[0]}.{Path(item['path']).stem}": item["sha256"] for item in files}
+    migrations: list[dict[str, Any]] = []
+    for item in raw_migrations:
+        if not isinstance(item, dict):
+            return {}
+        identifier = item.get("identifier")
+        dependencies = item.get("dependencies")
+        reversible = item.get("reversible")
+        digest = item.get("sha256")
+        if (
+            not isinstance(identifier, str)
+            or not re.fullmatch(r"[a-z][a-z0-9_]*\.[0-9]{4}_[a-z0-9_]+", identifier)
+            or identifier not in file_digests
+            or digest != file_digests[identifier]
+            or not isinstance(dependencies, list)
+            or len(dependencies) > 64
+            or not all(
+                isinstance(dependency, str)
+                and re.fullmatch(r"[a-z][a-z0-9_]*\.(?:[0-9]{4}_[a-z0-9_]+|__first__)", dependency)
+                for dependency in dependencies
+            )
+            or not isinstance(reversible, bool)
+        ):
+            return {}
+        migrations.append(
+            {
+                "identifier": identifier,
+                "dependencies": sorted(set(dependencies)),
+                "reversible": reversible,
+                "sha256": digest,
+            }
+        )
+    if len({item["identifier"] for item in migrations}) != len(migrations):
+        return {}
+    return {
+        "version": 1,
+        "files": sorted(files, key=lambda item: item["path"]),
+        "migrations": sorted(migrations, key=lambda item: item["identifier"]),
+    }
+
+
+def _migration_graph_extends(base: dict[str, dict[str, Any]], extended: dict[str, dict[str, Any]]) -> bool:
+    """Return whether every added node descends from a leaf of the base graph."""
+    if not base.keys() <= extended.keys():
+        return False
+    if not base:
+        return True
+    depended_on = {
+        dependency for migration in base.values() for dependency in migration["dependencies"] if dependency in base
+    }
+    reachable = set(base) - depended_on
+    remaining = set(extended) - set(base)
+    while remaining:
+        connected = {
+            identifier
+            for identifier in remaining
+            if any(dependency in reachable for dependency in extended[identifier]["dependencies"])
+        }
+        if not connected:
+            return False
+        reachable.update(connected)
+        remaining -= connected
+    return True
+
+
+def migration_compatibility(current: Any, target: Any) -> dict[str, Any]:
+    """Classify migration ancestry conservatively without promising compatibility."""
+    current_manifest = normalized_migration_manifest(current)
+    target_manifest = normalized_migration_manifest(target)
+    if not current_manifest or not target_manifest:
+        return {"risk": "unknown", "requires_acknowledgement": True, "affected_migrations": []}
+    current_migrations = {item["identifier"]: item for item in current_manifest["migrations"]}
+    target_migrations = {item["identifier"]: item for item in target_manifest["migrations"]}
+    changed = sorted(
+        identifier
+        for identifier in current_migrations.keys() & target_migrations.keys()
+        if current_migrations[identifier] != target_migrations[identifier]
+    )
+    if changed:
+        risk = "divergent"
+        affected = changed
+    elif current_migrations == target_migrations:
+        risk = "identical"
+        affected = []
+    elif _migration_graph_extends(current_migrations, target_migrations):
+        risk = "forward"
+        affected = sorted(target_migrations.keys() - current_migrations.keys())
+    elif _migration_graph_extends(target_migrations, current_migrations):
+        risk = "downgrade"
+        affected = sorted(current_migrations.keys() - target_migrations.keys())
+    else:
+        risk = "divergent"
+        affected = sorted(current_migrations.keys() ^ target_migrations.keys())
+    return {
+        "risk": risk,
+        "requires_acknowledgement": risk not in {"identical", "forward"},
+        "affected_migrations": affected[:20],
+    }
+
+
+def ensure_risk_acknowledged(state: dict[str, Any], acknowledged: Any) -> None:
+    """Reject installation of a risky one-time candidate without explicit consent."""
+    if state.get("risk_requires_acknowledgement") is True and acknowledged is not True:
+        raise AgentRequestError(HTTPStatus.CONFLICT, "risk_acknowledgement_required")
+
+
+def _serialized_size(value: Any) -> int:
+    """Return the exact compact JSON cache size in bytes."""
+    return len(json.dumps(value, ensure_ascii=True, separators=(",", ":")).encode("utf-8"))
+
+
+def _validated_release_identity(version: Any, revision: Any, build_date: Any) -> tuple[str, str, str]:
+    """Validate immutable release identity labels without truncating them."""
+    if not isinstance(version, str) or not (version == "unknown" or re.fullmatch(r"[0-9]{1,32}", version)):
+        raise RegistryMetadataError("Versionsmetadaten enthalten eine ungueltige Version.")
+    if not isinstance(revision, str) or not (revision == "unknown" or re.fullmatch(r"[0-9a-f]{40}", revision)):
+        raise RegistryMetadataError("Versionsmetadaten enthalten eine ungueltige Revision.")
+    if not isinstance(build_date, str) or len(build_date) > 64:
+        raise RegistryMetadataError("Versionsmetadaten enthalten ein ungueltiges Builddatum.")
+    if build_date != "unknown":
+        try:
+            timestamp = datetime.fromisoformat(build_date.replace("Z", "+00:00"))
+        except ValueError as error:
+            raise RegistryMetadataError("Versionsmetadaten enthalten ein ungueltiges Builddatum.") from error
+        if timestamp.tzinfo is None:
+            raise RegistryMetadataError("Versionsmetadaten enthalten ein ungueltiges Builddatum.")
+    return version, revision, build_date
+
+
+def _validated_metadata_image(image: Any, digest: str) -> str:
+    """Validate and bound the repository reference associated with metadata."""
+    if not isinstance(image, str) or not image or len(image) > 512:
+        raise RegistryMetadataError("Versionsmetadaten enthalten eine ungueltige Image-Referenz.")
+    try:
+        latest_image_reference(image)
+        _registry, _repository, reference = parse_image_reference(image)
+    except RuntimeError as error:
+        raise RegistryMetadataError("Versionsmetadaten enthalten eine ungueltige Image-Referenz.") from error
+    if reference.startswith("sha256:") and reference != digest:
+        raise RegistryMetadataError("Versionsmetadaten widersprechen der Image-Referenz.")
+    return image
+
+
+def _normalized_cache_metadata(entry: Any) -> dict[str, Any]:
+    """Validate identities and bound display metadata before cache persistence."""
+    if not isinstance(entry, dict):
+        raise RegistryMetadataError("Versionsmetadaten sind ungueltig.")
+    digest = entry.get("id")
+    if not isinstance(digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(digest):
+        raise RegistryMetadataError("Versionsmetadaten enthalten keinen validen Digest.")
+    catalog_id = entry.get("catalog_id", digest)
+    if catalog_id != digest:
+        raise RegistryMetadataError("Versionsmetadaten enthalten eine ungueltige Katalogidentitaet.")
+    version, revision, build_date = _validated_release_identity(
+        entry.get("version", "unknown"),
+        entry.get("revision", "unknown"),
+        entry.get("build_date", "unknown"),
+    )
+    image = _validated_metadata_image(entry.get("image"), digest)
+    channels = entry.get("channels", [])
+    pointers = entry.get("channel_pointers", [])
+    if (
+        not isinstance(channels, list)
+        or len(channels) > 3
+        or any(not isinstance(channel, str) or channel not in ENVIRONMENT_CHANNELS for channel in channels)
+        or not isinstance(pointers, list)
+        or len(pointers) > 3
+        or any(
+            not isinstance(pointer, str)
+            or channel_for_tag(pointer) not in channels
+            or pointer != {"prod": "prod", "staging": "latest", "dev": "dev"}.get(channel_for_tag(pointer))
+            for pointer in pointers
+        )
+    ):
+        raise RegistryMetadataError("Versionsmetadaten enthalten ungueltige Kanaele.")
+    change = entry.get("change", "Unbekannter Change")
+    if not isinstance(change, str):
+        change = str(change)
+    normalized = {
+        "id": digest,
+        "image": image,
+        "version": version,
+        "revision": revision,
+        "build_date": build_date,
+        "change": change.strip()[:280],
+        "changelog": normalized_changelog_entries(entry.get("changelog", [])),
+        "migrations": normalized_migration_manifest(entry.get("migrations", {})),
+        "catalog_id": digest,
+        "channels": list(dict.fromkeys(channels)),
+        "channel_pointers": list(dict.fromkeys(pointers)),
+    }
+    if _serialized_size(normalized) > MAX_VERSION_DETAIL_BYTES:
+        raise RegistryMetadataError("Versionsdetails ueberschreiten das Groessenlimit.")
+    return normalized
 
 
 def image_metadata(image: Any) -> dict[str, Any]:
     """Normalize OCI image metadata from Docker-like objects or dict payloads."""
     if isinstance(image, dict):
         labels = image.get("labels") or {}
-        image_id = str(image.get("id", "unknown"))
-        image_ref = str(image.get("image", "unknown"))
+        image_id = image.get("id")
+        image_ref = image.get("image")
     else:
         labels = image.labels or {}
-        image_id = str(image.id)
+        image_id = image.id
         image_ref = "unknown"
-    return {
+    if not isinstance(labels, dict):
+        labels = {}
+    if not isinstance(image_id, str) or not IMAGE_DIGEST_PATTERN.fullmatch(image_id):
+        raise RegistryMetadataError("Versionsmetadaten enthalten keinen validen Digest.")
+    version, revision, build_date = _validated_release_identity(
+        labels.get(OCI_LABELS["version"], "unknown"),
+        labels.get(OCI_LABELS["revision"], "unknown"),
+        labels.get(OCI_LABELS["build_date"], "unknown"),
+    )
+    image_ref = _validated_metadata_image(image_ref, image_id)
+    change = labels.get(OCI_LABELS["change"], "Unbekannter Change")
+    if not isinstance(change, str):
+        change = str(change)
+    metadata = {
         "id": image_id,
         "image": image_ref,
-        "version": str(labels.get(OCI_LABELS["version"], "unknown")),
-        "revision": str(labels.get(OCI_LABELS["revision"], "unknown")),
-        "build_date": str(labels.get(OCI_LABELS["build_date"], "unknown")),
-        "change": str(labels.get(OCI_LABELS["change"], "Unbekannter Change")),
+        "version": version,
+        "revision": revision,
+        "build_date": build_date,
+        "change": change.strip()[:280],
         "changelog": normalized_changelog_entries(labels.get(OCI_LABELS["changelog"], "[]")),
+        "migrations": normalized_migration_manifest(labels.get(OCI_LABELS["migrations"], "{}")),
     }
+    if _serialized_size(metadata) > MAX_VERSION_DETAIL_BYTES:
+        raise RegistryMetadataError("Versionsdetails ueberschreiten das Groessenlimit.")
+    return metadata
 
 
 def current_metadata_from_payload(payload: dict[str, Any] | None) -> dict[str, str]:
@@ -1129,15 +2290,13 @@ def deployment_status() -> dict[str, Any]:
     running_image = stack_app_image(stack)
     result = load_state()
     result["running"] = {"image": running_image}
-    if "update_available" not in result:
-        latest_id = result.get("latest", {}).get("id")
-        installed_id = result.get("installed", {}).get("id")
-        result["update_available"] = bool(latest_id and latest_id != installed_id)
+    result["environment"] = UPDATE_ENVIRONMENT
+    result.setdefault("update_available", False)
     return result
 
 
 def check_update(payload: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Check GHCR metadata and compare it with current Django build metadata."""
+    """Bind one environment-allowed registry image to the running stack digest."""
     if not update_lock.acquire(blocking=False):
         raise AgentRequestError(HTTPStatus.CONFLICT, "update_in_progress")
     try:
@@ -1148,30 +2307,53 @@ def check_update(payload: dict[str, Any] | None = None) -> dict[str, Any]:
         validate_active_stack_contract(client, stack)
         running_digest_image = immutable_running_image(client, running_image)
         _running_repository, running_digest = validate_immutable_image_reference(running_digest_image)
-        discovery_image = latest_image_reference(running_image)
-        latest = fetch_image_metadata(discovery_image)
+        requested_catalog_id = payload.get("catalog_id", "") if isinstance(payload, dict) else ""
+        if requested_catalog_id:
+            versions = cached_version_catalog(running_image, force=True)
+            selected = selected_catalog_entry(versions, requested_catalog_id)
+            latest = version_metadata(selected)
+            discovery_image = str(latest["image"])
+        else:
+            discovery_image = environment_image_reference(running_image)
+            latest = fetch_image_metadata(discovery_image)
         approved_image = immutable_image_reference(str(latest.get("image") or discovery_image), latest.get("id"))
         approved_digest = str(latest["id"])
         current = current_metadata_from_payload(payload)
-        update_available = has_update(latest, current, running_image)
-        changelog = changelog_between_versions(latest, current)
+        update_available = approved_digest != running_digest
+        if latest.get("migrations"):
+            try:
+                running_metadata = fetch_image_metadata(running_digest_image)
+                running_migrations = running_metadata.get("migrations")
+            except RegistryManifestNotFoundError:
+                logger.warning(
+                    "Das Manifest des laufenden Images ist nicht mehr in der Registry vorhanden; "
+                    "die Migrationskompatibilitaet wird als unbekannt behandelt."
+                )
+                running_migrations = {}
+            compatibility = migration_compatibility(running_migrations, latest.get("migrations"))
+        else:
+            compatibility = migration_compatibility({}, {})
         candidate_id = secrets.token_urlsafe(32) if update_available else ""
+        target_metadata = {key: latest[key] for key in ("version", "revision", "build_date", "change") if key in latest}
         return save_state(
             phase="checked",
             message="Image-Pruefung abgeschlossen.",
             error="",
             rollback_error="",
             recovery="",
-            latest=latest,
+            target_metadata=target_metadata,
             approved_image=approved_image,
             approved_digest=approved_digest,
+            selected_catalog_id=requested_catalog_id or approved_digest,
+            candidate_environment=UPDATE_ENVIRONMENT,
+            compatibility=compatibility,
+            risk_requires_acknowledgement=compatibility["requires_acknowledgement"],
             candidate_id=candidate_id,
             candidate_digest=approved_digest if update_available else "",
             candidate_base_digest=running_digest,
             candidate_contract=CANDIDATE_CONTRACT_VERSION,
             running={"image": running_image, **current},
             update_available=update_available,
-            changelog=changelog,
             checked_at=utc_now(),
         )
     finally:
@@ -1200,11 +2382,13 @@ def checked_install_candidate(candidate_id: Any) -> tuple[str, dict[str, Any]]:
         raise AgentRequestError(HTTPStatus.CONFLICT, "candidate_mismatch") from error
     if state.get("approved_digest") != approved_digest or state.get("candidate_digest") != approved_digest:
         raise AgentRequestError(HTTPStatus.CONFLICT, "candidate_mismatch")
+    if state.get("candidate_environment") != UPDATE_ENVIRONMENT:
+        raise AgentRequestError(HTTPStatus.CONFLICT, "candidate_mismatch")
     candidate_base_digest = state.get("candidate_base_digest")
     if not isinstance(candidate_base_digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(candidate_base_digest):
         raise AgentRequestError(HTTPStatus.CONFLICT, "candidate_mismatch")
     latest = state.get("latest")
-    if not isinstance(latest, dict) or latest.get("id") != approved_digest:
+    if latest is not None and (not isinstance(latest, dict) or latest.get("id") != approved_digest):
         raise AgentRequestError(HTTPStatus.CONFLICT, "candidate_mismatch")
     return candidate_id, state
 
@@ -1604,6 +2788,16 @@ def reconcile_interrupted_update() -> dict[str, Any]:
                 completed_at=utc_now(),
             )
 
+        # A rollback PUT is an externally visible mutation. Once its start was
+        # persisted, its outcome is uncertain and must never be retried after
+        # restart; fail closed until an operator resolves the runtime.
+        if state.get("rollback_put_started_at"):
+            logger.error("Rollback ist bereits gestartet; kein weiterer Rollback-PUT, Operation %s", operation_id)
+            return _recovery_required(
+                error="Rollback wurde bereits gestartet, sein Ergebnis ist aber nicht verifiziert.",
+                outcome="rollback_failed",
+            )
+
         save_state(
             phase="rollback",
             message="Unterbrochenes Update wird kontrolliert zurueckgesetzt.",
@@ -1675,8 +2869,10 @@ def perform_update(checked_state: dict[str, Any]) -> None:
         if checked_state.get("approved_digest") != approved_digest:
             raise RuntimeError("Der freigegebene Image-Digest passt nicht zum Update-Status.")
         latest = checked_state.get("latest")
-        if not isinstance(latest, dict) or latest.get("id") != approved_digest:
+        if latest is not None and (not isinstance(latest, dict) or latest.get("id") != approved_digest):
             raise RuntimeError("Der freigegebene Image-Digest passt nicht zu den geprüften Metadaten.")
+        if not isinstance(latest, dict):
+            latest = {}
         client = PortainerClient()
         step = "Rollback-Image ermitteln"
         old_image = immutable_running_image(client, approved_image)
@@ -1842,21 +3038,29 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.respond(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
             return
         try:
-            if self.command == "GET" and self.path == "/healthz":
+            parsed_path = urllib.parse.urlsplit(self.path)
+            if self.command == "GET" and parsed_path.path == "/healthz":
                 self.respond(HTTPStatus.OK, {"status": "ok"})
-            elif self.command == "GET" and self.path == "/status":
+            elif self.command == "GET" and parsed_path.path == "/status":
                 self.respond(HTTPStatus.OK, deployment_status())
-            elif self.command == "POST" and self.path == "/check":
+            elif self.command == "GET" and parsed_path.path == "/versions":
+                values = urllib.parse.parse_qs(parsed_path.query, strict_parsing=True) if parsed_path.query else {}
+                if set(values) - {"selected"} or any(len(items) != 1 for items in values.values()):
+                    raise AgentRequestError(HTTPStatus.BAD_REQUEST, "invalid_catalog_selection")
+                self.respond(HTTPStatus.OK, deployment_versions(values.get("selected", [""])[0]))
+            elif self.command == "POST" and parsed_path.path == "/check":
                 self.respond(HTTPStatus.OK, check_update(read_json_body(self)))
-            elif self.command == "POST" and self.path == "/install":
+            elif self.command == "POST" and parsed_path.path == "/install":
                 if not update_lock.acquire(blocking=False):
                     self.respond(HTTPStatus.CONFLICT, {"error": "update_in_progress"})
                     return
                 lock_handed_to_thread = False
                 try:
                     ensure_update_mutations_allowed()
-                    request_candidate_id = read_json_body(self).get("candidate_id")
-                    checked_install_candidate(request_candidate_id)
+                    request_payload = read_json_body(self)
+                    request_candidate_id = request_payload.get("candidate_id")
+                    _candidate_id, candidate_state = checked_install_candidate(request_candidate_id)
+                    ensure_risk_acknowledged(candidate_state, request_payload.get("risk_acknowledged", False))
                     client = PortainerClient()
                     stack = client.get_stack()
                     validate_active_stack_contract(client, stack)
@@ -1889,7 +3093,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                     if not lock_handed_to_thread:
                         update_lock.release()
                 self.respond(HTTPStatus.ACCEPTED, {"status": "accepted"})
-            elif self.command == "POST" and self.path == "/backup":
+            elif self.command == "POST" and parsed_path.path == "/backup" and not parsed_path.query:
                 payload = read_json_body(self)
                 backup_name = create_backup_archive(
                     str(payload.get("staging_dir", "")),
@@ -1972,9 +3176,11 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
 
 def run_agent() -> None:
     """Reconcile persisted update work before accepting mutating agent requests."""
+    environment_channels()
     wait_for_portainer_startup(PortainerClient())
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    save_state()
     reconcile_interrupted_update()
     server = BoundedThreadingHTTPServer(
         ("0.0.0.0", 8080),
