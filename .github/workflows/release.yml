@@ -42,13 +42,44 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Resolve and validate current staging images
+      - name: Promote production image pair
         run: |
           set -euo pipefail
+          inspect_digest() {
+            local reference="$1" digest inspect_error inspect_status
+            inspect_error="$(mktemp)"
+            if digest="$(docker buildx imagetools inspect "$reference" --format '{{.Manifest.Digest}}' 2>"$inspect_error")"; then
+              rm -f "$inspect_error"
+              [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || return 1
+              printf '%s' "$digest"
+              return 0
+            else
+              inspect_status=$?
+            fi
+            if grep -Fq '404 Not Found' "$inspect_error"; then
+              rm -f "$inspect_error"
+              return 44
+            fi
+            cat "$inspect_error" >&2
+            rm -f "$inspect_error"
+            return "$inspect_status"
+          }
+          ensure_immutable_tag() {
+            local repository="$1" tag="$2" expected="$3" existing status
+            if existing="$(inspect_digest "$repository:$tag")"; then
+              test "$existing" = "$expected"
+            else
+              status=$?
+              test "$status" -eq 44 || return "$status"
+              [[ "${VALIDATE_ONLY:-0}" = 1 ]] && return 0
+              docker buildx imagetools create --tag "$repository:$tag" "$repository@$expected"
+              test "$(inspect_digest "$repository:$tag")" = "$expected"
+            fi
+          }
           APP_SOURCE="$REGISTRY/$APP:latest"
           UPDATER_SOURCE="$REGISTRY/$UPDATER:latest"
-          APP_DIGEST="$(docker buildx imagetools inspect "$APP_SOURCE" --format '{{.Manifest.Digest}}')"
-          UPDATER_DIGEST="$(docker buildx imagetools inspect "$UPDATER_SOURCE" --format '{{.Manifest.Digest}}')"
+          APP_DIGEST="$(inspect_digest "$APP_SOURCE")"
+          UPDATER_DIGEST="$(inspect_digest "$UPDATER_SOURCE")"
           docker pull --platform linux/amd64 "$REGISTRY/$APP@$APP_DIGEST"
           docker pull --platform linux/amd64 "$REGISTRY/$UPDATER@$UPDATER_DIGEST"
           APP_REVISION="$(docker image inspect "$REGISTRY/$APP@$APP_DIGEST" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
@@ -56,9 +87,57 @@ jobs:
           MAIN_REVISION="$(git rev-parse HEAD)"
           test "$APP_REVISION" = "$UPDATER_REVISION"
           test "$APP_REVISION" = "$MAIN_REVISION"
-          test -n "$APP_DIGEST"
-          test -n "$UPDATER_DIGEST"
-          docker buildx imagetools create --tag "$REGISTRY/$APP:prod-$APP_REVISION" "$REGISTRY/$APP@$APP_DIGEST"
+          [[ "$APP_REVISION" =~ ^[0-9a-f]{40}$ ]]
+          # Both immutable references must be valid before changing either prod pointer.
+          for VALIDATE_ONLY in 1 0; do
+            ensure_immutable_tag "$REGISTRY/$APP" "prod-$APP_REVISION" "$APP_DIGEST"
+            ensure_immutable_tag "$REGISTRY/$UPDATER" "prod-$UPDATER_REVISION" "$UPDATER_DIGEST"
+          done
+          previous_digest() {
+            local reference="$1" digest status
+            if digest="$(inspect_digest "$reference")"; then
+              printf '%s' "$digest"
+            else
+              status=$?
+              test "$status" -eq 44 || return "$status"
+              return 0
+            fi
+          }
+          PREVIOUS_APP_PROD_DIGEST="$(previous_digest "$REGISTRY/$APP:prod")"
+          PREVIOUS_UPDATER_PROD_DIGEST="$(previous_digest "$REGISTRY/$UPDATER:prod")"
+          if [[ -z "$PREVIOUS_APP_PROD_DIGEST" && -z "$PREVIOUS_UPDATER_PROD_DIGEST" ]]; then
+            # On the first release repair forward to the verified pair instead
+            # of deleting registry manifests also referenced by staging tags.
+            PREVIOUS_APP_PROD_DIGEST="$APP_DIGEST"
+            PREVIOUS_UPDATER_PROD_DIGEST="$UPDATER_DIGEST"
+          elif [[ -z "$PREVIOUS_APP_PROD_DIGEST" || -z "$PREVIOUS_UPDATER_PROD_DIGEST" ]]; then
+            echo 'Incomplete existing production pair; repair it before promotion.' >&2
+            exit 1
+          fi
+          restore_previous_prod_pair() {
+            local failed=0
+            docker buildx imagetools create --tag "$REGISTRY/$APP:prod" "$REGISTRY/$APP@$PREVIOUS_APP_PROD_DIGEST" || failed=1
+            docker buildx imagetools create --tag "$REGISTRY/$UPDATER:prod" "$REGISTRY/$UPDATER@$PREVIOUS_UPDATER_PROD_DIGEST" || failed=1
+            test "$(inspect_digest "$REGISTRY/$APP:prod")" = "$PREVIOUS_APP_PROD_DIGEST" || failed=1
+            test "$(inspect_digest "$REGISTRY/$UPDATER:prod")" = "$PREVIOUS_UPDATER_PROD_DIGEST" || failed=1
+            return "$failed"
+          }
+          recover_failed_promotion() {
+            local status=$?
+            trap - EXIT INT TERM
+            if ! restore_previous_prod_pair; then
+              echo 'Production pair recovery failed; restore the recorded digest pair manually.' >&2
+              printf 'app=%s updater=%s\n' "$PREVIOUS_APP_PROD_DIGEST" "$PREVIOUS_UPDATER_PROD_DIGEST" >&2
+            fi
+            exit "$status"
+          }
+          trap recover_failed_promotion EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
           docker buildx imagetools create --tag "$REGISTRY/$APP:prod" "$REGISTRY/$APP@$APP_DIGEST"
-          docker buildx imagetools create --tag "$REGISTRY/$UPDATER:prod-$UPDATER_REVISION" "$REGISTRY/$UPDATER@$UPDATER_DIGEST"
           docker buildx imagetools create --tag "$REGISTRY/$UPDATER:prod" "$REGISTRY/$UPDATER@$UPDATER_DIGEST"
+          FINAL_APP_PROD_DIGEST="$(inspect_digest "$REGISTRY/$APP:prod")"
+          FINAL_UPDATER_PROD_DIGEST="$(inspect_digest "$REGISTRY/$UPDATER:prod")"
+          test "$FINAL_APP_PROD_DIGEST" = "$APP_DIGEST"
+          test "$FINAL_UPDATER_PROD_DIGEST" = "$UPDATER_DIGEST"
+          trap - EXIT INT TERM

@@ -20,3 +20,7 @@
 - Erfasst im OCI-Migrationsmanifest die Migrationen aller installierten Django-Apps und nicht nur die der Abrechnungs-App.
 - Serialisiert manuelle Produktionsfreigaben, damit App und Updater auch bei parallelen Auslösungen als geprüftes Paar promotet werden.
 - Verwendet für sämtliche Django-Dienste einschließlich Recovery-Worker standardmäßig ausschließlich das Prod-Image.
+- Veröffentlicht Dev-Images für AMD64 und ARM64 und verhindert das Überschreiben bereits belegter revisionsgebundener Tags.
+- Bricht Dev-Promotionen bei nicht prüfbarem Kanalzeiger ab und verwendet den verifizierten Kanalzeiger für die Standardauswahl.
+- Begrenzt Katalogabrufe zeitlich und parallel sowie Versionsdetails und Changelogs durch feste Größenlimits.
+- Prüft Produktionsfreigaben als Digest-Paar und stellt bei Teilfehlern das vorherige Paar kompensierend wieder her.

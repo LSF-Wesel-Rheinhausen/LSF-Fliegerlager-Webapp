@@ -22,6 +22,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from datetime import UTC, datetime
 from enum import Enum
 from http import HTTPStatus
@@ -47,6 +48,10 @@ class PortainerTransientError(PortainerAPIError):
 
 class RegistryMetadataError(RuntimeError):
     """Raised when registry metadata cannot be trusted for an immutable update."""
+
+
+class CatalogBudgetExpired(TimeoutError):
+    """Raised internally when no catalog refresh I/O budget remains."""
 
 
 class RegistryManifestNotFoundError(RegistryMetadataError):
@@ -118,6 +123,17 @@ def positive_float_setting(name: str, default: str) -> float:
     return value
 
 
+def _remaining_io_timeout(maximum: float, *, deadline: float | None = None) -> float:
+    """Return a positive I/O timeout capped by the active catalog deadline."""
+    active_deadline = deadline if deadline is not None else getattr(catalog_request_context, "deadline", None)
+    if active_deadline is None:
+        return maximum
+    remaining = active_deadline - time.monotonic()
+    if remaining <= 0:
+        raise CatalogBudgetExpired("Versionskatalog-Zeitbudget ist abgelaufen.")
+    return min(maximum, remaining)
+
+
 TOKEN = os.environ["UPDATE_AGENT_TOKEN"]
 TARGET_SERVICE = os.getenv("TARGET_SERVICE", "app")
 PORTAINER_URL = os.getenv("PORTAINER_URL", "").rstrip("/")
@@ -149,6 +165,11 @@ MAX_REGISTRY_RESPONSE_BYTES = positive_int_setting("MAX_REGISTRY_RESPONSE_BYTES"
 MAX_REGISTRY_REDIRECTS = 3
 MAX_GITHUB_PACKAGE_VERSION_PAGES = 3
 GITHUB_PACKAGE_REQUEST_TIMEOUT_SECONDS = 5
+CATALOG_REFRESH_BUDGET_SECONDS = 24.0
+CATALOG_REFRESH_WORKERS = 4
+MAX_VERSION_SUMMARY_BYTES = 4096
+MAX_VERSION_DETAIL_BYTES = 131072
+MAX_CHANGELOG_BYTES = 65536
 BACKUP_STAGING_PATTERN = re.compile(r"^staging/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 BACKUP_ARCHIVE_PREFIX_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$")
 CONTENT_LENGTH_PATTERN = re.compile(r"^[0-9]+$")
@@ -162,6 +183,13 @@ RECOVERY_CONTRACT_VERSION = 1
 update_lock = threading.Lock()
 backup_lock = threading.Lock()
 state_lock = threading.Lock()
+catalog_request_context = threading.local()
+catalog_executor = ThreadPoolExecutor(
+    max_workers=CATALOG_REFRESH_WORKERS,
+    thread_name_prefix="version-catalog",
+)
+version_request_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="version-request")
+version_request_slots = threading.BoundedSemaphore(2)
 
 PERSISTED_STATE_FIELDS = frozenset(
     {
@@ -482,7 +510,11 @@ class PortainerClient:
             },
         )
         try:
-            with urllib.request.urlopen(request, timeout=timeout, context=self.ssl_context()) as response:
+            with urllib.request.urlopen(
+                request,
+                timeout=_remaining_io_timeout(timeout),
+                context=self.ssl_context(),
+            ) as response:
                 if response.status == HTTPStatus.NO_CONTENT:
                     return {}
                 raw = response.read()
@@ -1048,7 +1080,11 @@ def registry_request(
             headers["Authorization"] = authorization
     request = urllib.request.Request(url, headers=headers)
     try:
-        with registry_urlopen(request, timeout=timeout, allow_blob_redirect=allow_blob_redirect) as response:
+        with registry_urlopen(
+            request,
+            timeout=_remaining_io_timeout(timeout),
+            allow_blob_redirect=allow_blob_redirect,
+        ) as response:
             return read_registry_body(response), dict(response.headers)
     except urllib.error.HTTPError as error:
         if HTTPStatus.MULTIPLE_CHOICES <= error.code < HTTPStatus.BAD_REQUEST:
@@ -1060,6 +1096,7 @@ def registry_request(
         bearer_token = fetch_registry_token(
             error.headers.get("WWW-Authenticate", ""),
             registry_host=registry_authority,
+            timeout=timeout,
         )
         return registry_request(
             url,
@@ -1069,6 +1106,8 @@ def registry_request(
             allow_blob_redirect=allow_blob_redirect,
             expected_blob_digest=expected_blob_digest,
         )
+    except CatalogBudgetExpired:
+        raise
     except (OSError, TimeoutError) as error:
         raise RuntimeError("Registry ist nicht erreichbar.") from error
 
@@ -1093,7 +1132,7 @@ def manifest_digest(raw_manifest: bytes, headers: dict[str, str]) -> str:
     return advertised
 
 
-def fetch_registry_token(auth_header: str, *, registry_host: str = "ghcr.io") -> str:
+def fetch_registry_token(auth_header: str, *, registry_host: str = "ghcr.io", timeout: float = 30) -> str:
     """Fetch a bearer token from a registry WWW-Authenticate challenge."""
     canonical_host = canonical_registry_authority(registry_host)
     if canonical_host not in allowed_registry_authorities():
@@ -1113,12 +1152,14 @@ def fetch_registry_token(auth_header: str, *, registry_host: str = "ghcr.io") ->
         headers["Authorization"] = authorization
     request = urllib.request.Request(url, headers=headers)
     try:
-        with registry_urlopen(request, timeout=30) as response:
+        with registry_urlopen(request, timeout=_remaining_io_timeout(timeout)) as response:
             payload = json.loads(read_registry_body(response))
     except urllib.error.HTTPError as error:
         if HTTPStatus.MULTIPLE_CHOICES <= error.code < HTTPStatus.BAD_REQUEST:
             raise RegistryMetadataError("Registry-Redirects sind nicht erlaubt.") from error
         raise RuntimeError("Registry-Token konnte nicht geladen werden.") from error
+    except CatalogBudgetExpired:
+        raise
     except (OSError, TimeoutError, json.JSONDecodeError) as error:
         raise RuntimeError("Registry-Token konnte nicht geladen werden.") from error
     token = payload.get("token") or payload.get("access_token")
@@ -1284,7 +1325,12 @@ def channel_for_tag(tag: str) -> str | None:
     return None
 
 
-def _package_versions_from_endpoint(endpoint: str, allowed_channels: tuple[str, ...]) -> list[dict[str, Any]]:
+def _package_versions_from_endpoint(
+    endpoint: str,
+    allowed_channels: tuple[str, ...],
+    *,
+    deadline: float | None = None,
+) -> list[dict[str, Any]]:
     """Return bounded package versions from one GitHub organization or user endpoint."""
     versions: list[dict[str, Any]] = []
     channel_counts = dict.fromkeys(allowed_channels, 0)
@@ -1298,8 +1344,13 @@ def _package_versions_from_endpoint(endpoint: str, allowed_channels: tuple[str, 
             },
         )
         try:
-            with registry_urlopen(request, timeout=GITHUB_PACKAGE_REQUEST_TIMEOUT_SECONDS) as response:
+            with registry_urlopen(
+                request,
+                timeout=_remaining_io_timeout(GITHUB_PACKAGE_REQUEST_TIMEOUT_SECONDS, deadline=deadline),
+            ) as response:
                 payload = json.loads(read_registry_body(response))
+        except CatalogBudgetExpired:
+            return versions
         except urllib.error.HTTPError as error:
             if error.code == HTTPStatus.NOT_FOUND:
                 raise GitHubPackageNotFoundError("GitHub-Paket wurde fuer diesen Owner-Typ nicht gefunden.") from error
@@ -1342,7 +1393,12 @@ def _package_versions_from_endpoint(endpoint: str, allowed_channels: tuple[str, 
     return versions
 
 
-def list_package_versions(image: str, allowed_channels: tuple[str, ...]) -> list[dict[str, Any]]:
+def list_package_versions(
+    image: str,
+    allowed_channels: tuple[str, ...],
+    *,
+    deadline: float | None = None,
+) -> list[dict[str, Any]]:
     """List GHCR package versions for organization- or user-owned namespaces.
 
     The API supplies build timestamps without fetching every OCI manifest. Its
@@ -1362,33 +1418,54 @@ def list_package_versions(image: str, allowed_channels: tuple[str, ...]) -> list
     for owner_kind in ("orgs", "users"):
         endpoint = f"https://api.github.com/{owner_kind}/{encoded_owner}/packages/container/{encoded_package}/versions"
         try:
-            return _package_versions_from_endpoint(endpoint, allowed_channels)
+            return _package_versions_from_endpoint(endpoint, allowed_channels, deadline=deadline)
         except GitHubPackageNotFoundError:
             continue
     raise RegistryMetadataError("GitHub-Paketversionen konnten nicht geladen werden.")
 
 
 def catalog_candidate_tags(
-    versions: list[dict[str, Any]], allowed_channels: tuple[str, ...]
-) -> list[tuple[str, str, str]]:
+    versions: list[dict[str, Any]], allowed_channels: tuple[str, ...], *, environment: str = UPDATE_ENVIRONMENT
+) -> list[tuple[str, str, str, bool]]:
     """Select at most twenty newest tags per channel with their trusted publication time."""
-    selected: list[tuple[str, str, str]] = []
+    selected: list[tuple[str, str, str, bool]] = []
     newest_first = sorted(versions, key=lambda version: version["created_at"], reverse=True)
+    channel_pointers = {"prod": "prod", "staging": "latest", "dev": "dev"}
     for channel in allowed_channels:
-        count = 0
-        for version in newest_first:
+        matching_versions = [
+            version for version in newest_first if any(channel_for_tag(tag) == channel for tag in version["tags"])
+        ]
+        pointer_version = next(
+            (version for version in matching_versions if channel_pointers[channel] in version["tags"]),
+            None,
+        )
+        chosen_versions = matching_versions[:20]
+        if pointer_version is not None and pointer_version not in chosen_versions:
+            chosen_versions[-1:] = [pointer_version]
+        for version in chosen_versions:
             matching = [tag for tag in version["tags"] if channel_for_tag(tag) == channel]
-            if not matching:
-                continue
             immutable = sorted(tag for tag in matching if tag not in {"prod", "latest", "dev"})
-            selected.append(((immutable or matching)[0], version["digest"], version["created_at"]))
-            count += 1
-            if count == 20:
-                break
+            is_pointer = channel_pointers[channel] in matching
+            selected.append(
+                (
+                    channel_pointers[channel] if is_pointer else (immutable or matching)[0],
+                    version["digest"],
+                    version["created_at"],
+                    is_pointer,
+                )
+            )
+    own_pointer = {"prod": "prod", "staging": "latest", "dev": "dev"}.get(environment)
+    selected.sort(key=lambda candidate: candidate[0] != own_pointer)
     return selected
 
 
-def catalog_candidates(image: str, allowed_channels: tuple[str, ...]) -> list[tuple[str, str | None, str | None]]:
+def catalog_candidates(
+    image: str,
+    allowed_channels: tuple[str, ...],
+    *,
+    deadline: float | None = None,
+    environment: str = UPDATE_ENVIRONMENT,
+) -> list[tuple[str, str | None, str | None, bool]]:
     """Return bounded catalog tags and optional API-provided digest bindings.
 
     GHCR exposes chronologically sortable package versions. Other explicitly
@@ -1397,26 +1474,83 @@ def catalog_candidates(image: str, allowed_channels: tuple[str, ...]) -> list[tu
     """
     registry, _repository, _reference = parse_image_reference(image)
     if registry == "ghcr.io":
-        return catalog_candidate_tags(list_package_versions(image, allowed_channels), allowed_channels)
+        return catalog_candidate_tags(
+            list_package_versions(image, allowed_channels, deadline=deadline),
+            allowed_channels,
+            environment=environment,
+        )
     channel_tags = {"prod": "prod", "staging": "latest", "dev": "dev"}
-    return [(channel_tags[channel], None, None) for channel in allowed_channels]
+    return [(channel_tags[channel], None, None, True) for channel in allowed_channels]
 
 
 def build_version_catalog(image: str, *, environment: str = UPDATE_ENVIRONMENT) -> list[dict[str, Any]]:
-    """Return at most twenty digest-verified image versions per allowed channel."""
+    """Return digest-verified versions within one fixed, bounded refresh budget."""
     allowed = environment_channels(environment)
     registry, repository, _reference = parse_image_reference(image)
+    deadline = getattr(catalog_request_context, "deadline", None)
+    if deadline is None:
+        deadline = time.monotonic() + CATALOG_REFRESH_BUDGET_SECONDS
+    catalog_deadline = min(deadline, time.monotonic() + CATALOG_REFRESH_BUDGET_SECONDS * 2 / 3)
+    candidates = catalog_candidates(image, allowed, deadline=catalog_deadline, environment=environment)
+
+    def fetch_candidate(
+        candidate: tuple[str, str | None, str | None, bool],
+    ) -> tuple[dict[str, Any], str, str | None, str | None, bool] | None:
+        tag, expected_digest, published_at, is_pointer = candidate
+        catalog_request_context.deadline = catalog_deadline
+        try:
+            try:
+                metadata = fetch_image_metadata(f"{registry}/{repository}:{tag}")
+            except RegistryTagNotFoundError:
+                if expected_digest is None:
+                    return None
+                raise
+            return metadata, tag, expected_digest, published_at, is_pointer
+        finally:
+            catalog_request_context.__dict__.pop("deadline", None)
+
+    completed_candidates: list[tuple[dict[str, Any], str, str | None, str | None, bool]] = []
+    executor = catalog_executor
+    pending: dict[Future[Any], int] = {}
+    next_index = 0
+
+    def submit_available() -> None:
+        nonlocal next_index
+        while next_index < len(candidates) and len(pending) < CATALOG_REFRESH_WORKERS:
+            if time.monotonic() >= catalog_deadline:
+                return
+            pending[executor.submit(fetch_candidate, candidates[next_index])] = next_index
+            next_index += 1
+
+    try:
+        submit_available()
+        while pending:
+            remaining = catalog_deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            done, _not_done = wait(pending, timeout=remaining, return_when=FIRST_COMPLETED)
+            if not done or time.monotonic() >= catalog_deadline:
+                break
+            for future in sorted(done, key=pending.__getitem__):
+                pending.pop(future)
+                try:
+                    result = future.result()
+                except CatalogBudgetExpired:
+                    continue
+                if result is not None:
+                    completed_candidates.append(result)
+            submit_available()
+    finally:
+        for future in pending:
+            future.cancel()
+        # The shared executor bounds lingering I/O threads across refresh requests.
+
     by_digest: dict[str, dict[str, Any]] = {}
-    for tag, expected_digest, published_at in catalog_candidates(image, allowed):
+    channel_pointers = {"prod": "prod", "staging": "latest", "dev": "dev"}
+    for metadata, tag, expected_digest, published_at, is_pointer in completed_candidates:
         channel = channel_for_tag(tag)
         if channel not in allowed:
             continue
-        try:
-            metadata = fetch_image_metadata(f"{registry}/{repository}:{tag}")
-        except RegistryTagNotFoundError:
-            if expected_digest is None:
-                continue
-            raise
         digest = metadata.get("id")
         if not isinstance(digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(digest):
             raise RegistryMetadataError("Katalog-Image enthaelt keinen validen Digest.")
@@ -1429,6 +1563,7 @@ def build_version_catalog(image: str, *, environment: str = UPDATE_ENVIRONMENT) 
                 "catalog_id": digest,
                 "image": f"{registry}/{repository}@{digest}",
                 "channels": [],
+                "channel_pointers": [],
                 "_catalog_sort_date": published_at or str(metadata.get("build_date", "")),
             },
         )
@@ -1437,6 +1572,8 @@ def build_version_catalog(image: str, *, environment: str = UPDATE_ENVIRONMENT) 
             entry["_catalog_sort_date"] = candidate_sort_date
         if channel not in entry["channels"]:
             entry["channels"].append(channel)
+        if is_pointer and channel_pointers[channel] not in entry["channel_pointers"]:
+            entry["channel_pointers"].append(channel_pointers[channel])
     channel_order = {channel: index for index, channel in enumerate(ENVIRONMENT_CHANNELS["dev"])}
     versions = sorted(
         by_digest.values(),
@@ -1444,13 +1581,22 @@ def build_version_catalog(image: str, *, environment: str = UPDATE_ENVIRONMENT) 
         reverse=True,
     )
     keep: set[str] = set()
+    channel_pointers = {"prod": "prod", "staging": "latest", "dev": "dev"}
     for channel in allowed:
-        matching = [entry for entry in versions if channel in entry["channels"]][:20]
+        matching = [entry for entry in versions if channel in entry["channels"]]
+        pointer_entry = next(
+            (entry for entry in matching if channel_pointers[channel] in entry["channel_pointers"]),
+            None,
+        )
+        matching = matching[:20]
+        if pointer_entry is not None and pointer_entry not in matching:
+            matching[-1:] = [pointer_entry]
         keep.update(str(entry["catalog_id"]) for entry in matching)
     result = [entry for entry in versions if entry["catalog_id"] in keep]
     for entry in result:
         entry.pop("_catalog_sort_date")
         entry["channels"].sort(key=channel_order.__getitem__)
+        entry["channel_pointers"].sort(key=lambda pointer: channel_order[channel_for_tag(pointer) or "prod"])
     return result
 
 
@@ -1475,11 +1621,25 @@ def _metadata_cache_path(digest: str) -> Path:
 
 def _version_summary(entry: dict[str, Any]) -> dict[str, Any]:
     """Return presentation metadata without large changelog or migration bodies."""
-    return {
-        key: entry[key]
-        for key in ("catalog_id", "image", "id", "version", "revision", "build_date", "change", "channels")
-        if key in entry
+    normalized = _normalized_cache_metadata(entry)
+    summary = {
+        key: normalized[key]
+        for key in (
+            "catalog_id",
+            "image",
+            "id",
+            "version",
+            "revision",
+            "build_date",
+            "change",
+            "channels",
+            "channel_pointers",
+        )
+        if key in normalized
     }
+    if _serialized_size(summary) > MAX_VERSION_SUMMARY_BYTES:
+        raise RegistryMetadataError("Versionszusammenfassung ueberschreitet das Groessenlimit.")
+    return summary
 
 
 def _valid_cached_catalog(versions: Any, *, registry: str, repository: str) -> bool:
@@ -1491,10 +1651,16 @@ def _valid_cached_catalog(versions: Any, *, registry: str, repository: str) -> b
     for entry in versions:
         if not isinstance(entry, dict):
             return False
+        try:
+            if _version_summary(entry) != entry:
+                return False
+        except RegistryMetadataError:
+            return False
         digest = entry.get("id")
         catalog_id = entry.get("catalog_id")
         image = entry.get("image")
         channels = entry.get("channels")
+        channel_pointers = entry.get("channel_pointers", [])
         if (
             not isinstance(digest, str)
             or not IMAGE_DIGEST_PATTERN.fullmatch(digest)
@@ -1505,6 +1671,13 @@ def _valid_cached_catalog(versions: Any, *, registry: str, repository: str) -> b
             or not channels
             or len(channels) > 3
             or any(not isinstance(channel, str) or channel not in allowed_channels for channel in channels)
+            or not isinstance(channel_pointers, list)
+            or len(channel_pointers) > 3
+            or any(
+                not isinstance(pointer, str) or channel_for_tag(pointer) not in allowed_channels
+                for pointer in channel_pointers
+            )
+            or _serialized_size(entry) > MAX_VERSION_SUMMARY_BYTES
         ):
             return False
         try:
@@ -1518,10 +1691,10 @@ def _valid_cached_catalog(versions: Any, *, registry: str, repository: str) -> b
 
 
 def _cache_metadata(entry: dict[str, Any]) -> None:
-    digest = entry.get("id")
-    if not isinstance(digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(digest):
-        raise RegistryMetadataError("Versionsmetadaten enthalten keinen validen Digest.")
-    _atomic_json_write(_metadata_cache_path(digest), entry)
+    normalized = _normalized_cache_metadata(entry)
+    digest = normalized["id"]
+    _remaining_io_timeout(30)
+    _atomic_json_write(_metadata_cache_path(digest), normalized)
     cache_directory = _metadata_cache_path(digest).parent
     cached = sorted(cache_directory.glob("*.json"), key=lambda path: (path.stat().st_mtime_ns, path.name), reverse=True)
     for stale in cached[60:]:
@@ -1535,7 +1708,11 @@ def cached_version_catalog(image: str, *, force: bool = False) -> list[dict[str,
     cache_path = _catalog_cache_path()
     if not force:
         try:
-            cached = json.loads(cache_path.read_text(encoding="utf-8"))
+            with cache_path.open("rb") as cache_file:
+                raw_cache = cache_file.read(MAX_VERSION_SUMMARY_BYTES * 60 + 1)
+            if len(raw_cache) > MAX_VERSION_SUMMARY_BYTES * 60:
+                raise RegistryMetadataError("Versionskatalog-Cache ueberschreitet das Groessenlimit.")
+            cached = json.loads(raw_cache)
             age = time.time() - float(cached["fetched_at"])
             versions = cached["versions"]
             if (
@@ -1547,7 +1724,7 @@ def cached_version_catalog(image: str, *, force: bool = False) -> list[dict[str,
                 return versions
         except FileNotFoundError:
             logger.debug("Versionskatalog-Cache fehlt; Registry wird abgefragt.")
-        except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as error:
+        except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError, RegistryMetadataError) as error:
             logger.warning(
                 "Versionskatalog-Cache ist unbrauchbar (%s); Registry wird abgefragt.",
                 type(error).__name__,
@@ -1556,6 +1733,7 @@ def cached_version_catalog(image: str, *, force: bool = False) -> list[dict[str,
     for entry in full_versions:
         _cache_metadata(entry)
     summaries = [_version_summary(entry) for entry in full_versions]
+    _remaining_io_timeout(30)
     _atomic_json_write(
         cache_path,
         {
@@ -1575,12 +1753,19 @@ def version_metadata(entry: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(digest) or not isinstance(image, str):
         raise RegistryMetadataError("Katalogeintrag ist ungueltig.")
     try:
-        cached = json.loads(_metadata_cache_path(digest).read_text(encoding="utf-8"))
+        with _metadata_cache_path(digest).open("rb") as cache_file:
+            raw_cached = cache_file.read(MAX_VERSION_DETAIL_BYTES + 1)
+        if len(raw_cached) > MAX_VERSION_DETAIL_BYTES:
+            raise RegistryMetadataError("Versionsdetails-Cache ueberschreitet das Groessenlimit.")
+        cached = json.loads(raw_cached)
         if isinstance(cached, dict) and cached.get("id") == digest and cached.get("image") == image:
-            return cached
+            try:
+                return _normalized_cache_metadata(cached)
+            except RegistryMetadataError:
+                logger.warning("Versionsdetail-Cache ist ungueltig; Registry wird abgefragt.")
     except FileNotFoundError:
         logger.debug("Versionsdetail-Cache fehlt; Registry wird abgefragt.")
-    except (OSError, json.JSONDecodeError) as error:
+    except (OSError, json.JSONDecodeError, RegistryMetadataError) as error:
         logger.warning(
             "Versionsdetail-Cache ist unbrauchbar (%s); Registry wird abgefragt.",
             type(error).__name__,
@@ -1588,7 +1773,13 @@ def version_metadata(entry: dict[str, Any]) -> dict[str, Any]:
     metadata = fetch_image_metadata(image)
     if metadata.get("id") != digest:
         raise RegistryMetadataError("Katalog und Versionsmetadaten widersprechen sich.")
-    metadata.update(catalog_id=digest, channels=list(entry.get("channels", [])), image=image)
+    metadata.update(
+        catalog_id=digest,
+        channels=list(entry.get("channels", [])),
+        channel_pointers=list(entry.get("channel_pointers", [])),
+        image=image,
+    )
+    metadata = _normalized_cache_metadata(metadata)
     _cache_metadata(metadata)
     return metadata
 
@@ -1614,16 +1805,47 @@ def selected_catalog_entry(versions: list[dict[str, Any]], selected: Any = "") -
             raise AgentRequestError(HTTPStatus.CONFLICT, "catalog_selection_not_allowed")
         return match
     own_channel = UPDATE_ENVIRONMENT
-    match = next((entry for entry in valid if own_channel in entry["channels"]), None)
-    if match is None and valid:
-        match = valid[0]
+    own_pointer = {"prod": "prod", "staging": "latest", "dev": "dev"}[own_channel]
+    match = next(
+        (
+            entry
+            for entry in valid
+            if isinstance(entry.get("channel_pointers", []), list) and own_pointer in entry.get("channel_pointers", [])
+        ),
+        None,
+    )
     if match is None:
         raise AgentRequestError(HTTPStatus.CONFLICT, "no_environment_release")
     return match
 
 
 def deployment_versions(selected: Any = "") -> dict[str, Any]:
-    """Return the allowed catalog and selected digest-bound details for the admin UI."""
+    """Bound the entire versions response, including stalled remote response bodies."""
+    if not version_request_slots.acquire(blocking=False):
+        raise RegistryMetadataError("Versionsabfragen sind ausgelastet; bitte erneut versuchen.")
+    deadline = time.monotonic() + CATALOG_REFRESH_BUDGET_SECONDS
+
+    def collect() -> dict[str, Any]:
+        catalog_request_context.deadline = deadline
+        try:
+            return _deployment_versions_with_deadline(selected)
+        finally:
+            catalog_request_context.__dict__.pop("deadline", None)
+
+    try:
+        future = version_request_executor.submit(collect)
+    except RuntimeError:
+        version_request_slots.release()
+        raise
+    future.add_done_callback(lambda _future: version_request_slots.release())
+    try:
+        return future.result(timeout=max(0, deadline - time.monotonic()))
+    except TimeoutError as error:
+        future.cancel()
+        raise RegistryMetadataError("Versionsabfrage hat ihr Zeitbudget ueberschritten.") from error
+
+
+def _deployment_versions_with_deadline(selected: Any = "") -> dict[str, Any]:
     client = PortainerClient()
     stack = client.get_stack()
     running_image = stack_app_image(stack)
@@ -1664,21 +1886,56 @@ def normalized_changelog_entries(raw_changelog: Any) -> list[dict[str, str]]:
     if not isinstance(raw_changelog, list):
         return []
 
-    entries = []
+    entries: list[dict[str, str]] = []
     for item in raw_changelog:
+        if len(entries) >= 100:
+            break
         if not isinstance(item, dict):
             continue
-        revision = str(item.get("revision", "")).strip()
-        version = str(item.get("version", "")).strip()
-        title = str(item.get("title", "")).strip()
-        body = str(item.get("body", "")).strip()
-        path = str(item.get("path", "")).strip()
-        if not revision or not title:
+        revision = item.get("revision", "")
+        version = item.get("version", "")
+        title = item.get("title", "")
+        body = item.get("body", "")
+        path = item.get("path", "")
+        if (
+            not isinstance(revision, str)
+            or not revision.strip()
+            or len(revision.strip()) > 64
+            or not isinstance(version, str)
+            or len(version.strip()) > 32
+            or not isinstance(title, str)
+            or not title.strip()
+            or not isinstance(body, str)
+            or not isinstance(path, str)
+        ):
             continue
-        entry = {"revision": revision, "title": title, "body": body, "path": path}
+        revision = revision.strip()
+        version = version.strip()
+        entry = {
+            "revision": revision,
+            "title": title.strip()[:280],
+            "body": body.strip()[:4000],
+            "path": path.strip()[:240],
+        }
         if version:
             entry["version"] = version
-        entries.append(entry)
+        candidate = [*entries, entry]
+        if _serialized_size(candidate) <= MAX_CHANGELOG_BYTES:
+            entries.append(entry)
+            continue
+        low = 0
+        high = len(entry["body"])
+        while low < high:
+            midpoint = (low + high + 1) // 2
+            shortened = {**entry, "body": entry["body"][:midpoint]}
+            if _serialized_size([*entries, shortened]) <= MAX_CHANGELOG_BYTES:
+                low = midpoint
+            else:
+                high = midpoint - 1
+        shortened = {**entry, "body": entry["body"][:low]}
+        if _serialized_size([*entries, shortened]) <= MAX_CHANGELOG_BYTES:
+            entries.append(shortened)
+        break
     return entries
 
 
@@ -1823,26 +2080,132 @@ def ensure_risk_acknowledged(state: dict[str, Any], acknowledged: Any) -> None:
         raise AgentRequestError(HTTPStatus.CONFLICT, "risk_acknowledgement_required")
 
 
+def _serialized_size(value: Any) -> int:
+    """Return the exact compact JSON cache size in bytes."""
+    return len(json.dumps(value, ensure_ascii=True, separators=(",", ":")).encode("utf-8"))
+
+
+def _validated_release_identity(version: Any, revision: Any, build_date: Any) -> tuple[str, str, str]:
+    """Validate immutable release identity labels without truncating them."""
+    if not isinstance(version, str) or not (version == "unknown" or re.fullmatch(r"[0-9]{1,32}", version)):
+        raise RegistryMetadataError("Versionsmetadaten enthalten eine ungueltige Version.")
+    if not isinstance(revision, str) or not (revision == "unknown" or re.fullmatch(r"[0-9a-f]{40}", revision)):
+        raise RegistryMetadataError("Versionsmetadaten enthalten eine ungueltige Revision.")
+    if not isinstance(build_date, str) or len(build_date) > 64:
+        raise RegistryMetadataError("Versionsmetadaten enthalten ein ungueltiges Builddatum.")
+    if build_date != "unknown":
+        try:
+            timestamp = datetime.fromisoformat(build_date.replace("Z", "+00:00"))
+        except ValueError as error:
+            raise RegistryMetadataError("Versionsmetadaten enthalten ein ungueltiges Builddatum.") from error
+        if timestamp.tzinfo is None:
+            raise RegistryMetadataError("Versionsmetadaten enthalten ein ungueltiges Builddatum.")
+    return version, revision, build_date
+
+
+def _validated_metadata_image(image: Any, digest: str) -> str:
+    """Validate and bound the repository reference associated with metadata."""
+    if not isinstance(image, str) or not image or len(image) > 512:
+        raise RegistryMetadataError("Versionsmetadaten enthalten eine ungueltige Image-Referenz.")
+    try:
+        latest_image_reference(image)
+        _registry, _repository, reference = parse_image_reference(image)
+    except RuntimeError as error:
+        raise RegistryMetadataError("Versionsmetadaten enthalten eine ungueltige Image-Referenz.") from error
+    if reference.startswith("sha256:") and reference != digest:
+        raise RegistryMetadataError("Versionsmetadaten widersprechen der Image-Referenz.")
+    return image
+
+
+def _normalized_cache_metadata(entry: Any) -> dict[str, Any]:
+    """Validate identities and bound display metadata before cache persistence."""
+    if not isinstance(entry, dict):
+        raise RegistryMetadataError("Versionsmetadaten sind ungueltig.")
+    digest = entry.get("id")
+    if not isinstance(digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(digest):
+        raise RegistryMetadataError("Versionsmetadaten enthalten keinen validen Digest.")
+    catalog_id = entry.get("catalog_id", digest)
+    if catalog_id != digest:
+        raise RegistryMetadataError("Versionsmetadaten enthalten eine ungueltige Katalogidentitaet.")
+    version, revision, build_date = _validated_release_identity(
+        entry.get("version", "unknown"),
+        entry.get("revision", "unknown"),
+        entry.get("build_date", "unknown"),
+    )
+    image = _validated_metadata_image(entry.get("image"), digest)
+    channels = entry.get("channels", [])
+    pointers = entry.get("channel_pointers", [])
+    if (
+        not isinstance(channels, list)
+        or len(channels) > 3
+        or any(not isinstance(channel, str) or channel not in ENVIRONMENT_CHANNELS for channel in channels)
+        or not isinstance(pointers, list)
+        or len(pointers) > 3
+        or any(
+            not isinstance(pointer, str)
+            or channel_for_tag(pointer) not in channels
+            or pointer != {"prod": "prod", "staging": "latest", "dev": "dev"}.get(channel_for_tag(pointer))
+            for pointer in pointers
+        )
+    ):
+        raise RegistryMetadataError("Versionsmetadaten enthalten ungueltige Kanaele.")
+    change = entry.get("change", "Unbekannter Change")
+    if not isinstance(change, str):
+        change = str(change)
+    normalized = {
+        "id": digest,
+        "image": image,
+        "version": version,
+        "revision": revision,
+        "build_date": build_date,
+        "change": change.strip()[:280],
+        "changelog": normalized_changelog_entries(entry.get("changelog", [])),
+        "migrations": normalized_migration_manifest(entry.get("migrations", {})),
+        "catalog_id": digest,
+        "channels": list(dict.fromkeys(channels)),
+        "channel_pointers": list(dict.fromkeys(pointers)),
+    }
+    if _serialized_size(normalized) > MAX_VERSION_DETAIL_BYTES:
+        raise RegistryMetadataError("Versionsdetails ueberschreiten das Groessenlimit.")
+    return normalized
+
+
 def image_metadata(image: Any) -> dict[str, Any]:
     """Normalize OCI image metadata from Docker-like objects or dict payloads."""
     if isinstance(image, dict):
         labels = image.get("labels") or {}
-        image_id = str(image.get("id", "unknown"))
-        image_ref = str(image.get("image", "unknown"))
+        image_id = image.get("id")
+        image_ref = image.get("image")
     else:
         labels = image.labels or {}
-        image_id = str(image.id)
+        image_id = image.id
         image_ref = "unknown"
-    return {
+    if not isinstance(labels, dict):
+        labels = {}
+    if not isinstance(image_id, str) or not IMAGE_DIGEST_PATTERN.fullmatch(image_id):
+        raise RegistryMetadataError("Versionsmetadaten enthalten keinen validen Digest.")
+    version, revision, build_date = _validated_release_identity(
+        labels.get(OCI_LABELS["version"], "unknown"),
+        labels.get(OCI_LABELS["revision"], "unknown"),
+        labels.get(OCI_LABELS["build_date"], "unknown"),
+    )
+    image_ref = _validated_metadata_image(image_ref, image_id)
+    change = labels.get(OCI_LABELS["change"], "Unbekannter Change")
+    if not isinstance(change, str):
+        change = str(change)
+    metadata = {
         "id": image_id,
         "image": image_ref,
-        "version": str(labels.get(OCI_LABELS["version"], "unknown")),
-        "revision": str(labels.get(OCI_LABELS["revision"], "unknown")),
-        "build_date": str(labels.get(OCI_LABELS["build_date"], "unknown")),
-        "change": str(labels.get(OCI_LABELS["change"], "Unbekannter Change")),
+        "version": version,
+        "revision": revision,
+        "build_date": build_date,
+        "change": change.strip()[:280],
         "changelog": normalized_changelog_entries(labels.get(OCI_LABELS["changelog"], "[]")),
         "migrations": normalized_migration_manifest(labels.get(OCI_LABELS["migrations"], "{}")),
     }
+    if _serialized_size(metadata) > MAX_VERSION_DETAIL_BYTES:
+        raise RegistryMetadataError("Versionsdetails ueberschreiten das Groessenlimit.")
+    return metadata
 
 
 def current_metadata_from_payload(payload: dict[str, Any] | None) -> dict[str, str]:

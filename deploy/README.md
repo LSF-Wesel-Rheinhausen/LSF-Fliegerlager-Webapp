@@ -36,6 +36,14 @@ beide Images als `staging-<SHA>` und `latest`. Die geschützte manuelle Prod-Pip
 Staging-Revision, prüft die identischen OCI-Revisionslabels von App und Updater und promotet deren unveränderliche
 Digests nach `prod-<SHA>` und `prod`; sie führt keinen Neubau aus und verändert den Staging-Zeiger `latest` nicht.
 
+Revisionsgebundene Tags dürfen nur neu angelegt oder mit identischem Digest erneut verwendet werden.
+Die Prod-Promotion sichert beide bisherigen Digests und verifiziert nach dem Schreiben beide Kanalzeiger.
+Bei einem Teilfehler versucht sie, das bisherige Paar wiederherzustellen. Bei der ersten Freigabe ohne
+Prod-Tags vervollständigt die Fehlerbehandlung stattdessen das geprüfte Zielpaar. Ein bereits unvollständiges
+Prod-Paar wird vor weiteren Änderungen abgewiesen. Zwei Registry-Tags lassen sich nicht atomar schreiben:
+Während der Promotion kann kurzzeitig ein gemischter Stand sichtbar sein. Bei anhaltenden Registry-Fehlern
+oder einem harten Runner-Abbruch ist eine manuelle Wiederherstellung anhand der protokollierten Digests nötig.
+
 In Portainer müssen `APP_IMAGE` und `UPDATER_IMAGE` auf die gewünschten Kanal-Tags oder — für reproduzierbare
 Rollouts — auf vollständige `repo@sha256:...`-Digests zeigen. `UPDATE_ENVIRONMENT=prod` allein erteilt keine
 Registry- oder Portainer-Rechte. Der Updater erhält diese Zugangsdaten ausschließlich über den `updater`-Service;

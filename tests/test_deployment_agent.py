@@ -684,38 +684,38 @@ def test_choose_manifest_descriptor_accepts_supported_image_manifest_media_types
 
 def test_image_metadata_reads_oci_and_change_labels():
     image = {
-        "id": "sha256:123",
+        "id": image_digest("1"),
         "image": TEST_TARGET_IMAGE,
         "labels": {
-            "org.opencontainers.image.version": "1.2.3",
-            "org.opencontainers.image.revision": "abc123",
+            "org.opencontainers.image.version": "123",
+            "org.opencontainers.image.revision": "a" * 40,
             "org.opencontainers.image.created": "2026-06-09T12:00:00Z",
             "io.lsf-fliegerlager.change": "feat: deployment updates",
-            "io.lsf-fliegerlager.changelog": (
-                '[{"revision":"abc123","title":"Deployment updates","body":"Updater hardening"}]'
+            "io.lsf-fliegerlager.changelog": json.dumps(
+                [{"revision": "a" * 40, "title": "Deployment updates", "body": "Updater hardening"}]
             ),
         },
     }
 
     assert deployment_agent.image_metadata(image) == {
-        "id": "sha256:123",
+        "id": image_digest("1"),
         "image": TEST_TARGET_IMAGE,
-        "version": "1.2.3",
-        "revision": "abc123",
+        "version": "123",
+        "revision": "a" * 40,
         "build_date": "2026-06-09T12:00:00Z",
         "change": "feat: deployment updates",
-        "changelog": [{"revision": "abc123", "title": "Deployment updates", "body": "Updater hardening", "path": ""}],
+        "changelog": [{"revision": "a" * 40, "title": "Deployment updates", "body": "Updater hardening", "path": ""}],
         "migrations": {},
     }
 
 
 def test_image_metadata_ignores_invalid_changelog_labels():
     image = {
-        "id": "sha256:123",
+        "id": image_digest("1"),
         "image": TEST_TARGET_IMAGE,
         "labels": {
-            "org.opencontainers.image.version": "1.2.3",
-            "org.opencontainers.image.revision": "abc123",
+            "org.opencontainers.image.version": "123",
+            "org.opencontainers.image.revision": "a" * 40,
             "org.opencontainers.image.created": "2026-06-09T12:00:00Z",
             "io.lsf-fliegerlager.change": "feat: deployment updates",
             "io.lsf-fliegerlager.changelog": '{"not":"a-list"}',
@@ -723,6 +723,178 @@ def test_image_metadata_ignores_invalid_changelog_labels():
     }
 
     assert deployment_agent.image_metadata(image)["changelog"] == []
+
+
+@pytest.mark.parametrize(
+    ("label", "value"),
+    [
+        ("org.opencontainers.image.version", "1.2.3"),
+        ("org.opencontainers.image.version", "1" * 33),
+        ("org.opencontainers.image.revision", "ABC"),
+        ("org.opencontainers.image.revision", "a" * 41),
+        ("org.opencontainers.image.created", "2026-09-20"),
+        ("org.opencontainers.image.created", "x" * 65),
+    ],
+)
+def test_image_metadata_rejects_invalid_identity_labels(label, value):
+    labels = {
+        "org.opencontainers.image.version": "42",
+        "org.opencontainers.image.revision": "a" * 40,
+        "org.opencontainers.image.created": "2026-09-20T00:00:00Z",
+    }
+    labels[label] = value
+
+    with pytest.raises(deployment_agent.RegistryMetadataError, match="metadaten"):
+        deployment_agent.image_metadata({"id": image_digest("a"), "image": TEST_TARGET_IMAGE, "labels": labels})
+
+
+def test_changelog_drops_invalid_identity_and_truncates_display_fields_to_serialized_budget():
+    entries = [
+        {
+            "revision": f"{index:040x}",
+            "version": str(index),
+            "title": "t" * 500,
+            "body": "ä" * 10_000,
+            "path": "p" * 500,
+        }
+        for index in range(110)
+    ]
+    entries.insert(0, {"revision": "r" * 65, "version": "1", "title": "invalid", "body": "", "path": ""})
+
+    normalized = deployment_agent.normalized_changelog_entries(entries)
+
+    assert len(normalized) <= 100
+    assert all(len(entry["revision"]) <= 64 for entry in normalized)
+    assert all(len(entry.get("version", "")) <= 32 for entry in normalized)
+    assert all(len(entry["title"]) <= 280 for entry in normalized)
+    assert all(len(entry["body"]) <= 4000 for entry in normalized)
+    assert all(len(entry["path"]) <= 240 for entry in normalized)
+    assert len(json.dumps(normalized, ensure_ascii=True, separators=(",", ":")).encode()) <= 65_536
+
+
+def test_summary_and_detail_are_bounded_before_cache_write(monkeypatch, tmp_path):
+    monkeypatch.setattr(deployment_agent, "STATE_FILE", tmp_path / "status.json")
+    digest = image_digest("e")
+    entry = {
+        "catalog_id": digest,
+        "id": digest,
+        "image": target_digest_reference(digest),
+        "version": "42",
+        "revision": "e" * 40,
+        "build_date": "2026-09-20T00:00:00Z",
+        "change": "x" * 10_000,
+        "channels": ["prod"],
+        "changelog": [],
+        "migrations": {},
+    }
+
+    summary = deployment_agent._version_summary(entry)
+    deployment_agent._cache_metadata(entry)
+    cached = json.loads(deployment_agent._metadata_cache_path(digest).read_text(encoding="utf-8"))
+
+    assert len(summary["change"]) == 280
+    assert len(json.dumps(summary, ensure_ascii=True, separators=(",", ":")).encode()) <= 4096
+    assert len(json.dumps(cached, ensure_ascii=True, separators=(",", ":")).encode()) <= 131_072
+    assert cached["change"] == "x" * 280
+
+
+def test_cache_rejects_invalid_identity_before_writing(monkeypatch, tmp_path):
+    monkeypatch.setattr(deployment_agent, "STATE_FILE", tmp_path / "status.json")
+    digest = image_digest("f")
+    entry = {
+        "catalog_id": digest,
+        "id": digest,
+        "image": target_digest_reference(digest),
+        "version": "not-numeric",
+        "revision": "f" * 40,
+        "build_date": "2026-09-20T00:00:00Z",
+        "change": "release",
+        "channels": ["prod"],
+        "changelog": [],
+        "migrations": {},
+    }
+
+    with pytest.raises(deployment_agent.RegistryMetadataError, match="metadaten"):
+        deployment_agent._cache_metadata(entry)
+
+    assert not deployment_agent._metadata_cache_path(digest).exists()
+
+
+def test_metadata_cache_rejects_non_string_channels_before_membership(monkeypatch):
+    digest = image_digest("e")
+    entry = {
+        "id": digest,
+        "image": target_digest_reference(digest),
+        "channels": [{}],
+        "channel_pointers": [],
+    }
+
+    with pytest.raises(deployment_agent.RegistryMetadataError, match="Kanaele"):
+        deployment_agent._normalized_cache_metadata(entry)
+
+
+def test_invalid_cached_details_refetch_and_replace_cache(monkeypatch, tmp_path):
+    monkeypatch.setattr(deployment_agent, "STATE_FILE", tmp_path / "status.json")
+    digest = image_digest("e")
+    entry = {"id": digest, "image": target_digest_reference(digest), "channels": ["prod"]}
+    cache_path = deployment_agent._metadata_cache_path(digest)
+    cache_path.parent.mkdir(parents=True)
+    cache_path.write_text('{"id":"invalid"}', encoding="utf-8")
+    replacement = {
+        "id": digest,
+        "image": target_digest_reference(digest),
+        "version": "42",
+        "revision": "e" * 40,
+        "build_date": "2026-09-20T00:00:00Z",
+        "change": "release",
+        "changelog": [],
+        "migrations": {},
+    }
+    fetch = Mock(return_value=replacement)
+    monkeypatch.setattr(deployment_agent, "fetch_image_metadata", fetch)
+
+    result = deployment_agent.version_metadata(entry)
+
+    fetch.assert_called_once_with(entry["image"])
+    assert result["id"] == digest
+    assert json.loads(cache_path.read_text(encoding="utf-8"))["id"] == digest
+
+
+def test_cache_rejects_detail_over_serialized_budget(monkeypatch, tmp_path):
+    monkeypatch.setattr(deployment_agent, "STATE_FILE", tmp_path / "status.json")
+    digest = image_digest("d")
+    migration_name = "0" * 140_000
+    migration_path = f"billing/migrations/0001_{migration_name}.py"
+    migration_identifier = f"billing.0001_{migration_name}"
+    file_digest = "a" * 64
+    entry = {
+        "catalog_id": digest,
+        "id": digest,
+        "image": target_digest_reference(digest),
+        "version": "42",
+        "revision": "d" * 40,
+        "build_date": "2026-09-20T00:00:00Z",
+        "change": "release",
+        "channels": ["prod"],
+        "changelog": [],
+        "migrations": {
+            "version": 1,
+            "files": [{"path": migration_path, "sha256": file_digest}],
+            "migrations": [
+                {
+                    "identifier": migration_identifier,
+                    "dependencies": [],
+                    "reversible": True,
+                    "sha256": file_digest,
+                }
+            ],
+        },
+    }
+
+    with pytest.raises(deployment_agent.RegistryMetadataError, match="Groessenlimit"):
+        deployment_agent._cache_metadata(entry)
+
+    assert not deployment_agent._metadata_cache_path(digest).exists()
 
 
 def test_fetch_image_metadata_keeps_index_digest_for_installation(monkeypatch):
@@ -1812,7 +1984,9 @@ def test_build_version_catalog_limits_channels_and_deduplicates_digests(monkeypa
         }
         for tag in tags
     ]
-    monkeypatch.setattr(deployment_agent, "list_package_versions", lambda _image, _channels: package_versions)
+    monkeypatch.setattr(
+        deployment_agent, "list_package_versions", lambda _image, _channels, **_kwargs: package_versions
+    )
 
     def metadata(image):
         revision = image.rsplit("-", 1)[-1]
@@ -1953,7 +2127,9 @@ def test_build_version_catalog_bounds_metadata_fetches_before_inspecting_tags(mo
         }
         for tag in tags
     ]
-    monkeypatch.setattr(deployment_agent, "list_package_versions", lambda _image, _channels: package_versions)
+    monkeypatch.setattr(
+        deployment_agent, "list_package_versions", lambda _image, _channels, **_kwargs: package_versions
+    )
     fetch = Mock(
         side_effect=lambda image: {
             "id": image_digest(hashlib.sha256(image.encode()).hexdigest()[0]),
@@ -1986,7 +2162,7 @@ def test_catalog_selects_newest_by_package_publication_time_not_tag_text(monkeyp
         "created_at": "2026-09-20T00:00:00+00:00",
         "tags": [f"prod-{'0' * 40}"],
     }
-    monkeypatch.setattr(deployment_agent, "list_package_versions", lambda _image, _channels: old + [newest])
+    monkeypatch.setattr(deployment_agent, "list_package_versions", lambda _image, _channels, **_kwargs: old + [newest])
     fetched: list[str] = []
 
     def metadata(image):
@@ -2016,10 +2192,10 @@ def test_catalog_orders_and_selects_by_trusted_package_publication_time(monkeypa
         {
             "digest": newer_digest,
             "created_at": "2026-09-20T00:00:00+00:00",
-            "tags": [f"dev-2-{'b' * 40}"],
+            "tags": ["dev", f"dev-2-{'b' * 40}"],
         },
     ]
-    monkeypatch.setattr(deployment_agent, "list_package_versions", lambda _image, _channels: versions)
+    monkeypatch.setattr(deployment_agent, "list_package_versions", lambda _image, _channels, **_kwargs: versions)
     monkeypatch.setattr(deployment_agent, "UPDATE_ENVIRONMENT", "dev")
 
     def metadata(image):
@@ -2036,11 +2212,194 @@ def test_catalog_orders_and_selects_by_trusted_package_publication_time(monkeypa
     assert deployment_agent.selected_catalog_entry(catalog)["catalog_id"] == newer_digest
 
 
+def test_dev_pointer_determines_default_even_when_an_old_run_was_published_later(monkeypatch):
+    pointer_digest = image_digest("a")
+    delayed_old_digest = image_digest("b")
+    versions = [
+        {
+            "digest": delayed_old_digest,
+            "created_at": "2026-09-21T00:00:00+00:00",
+            "tags": [f"dev-1-{'b' * 40}"],
+        },
+        {
+            "digest": pointer_digest,
+            "created_at": "2026-09-20T00:00:00+00:00",
+            "tags": ["dev", f"dev-2-{'a' * 40}"],
+        },
+    ]
+    monkeypatch.setattr(deployment_agent, "list_package_versions", lambda _image, _channels, **_kwargs: versions)
+    monkeypatch.setattr(deployment_agent, "UPDATE_ENVIRONMENT", "dev")
+    fetched: list[str] = []
+
+    monkeypatch.setattr(
+        deployment_agent,
+        "fetch_image_metadata",
+        lambda image: (
+            fetched.append(image)
+            or {
+                "id": pointer_digest if image.endswith(":dev") else delayed_old_digest,
+                "image": image,
+                "version": "2" if image.endswith(":dev") else "1",
+                "revision": "a" * 40 if image.endswith(":dev") else "b" * 40,
+                "build_date": "2026-09-20T00:00:00+00:00",
+                "change": "release",
+                "changelog": [],
+                "migrations": {},
+            }
+        ),
+    )
+
+    catalog = deployment_agent.build_version_catalog("ghcr.io/example/app:dev", environment="dev")
+
+    assert [entry["catalog_id"] for entry in catalog] == [delayed_old_digest, pointer_digest]
+    assert deployment_agent.selected_catalog_entry(catalog)["catalog_id"] == pointer_digest
+    assert fetched[0].endswith(":dev")
+
+
+def test_catalog_candidate_limit_always_reserves_a_slot_for_channel_pointer():
+    delayed_runs = [
+        {
+            "digest": f"sha256:{index:064x}",
+            "created_at": f"2026-09-{20 - index:02d}T12:00:00+00:00",
+            "tags": [f"dev-{index + 10}-{index:040x}"],
+        }
+        for index in range(20)
+    ]
+    pointer = {
+        "digest": image_digest("f"),
+        "created_at": "2026-08-01T00:00:00+00:00",
+        "tags": ["dev", f"dev-2-{'f' * 40}"],
+    }
+
+    candidates = deployment_agent.catalog_candidate_tags([*delayed_runs, pointer], ("dev",))
+
+    assert len(candidates) == 20
+    assert any(expected_digest == pointer["digest"] and is_pointer for _, expected_digest, _, is_pointer in candidates)
+    assert next(tag for tag, _digest, _date, is_pointer in candidates if is_pointer) == "dev"
+
+
+def test_catalog_refresh_returns_bounded_partial_result_with_small_worker_pool(monkeypatch):
+    digests = [image_digest(character) for character in "abcdef"]
+    candidates = [
+        (f"prod-{index:040x}", digest, "2026-09-20T00:00:00+00:00", False) for index, digest in enumerate(digests)
+    ]
+    monkeypatch.setattr(deployment_agent, "catalog_candidates", lambda *_args, **_kwargs: candidates)
+    monkeypatch.setattr(deployment_agent, "CATALOG_REFRESH_BUDGET_SECONDS", 0.04)
+    monkeypatch.setattr(deployment_agent, "CATALOG_REFRESH_WORKERS", 2)
+    active = 0
+    maximum_active = 0
+    lock = threading.Lock()
+
+    def metadata(image):
+        nonlocal active, maximum_active
+        with lock:
+            active += 1
+            maximum_active = max(maximum_active, active)
+        try:
+            tag = image.rsplit(":", 1)[-1]
+            index = int(tag.removeprefix("prod-"), 16)
+            if index:
+                time.sleep(0.1)
+            return {
+                "id": digests[index],
+                "image": image,
+                "version": str(index + 1),
+                "revision": f"{index + 1:040x}",
+                "build_date": "2026-09-20T00:00:00+00:00",
+                "change": "release",
+                "changelog": [],
+                "migrations": {},
+            }
+        finally:
+            with lock:
+                active -= 1
+
+    monkeypatch.setattr(deployment_agent, "fetch_image_metadata", metadata)
+    started = time.monotonic()
+
+    catalog = deployment_agent.build_version_catalog("ghcr.io/example/app:prod", environment="prod")
+
+    assert time.monotonic() - started < 0.09
+    assert [entry["catalog_id"] for entry in catalog] == [digests[0]]
+    assert maximum_active <= 2
+
+
+def test_package_request_timeout_is_capped_by_catalog_remaining_budget(monkeypatch):
+    monkeypatch.setattr(deployment_agent, "GHCR_TOKEN", "read-only-token")
+    response = Mock()
+    response.__enter__ = Mock(return_value=response)
+    response.__exit__ = Mock(return_value=False)
+    response.headers = {}
+    response.read.return_value = b"[]"
+    monotonic = Mock(return_value=101.5)
+    monkeypatch.setattr(deployment_agent.time, "monotonic", monotonic)
+    with patch.object(deployment_agent, "registry_urlopen", return_value=response) as urlopen:
+        deployment_agent.list_package_versions(
+            "ghcr.io/example/app:prod",
+            ("prod",),
+            deadline=103.0,
+        )
+
+    assert urlopen.call_args.kwargs["timeout"] == pytest.approx(1.5)
+
+
+def test_catalog_workers_reserve_time_for_remaining_version_details(monkeypatch):
+    monkeypatch.setattr(deployment_agent.time, "monotonic", lambda: 100.0)
+    monkeypatch.setattr(
+        deployment_agent,
+        "catalog_candidates",
+        lambda *_args, **_kwargs: [("prod", None, None, True)],
+    )
+    deadlines = []
+
+    def metadata(image):
+        deadlines.append(deployment_agent.catalog_request_context.deadline)
+        return {"id": image_digest("a"), "image": image}
+
+    monkeypatch.setattr(deployment_agent, "fetch_image_metadata", metadata)
+    catalog = deployment_agent.build_version_catalog(TEST_TARGET_IMAGE)
+
+    assert len(catalog) == 1
+    assert deadlines == [116.0]
+
+
+def test_versions_timeout_keeps_stalled_requests_bounded_until_completion(monkeypatch):
+    pending = [deployment_agent.Future(), deployment_agent.Future()]
+    executor = Mock()
+    executor.submit.side_effect = pending
+    monkeypatch.setattr(deployment_agent, "version_request_executor", executor)
+    slots = threading.BoundedSemaphore(2)
+    monkeypatch.setattr(deployment_agent, "version_request_slots", slots)
+    for future in pending:
+        future.set_running_or_notify_cancel()
+        monkeypatch.setattr(future, "result", Mock(side_effect=TimeoutError))
+        with pytest.raises(deployment_agent.RegistryMetadataError, match="Zeitbudget"):
+            deployment_agent.deployment_versions()
+        assert 0 < future.result.call_args.kwargs["timeout"] <= 24
+    with pytest.raises(deployment_agent.RegistryMetadataError, match="ausgelastet"):
+        deployment_agent.deployment_versions()
+    assert executor.submit.call_count == 2
+    pending[0].set_result({})
+    assert slots.acquire(blocking=False)
+    slots.release()
+    pending[1].set_result({})
+
+
+def test_expired_version_request_does_not_write_detail_cache(monkeypatch, tmp_path):
+    monkeypatch.setattr(deployment_agent, "STATE_FILE", tmp_path / "status.json")
+    monkeypatch.setattr(deployment_agent.catalog_request_context, "deadline", -1.0, raising=False)
+    digest = image_digest("a")
+    entry = {"id": digest, "image": target_digest_reference(digest)}
+    with pytest.raises(deployment_agent.CatalogBudgetExpired):
+        deployment_agent._cache_metadata(entry)
+    assert not deployment_agent._metadata_cache_path(digest).exists()
+
+
 def test_catalog_rejects_package_and_registry_digest_disagreement(monkeypatch):
     monkeypatch.setattr(
         deployment_agent,
         "list_package_versions",
-        lambda _image, _channels: [
+        lambda _image, _channels, **_kwargs: [
             {"digest": image_digest("a"), "created_at": "2026-09-20T00:00:00+00:00", "tags": ["prod"]}
         ],
     )
@@ -2273,7 +2632,11 @@ def test_catalog_cache_uses_fresh_compact_summaries_without_registry(monkeypatch
                 "id": digest,
                 "image": target_digest_reference(digest),
                 "version": "42",
+                "revision": "a" * 40,
+                "build_date": "2026-09-20T00:00:00Z",
+                "change": "release",
                 "channels": ["staging"],
+                "channel_pointers": ["latest"],
             }
         ],
     }
@@ -2388,17 +2751,20 @@ def test_detail_cache_prunes_deterministically_to_sixty_digests(monkeypatch, tmp
 
 def test_default_catalog_selection_prefers_own_environment_channel(monkeypatch):
     prod = {"catalog_id": image_digest("a"), "channels": ["prod"]}
-    staging = {"catalog_id": image_digest("b"), "channels": ["staging"]}
+    staging = {"catalog_id": image_digest("b"), "channels": ["staging"], "channel_pointers": ["latest"]}
     monkeypatch.setattr(deployment_agent, "UPDATE_ENVIRONMENT", "staging")
 
     assert deployment_agent.selected_catalog_entry([prod, staging]) == staging
 
 
-def test_default_catalog_selection_falls_back_to_newest_inherited_channel(monkeypatch):
+def test_default_catalog_selection_requires_own_channel_pointer(monkeypatch):
     prod = {"catalog_id": image_digest("a"), "channels": ["prod"]}
     monkeypatch.setattr(deployment_agent, "UPDATE_ENVIRONMENT", "staging")
 
-    assert deployment_agent.selected_catalog_entry([prod]) == prod
+    with pytest.raises(deployment_agent.AgentRequestError) as error:
+        deployment_agent.selected_catalog_entry([prod])
+
+    assert error.value.public_code == "no_environment_release"
 
 
 def test_default_catalog_selection_rejects_malformed_channel_data(monkeypatch):
@@ -2428,6 +2794,7 @@ def test_deployment_versions_exposes_only_changelog_delta_from_running_image(
         "id": target_digest,
         "image": target_digest_reference(target_digest),
         "channels": ["prod"],
+        "channel_pointers": ["prod"],
     }
     target_metadata = {
         **target_summary,
@@ -2468,6 +2835,7 @@ def test_deployment_versions_treats_deleted_running_manifest_as_unknown(monkeypa
         "id": target_digest,
         "image": target_digest_reference(target_digest),
         "channels": ["prod"],
+        "channel_pointers": ["prod"],
     }
     target_metadata = {
         **target_summary,
