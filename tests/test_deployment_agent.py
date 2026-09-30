@@ -1978,6 +1978,67 @@ def test_migration_graph_resolves_django_first_dependencies(identifier, dependen
     assert deployment_agent._migration_graph_extends(base, extended) is expected
 
 
+def test_django_latest_dependency_is_resolved_to_app_leaf():
+    migrations = {
+        "contenttypes.0001_initial": {"dependencies": []},
+        "contenttypes.0002_remove_content_type_name": {"dependencies": ["contenttypes.0001_initial"]},
+        "admin.0001_initial": {"dependencies": ["contenttypes.__latest__"]},
+    }
+
+    dependencies = deployment_agent._resolved_migration_dependencies(migrations)
+
+    assert dependencies == {
+        "contenttypes.0001_initial": set(),
+        "contenttypes.0002_remove_content_type_name": {"contenttypes.0001_initial"},
+        "admin.0001_initial": {"contenttypes.0002_remove_content_type_name"},
+    }
+    assert deployment_agent._migration_graph_is_valid(migrations)
+
+
+def test_latest_rebinding_of_existing_parent_is_not_a_forward_extension():
+    base = {
+        "contenttypes.0001_initial": {"dependencies": []},
+        "admin.0001_initial": {"dependencies": ["contenttypes.__latest__"]},
+    }
+    extended = {
+        **base,
+        "contenttypes.0002_next": {"dependencies": ["contenttypes.0001_initial"]},
+    }
+
+    assert not deployment_agent._migration_graph_extends(base, extended)
+
+
+def test_installed_django_migration_manifest_classifies_identically():
+    from scripts.build_migration_manifest import installed_migration_paths, render_manifest
+
+    manifest = json.loads(render_manifest(installed_migration_paths()))
+
+    assert deployment_agent.migration_compatibility(manifest, manifest)["risk"] == "identical"
+
+
+@pytest.mark.parametrize(
+    "migrations",
+    [
+        {
+            "app.0001_initial": {"dependencies": ["missing.__latest__"]},
+            "app.0002_next": {"dependencies": ["app.0001_initial"]},
+        },
+        {
+            "app.0001_first": {"dependencies": []},
+            "app.0002_second": {"dependencies": []},
+            "other.0001_initial": {"dependencies": ["app.__latest__"]},
+        },
+        {
+            "app.0001_first": {"dependencies": ["app.0002_second"]},
+            "app.0002_second": {"dependencies": ["app.0001_first"]},
+            "other.0001_initial": {"dependencies": ["app.__latest__"]},
+        },
+    ],
+)
+def test_django_latest_dependency_rejects_missing_ambiguous_or_cyclic_app(migrations):
+    assert not deployment_agent._migration_graph_is_valid(migrations)
+
+
 def test_migration_compatibility_treats_missing_metadata_as_unknown_risk():
     result = deployment_agent.migration_compatibility({}, {})
 
@@ -2836,14 +2897,67 @@ def test_default_catalog_selection_prefers_own_environment_channel(monkeypatch):
     assert deployment_agent.selected_catalog_entry([prod, staging]) == staging
 
 
-def test_default_catalog_selection_requires_own_channel_pointer(monkeypatch):
+def test_default_catalog_selection_uses_inherited_channel_when_own_pointer_is_missing(monkeypatch):
     prod = {"catalog_id": image_digest("a"), "channels": ["prod"]}
     monkeypatch.setattr(deployment_agent, "UPDATE_ENVIRONMENT", "staging")
 
-    with pytest.raises(deployment_agent.AgentRequestError) as error:
-        deployment_agent.selected_catalog_entry([prod])
+    assert deployment_agent.selected_catalog_entry([prod]) == prod
 
-    assert error.value.public_code == "no_environment_release"
+
+def test_default_catalog_selection_falls_back_to_newest_inherited_release(monkeypatch):
+    prod = {"catalog_id": image_digest("a"), "channels": ["prod"]}
+    staging = {"catalog_id": image_digest("b"), "channels": ["prod", "staging"]}
+    monkeypatch.setattr(deployment_agent, "UPDATE_ENVIRONMENT", "staging")
+
+    assert deployment_agent.selected_catalog_entry([staging, prod]) == staging
+
+
+def test_default_catalog_selection_prefers_own_pointer_over_newer_inherited(monkeypatch):
+    inherited = {"catalog_id": image_digest("b"), "channels": ["prod", "staging"]}
+    own = {"catalog_id": image_digest("a"), "channels": ["staging"], "channel_pointers": ["latest"]}
+    monkeypatch.setattr(deployment_agent, "UPDATE_ENVIRONMENT", "staging")
+
+    assert deployment_agent.selected_catalog_entry([inherited, own]) == own
+
+
+def test_default_versions_route_selects_inherited_catalog_entry_without_registry(monkeypatch):
+    digest = image_digest("b")
+    monkeypatch.setattr(deployment_agent, "UPDATE_ENVIRONMENT", "staging")
+    entry = {"catalog_id": digest, "channels": ["prod", "staging"], "image": target_digest_reference(digest)}
+    monkeypatch.setattr(deployment_agent, "cached_version_catalog", lambda *_args: [entry])
+    monkeypatch.setattr(
+        deployment_agent,
+        "PortainerClient",
+        lambda: Mock(get_stack=lambda: active_stack(TEST_TARGET_IMAGE)),
+    )
+    monkeypatch.setattr(
+        deployment_agent,
+        "version_metadata",
+        lambda selected: {**selected, "version": "42", "id": selected.get("id", digest)},
+    )
+    monkeypatch.setattr(
+        deployment_agent,
+        "immutable_running_image",
+        lambda *_args: target_digest_reference(image_digest("c")),
+    )
+    monkeypatch.setattr(deployment_agent, "changelog_between_versions", lambda *_args: [])
+
+    class Handler:
+        command = "GET"
+        path = "/versions"
+
+        def authorized(self):
+            return True
+
+        def respond(self, status, payload):
+            self.status = status
+            self.payload = payload
+
+    handler = Handler()
+    deployment_agent.RequestHandler.dispatch(handler)
+
+    assert handler.status == HTTPStatus.OK, handler.payload
+    assert handler.payload["selected"]["catalog_id"] == digest
 
 
 def test_default_catalog_selection_rejects_malformed_channel_data(monkeypatch):

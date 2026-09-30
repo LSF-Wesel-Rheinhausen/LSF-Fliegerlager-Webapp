@@ -27,3 +27,6 @@
 - Bindet Produktionsfreigaben an den genehmigten Auslösungs-Commit und stellt auch Dev-Image-Paare bei Teilfehlern wieder her.
 - Prüft Migrationslabels gegen die tatsächlich installierten Image-Abhängigkeiten und bricht Builds bei Abweichungen ab.
 - Behandelt fehlende oder zyklische Migrationsabhängigkeiten als unbekanntes Risiko und verlangt alle Vorgänger für sichere Vorwärtsupdates.
+- Stellt auch Staging-Image-Paare bei Teilfehlern wieder her und prüft vor Dev-Promotionen erneut den offenen PR-Status.
+- Verwendet bei fehlendem eigenen Kanalzeiger den neuesten erlaubten Katalogeintrag als Standardauswahl.
+- Unterstützt Djangos `__latest__`-Migrationsabhängigkeiten für die Kompatibilitätsbewertung vollständiger App-Manifeste.

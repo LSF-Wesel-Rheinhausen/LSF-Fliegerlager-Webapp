@@ -106,6 +106,114 @@ def test_main_release_builds_staging_sha_and_latest_without_rebuilding_for_lates
     assert "already exists with digest" in immutable["run"]
 
 
+@pytest.mark.parametrize("failure", ["", "second-write", "final-mismatch", "bootstrap", "one-absent", "unauthorized"])
+def test_main_latest_pair_promotion_executes_compensation(tmp_path: Path, failure: str) -> None:
+    """Exercise paired latest publication and recovery through fake Docker I/O."""
+    app = "ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp"
+    updater = "ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater"
+    old_app, old_updater = "sha256:" + "1" * 64, "sha256:" + "2" * 64
+    new_app, new_updater = "sha256:" + "3" * 64, "sha256:" + "4" * 64
+    state = {
+        "tags": {
+            f"{app}:latest": old_app,
+            f"{updater}:latest": old_updater,
+            f"{app}:{'a' * 40}": new_app,
+            f"{updater}:{'a' * 40}": new_updater,
+        },
+        "writes": [],
+        "latest_writes": 0,
+    }
+    if failure in {"bootstrap", "one-absent"}:
+        del state["tags"][f"{app}:latest"]
+    if failure == "bootstrap":
+        del state["tags"][f"{updater}:latest"]
+    path = tmp_path / "registry.json"
+    path.write_text(json.dumps(state), encoding="utf-8")
+    docker = tmp_path / "docker"
+    docker.write_text(
+        f"#!{sys.executable}\n"
+        + """
+import json, os, sys
+from pathlib import Path
+path = Path(os.environ["FAKE_REGISTRY"])
+state = json.loads(path.read_text())
+args = sys.argv[1:]
+if args[:3] == ["buildx", "imagetools", "inspect"]:
+    ref = args[3]
+    if os.environ["FAILURE"] == "unauthorized" and ref.endswith(":latest"):
+        print("401 Unauthorized", file=sys.stderr); sys.exit(1)
+    digest = ref.split("@", 1)[1] if "@" in ref else state["tags"].get(ref)
+    if digest is None:
+        print("404 Not Found", file=sys.stderr); sys.exit(1)
+    if (
+        os.environ["FAILURE"] == "final-mismatch"
+        and ref.endswith(":latest")
+        and state["latest_writes"] >= 2
+        and not state.get("mismatch_used")
+    ):
+        state["mismatch_used"] = True
+        path.write_text(json.dumps(state)); print("sha256:" + "9" * 64); sys.exit(0)
+    print(digest)
+elif args[:3] == ["buildx", "imagetools", "create"]:
+    tag = args[args.index("--tag") + 1]
+    digest = args[-1].split("@", 1)[1]
+    if tag.endswith(":latest"):
+        state["latest_writes"] += 1
+        if os.environ["FAILURE"] == "second-write" and state["latest_writes"] == 2:
+            state["tags"][tag] = digest; state["writes"].append([tag, digest])
+            path.write_text(json.dumps(state)); sys.exit(1)
+    state["tags"][tag] = digest; state["writes"].append([tag, digest])
+    path.write_text(json.dumps(state))
+else:
+    sys.exit(2)
+""",
+        encoding="utf-8",
+    )
+    docker.chmod(0o755)
+    git = tmp_path / "git"
+    git.write_text(
+        f"#!{sys.executable}\nprint({('a' * 40 + chr(9) + 'refs/heads/main')!r})\n",
+        encoding="utf-8",
+    )
+    git.chmod(0o755)
+    steps = _docker_workflow()["jobs"]["docker-publish"]["steps"]
+    promotion = next(step for step in steps if step.get("name") == "Promote latest image pair")
+    result = subprocess.run(
+        ["bash"],
+        input=promotion["run"],
+        text=True,
+        capture_output=True,
+        timeout=10,
+        env={
+            **os.environ,
+            "PATH": f"{tmp_path}:{os.environ['PATH']}",
+            "FAKE_REGISTRY": str(path),
+            "FAILURE": failure,
+            "TESTED_SHA": "a" * 40,
+            "APP_TARGET_DIGEST": new_app,
+            "UPDATER_TARGET_DIGEST": new_updater,
+        },
+    )
+    final = json.loads(path.read_text(encoding="utf-8"))
+    succeeds = failure in {"", "bootstrap"}
+    assert result.returncode == (0 if succeeds else 1), result.stderr
+    if succeeds:
+        assert final["tags"][f"{app}:latest"] == new_app
+        assert final["tags"][f"{updater}:latest"] == new_updater
+    elif failure in {"second-write", "final-mismatch"}:
+        assert final["tags"][f"{app}:latest"] == old_app
+        assert final["tags"][f"{updater}:latest"] == old_updater
+    elif failure == "one-absent":
+        assert f"{app}:latest" not in final["tags"]
+        assert final["tags"][f"{updater}:latest"] == old_updater
+        assert final["writes"] == []
+    else:
+        assert final["tags"][f"{app}:latest"] == old_app
+        assert final["tags"][f"{updater}:latest"] == old_updater
+    assert final["tags"][f"{app}:{'a' * 40}"] == new_app
+    assert final["tags"][f"{updater}:{'a' * 40}"] == new_updater
+
+
 def test_container_build_dates_are_deterministic_for_the_tested_commit() -> None:
     workflow = _docker_workflow()
 
@@ -312,6 +420,11 @@ elif args[:1] != ["pull"]:
         "invalid-annotation",
         "mismatched-pair-runs",
         "source-mismatch",
+        "pr-open",
+        "pr-moved",
+        "pr-closed-same-sha",
+        "pr-malformed",
+        "pr-null",
     ],
 )
 def test_dev_promotion_executes_pair_recovery(tmp_path: Path, failure: str) -> None:
@@ -396,6 +509,23 @@ else:
         encoding="utf-8",
     )
     docker.chmod(0o755)
+    gh = tmp_path / "gh"
+    gh.write_text(
+        f"#!{sys.executable}\n"
+        + """
+import json, os
+failure = os.environ["FAILURE"]
+if failure == "pr-malformed":
+    print("{"); raise SystemExit
+if failure == "pr-null":
+    print("null"); raise SystemExit
+sha = "b" * 40 if failure == "pr-moved" else os.environ["REVISION"]
+state = "closed" if failure == "pr-closed-same-sha" else "open"
+print(json.dumps({"state": state, "head": {"sha": sha}}))
+""",
+        encoding="utf-8",
+    )
+    gh.chmod(0o755)
     steps = _docker_workflow()["jobs"]["docker-publish-dev"]["steps"]
     script = next(step["run"] for step in steps if step.get("name") == "Promote newest development revision")
     result = subprocess.run(
@@ -411,11 +541,13 @@ else:
             "REVISION": "a" * 40,
             "FAKE_REGISTRY": str(state_path),
             "FAILURE": failure,
+            "GITHUB_REPOSITORY": "example/repo",
+            "GH_TOKEN": "test-token",
             "PATH": f"{tmp_path}:{os.environ['PATH']}",
         },
     )
     final = json.loads(state_path.read_text(encoding="utf-8"))
-    successful = failure in {"", "both-missing", "newer"}
+    successful = failure in {"", "both-missing", "newer", "pr-open"}
     assert result.returncode == (0 if successful else 1), result.stderr
     if failure == "newer":
         assert final["tags"][f"{app}:dev"] == old_app
@@ -427,6 +559,10 @@ else:
         assert f"{app}:dev" not in final["tags"]
         assert final["tags"][f"{updater}:dev"] == old_updater
         assert final["writes"] == []
+    elif failure.startswith("pr-"):
+        assert final["writes"] == []
+        assert final["tags"][f"{app}:dev"] == old_app
+        assert final["tags"][f"{updater}:dev"] == old_updater
     else:
         assert final["tags"][f"{app}:dev"] == old_app
         assert final["tags"][f"{updater}:dev"] == old_updater

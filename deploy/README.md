@@ -45,8 +45,9 @@ Prod-Tags vervollständigt die Fehlerbehandlung stattdessen das geprüfte Zielpa
 Prod-Paar wird vor weiteren Änderungen abgewiesen. Zwei Registry-Tags lassen sich nicht atomar schreiben:
 Während der Promotion kann kurzzeitig ein gemischter Stand sichtbar sein. Bei anhaltenden Registry-Fehlern
 oder einem harten Runner-Abbruch ist eine manuelle Wiederherstellung anhand der protokollierten Digests nötig.
-Auch Dev-Promotionen sichern das vorherige Paar, versuchen bei Teilfehlern dessen Wiederherstellung und
+Auch Dev- und Staging-Promotionen sichern das vorherige Paar, versuchen bei Teilfehlern dessen Wiederherstellung und
 prüfen die endgültigen Digests. Dieselben Grenzen bei Registry-Ausfällen und harten Abbrüchen gelten dort.
+Vor dem Schreiben der Dev-Kanalzeiger wird erneut geprüft, dass der PR offen ist und sein Kopf unverändert ist.
 
 Beim App-Build wird das OCI-Migrationsmanifest gegen die tatsächlich im Image installierten Migrationen
 geprüft. Weichen etwa gecachte Abhängigkeiten von den Runner-Abhängigkeiten ab, scheitert der Build;
@@ -281,8 +282,11 @@ Sind Ziel- und Rollback-Image identisch, wird der Stack nicht automatisch redepl
 wird als `complete` mit `target_verified` abgeschlossen. Ohne diesen Nachweis bleibt der Zustand
 `recovery_required` und verlangt einen kontrollierten manuellen Eingriff.
 
-Ein Django-Superuser öffnet **Updates**, prüft das bereitgestellte `latest`-Image und bestätigt die Installation. Der
-Updater liest die OCI-Metadaten aus GHCR und speichert den dabei validierten `repo@sha256:...`-Digest als freigegebenen
+Ein Django-Superuser öffnet **Updates**, prüft die ausgewählte erlaubte Version und bestätigt die Installation.
+Die Standardauswahl bevorzugt den verifizierten Zeiger des eigenen Kanals (`prod`, `latest` oder `dev`).
+Fehlt dieser, wird der neueste gültige Eintrag aus dem für die Umgebung erlaubten Katalog vorgeschlagen,
+einschließlich geerbter Releases. Ein leerer Katalog bleibt ein Fehler.
+Der Updater liest die OCI-Metadaten aus GHCR und speichert den dabei validierten `repo@sha256:...`-Digest als freigegebenen
 Installationskandidaten. `/install` verwendet ausschließlich diesen gespeicherten Digest und fragt das bewegliche Tag
 nicht erneut ab. Vor dem Update ermittelt der Updater den unveränderlichen Digest des laufenden App-Containers,
 erstellt ein Backup unter `BACKUP_DIR`, setzt `APP_IMAGE` über die Portainer-API und wartet auf `APP_HEALTH_URL`.

@@ -1815,6 +1815,8 @@ def selected_catalog_entry(versions: list[dict[str, Any]], selected: Any = "") -
         None,
     )
     if match is None:
+        if valid:
+            return valid[0]
         raise AgentRequestError(HTTPStatus.CONFLICT, "no_environment_release")
     return match
 
@@ -1992,7 +1994,7 @@ def normalized_migration_manifest(raw_manifest: Any) -> dict[str, Any]:
             or len(dependencies) > 64
             or not all(
                 isinstance(dependency, str)
-                and re.fullmatch(r"[a-z][a-z0-9_]*\.(?:[0-9]{4}_[a-z0-9_]+|__first__)", dependency)
+                and re.fullmatch(r"[a-z][a-z0-9_]*\.(?:[0-9]{4}_[a-z0-9_]+|__(?:first|latest)__)", dependency)
                 for dependency in dependencies
             )
             or not isinstance(reversible, bool)
@@ -2025,6 +2027,7 @@ def _resolved_migration_dependencies(
         identifiers_by_app.setdefault(app_label, set()).add(identifier)
 
     roots_by_app: dict[str, list[str]] = {}
+    leaves_by_app: dict[str, list[str]] = {}
     for app_label, identifiers in identifiers_by_app.items():
         roots_by_app[app_label] = sorted(
             identifier
@@ -2035,6 +2038,13 @@ def _resolved_migration_dependencies(
                 if dependency != f"{app_label}.__first__"
             )
         )
+        depended_on = {
+            dependency
+            for identifier in identifiers
+            for dependency in migrations[identifier]["dependencies"]
+            if dependency in identifiers
+        }
+        leaves_by_app[app_label] = sorted(identifiers - depended_on)
 
     resolved: dict[str, set[str]] = {}
     for identifier, migration in migrations.items():
@@ -2049,6 +2059,13 @@ def _resolved_migration_dependencies(
                 if len(roots) != 1:
                     return None
                 dependency = roots[0]
+            elif dependency.endswith(".__latest__"):
+                if dependency_app == app_label:
+                    continue
+                leaves = leaves_by_app.get(dependency_app, [])
+                if len(leaves) != 1:
+                    return None
+                dependency = leaves[0]
             if dependency not in migrations:
                 return None
             dependencies.add(dependency)
@@ -2084,7 +2101,10 @@ def _migration_graph_extends(base: dict[str, dict[str, Any]], extended: dict[str
     if not base:
         return True
     dependencies = _resolved_migration_dependencies(extended)
-    if dependencies is None:
+    base_dependencies = _resolved_migration_dependencies(base)
+    if dependencies is None or base_dependencies is None:
+        return False
+    if any(dependencies[identifier] != base_dependencies[identifier] for identifier in base):
         return False
     depended_on = {dependency for identifier in base for dependency in dependencies[identifier] if dependency in base}
     lineage = set(base) - depended_on
