@@ -524,33 +524,88 @@ jobs:
             echo "The triggering test workflow has an invalid run ID." >&2
             exit 1
           fi
-          CURRENT_TEST_RUN_ID=""
-          inspect_error="$(mktemp)"
-          if current_manifest="$(docker buildx imagetools inspect "$APP_REPOSITORY:dev" --raw 2>"$inspect_error")"; then
-            rm -f "$inspect_error"
-            CURRENT_TEST_RUN_ID="$(jq -r '.annotations["io.lsf-fliegerlager.test-workflow-run-id"] // empty' <<<"$current_manifest")"
-            if [[ ! "$CURRENT_TEST_RUN_ID" =~ ^[1-9][0-9]*$ ]]; then
-              echo "The current development tag has an invalid trusted workflow-run annotation." >&2
-              exit 1
-            fi
-          else
-            inspect_status=$?
-            if ! grep -Fq "404 Not Found" "$inspect_error"; then
-              cat "$inspect_error" >&2
+          inspect_digest() {
+            local reference="$1" digest inspect_error inspect_status
+            inspect_error="$(mktemp)"
+            if digest="$(docker buildx imagetools inspect "$reference" --format '{{.Manifest.Digest}}' 2>"$inspect_error")"; then
               rm -f "$inspect_error"
-              exit "$inspect_status"
+              [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || return 1
+              printf '%s' "$digest"
+              return 0
+            else
+              inspect_status=$?
             fi
+            if grep -Fq '404 Not Found' "$inspect_error"; then
+              rm -f "$inspect_error"
+              return 44
+            fi
+            cat "$inspect_error" >&2
             rm -f "$inspect_error"
+            return "$inspect_status"
+          }
+          previous_digest() {
+            local digest status
+            if digest="$(inspect_digest "$1")"; then
+              printf '%s' "$digest"
+            else
+              status=$?
+              test "$status" -eq 44 || return "$status"
+            fi
+          }
+          trusted_run_id() {
+            local manifest run_id
+            manifest="$(docker buildx imagetools inspect "$1" --raw)" || return 1
+            run_id="$(jq -r '.annotations["io.lsf-fliegerlager.test-workflow-run-id"] // empty' <<<"$manifest")" || return 1
+            [[ "$run_id" =~ ^[1-9][0-9]*$ ]] || return 1
+            printf '%s' "$run_id"
+          }
+          PREVIOUS_APP_DEV_DIGEST="$(previous_digest "$APP_REPOSITORY:dev")"
+          PREVIOUS_UPDATER_DEV_DIGEST="$(previous_digest "$UPDATER_REPOSITORY:dev")"
+          if [[ -n "$PREVIOUS_APP_DEV_DIGEST" && -n "$PREVIOUS_UPDATER_DEV_DIGEST" ]]; then
+            CURRENT_TEST_RUN_ID="$(trusted_run_id "$APP_REPOSITORY@$PREVIOUS_APP_DEV_DIGEST")"
+            CURRENT_UPDATER_RUN_ID="$(trusted_run_id "$UPDATER_REPOSITORY@$PREVIOUS_UPDATER_DEV_DIGEST")"
+            test "$CURRENT_TEST_RUN_ID" = "$CURRENT_UPDATER_RUN_ID"
+            if (( TEST_RUN_ID < CURRENT_TEST_RUN_ID )); then
+              echo "A newer development build is already promoted; immutable images remain available."
+              exit 0
+            fi
+          elif [[ -n "$PREVIOUS_APP_DEV_DIGEST" || -n "$PREVIOUS_UPDATER_DEV_DIGEST" ]]; then
+            echo 'Incomplete existing development pair; repair it before promotion.' >&2
+            exit 1
           fi
-          if [[ -n "$CURRENT_TEST_RUN_ID" ]] && (( TEST_RUN_ID < CURRENT_TEST_RUN_ID )); then
-            echo "A newer development build is already promoted; immutable images remain available."
-            exit 0
+          APP_DEV_DIGEST="$(inspect_digest "$APP_REPOSITORY:dev-$PR_NUMBER-$REVISION")"
+          UPDATER_DEV_DIGEST="$(inspect_digest "$UPDATER_REPOSITORY:dev-$PR_NUMBER-$REVISION")"
+          test "$(trusted_run_id "$APP_REPOSITORY@$APP_DEV_DIGEST")" = "$TEST_RUN_ID"
+          test "$(trusted_run_id "$UPDATER_REPOSITORY@$UPDATER_DEV_DIGEST")" = "$TEST_RUN_ID"
+          if [[ -z "$PREVIOUS_APP_DEV_DIGEST" ]]; then
+            # Bootstrap failures repair forward; never delete shared manifests.
+            PREVIOUS_APP_DEV_DIGEST="$APP_DEV_DIGEST"
+            PREVIOUS_UPDATER_DEV_DIGEST="$UPDATER_DEV_DIGEST"
           fi
-          docker buildx imagetools create \
-            --annotation "index:io.lsf-fliegerlager.test-workflow-run-id=$TEST_RUN_ID" \
-            --tag "$APP_REPOSITORY:dev" \
-            "$APP_REPOSITORY:dev-$PR_NUMBER-$REVISION"
-          docker buildx imagetools create \
-            --annotation "index:io.lsf-fliegerlager.test-workflow-run-id=$TEST_RUN_ID" \
-            --tag "$UPDATER_REPOSITORY:dev" \
-            "$UPDATER_REPOSITORY:dev-$PR_NUMBER-$REVISION"
+          restore_previous_dev_pair() {
+            local failed=0
+            docker buildx imagetools create --tag "$APP_REPOSITORY:dev" "$APP_REPOSITORY@$PREVIOUS_APP_DEV_DIGEST" || failed=1
+            docker buildx imagetools create --tag "$UPDATER_REPOSITORY:dev" "$UPDATER_REPOSITORY@$PREVIOUS_UPDATER_DEV_DIGEST" || failed=1
+            test "$(inspect_digest "$APP_REPOSITORY:dev")" = "$PREVIOUS_APP_DEV_DIGEST" || failed=1
+            test "$(inspect_digest "$UPDATER_REPOSITORY:dev")" = "$PREVIOUS_UPDATER_DEV_DIGEST" || failed=1
+            return "$failed"
+          }
+          recover_failed_promotion() {
+            local status=$?
+            trap - EXIT INT TERM
+            if ! restore_previous_dev_pair; then
+              echo 'Development pair recovery failed; restore the recorded digest pair manually.' >&2
+              printf 'app=%s updater=%s\n' "$PREVIOUS_APP_DEV_DIGEST" "$PREVIOUS_UPDATER_DEV_DIGEST" >&2
+            fi
+            exit "$status"
+          }
+          trap recover_failed_promotion EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+          docker buildx imagetools create --tag "$APP_REPOSITORY:dev" "$APP_REPOSITORY@$APP_DEV_DIGEST"
+          docker buildx imagetools create --tag "$UPDATER_REPOSITORY:dev" "$UPDATER_REPOSITORY@$UPDATER_DEV_DIGEST"
+          FINAL_APP_DEV_DIGEST="$(inspect_digest "$APP_REPOSITORY:dev")"
+          FINAL_UPDATER_DEV_DIGEST="$(inspect_digest "$UPDATER_REPOSITORY:dev")"
+          test "$FINAL_APP_DEV_DIGEST" = "$APP_DEV_DIGEST"
+          test "$FINAL_UPDATER_DEV_DIGEST" = "$UPDATER_DEV_DIGEST"
+          trap - EXIT INT TERM

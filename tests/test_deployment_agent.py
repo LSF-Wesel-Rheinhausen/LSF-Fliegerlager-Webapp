@@ -1901,6 +1901,83 @@ def test_migration_compatibility_rejects_added_branch_that_does_not_extend_curre
     assert result["requires_acknowledgement"] is True
 
 
+def test_migration_graph_rejects_missing_dependency_even_when_another_predecessor_is_valid():
+    base = {
+        "billing.0001_initial": {"dependencies": []},
+    }
+    extended = {
+        **base,
+        "billing.0002_more": {
+            "dependencies": ["billing.0001_initial", "billing.0000_missing"],
+        },
+    }
+
+    assert not deployment_agent._migration_graph_extends(base, extended)
+
+
+def test_identical_cyclic_migration_graph_is_unknown_and_requires_acknowledgement():
+    digest = "a" * 64
+    manifest = {
+        "version": 1,
+        "files": [
+            {"path": "billing/migrations/0001_first.py", "sha256": digest},
+            {"path": "billing/migrations/0002_second.py", "sha256": digest},
+        ],
+        "migrations": [
+            {
+                "identifier": "billing.0001_first",
+                "dependencies": ["billing.0002_second"],
+                "reversible": True,
+                "sha256": digest,
+            },
+            {
+                "identifier": "billing.0002_second",
+                "dependencies": ["billing.0001_first"],
+                "reversible": True,
+                "sha256": digest,
+            },
+        ],
+    }
+
+    assert deployment_agent.migration_compatibility(manifest, manifest) == {
+        "risk": "unknown",
+        "requires_acknowledgement": True,
+        "affected_migrations": [],
+    }
+
+
+def test_migration_graph_accepts_multiple_dependencies_including_base_ancestor_and_leaf():
+    base = {
+        "billing.0001_initial": {"dependencies": []},
+        "billing.0002_current": {"dependencies": ["billing.0001_initial"]},
+    }
+    extended = {
+        **base,
+        "billing.0003_join": {
+            "dependencies": ["billing.0001_initial", "billing.0002_current"],
+        },
+    }
+
+    assert deployment_agent._migration_graph_extends(base, extended)
+
+
+@pytest.mark.parametrize(
+    ("identifier", "dependencies", "expected"),
+    [
+        ("billing.0001_initial", ["billing.__first__"], True),
+        ("reports.0001_initial", ["billing.__first__"], True),
+    ],
+)
+def test_migration_graph_resolves_django_first_dependencies(identifier, dependencies, expected):
+    base = {"billing.0001_initial": {"dependencies": []}}
+    extended = {
+        **base,
+        identifier: {"dependencies": dependencies},
+    }
+
+    assert deployment_agent._migration_graph_extends(base, extended) is expected
+
+
 def test_migration_compatibility_treats_missing_metadata_as_unknown_risk():
     result = deployment_agent.migration_compatibility({}, {})
 

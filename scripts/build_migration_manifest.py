@@ -109,8 +109,8 @@ def render_manifest(paths: list[Path]) -> str:
     return (
         json.dumps(
             {
-                "files": entries,
-                "migrations": migrations,
+                "files": sorted(entries, key=lambda entry: entry["path"]),
+                "migrations": sorted(migrations, key=lambda migration: migration["identifier"]),
                 "version": 1,
             },
             ensure_ascii=True,
@@ -145,12 +145,31 @@ def installed_migration_paths() -> list[Path]:
     return paths
 
 
+def verify_manifest_label(expected: str, actual: str) -> None:
+    """Reject a label that differs from the installed image's migration manifest.
+
+    The default empty object denotes unknown compatibility for local builds.
+    Any nonempty claim must match the actual manifest, otherwise ValueError is
+    raised. Malformed JSON also raises ValueError.
+    """
+    claimed = json.loads(expected)
+    if claimed == {}:
+        return
+    if claimed != json.loads(actual):
+        raise ValueError("Migration label does not match the installed image dependencies.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path)
+    parser.add_argument("--verify-label")
     args = parser.parse_args()
     paths = list(args.root.glob("*.py")) if args.root is not None else installed_migration_paths()
-    print(render_manifest(paths), end="")
+    actual = render_manifest(paths)
+    if args.verify_label is not None:
+        verify_manifest_label(args.verify_label, actual)
+    else:
+        print(actual, end="")
 
 
 if __name__ == "__main__":

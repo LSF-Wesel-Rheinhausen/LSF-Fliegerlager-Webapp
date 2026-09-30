@@ -2015,27 +2015,92 @@ def normalized_migration_manifest(raw_manifest: Any) -> dict[str, Any]:
     }
 
 
+def _resolved_migration_dependencies(
+    migrations: dict[str, dict[str, Any]],
+) -> dict[str, set[str]] | None:
+    """Resolve dependencies and reject missing nodes or ambiguous Django roots."""
+    identifiers_by_app: dict[str, set[str]] = {}
+    for identifier in migrations:
+        app_label, _name = identifier.split(".", 1)
+        identifiers_by_app.setdefault(app_label, set()).add(identifier)
+
+    roots_by_app: dict[str, list[str]] = {}
+    for app_label, identifiers in identifiers_by_app.items():
+        roots_by_app[app_label] = sorted(
+            identifier
+            for identifier in identifiers
+            if not any(
+                dependency in identifiers
+                for dependency in migrations[identifier]["dependencies"]
+                if dependency != f"{app_label}.__first__"
+            )
+        )
+
+    resolved: dict[str, set[str]] = {}
+    for identifier, migration in migrations.items():
+        app_label = identifier.split(".", 1)[0]
+        dependencies: set[str] = set()
+        for dependency in migration["dependencies"]:
+            dependency_app, _name = dependency.split(".", 1)
+            if dependency.endswith(".__first__"):
+                if dependency_app == app_label:
+                    continue
+                roots = roots_by_app.get(dependency_app, [])
+                if len(roots) != 1:
+                    return None
+                dependency = roots[0]
+            if dependency not in migrations:
+                return None
+            dependencies.add(dependency)
+        resolved[identifier] = dependencies
+    return resolved
+
+
+def _migration_graph_is_valid(migrations: dict[str, dict[str, Any]]) -> bool:
+    """Return whether every dependency resolves and the graph is acyclic."""
+    dependencies = _resolved_migration_dependencies(migrations)
+    if dependencies is None:
+        return False
+    remaining = {identifier: set(parents) for identifier, parents in dependencies.items()}
+    available = {identifier for identifier, parents in remaining.items() if not parents}
+    while available:
+        completed = available
+        available = set()
+        for parents in remaining.values():
+            parents.difference_update(completed)
+        for identifier, parents in remaining.items():
+            if parents == set():
+                available.add(identifier)
+        for identifier in completed:
+            remaining.pop(identifier, None)
+        available.difference_update(completed)
+    return not remaining
+
+
 def _migration_graph_extends(base: dict[str, dict[str, Any]], extended: dict[str, dict[str, Any]]) -> bool:
     """Return whether every added node descends from a leaf of the base graph."""
-    if not base.keys() <= extended.keys():
+    if not base.keys() <= extended.keys() or not _migration_graph_is_valid(extended):
         return False
     if not base:
         return True
-    depended_on = {
-        dependency for migration in base.values() for dependency in migration["dependencies"] if dependency in base
-    }
-    reachable = set(base) - depended_on
+    dependencies = _resolved_migration_dependencies(extended)
+    if dependencies is None:
+        return False
+    depended_on = {dependency for identifier in base for dependency in dependencies[identifier] if dependency in base}
+    lineage = set(base) - depended_on
+    available = set(base)
     remaining = set(extended) - set(base)
     while remaining:
-        connected = {
+        ready = {
             identifier
             for identifier in remaining
-            if any(dependency in reachable for dependency in extended[identifier]["dependencies"])
+            if dependencies[identifier] <= available and dependencies[identifier] & lineage
         }
-        if not connected:
+        if not ready:
             return False
-        reachable.update(connected)
-        remaining -= connected
+        available.update(ready)
+        lineage.update(ready)
+        remaining -= ready
     return True
 
 
@@ -2047,6 +2112,8 @@ def migration_compatibility(current: Any, target: Any) -> dict[str, Any]:
         return {"risk": "unknown", "requires_acknowledgement": True, "affected_migrations": []}
     current_migrations = {item["identifier"]: item for item in current_manifest["migrations"]}
     target_migrations = {item["identifier"]: item for item in target_manifest["migrations"]}
+    if not _migration_graph_is_valid(current_migrations) or not _migration_graph_is_valid(target_migrations):
+        return {"risk": "unknown", "requires_acknowledgement": True, "affected_migrations": []}
     changed = sorted(
         identifier
         for identifier in current_migrations.keys() & target_migrations.keys()

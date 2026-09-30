@@ -43,9 +43,11 @@ RUN groupadd --system --gid 10001 app \
 COPY --from=builder /opt/venv /opt/venv
 WORKDIR /app
 COPY --chown=app:app src ./src
+COPY scripts/build_migration_manifest.py ./scripts/build_migration_manifest.py
 COPY --chown=app:app docker/app-entrypoint.sh /usr/local/bin/app-entrypoint
 
-RUN chmod 0755 /usr/local/bin/app-entrypoint \
+RUN DJANGO_DEBUG=1 python scripts/build_migration_manifest.py --verify-label "$MIGRATION_MANIFEST" \
+    && chmod 0755 /usr/local/bin/app-entrypoint \
     && mkdir -p /app/src/media /app/src/staticfiles \
     && chown -R app:app /app
 

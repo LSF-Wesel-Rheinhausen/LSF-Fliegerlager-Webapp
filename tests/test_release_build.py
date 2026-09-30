@@ -53,7 +53,8 @@ def test_pull_request_release_publishes_only_tested_same_repo_dev_tags() -> None
     assert "io.lsf-fliegerlager.test-workflow-run-id" in promotion["run"]
     assert "docker buildx imagetools inspect" in promotion["run"]
     assert "^[1-9][0-9]*$" in promotion["run"]
-    assert promotion["run"].count("--annotation") == 2
+    assert promotion["run"].count("--annotation") == 0
+    assert "trusted_run_id" in promotion["run"]
     assert ':dev"' in promotion["run"]
     test_job = workflow["jobs"]["docker-test"]
     artifact_build = next(
@@ -146,6 +147,15 @@ def test_prod_workflow_promotes_matching_existing_digests_and_rejects_mixed_revi
     assert "404 Not Found" in text
 
 
+def test_prod_checkout_is_bound_to_dispatch_commit_and_main_only() -> None:
+    workflow = _release_workflow()
+    job = workflow["jobs"]["promote-prod"]
+
+    assert "github.ref == 'refs/heads/main'" in job["if"]
+    checkout = next(step for step in job["steps"] if step.get("name") == "Checkout protected main branch")
+    assert checkout["with"]["ref"] == "${{ github.sha }}"
+
+
 def test_dev_inspection_fails_closed_except_for_an_explicit_404() -> None:
     workflow = _docker_workflow()
     job = workflow["jobs"]["docker-publish-dev"]
@@ -155,7 +165,7 @@ def test_dev_inspection_fails_closed_except_for_an_explicit_404() -> None:
     assert "inspect_status=$?" in script
     assert "404 Not Found" in script
     assert 'cat "$inspect_error" >&2' in script
-    assert 'exit "$inspect_status"' in script
+    assert 'return "$inspect_status"' in script
 
 
 def test_prod_promotion_restores_both_previous_pointers_and_verifies_the_pair() -> None:
@@ -288,36 +298,109 @@ elif args[:1] != ["pull"]:
 
 
 @pytest.mark.parametrize(
-    ("inspection_status", "inspection_output", "expected_status", "promotions"),
+    "failure",
     [
-        (1, "401 Unauthorized", 1, 0),
-        (1, "connection timeout", 1, 0),
-        (1, "404 Not Found", 0, 2),
-        (0, '{"annotations":{"io.lsf-fliegerlager.test-workflow-run-id":"20"}}', 0, 0),
-        (0, '{"annotations":{"io.lsf-fliegerlager.test-workflow-run-id":"9"}}', 0, 2),
-        (0, '{"annotations":{}}', 1, 0),
-        (0, '{"annotations":{"io.lsf-fliegerlager.test-workflow-run-id":"invalid"}}', 1, 0),
+        "",
+        "second-promotion",
+        "final-digest",
+        "newer",
+        "both-missing",
+        "one-missing",
+        "unauthorized",
+        "timeout",
+        "missing-annotation",
+        "invalid-annotation",
+        "mismatched-pair-runs",
+        "source-mismatch",
     ],
 )
-def test_dev_promotion_runtime_fails_closed(inspection_status, inspection_output, expected_status, promotions):
+def test_dev_promotion_executes_pair_recovery(tmp_path: Path, failure: str) -> None:
+    app = "ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp"
+    updater = "ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater"
+    old_app, old_updater = "sha256:" + "1" * 64, "sha256:" + "2" * 64
+    new_app, new_updater = "sha256:" + "3" * 64, "sha256:" + "4" * 64
+    old_run = "20" if failure == "newer" else "10"
+    updater_run = "11" if failure == "mismatched-pair-runs" else old_run
+    app_source_run = "9" if failure == "source-mismatch" else "10"
+    state = {
+        "tags": {
+            f"{app}:dev": old_app,
+            f"{updater}:dev": old_updater,
+            f"{app}:dev-618-{'a' * 40}": new_app,
+            f"{updater}:dev-618-{'a' * 40}": new_updater,
+        },
+        "annotations": {old_app: old_run, old_updater: updater_run, new_app: app_source_run, new_updater: "10"},
+        "writes": [],
+        "promotions": 0,
+        "final_mismatch_used": False,
+    }
+    if failure == "missing-annotation":
+        del state["annotations"][old_app]
+    if failure == "invalid-annotation":
+        state["annotations"][old_app] = "invalid"
+    if failure in {"both-missing", "one-missing"}:
+        del state["tags"][f"{app}:dev"]
+    if failure == "both-missing":
+        del state["tags"][f"{updater}:dev"]
+    state_path = tmp_path / "registry.json"
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+    docker = tmp_path / "docker"
+    docker.write_text(
+        f"#!{sys.executable}\n"
+        + """
+import json, os, sys
+from pathlib import Path
+path = Path(os.environ["FAKE_REGISTRY"])
+state = json.loads(path.read_text())
+args = sys.argv[1:]
+if args[:3] == ["buildx", "imagetools", "inspect"]:
+    ref = args[3]
+    if os.environ["FAILURE"] in {"unauthorized", "timeout"} and ref.endswith(":dev"):
+        message = "401 Unauthorized" if os.environ["FAILURE"] == "unauthorized" else "connection timeout"
+        print(message, file=sys.stderr)
+        sys.exit(1)
+    digest = ref.split("@", 1)[1] if "@" in ref else state["tags"].get(ref)
+    if digest is None:
+        print("404 Not Found", file=sys.stderr); sys.exit(1)
+    if "--raw" in args:
+        annotation = state["annotations"].get(digest)
+        annotations = {} if annotation is None else {"io.lsf-fliegerlager.test-workflow-run-id": annotation}
+        print(json.dumps({"annotations": annotations}))
+    else:
+        if (
+            os.environ["FAILURE"] == "final-digest"
+            and ref.endswith(":dev")
+            and state["promotions"] == 2
+            and not state["final_mismatch_used"]
+        ):
+            state["final_mismatch_used"] = True
+            path.write_text(json.dumps(state))
+            print("sha256:" + "9" * 64)
+            sys.exit(0)
+        print(digest)
+elif args[:3] == ["buildx", "imagetools", "create"]:
+    tag = args[args.index("--tag") + 1]
+    digest = args[-1].split("@", 1)[1]
+    is_target = tag.endswith(":dev")
+    if is_target:
+        state["promotions"] += 1
+        if os.environ["FAILURE"] == "second-promotion" and state["promotions"] == 2:
+            state["writes"].append([tag, digest]); state["tags"][tag] = digest
+            path.write_text(json.dumps(state)); sys.exit(1)
+    state["tags"][tag] = digest
+    state["writes"].append([tag, digest])
+    path.write_text(json.dumps(state))
+else:
+    sys.exit(2)
+""",
+        encoding="utf-8",
+    )
+    docker.chmod(0o755)
     steps = _docker_workflow()["jobs"]["docker-publish-dev"]["steps"]
     script = next(step["run"] for step in steps if step.get("name") == "Promote newest development revision")
-    mock = """
-docker() {
-  if [[ "$3" = inspect ]]; then
-    if [[ "$INSPECTION_STATUS" = 0 ]]; then
-      printf '%s' "$INSPECTION_OUTPUT"
-    else
-      printf '%s' "$INSPECTION_OUTPUT" >&2
-    fi
-    return "$INSPECTION_STATUS"
-  fi
-  echo PROMOTED
-}
-"""
     result = subprocess.run(
         ["bash"],
-        input=mock + script,
+        input=script,
         text=True,
         capture_output=True,
         timeout=10,
@@ -326,12 +409,41 @@ docker() {
             "TEST_RUN_ID": "10",
             "PR_NUMBER": "618",
             "REVISION": "a" * 40,
-            "INSPECTION_STATUS": str(inspection_status),
-            "INSPECTION_OUTPUT": inspection_output,
+            "FAKE_REGISTRY": str(state_path),
+            "FAILURE": failure,
+            "PATH": f"{tmp_path}:{os.environ['PATH']}",
         },
     )
-    assert result.returncode == expected_status, result.stderr
-    assert result.stdout.count("PROMOTED") == promotions
+    final = json.loads(state_path.read_text(encoding="utf-8"))
+    successful = failure in {"", "both-missing", "newer"}
+    assert result.returncode == (0 if successful else 1), result.stderr
+    if failure == "newer":
+        assert final["tags"][f"{app}:dev"] == old_app
+        assert final["tags"][f"{updater}:dev"] == old_updater
+    elif successful:
+        assert final["tags"][f"{app}:dev"] == new_app
+        assert final["tags"][f"{updater}:dev"] == new_updater
+    elif failure == "one-missing":
+        assert f"{app}:dev" not in final["tags"]
+        assert final["tags"][f"{updater}:dev"] == old_updater
+        assert final["writes"] == []
+    else:
+        assert final["tags"][f"{app}:dev"] == old_app
+        assert final["tags"][f"{updater}:dev"] == old_updater
+
+
+def test_dev_pair_guard_rejects_missing_half_and_restores_after_second_write() -> None:
+    steps = _docker_workflow()["jobs"]["docker-publish-dev"]["steps"]
+    promotion = next(step for step in steps if step.get("name") == "Promote newest development revision")
+    script = promotion["run"]
+    assert "restore_previous_dev_pair" in script
+    assert "PREVIOUS_APP_DEV_DIGEST" in script
+    assert "PREVIOUS_UPDATER_DEV_DIGEST" in script
+    assert "FINAL_APP_DEV_DIGEST" in script
+    assert "FINAL_UPDATER_DEV_DIGEST" in script
+    assert script.count("--annotation") == 0
+    assert 'trusted_run_id "$APP_REPOSITORY@$PREVIOUS_APP_DEV_DIGEST"' in script
+    assert 'trusted_run_id "$UPDATER_REPOSITORY@$PREVIOUS_UPDATER_DEV_DIGEST"' in script
 
 
 def test_prod_workflow_serializes_complete_image_pair_promotions() -> None:

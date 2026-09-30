@@ -35,6 +35,8 @@ Kanal `dev`. Fork-Pull-Requests werden niemals nach GHCR veröffentlicht. Ein er
 beide Images als `staging-<SHA>` und `latest`. Die geschützte manuelle Prod-Pipeline nimmt nur eine bereits gebaute
 Staging-Revision, prüft die identischen OCI-Revisionslabels von App und Updater und promotet deren unveränderliche
 Digests nach `prod-<SHA>` und `prod`; sie führt keinen Neubau aus und verändert den Staging-Zeiger `latest` nicht.
+Die Freigabe ist an den unveränderlichen Commit der Auslösung auf `main` gebunden. Falls `latest` während
+der Genehmigung weiterläuft, bricht die Promotion ab; die neue Revision benötigt eine neue Freigabe.
 
 Revisionsgebundene Tags dürfen nur neu angelegt oder mit identischem Digest erneut verwendet werden.
 Die Prod-Promotion sichert beide bisherigen Digests und verifiziert nach dem Schreiben beide Kanalzeiger.
@@ -43,6 +45,13 @@ Prod-Tags vervollständigt die Fehlerbehandlung stattdessen das geprüfte Zielpa
 Prod-Paar wird vor weiteren Änderungen abgewiesen. Zwei Registry-Tags lassen sich nicht atomar schreiben:
 Während der Promotion kann kurzzeitig ein gemischter Stand sichtbar sein. Bei anhaltenden Registry-Fehlern
 oder einem harten Runner-Abbruch ist eine manuelle Wiederherstellung anhand der protokollierten Digests nötig.
+Auch Dev-Promotionen sichern das vorherige Paar, versuchen bei Teilfehlern dessen Wiederherstellung und
+prüfen die endgültigen Digests. Dieselben Grenzen bei Registry-Ausfällen und harten Abbrüchen gelten dort.
+
+Beim App-Build wird das OCI-Migrationsmanifest gegen die tatsächlich im Image installierten Migrationen
+geprüft. Weichen etwa gecachte Abhängigkeiten von den Runner-Abhängigkeiten ab, scheitert der Build;
+in diesem Fall muss der veraltete Builder-Cache erneuert werden. Lokale Builds ohne Manifest (`{}`)
+bleiben als unbekannte Kompatibilität eingestuft und benötigen eine Risikobestätigung.
 
 In Portainer müssen `APP_IMAGE` und `UPDATER_IMAGE` auf die gewünschten Kanal-Tags oder — für reproduzierbare
 Rollouts — auf vollständige `repo@sha256:...`-Digests zeigen. `UPDATE_ENVIRONMENT=prod` allein erteilt keine

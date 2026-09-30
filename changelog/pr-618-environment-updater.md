@@ -24,3 +24,6 @@
 - Bricht Dev-Promotionen bei nicht prüfbarem Kanalzeiger ab und verwendet den verifizierten Kanalzeiger für die Standardauswahl.
 - Begrenzt Katalogabrufe zeitlich und parallel sowie Versionsdetails und Changelogs durch feste Größenlimits.
 - Prüft Produktionsfreigaben als Digest-Paar und stellt bei Teilfehlern das vorherige Paar kompensierend wieder her.
+- Bindet Produktionsfreigaben an den genehmigten Auslösungs-Commit und stellt auch Dev-Image-Paare bei Teilfehlern wieder her.
+- Prüft Migrationslabels gegen die tatsächlich installierten Image-Abhängigkeiten und bricht Builds bei Abweichungen ab.
+- Behandelt fehlende oder zyklische Migrationsabhängigkeiten als unbekanntes Risiko und verlangt alle Vorgänger für sichere Vorwärtsupdates.
