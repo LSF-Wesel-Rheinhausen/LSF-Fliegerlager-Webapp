@@ -25,6 +25,39 @@ Pflichtvariablen für den Update-Agent:
 - `PORTAINER_API_KEY`: API-Key eines dedizierten technischen Portainer-Benutzers.
 - `PORTAINER_ENDPOINT_ID`: Portainer Environment/Endpoint-ID des Ziel-Stacks.
 - `PORTAINER_STACK_ID`: Portainer Stack-ID des Ziel-Stacks.
+- `UPDATE_ENVIRONMENT`: Umgebung des Ziel-Stacks (`dev`, `staging` oder `prod`); für produktive Portainer-Stacks auf
+  `prod` setzen. Prod sieht ausschließlich Prod-Releases, Staging zusätzlich Staging-Releases und Dev alle drei Kanäle.
+
+## Release-Kanäle
+
+Pull Requests aus diesem Repository veröffentlichen nach erfolgreichen Tests `dev-<PR>-<SHA>` und den beweglichen
+Kanal `dev`. Fork-Pull-Requests werden niemals nach GHCR veröffentlicht. Ein erfolgreicher `main`-Build veröffentlicht
+beide Images als `staging-<SHA>` und `latest`. Die geschützte manuelle Prod-Pipeline nimmt nur eine bereits gebaute
+Staging-Revision, prüft die identischen OCI-Revisionslabels von App und Updater und promotet deren unveränderliche
+Digests nach `prod-<SHA>` und `prod`; sie führt keinen Neubau aus und verändert den Staging-Zeiger `latest` nicht.
+Die Freigabe ist an den unveränderlichen Commit der Auslösung auf `main` gebunden. Falls `latest` während
+der Genehmigung weiterläuft, bricht die Promotion ab; die neue Revision benötigt eine neue Freigabe.
+
+Revisionsgebundene Tags dürfen nur neu angelegt oder mit identischem Digest erneut verwendet werden.
+Die Prod-Promotion sichert beide bisherigen Digests und verifiziert nach dem Schreiben beide Kanalzeiger.
+Bei einem Teilfehler versucht sie, das bisherige Paar wiederherzustellen. Bei der ersten Freigabe ohne
+Prod-Tags vervollständigt die Fehlerbehandlung stattdessen das geprüfte Zielpaar. Ein bereits unvollständiges
+Prod-Paar wird vor weiteren Änderungen abgewiesen. Zwei Registry-Tags lassen sich nicht atomar schreiben:
+Während der Promotion kann kurzzeitig ein gemischter Stand sichtbar sein. Bei anhaltenden Registry-Fehlern
+oder einem harten Runner-Abbruch ist eine manuelle Wiederherstellung anhand der protokollierten Digests nötig.
+Auch Dev- und Staging-Promotionen sichern das vorherige Paar, versuchen bei Teilfehlern dessen Wiederherstellung und
+prüfen die endgültigen Digests. Dieselben Grenzen bei Registry-Ausfällen und harten Abbrüchen gelten dort.
+Vor dem Schreiben der Dev-Kanalzeiger wird erneut geprüft, dass der PR offen ist und sein Kopf unverändert ist.
+
+Beim App-Build wird das OCI-Migrationsmanifest gegen die tatsächlich im Image installierten Migrationen
+geprüft. Weichen etwa gecachte Abhängigkeiten von den Runner-Abhängigkeiten ab, scheitert der Build;
+in diesem Fall muss der veraltete Builder-Cache erneuert werden. Lokale Builds ohne Manifest (`{}`)
+bleiben als unbekannte Kompatibilität eingestuft und benötigen eine Risikobestätigung.
+
+In Portainer müssen `APP_IMAGE` und `UPDATER_IMAGE` auf die gewünschten Kanal-Tags oder — für reproduzierbare
+Rollouts — auf vollständige `repo@sha256:...`-Digests zeigen. `UPDATE_ENVIRONMENT=prod` allein erteilt keine
+Registry- oder Portainer-Rechte. Der Updater erhält diese Zugangsdaten ausschließlich über den `updater`-Service;
+Runtime-App-Container bekommen kein GHCR-Schreibrecht.
 
 ## Service-spezifische Umgebungsvariablen
 
@@ -39,8 +72,8 @@ Prozess benötigten Variablen:
 - `email-worker`: Django-Secret, Django-Host-Allowlist und Datenbank-URL. SMTP-Zugangsdaten liegen verschlüsselt in
   PostgreSQL; Web-Push-Schlüssel werden diesem Dienst nicht bereitgestellt.
 - `account-recovery-worker`: löst öffentliche Recovery-Anfragen nach der HTTP-Antwort in E-Mail- und Push-Outbox-Einträge auf.
-- `updater`: Update-Agent-Token, Datenbank-/Backup-Konfiguration, Portainer-Zugangsdaten, Registry-Allowlist und
-  optional `GHCR_TOKEN`.
+- `updater`: Update-Agent-Token, Datenbank-/Backup-Konfiguration, Portainer-Zugangsdaten, Registry-Allowlist und bei
+  einem GHCR-App-Image `GHCR_TOKEN` mit ausschließlich `read:packages`.
 
 `PORTAINER_URL`, `PORTAINER_API_KEY`, `PORTAINER_ENDPOINT_ID`, `PORTAINER_STACK_ID` und `GHCR_TOKEN` dürfen nur im
 `updater`-Service vorkommen. Änderungen an der Allowlist müssen durch die Compose-Konfigurationstests abgesichert
@@ -68,11 +101,15 @@ Optionale Variablen mit Defaults:
 - `PERSISTENCE_DIR`: absoluter Host-Pfad für alle persistenten Daten; für Portainer wird `/srv/fliegerlager` empfohlen.
 - `BACKUP_DIR`: bisheriger Host-Pfad der Backups; dient nur als Quelle bei der einmaligen Speichermigration.
 - `PORTAINER_VERIFY_SSL`: Portainer-Zertifikatsprüfung; Default `true`. Für interne Portainer-Instanzen mit Self-Signed-Zertifikat `false` setzen.
-- `GHCR_TOKEN`: nur für private GHCR-Images setzen; bei öffentlichen Images leer lassen.
+- `GHCR_TOKEN`: erforderlich für den nach Veröffentlichungszeit sortierten Versionskatalog, wenn `APP_IMAGE` auf
+  GHCR liegt. In Portainer als Updater-Secret mit ausschließlich `read:packages` setzen; weder App noch andere
+  Dienste erhalten es. Bei einer ausschließlich benutzerdefinierten Registry bleibt die Variable leer.
 - `UPDATE_REGISTRY_ALLOWED_HOSTS`: komma-separierte Liste exakter Registry-Hosts mit optionalem Port; Default
   `ghcr.io`. Erlaubt sind ausschließlich `Host[:Port]` ohne Schema, Pfad, Userinfo, Wildcards oder abschließenden
   Punkt. Benutzerdefinierte Registries müssen hier explizit eingetragen werden, zum Beispiel
-  `ghcr.io,registry.example.org:5443`.
+  `ghcr.io,registry.example.org:5443`. Da nur GHCR chronologisch sortierbare Package-Metadaten bereitstellt, zeigt
+  der Katalog für andere erlaubte Registries ausschließlich die digestgeprüften Kanalzeiger `prod`, `latest` und
+  `dev`, soweit sie in der konfigurierten Umgebung sichtbar sind.
 - `TZ`: Zeitzone des Updaters; Default `Europe/Berlin`.
 
 Der Compose-Service `storage-migrate` legt die Zielstruktur an und setzt die schreibbaren App-Verzeichnisse auf
@@ -245,8 +282,11 @@ Sind Ziel- und Rollback-Image identisch, wird der Stack nicht automatisch redepl
 wird als `complete` mit `target_verified` abgeschlossen. Ohne diesen Nachweis bleibt der Zustand
 `recovery_required` und verlangt einen kontrollierten manuellen Eingriff.
 
-Ein Django-Superuser öffnet **Updates**, prüft das bereitgestellte `latest`-Image und bestätigt die Installation. Der
-Updater liest die OCI-Metadaten aus GHCR und speichert den dabei validierten `repo@sha256:...`-Digest als freigegebenen
+Ein Django-Superuser öffnet **Updates**, prüft die ausgewählte erlaubte Version und bestätigt die Installation.
+Die Standardauswahl bevorzugt den verifizierten Zeiger des eigenen Kanals (`prod`, `latest` oder `dev`).
+Fehlt dieser, wird der neueste gültige Eintrag aus dem für die Umgebung erlaubten Katalog vorgeschlagen,
+einschließlich geerbter Releases. Ein leerer Katalog bleibt ein Fehler.
+Der Updater liest die OCI-Metadaten aus GHCR und speichert den dabei validierten `repo@sha256:...`-Digest als freigegebenen
 Installationskandidaten. `/install` verwendet ausschließlich diesen gespeicherten Digest und fragt das bewegliche Tag
 nicht erneut ab. Vor dem Update ermittelt der Updater den unveränderlichen Digest des laufenden App-Containers,
 erstellt ein Backup unter `BACKUP_DIR`, setzt `APP_IMAGE` über die Portainer-API und wartet auf `APP_HEALTH_URL`.
@@ -270,8 +310,12 @@ die Ziel-Environment und Rechte zum Lesen, Aktualisieren und Redeployen genau di
 sind nur nötig, falls Portainer sie für den Redeploy des Stacks verlangt. Nicht erforderlich und nicht zu vergeben sind
 Admin-Rechte, User-/Team-Verwaltung sowie Zugriff auf andere Environments oder Stacks.
 
-GHCR ist für dieses Projekt öffentlich lesbar. `GHCR_TOKEN` bleibt leer und wird erst benötigt, falls das Image später
-privat wird. Der Update-Agent sendet dieses Credential ausschließlich an den exakt validierten Host `ghcr.io`.
+GHCR ist für dieses Projekt öffentlich lesbar. Die GitHub-Package-Versionen-API verlangt dennoch `read:packages`;
+deshalb benötigt der Update-Agent für GHCR-App-Images `GHCR_TOKEN` für den chronologisch korrekten Katalog. Er sendet
+dieses Credential ausschließlich an `api.github.com` für die fest konstruierte Package-Versionen-URL und an den exakt validierten Host
+`ghcr.io` für Registry-Lesezugriffe. Ohne Token ist für ein GHCR-App-Image kein Versionskatalog abrufbar; der Updater
+führt dadurch kein Update auf Basis einer unvollständigen oder falsch sortierten Liste aus. Benutzerdefinierte
+Registries verwenden ausschließlich ihre digestgeprüften Kanalzeiger und benötigen dieses GitHub-Credential nicht.
 Discovery-Requests verwenden nur HTTPS und ausschließlich Hosts aus `UPDATE_REGISTRY_ALLOWED_HOSTS`; private,
 reservierte und anderweitig spezielle IP-Literale sowie nicht exakt erlaubte Hosts werden ohne DNS-Vertrauensprüfung
 abgewiesen. Registry- und Token-Endpunkte dürfen nicht redirecten, sodass Credentials und Bearer-Tokens den geprüften

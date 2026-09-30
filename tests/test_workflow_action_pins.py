@@ -171,10 +171,11 @@ def test_docker_builds_pull_requests_and_main_without_publishing() -> None:
     docker_test = dict(jobs["docker-test"])
     publish = dict(jobs["docker-publish"])
 
-    assert "pull_request" in events
+    assert set(events) == {"pull_request", "workflow_run"}
     assert "push" not in events
     assert "workflow_run" in events
-    assert "pull_request" in docker_test["if"]
+    assert "workflow_run.event == 'pull_request'" in docker_test["if"]
+    assert "github.event.pull_request.head.repo.full_name != github.repository" not in docker_test["if"]
     assert "workflow_run" in docker_test["if"]
     assert "workflow_run.conclusion == 'success'" in docker_test["if"]
     assert "push: true" not in "\n".join(str(step) for step in docker_test["steps"])
@@ -218,9 +219,14 @@ def test_docker_test_and_publish_share_the_exact_sha_for_pr_and_workflow_run() -
         step for step in docker_test["steps"] if "Build application image" in dict(step).get("name", "")
     )
     build_args = dict(application_build["with"])["build-args"]
-    expected_sha = "${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}"
+    expected_sha = "${{ steps.metadata.outputs.revision }}"
 
-    assert dict(checkout["with"])["ref"] == expected_sha
+    assert "github.event.pull_request.head.sha" in dict(checkout["with"])["ref"]
+    assert "github.event.workflow_run.head_sha" in dict(checkout["with"])["ref"]
+    assert "github.event.pull_request.head.repo.full_name" in dict(checkout["with"])["repository"]
+    assert "github.event.workflow_run.head_repository.full_name" in dict(checkout["with"])["repository"]
+    metadata = next(step for step in docker_test["steps"] if dict(step).get("name") == "Read build metadata")
+    assert "git rev-parse HEAD" in metadata["run"]
     assert f"APP_REVISION={expected_sha}" in build_args
 
 
@@ -245,8 +251,7 @@ def test_docker_publish_promotes_latest_only_after_immutable_sha_images_finish()
     steps = [dict(step) for step in publish["steps"]]
     app_build = next(step for step in steps if step.get("name") == "Publish application image")
     updater_build = next(step for step in steps if step.get("name") == "Publish updater image")
-    app_promotion = next(step for step in steps if step.get("name") == "Promote application image")
-    updater_promotion = next(step for step in steps if step.get("name") == "Promote updater image")
+    promotion = next(step for step in steps if step.get("name") == "Promote latest image pair")
 
     for build in (app_build, updater_build):
         build_text = str(build["with"])
@@ -254,20 +259,21 @@ def test_docker_publish_promotes_latest_only_after_immutable_sha_images_finish()
         assert "${{ github.event.workflow_run.head_sha }}" in build_text
         assert build["with"]["push"] == "true"
 
-    final_verification = next(
-        index
-        for index, step in enumerate(steps)
-        if step.get("name") == "Verify main has not moved before latest promotion"
-    )
+    immutable_publication = next(step for step in steps if step.get("name") == "Publish immutable revision tags")
     app_build_index = steps.index(app_build)
     updater_build_index = steps.index(updater_build)
-    app_promotion_index = steps.index(app_promotion)
-    updater_promotion_index = steps.index(updater_promotion)
-    assert app_build_index < updater_build_index < final_verification < app_promotion_index < updater_promotion_index
-    assert "docker buildx imagetools create" in app_promotion["run"]
-    assert "docker buildx imagetools create" in updater_promotion["run"]
-    assert "latest" in app_promotion["run"]
-    assert "latest" in updater_promotion["run"]
-    for promotion in (app_promotion, updater_promotion):
-        assert promotion["env"]["TESTED_SHA"] == "${{ github.event.workflow_run.head_sha }}"
-        assert "${TESTED_SHA}" in promotion["run"]
+    assert app_build_index < updater_build_index < steps.index(immutable_publication) < steps.index(promotion)
+    assert promotion["env"]["TESTED_SHA"] == "${{ github.event.workflow_run.head_sha }}"
+    script = promotion["run"]
+    assert 'inspect_digest "$APP_REPOSITORY:$TESTED_SHA"' in script
+    assert 'inspect_digest "$UPDATER_REPOSITORY:$TESTED_SHA"' in script
+    main_check = script.index('test "$actual_sha" = "$TESTED_SHA"')
+    app_write = script.index(
+        'docker buildx imagetools create --tag "$APP_REPOSITORY:latest" "$APP_REPOSITORY@$APP_TARGET_DIGEST"'
+    )
+    updater_write = script.index(
+        'docker buildx imagetools create --tag "$UPDATER_REPOSITORY:latest" '
+        '"$UPDATER_REPOSITORY@$UPDATER_TARGET_DIGEST"'
+    )
+    assert "git ls-remote --exit-code origin refs/heads/main" in script
+    assert main_check < app_write < updater_write < script.index("FINAL_APP_LATEST_DIGEST=")

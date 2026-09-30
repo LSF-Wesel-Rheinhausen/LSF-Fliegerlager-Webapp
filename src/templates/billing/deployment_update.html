@@ -9,9 +9,37 @@
     </div>
     <form method="post" action="{% url 'deployment-update-check' %}">
       {% csrf_token %}
+      {% if version_catalog.selected.catalog_id %}<input type="hidden" name="catalog_id" value="{{ version_catalog.selected.catalog_id }}">{% endif %}
       <button type="submit">Auf Update prüfen</button>
     </form>
   </div>
+
+  {% if version_catalog.environment %}
+    <section class="panel stack">
+      <div>
+        <h2>Verfügbare Versionen</h2>
+        <p><strong>Umgebung: {{ version_catalog.environment|title }}</strong></p>
+        <p>Es werden nur Builds angezeigt, die für diese serverseitig konfigurierte Umgebung freigegeben sind.</p>
+      </div>
+      {% if version_catalog.versions %}
+        <form method="get" class="form-grid">
+          <div>
+            <label for="deployment-version">Version auswählen</label>
+            <select id="deployment-version" name="version">
+              {% for version in version_catalog.versions %}
+                <option value="{{ version.catalog_id }}"{% if version_catalog.selected.catalog_id == version.catalog_id %} selected{% endif %}>
+                  v{{ version.version }} · {{ version.channels|join:", "|title }} · {{ version.revision|slice:":12" }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="actions"><button type="submit" class="button-secondary">Details anzeigen</button></div>
+        </form>
+      {% else %}
+        <p>Für diese Umgebung wurden keine freigegebenen Builds gefunden.</p>
+      {% endif %}
+    </section>
+  {% endif %}
 
   {% if agent_error %}
     <section class="panel notice-warning" role="alert">
@@ -33,7 +61,15 @@
 
     <article class="panel">
       <h2>Verfügbares Image</h2>
-      {% if deployment_status.latest %}
+      {% if version_catalog.selected %}
+        <dl class="metadata-list">
+          <div><dt>Version</dt><dd>{{ version_catalog.selected.version }}</dd></div>
+          <div><dt>Revision</dt><dd><code>{{ version_catalog.selected.revision }}</code></dd></div>
+          <div><dt>Build</dt><dd>{{ version_catalog.selected.build_date }}</dd></div>
+          <div><dt>Kanäle</dt><dd>{{ version_catalog.selected.channels|join:", "|title }}</dd></div>
+          <div><dt>Letzter Change</dt><dd>{{ version_catalog.selected.change }}</dd></div>
+        </dl>
+      {% elif deployment_status.latest %}
         <dl class="metadata-list">
           <div><dt>Version</dt><dd>{{ deployment_status.latest.version }}</dd></div>
           <div><dt>Revision</dt><dd><code>{{ deployment_status.latest.revision }}</code></dd></div>
@@ -42,6 +78,29 @@
         </dl>
       {% else %}
         <p>Noch nicht geprüft.</p>
+      {% endif %}
+      {% if version_catalog.selected.compatibility %}
+        {% with compatibility=version_catalog.selected.compatibility %}
+          <div{% if compatibility.requires_acknowledgement %} class="notice-warning"{% endif %}>
+            <p><strong>Migrationsbewertung:</strong>
+              {% if compatibility.risk == "identical" %}Identischer Migrationsgraph
+              {% elif compatibility.risk == "forward" %}Lineares Vorwärtsupdate
+              {% elif compatibility.risk == "downgrade" %}Downgrade mit entfallenden Migrationen
+              {% elif compatibility.risk == "divergent" %}Veränderte oder divergierende Migrationen
+              {% else %}Kompatibilitätsdaten fehlen oder sind nicht auswertbar
+              {% endif %}
+            </p>
+            {% if compatibility.affected_migrations %}
+              <p>Betroffene Migrationen:</p>
+              <ul>
+                {% for migration in compatibility.affected_migrations %}<li><code>{{ migration }}</code></li>{% endfor %}
+              </ul>
+            {% endif %}
+            {% if compatibility.requires_acknowledgement %}
+              <p>Dies ist keine Kompatibilitätsgarantie. Vor der Installation ist eine gesonderte Risikobestätigung erforderlich.</p>
+            {% endif %}
+          </div>
+        {% endwith %}
       {% endif %}
     </article>
   </section>
@@ -64,24 +123,24 @@
       </span>
     </section>
 
-    {% if deployment_status.update_available and deployment_status.phase != "installing" and deployment_status.phase != "preparing" and deployment_status.phase != "rollback" %}
+    {% if deployment_status.update_available and candidate_matches_selection and deployment_status.phase != "installing" and deployment_status.phase != "preparing" and deployment_status.phase != "rollback" %}
       <section class="panel update-action">
         <div>
           <h2>Update installieren</h2>
-          <p>Vor dem Neustart wird automatisch ein PostgreSQL-Backup erzeugt. Die Anwendung ist kurzzeitig nicht erreichbar.</p>
+          <p>Vor dem Neustart wird automatisch ein PostgreSQL-Backup erzeugt. Die ausgewählte, digestgebundene Version wird installiert.</p>
         </div>
         <button type="button" class="button-danger" data-dialog-open="update-confirmation">Update installieren</button>
       </section>
     {% endif %}
 
-    {% if deployment_status.changelog %}
+    {% if version_catalog.selected.changelog or deployment_status.changelog %}
       <section class="panel stack">
         <div>
-          <h2>{% if deployment_status.phase == "complete" %}Installierte Änderungen{% else %}Änderungen seit installierter Version{% endif %}</h2>
+          <h2>Änderungen seit installierter Version</h2>
           <p>Kompakte Übersicht aller Änderungen zwischen installierter und verfügbarer Version. Klicke auf einen Eintrag für Details.</p>
         </div>
         <div class="changelog-list">
-          {% for entry in deployment_status.changelog %}
+          {% for entry in version_catalog.selected.changelog|default:deployment_status.changelog %}
             <details class="changelog-entry">
               <summary class="changelog-summary">
                 {% if entry.version %}<span class="changelog-version">v{{ entry.version }}</span>{% endif %}
@@ -134,13 +193,26 @@
     <div class="dialog-heading">
       <div>
         <h2 id="update-confirmation-title">Container-Update bestätigen</h2>
-        <p>Das neueste Image wird installiert und der App-Container neu gestartet.</p>
+        <p>Die ausgewählte Version wird installiert und der App-Container neu gestartet.</p>
+        <dl class="metadata-list">
+          <div><dt>Zielversion</dt><dd>{% firstof deployment_status.target_metadata.version version_catalog.selected.version "-" %}</dd></div>
+          <div><dt>Ziel-Digest</dt><dd><code>{{ deployment_status.approved_digest|slice:":19" }}</code></dd></div>
+          <div><dt>Ausgangsversion</dt><dd>{{ current.version }}</dd></div>
+          <div><dt>Umgebung</dt><dd>{{ version_catalog.environment|title }}</dd></div>
+        </dl>
+        <p>Vor der Installation wird ein PostgreSQL-Backup erstellt.</p>
       </div>
       <button type="button" class="button-secondary" data-dialog-close aria-label="Dialog schließen">Schließen</button>
     </div>
     <form method="post" action="{% url 'deployment-update-install' %}" class="dialog-actions">
       {% csrf_token %}
       <input type="hidden" name="candidate_id" value="{{ deployment_status.candidate_id }}">
+      {% if deployment_status.risk_requires_acknowledgement %}
+        <div class="field-row">
+          <input id="risk-acknowledged" name="risk_acknowledged" type="checkbox" required>
+          <label for="risk-acknowledged">Ich verstehe, dass Migrationen und der Datenbankzustand nicht automatisch zurückgesetzt werden und das Backup gegebenenfalls manuell wiederhergestellt werden muss.</label>
+        </div>
+      {% endif %}
       <button type="button" class="button-secondary" data-dialog-close>Abbrechen</button>
       <button type="submit" class="button-danger">Backup erstellen und installieren</button>
     </form>

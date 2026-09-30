@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -35,6 +36,13 @@ AGENT_ERROR_MESSAGES = {
     "stale_runtime_base": (
         "Der laufende Image-Zustand hat sich seit der Prüfung geändert. Bitte zuerst erneut auf ein Update prüfen."
     ),
+    "risk_acknowledgement_required": (
+        "Diese Version hat ein erkennbares Migrations- oder Kompatibilitätsrisiko. "
+        "Bitte den Risikohinweis ausdrücklich bestätigen."
+    ),
+    "invalid_catalog_selection": "Die ausgewählte Version ist ungültig. Bitte den Versionskatalog neu laden.",
+    "catalog_selection_not_allowed": "Die ausgewählte Version ist für diese Umgebung nicht freigegeben.",
+    "no_environment_release": "Für die konfigurierte Umgebung ist kein freigegebenes Image verfügbar.",
 }
 
 
@@ -84,26 +92,40 @@ def deployment_status() -> dict[str, Any]:
     return agent_request("/status")
 
 
-def check_for_update() -> dict[str, Any]:
+def deployment_versions(selected: str = "") -> dict[str, Any]:
+    """Return the environment-limited image catalog from the update agent."""
+    query = urllib.parse.urlencode({"selected": selected}) if selected else ""
+    return agent_request(f"/versions?{query}" if query else "/versions")
+
+
+def check_for_update(catalog_id: str = "") -> dict[str, Any]:
     """Ask the agent to compare latest OCI metadata with this Django build."""
     return agent_request(
         "/check",
         method="POST",
         timeout=120,
         payload={
+            **({"catalog_id": catalog_id} if catalog_id else {}),
             "current": {
                 "version": settings.APP_VERSION,
                 "revision": settings.APP_REVISION,
                 "build_date": settings.APP_BUILD_DATE,
                 "change": settings.APP_CHANGE,
-            }
+            },
         },
     )
 
 
-def install_update(candidate_id: str) -> dict[str, Any]:
+def install_update(candidate_id: str, *, risk_acknowledged: bool = False) -> dict[str, Any]:
     """Ask the agent to install the exact candidate confirmed by the user."""
-    return agent_request("/install", method="POST", payload={"candidate_id": candidate_id})
+    return agent_request(
+        "/install",
+        method="POST",
+        payload={
+            "candidate_id": candidate_id,
+            **({"risk_acknowledged": True} if risk_acknowledged else {}),
+        },
+    )
 
 
 def create_backup_archive(staging_dir: str, archive_prefix: str) -> dict[str, Any]:

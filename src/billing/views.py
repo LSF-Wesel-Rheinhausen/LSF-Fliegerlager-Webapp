@@ -36,7 +36,13 @@ from .attendance import (
     target_stay_for,
 )
 from .daily_settlement_backups import update_daily_backup_settings
-from .deployment_updates import UpdateAgentError, check_for_update, deployment_status, install_update
+from .deployment_updates import (
+    UpdateAgentError,
+    check_for_update,
+    deployment_status,
+    deployment_versions,
+    install_update,
+)
 from .exporters import (
     PDF_PREVIEW_CONTENT_SECURITY_POLICY,
     camp_settlement_csv,
@@ -799,11 +805,29 @@ def _book_open_kiosk_shifts(
 def deployment_update(request: HttpRequest) -> HttpResponse:
     """Show image metadata and the latest deployment-agent state."""
     status: dict[str, Any] | None = None
+    version_catalog: dict[str, Any] = {"versions": []}
+    candidate_matches_selection = False
     agent_error = ""
     try:
         status = deployment_status()
     except UpdateAgentError as error:
         agent_error = str(error)
+    else:
+        selected = request.GET.get("version", "") or str(status.get("selected_catalog_id", ""))
+        if len(selected) > 160:
+            selected = ""
+        try:
+            version_catalog = deployment_versions(selected)
+        except UpdateAgentError as error:
+            agent_error = str(error)
+        else:
+            selected_details = version_catalog.get("selected")
+            selected_catalog_id = selected_details.get("catalog_id") if isinstance(selected_details, dict) else None
+            candidate_matches_selection = bool(
+                status.get("update_available")
+                and isinstance(selected_catalog_id, str)
+                and selected_catalog_id == status.get("selected_catalog_id")
+            )
     current = {
         "version": settings.APP_VERSION,
         "revision": settings.APP_REVISION,
@@ -822,6 +846,8 @@ def deployment_update(request: HttpRequest) -> HttpResponse:
         "billing/deployment_update.html",
         {
             "deployment_status": status,
+            "version_catalog": version_catalog,
+            "candidate_matches_selection": candidate_matches_selection,
             "agent_error": agent_error,
             "current": current,
             "daily_backup_form": backup_form,
@@ -842,7 +868,8 @@ def deployment_update_status_json(request: HttpRequest) -> JsonResponse:
         )
         status_code = 502 if error.public_code == "invalid_registry_metadata" else 503
         return JsonResponse({"active": False, "phase": "error", "error": error_message}, status=status_code)
-    return JsonResponse(status)
+    polling_fields = ("phase", "message", "error", "rollback_error", "backup")
+    return JsonResponse({key: status[key] for key in polling_fields if key in status})
 
 
 @superuser_required
@@ -850,7 +877,7 @@ def deployment_update_status_json(request: HttpRequest) -> JsonResponse:
 def deployment_update_check(request: HttpRequest) -> HttpResponse:
     """Pull the configured latest image and compare it with the running image."""
     try:
-        result = check_for_update()
+        result = check_for_update(request.POST.get("catalog_id", ""))
     except UpdateAgentError as error:
         messages.error(request, str(error))
     else:
@@ -866,7 +893,11 @@ def deployment_update_check(request: HttpRequest) -> HttpResponse:
 def deployment_update_install(request: HttpRequest) -> HttpResponse:
     """Ask the isolated agent to install the latest image asynchronously."""
     try:
-        install_update(request.POST.get("candidate_id", ""))
+        candidate_id = request.POST.get("candidate_id", "")
+        if request.POST.get("risk_acknowledged") == "on":
+            install_update(candidate_id, risk_acknowledged=True)
+        else:
+            install_update(candidate_id)
     except UpdateAgentError as error:
         messages.error(request, str(error))
     else:
