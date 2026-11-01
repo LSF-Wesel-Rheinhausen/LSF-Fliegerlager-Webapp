@@ -806,6 +806,7 @@ def deployment_update(request: HttpRequest) -> HttpResponse:
     """Show image metadata and the latest deployment-agent state."""
     status: dict[str, Any] | None = None
     version_catalog: dict[str, Any] = {"versions": []}
+    changelog: Any = []
     candidate_matches_selection = False
     agent_error = ""
     try:
@@ -816,12 +817,15 @@ def deployment_update(request: HttpRequest) -> HttpResponse:
         selected = request.GET.get("version", "") or str(status.get("selected_catalog_id", ""))
         if len(selected) > 160:
             selected = ""
+        changelog = status.get("changelog") or []
         try:
             version_catalog = deployment_versions(selected)
         except UpdateAgentError as error:
             agent_error = str(error)
         else:
             selected_details = version_catalog.get("selected")
+            selected_changelog = selected_details.get("changelog") if isinstance(selected_details, dict) else None
+            changelog = selected_changelog or changelog
             selected_catalog_id = selected_details.get("catalog_id") if isinstance(selected_details, dict) else None
             candidate_matches_selection = bool(
                 status.get("update_available")
@@ -847,6 +851,7 @@ def deployment_update(request: HttpRequest) -> HttpResponse:
         {
             "deployment_status": status,
             "version_catalog": version_catalog,
+            "changelog": changelog,
             "candidate_matches_selection": candidate_matches_selection,
             "agent_error": agent_error,
             "current": current,

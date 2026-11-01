@@ -1889,7 +1889,7 @@ def normalized_changelog_entries(raw_changelog: Any) -> list[dict[str, str]]:
         return []
 
     entries: list[dict[str, str]] = []
-    for item in raw_changelog:
+    for item in reversed(raw_changelog):
         if len(entries) >= 100:
             break
         if not isinstance(item, dict):
@@ -1938,6 +1938,7 @@ def normalized_changelog_entries(raw_changelog: Any) -> list[dict[str, str]]:
         if _serialized_size([*entries, shortened]) <= MAX_CHANGELOG_BYTES:
             entries.append(shortened)
         break
+    entries.reverse()
     return entries
 
 

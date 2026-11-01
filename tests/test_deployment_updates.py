@@ -50,6 +50,118 @@ def test_deployment_page_is_limited_to_superusers(client, superuser, app_admin):
 
 
 @pytest.mark.django_db
+def test_deployment_page_renders_selected_changelog_without_status_changelog(client, superuser):
+    client.force_login(superuser)
+    selected_changelog = [{"version": "302", "title": "Ausgewählter Eintrag", "body": "Ausgewählte Details"}]
+    catalog = {
+        "selected": {"catalog_id": "selected-build", "changelog": selected_changelog},
+        "versions": [],
+    }
+    status = {
+        "phase": "idle",
+        "message": "Bereit",
+        "update_available": True,
+        "selected_catalog_id": "selected-build",
+    }
+
+    with (
+        patch("billing.views.deployment_status", return_value=status),
+        patch("billing.views.deployment_versions", return_value=catalog),
+    ):
+        response = client.get(reverse("deployment-update"))
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert "Ausgewählter Eintrag" in content
+    assert "Ausgewählte Details" in content
+    assert "Update installieren" in content
+
+
+@pytest.mark.django_db
+def test_deployment_page_prefers_selected_changelog_to_legacy_status_changelog(client, superuser):
+    client.force_login(superuser)
+    catalog = {
+        "selected": {
+            "catalog_id": "selected-build",
+            "changelog": [{"title": "Ausgewählt", "body": "Ausgewählter Text"}],
+        },
+        "versions": [],
+    }
+    status = {
+        "phase": "idle",
+        "message": "Bereit",
+        "changelog": [{"title": "Legacy", "body": "Alter Text"}],
+    }
+    with (
+        patch("billing.views.deployment_status", return_value=status),
+        patch("billing.views.deployment_versions", return_value=catalog),
+    ):
+        response = client.get(reverse("deployment-update"))
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert "Ausgewählt" in content
+    assert "Ausgewählter Text" in content
+    assert "Legacy" not in content
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("selected_changelog", "status_changelog", "expected_title"),
+    [
+        ([], [{"title": "Legacy-Fallback"}], "Legacy-Fallback"),
+        ([], None, None),
+        (None, None, None),
+    ],
+)
+def test_deployment_page_handles_empty_or_missing_changelogs(
+    client, superuser, selected_changelog, status_changelog, expected_title
+):
+    client.force_login(superuser)
+    catalog = {
+        "selected": {"catalog_id": "selected-build", "changelog": selected_changelog},
+        "versions": [],
+    }
+    status = {"phase": "idle", "message": "Bereit"}
+    if status_changelog is not None:
+        status["changelog"] = status_changelog
+    with (
+        patch("billing.views.deployment_status", return_value=status),
+        patch("billing.views.deployment_versions", return_value=catalog),
+    ):
+        response = client.get(reverse("deployment-update"))
+
+    assert response.status_code == 200
+    if expected_title:
+        assert expected_title in response.content.decode()
+    else:
+        assert b"changelog-entry" not in response.content
+
+
+@pytest.mark.django_db
+def test_deployment_page_escapes_changelog_title_and_body(client, superuser):
+    client.force_login(superuser)
+    catalog = {
+        "selected": {
+            "catalog_id": "selected-build",
+            "changelog": [{"title": "<script>alert(1)</script>", "body": "<img src=x onerror=alert(1)>"}],
+        },
+        "versions": [],
+    }
+    with (
+        patch("billing.views.deployment_status", return_value={"phase": "idle", "message": "Bereit"}),
+        patch("billing.views.deployment_versions", return_value=catalog),
+    ):
+        response = client.get(reverse("deployment-update"))
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in content
+    assert "&lt;img src=x onerror=alert(1)&gt;" in content
+    assert "<script>alert(1)</script>" not in content
+
+
+@pytest.mark.django_db
 def test_update_check_requires_post_and_reports_available_image(client, superuser):
     client.force_login(superuser)
     url = reverse("deployment-update-check")

@@ -31,3 +31,5 @@
 - Verwendet bei fehlendem eigenen Kanalzeiger den neuesten erlaubten Katalogeintrag als Standardauswahl.
 - Unterstützt Djangos `__latest__`-Migrationsabhängigkeiten für die Kompatibilitätsbewertung vollständiger App-Manifeste.
 - Übernimmt berechnete Abhängigkeiten installierter Apps aus Djangos Migrationsgraphen und bricht nicht vollständig auswertbare Manifest-Erzeugungen ab.
+- Rendert Versionsänderungen auch bei kompakten Statusantworten ohne Changelog und erhält die Installationsbedienung.
+- Behält bei Größen- und Eintragslimits die neuesten Changelog-Einträge in chronologischer Reihenfolge.

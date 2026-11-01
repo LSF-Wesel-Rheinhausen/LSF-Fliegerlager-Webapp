@@ -772,6 +772,43 @@ def test_changelog_drops_invalid_identity_and_truncates_display_fields_to_serial
     assert len(json.dumps(normalized, ensure_ascii=True, separators=(",", ":")).encode()) <= 65_536
 
 
+def test_changelog_retains_newest_100_entries_in_chronological_order():
+    entries = [
+        {"revision": f"{index:040x}", "version": str(index), "title": f"change {index}", "body": "", "path": ""}
+        for index in range(1, 102)
+    ]
+    entries.append({"revision": "r" * 65, "version": "102", "title": "invalid", "body": "", "path": ""})
+
+    normalized = deployment_agent.normalized_changelog_entries(entries)
+
+    assert [entry["version"] for entry in normalized] == [str(index) for index in range(2, 102)]
+
+
+def test_changelog_between_versions_retains_latest_entry_after_100_entry_limit():
+    entries = [
+        {"revision": f"{index:040x}", "version": str(index), "title": f"change {index}", "body": "", "path": ""}
+        for index in range(1, 102)
+    ]
+
+    result = deployment_agent.changelog_between_versions({"changelog": entries, "version": "101"}, {"version": "100"})
+
+    assert [entry["version"] for entry in result] == ["101"]
+
+
+def test_changelog_byte_budget_retains_newest_entries_and_unicode_serialization_is_bounded():
+    entries = [
+        {"revision": f"{index:040x}", "version": str(index), "title": f"change {index}", "body": "ä" * 4000, "path": ""}
+        for index in range(20)
+    ]
+
+    normalized = deployment_agent.normalized_changelog_entries(entries)
+
+    assert normalized[-1]["version"] == "19"
+    assert normalized[0]["version"] != "0"
+    assert len(json.dumps(normalized, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) <= 65_536
+    assert deployment_agent.normalized_changelog_entries(normalized) == normalized
+
+
 def test_summary_and_detail_are_bounded_before_cache_write(monkeypatch, tmp_path):
     monkeypatch.setattr(deployment_agent, "STATE_FILE", tmp_path / "status.json")
     digest = image_digest("e")

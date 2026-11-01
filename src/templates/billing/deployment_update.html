@@ -133,14 +133,14 @@
       </section>
     {% endif %}
 
-    {% if version_catalog.selected.changelog or deployment_status.changelog %}
+    {% if changelog %}
       <section class="panel stack">
         <div>
           <h2>Änderungen seit installierter Version</h2>
           <p>Kompakte Übersicht aller Änderungen zwischen installierter und verfügbarer Version. Klicke auf einen Eintrag für Details.</p>
         </div>
         <div class="changelog-list">
-          {% for entry in version_catalog.selected.changelog|default:deployment_status.changelog %}
+          {% for entry in changelog %}
             <details class="changelog-entry">
               <summary class="changelog-summary">
                 {% if entry.version %}<span class="changelog-version">v{{ entry.version }}</span>{% endif %}
