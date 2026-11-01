@@ -35,15 +35,20 @@ def _assignment(migration: ast.ClassDef | None, name: str) -> ast.expr | None:
 
 def _dependencies(value: ast.expr | None) -> list[str]:
     if not isinstance(value, (ast.List, ast.Tuple)):
-        return []
+        raise ValueError("Unsupported migration dependency declaration.")
     dependencies = []
     for item in value.elts:
         try:
             dependency = ast.literal_eval(item)
         except (ValueError, TypeError):
-            continue
-        if isinstance(dependency, tuple) and len(dependency) == 2 and all(isinstance(part, str) for part in dependency):
-            dependencies.append(f"{dependency[0]}.{dependency[1]}")
+            raise ValueError("Unsupported migration dependency declaration.") from None
+        if not (
+            isinstance(dependency, tuple)
+            and len(dependency) == 2
+            and all(isinstance(part, str) and part for part in dependency)
+        ):
+            raise ValueError("Unsupported migration dependency declaration.")
+        dependencies.append(f"{dependency[0]}.{dependency[1]}")
     return sorted(dependencies)
 
 
@@ -81,15 +86,28 @@ def _is_reversible(value: ast.expr | None) -> bool:
     return True
 
 
-def render_manifest(paths: list[Path]) -> str:
-    """Return stable JSON describing migration identity, ancestry, and file hashes."""
+def render_manifest(paths: list[Path], dependencies_by_identifier: dict[str, list[str]] | None = None) -> str:
+    """Return stable JSON describing migration identity, ancestry, and file hashes.
+
+    ``dependencies_by_identifier`` supplies dependencies resolved by Django's
+    migration graph. When omitted, dependencies are read as literal AST data.
+    Raises ``ValueError`` when a source filename or dependency declaration
+    cannot be represented safely, or when the supplied dependency map does not
+    exactly cover the migration files. A missing map identifier raises
+    ``KeyError`` before rendering an incomplete manifest.
+    """
     entries = []
     migrations = []
+    identifiers: set[str] = set()
     for path in sorted(paths, key=lambda item: item.as_posix()):
+        if path.name == "__init__.py":
+            continue
         match = MIGRATION_NAME.fullmatch(path.name)
         if not match:
-            continue
+            raise ValueError(f"Unsupported migration filename: {path.name}")
         app = path.parent.parent.name if path.parent.name == "migrations" else "billing"
+        identifier = f"{app}.{match.group('name')}"
+        identifiers.add(identifier)
         source = path.read_bytes()
         entry = {
             "path": f"{app}/migrations/{path.name}",
@@ -100,12 +118,18 @@ def render_manifest(paths: list[Path]) -> str:
         entries.append(entry)
         migrations.append(
             {
-                "dependencies": _dependencies(_assignment(migration, "dependencies")),
-                "identifier": f"{app}.{match.group('name')}",
+                "dependencies": (
+                    sorted(dependencies_by_identifier[identifier])
+                    if dependencies_by_identifier is not None
+                    else _dependencies(_assignment(migration, "dependencies"))
+                ),
+                "identifier": identifier,
                 "reversible": _is_reversible(_assignment(migration, "operations")),
                 "sha256": entry["sha256"],
             }
         )
+    if dependencies_by_identifier is not None and identifiers != dependencies_by_identifier.keys():
+        raise ValueError("Django dependencies do not match migration files.")
     return (
         json.dumps(
             {
@@ -119,6 +143,24 @@ def render_manifest(paths: list[Path]) -> str:
         )
         + "\n"
     )
+
+
+def installed_manifest() -> str:
+    """Render the installed migrations using Django's resolved graph dependencies."""
+    installed_migration_paths()
+    from django.db.migrations.loader import MigrationLoader
+
+    loader = MigrationLoader(None)
+    paths: list[Path] = []
+    dependencies_by_identifier: dict[str, list[str]] = {}
+    for key, migration in loader.disk_migrations.items():
+        app, name = key
+        module = importlib.import_module(migration.__module__)
+        path = Path(module.__file__)
+        paths.append(path)
+        node = loader.graph.node_map[key]
+        dependencies_by_identifier[f"{app}.{name}"] = [f"{parent.key[0]}.{parent.key[1]}" for parent in node.parents]
+    return render_manifest(paths, dependencies_by_identifier)
 
 
 def installed_migration_paths() -> list[Path]:
@@ -164,8 +206,7 @@ def main() -> None:
     parser.add_argument("--root", type=Path)
     parser.add_argument("--verify-label")
     args = parser.parse_args()
-    paths = list(args.root.glob("*.py")) if args.root is not None else installed_migration_paths()
-    actual = render_manifest(paths)
+    actual = render_manifest(list(args.root.glob("*.py"))) if args.root is not None else installed_manifest()
     if args.verify_label is not None:
         verify_manifest_label(args.verify_label, actual)
     else:

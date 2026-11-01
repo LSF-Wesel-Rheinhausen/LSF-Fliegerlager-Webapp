@@ -604,33 +604,20 @@ def test_images_expose_shared_revision_build_and_migration_labels(dockerfile: st
 def test_migration_manifest_is_deterministic_and_contains_required_contract() -> None:
     from scripts import build_migration_manifest
 
-    rendered = build_migration_manifest.render_manifest(
-        [
-            ROOT / "src/billing/migrations/0001_initial.py",
-            ROOT / "src/billing/migrations/0002_camp_foerdersatz_charge_foerderfaehig_and_more.py",
-        ]
-    )
+    rendered = build_migration_manifest.installed_manifest()
     payload = yaml.safe_load(rendered)
 
-    migrations = payload["migrations"]
+    migrations = [item for item in payload["migrations"] if item["identifier"].startswith("billing.")]
     assert migrations[0]["identifier"] == "billing.0001_initial"
-    assert migrations[0]["dependencies"] == []
+    assert migrations[0]["dependencies"] == ["auth.0001_initial"]
     assert migrations[0]["reversible"] is True
     assert migrations[1]["identifier"] == "billing.0002_camp_foerdersatz_charge_foerderfaehig_and_more"
     assert migrations[1]["dependencies"] == ["billing.0001_initial"]
     assert migrations[1]["reversible"] is True
-    assert payload["files"][0]["path"] < payload["files"][1]["path"]
+    paths = [item["path"] for item in payload["files"]]
+    assert paths == sorted(paths)
     assert all(len(item["sha256"]) == 64 for item in payload["files"])
-    assert rendered == build_migration_manifest.render_manifest(
-        list(
-            reversed(
-                [
-                    ROOT / "src/billing/migrations/0001_initial.py",
-                    ROOT / "src/billing/migrations/0002_camp_foerdersatz_charge_foerderfaehig_and_more.py",
-                ]
-            )
-        )
-    )
+    assert rendered == build_migration_manifest.installed_manifest()
 
 
 def test_migration_manifest_marks_runpython_without_reverse_as_irreversible(tmp_path: Path) -> None:
@@ -654,8 +641,7 @@ def test_default_migration_manifest_includes_all_installed_migrated_apps(monkeyp
     from scripts import build_migration_manifest
 
     monkeypatch.syspath_prepend(str(ROOT / "src"))
-    paths = build_migration_manifest.installed_migration_paths()
-    rendered = build_migration_manifest.render_manifest(paths)
+    rendered = build_migration_manifest.installed_manifest()
     identifiers = {entry["identifier"] for entry in yaml.safe_load(rendered)["migrations"]}
 
     assert "billing.0001_initial" in identifiers

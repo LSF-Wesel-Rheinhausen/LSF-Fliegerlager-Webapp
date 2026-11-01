@@ -2009,9 +2009,9 @@ def test_latest_rebinding_of_existing_parent_is_not_a_forward_extension():
 
 
 def test_installed_django_migration_manifest_classifies_identically():
-    from scripts.build_migration_manifest import installed_migration_paths, render_manifest
+    from scripts.build_migration_manifest import installed_manifest
 
-    manifest = json.loads(render_manifest(installed_migration_paths()))
+    manifest = json.loads(installed_manifest())
 
     assert deployment_agent.migration_compatibility(manifest, manifest)["risk"] == "identical"
 

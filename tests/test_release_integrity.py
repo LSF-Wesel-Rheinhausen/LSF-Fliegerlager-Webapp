@@ -69,6 +69,61 @@ def test_manifest_order_is_independent_of_dependency_installation_prefix(tmp_pat
     ]
 
 
+def test_manifest_rejects_unrecognized_migration_filename_but_ignores_package_init(tmp_path: Path) -> None:
+    migrations = tmp_path / "billing" / "migrations"
+    migrations.mkdir(parents=True)
+    (migrations / "__init__.py").write_text("raise RuntimeError('must not execute')\n")
+    unrecognized = migrations / "initial.py"
+    unrecognized.write_text("class Migration:\n    dependencies = []\n    operations = []\n")
+
+    with pytest.raises(ValueError, match="Unsupported migration filename"):
+        render_manifest([migrations / "__init__.py", unrecognized])
+
+
+def test_manifest_rejects_extra_dependency_map_entries(tmp_path: Path) -> None:
+    path = _migration(tmp_path, "billing")
+    with pytest.raises(ValueError, match="match migration files"):
+        render_manifest([path], {"billing.0001_initial": [], "billing.0002_missing": []})
+
+
+@pytest.mark.parametrize(
+    "dependency",
+    ["migrations.swappable_dependency(settings.AUTH_USER_MODEL)", "unknown_dependency()"],
+)
+def test_manifest_rejects_unsupported_dependency_instead_of_dropping_it(tmp_path: Path, dependency: str) -> None:
+    path = _migration(tmp_path, "billing")
+    path.write_text(
+        f"""class Migration:
+    dependencies = [("auth", "0001_initial"), {dependency}]
+    operations = []
+"""
+    )
+    with pytest.raises(ValueError, match="Unsupported migration dependency"):
+        render_manifest([path])
+
+
+@pytest.mark.parametrize(
+    "dependencies",
+    ["None", '[ ("auth", 1)]', '[ ("auth", "0001_initial"), unknown()]'],
+)
+def test_manifest_rejects_malformed_or_partially_supported_dependency_lists(tmp_path: Path, dependencies: str) -> None:
+    path = _migration(tmp_path, "billing")
+    path.write_text(f"class Migration:\n    dependencies = {dependencies}\n    operations = []\n")
+    with pytest.raises(ValueError, match="Unsupported migration dependency"):
+        render_manifest([path])
+
+
+def test_installed_manifest_uses_django_resolved_swappable_dependencies():
+    from scripts.build_migration_manifest import installed_manifest, verify_manifest_label
+
+    actual = installed_manifest()
+    manifest = json.loads(actual)
+    admin = next(item for item in manifest["migrations"] if item["identifier"] == "admin.0001_initial")
+    assert "auth.0001_initial" in admin["dependencies"]
+    assert "contenttypes.0001_initial" in admin["dependencies"]
+    verify_manifest_label(actual, installed_manifest())
+
+
 def test_docker_verifies_manifest_against_final_installed_environment() -> None:
     dockerfile = (ROOT / "Dockerfile").read_text()
     verification = 'DJANGO_DEBUG=1 python scripts/build_migration_manifest.py --verify-label "$MIGRATION_MANIFEST"'

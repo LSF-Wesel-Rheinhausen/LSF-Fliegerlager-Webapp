@@ -30,3 +30,4 @@
 - Stellt auch Staging-Image-Paare bei Teilfehlern wieder her und prüft vor Dev-Promotionen erneut den offenen PR-Status.
 - Verwendet bei fehlendem eigenen Kanalzeiger den neuesten erlaubten Katalogeintrag als Standardauswahl.
 - Unterstützt Djangos `__latest__`-Migrationsabhängigkeiten für die Kompatibilitätsbewertung vollständiger App-Manifeste.
+- Übernimmt berechnete Abhängigkeiten installierter Apps aus Djangos Migrationsgraphen und bricht nicht vollständig auswertbare Manifest-Erzeugungen ab.

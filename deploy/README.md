@@ -50,7 +50,10 @@ prüfen die endgültigen Digests. Dieselben Grenzen bei Registry-Ausfällen und 
 Vor dem Schreiben der Dev-Kanalzeiger wird erneut geprüft, dass der PR offen ist und sein Kopf unverändert ist.
 
 Beim App-Build wird das OCI-Migrationsmanifest gegen die tatsächlich im Image installierten Migrationen
-geprüft. Weichen etwa gecachte Abhängigkeiten von den Runner-Abhängigkeiten ab, scheitert der Build;
+geprüft. Abhängigkeiten installierter Apps werden aus Djangos geladenem Migrationsgraphen übernommen,
+einschließlich berechneter Abhängigkeiten wie `swappable_dependency`. Bei isolierter Dateianalyse führen
+nicht auswertbare Abhängigkeiten zum Abbruch der Manifest-Erzeugung statt zu einem unvollständigen Graphen.
+Weichen etwa gecachte Abhängigkeiten von den Runner-Abhängigkeiten ab, scheitert der Build;
 in diesem Fall muss der veraltete Builder-Cache erneuert werden. Lokale Builds ohne Manifest (`{}`)
 bleiben als unbekannte Kompatibilität eingestuft und benötigen eine Risikobestätigung.
 
