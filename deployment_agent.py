@@ -1491,7 +1491,27 @@ def build_version_catalog(image: str, *, environment: str = UPDATE_ENVIRONMENT) 
     if deadline is None:
         deadline = time.monotonic() + CATALOG_REFRESH_BUDGET_SECONDS
     catalog_deadline = min(deadline, time.monotonic() + CATALOG_REFRESH_BUDGET_SECONDS * 2 / 3)
-    candidates = catalog_candidates(image, allowed, deadline=catalog_deadline, environment=environment)
+    # Keep history pagination from consuming the time needed to resolve pointers.
+    history_deadline = min(catalog_deadline, time.monotonic() + CATALOG_REFRESH_BUDGET_SECONDS / 3)
+    candidates = catalog_candidates(image, allowed, deadline=history_deadline, environment=environment)
+    channel_tags = {"prod": "prod", "staging": "latest", "dev": "dev"}
+    pointer_candidates = [
+        (channel_tags[channel], None, None, True)
+        for channel in allowed
+        if not any(tag == channel_tags[channel] for tag, _digest, _published, _pointer in candidates)
+    ]
+    candidates.extend(pointer_candidates)
+    # Direct pointers count toward the same per-channel detail cap as history.
+    for channel in allowed:
+        channel_candidates = [candidate for candidate in candidates if channel_for_tag(candidate[0]) == channel]
+        if len(channel_candidates) > 20:
+            pointer_tag = channel_tags[channel]
+            removable = [candidate for candidate in channel_candidates if candidate[0] != pointer_tag]
+            for candidate in removable[-(len(channel_candidates) - 20) :]:
+                candidates.remove(candidate)
+    own_pointer = channel_tags.get(environment)
+    pointer_tags = set(channel_tags.values())
+    candidates.sort(key=lambda candidate: (candidate[0] not in pointer_tags, candidate[0] != own_pointer))
 
     def fetch_candidate(
         candidate: tuple[str, str | None, str | None, bool],
@@ -1502,9 +1522,11 @@ def build_version_catalog(image: str, *, environment: str = UPDATE_ENVIRONMENT) 
             try:
                 metadata = fetch_image_metadata(f"{registry}/{repository}:{tag}")
             except RegistryTagNotFoundError:
-                if expected_digest is None:
+                if expected_digest is None or is_pointer:
                     return None
                 raise
+            if is_pointer and expected_digest is not None and metadata.get("id") != expected_digest:
+                published_at = None
             return metadata, tag, expected_digest, published_at, is_pointer
         finally:
             catalog_request_context.__dict__.pop("deadline", None)
@@ -1554,7 +1576,7 @@ def build_version_catalog(image: str, *, environment: str = UPDATE_ENVIRONMENT) 
         digest = metadata.get("id")
         if not isinstance(digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(digest):
             raise RegistryMetadataError("Katalog-Image enthaelt keinen validen Digest.")
-        if expected_digest is not None and digest != expected_digest:
+        if expected_digest is not None and not is_pointer and digest != expected_digest:
             raise RegistryMetadataError("Katalog-Tag und GitHub-Paketversion haben unterschiedliche Digests.")
         entry = by_digest.setdefault(
             digest,
@@ -2045,7 +2067,10 @@ def _resolved_migration_dependencies(
             for dependency in migrations[identifier]["dependencies"]
             if dependency in identifiers
         }
-        leaves_by_app[app_label] = sorted(identifiers - depended_on)
+        leaves = sorted(identifiers - depended_on)
+        if len(leaves) != 1:
+            return None
+        leaves_by_app[app_label] = leaves
 
     resolved: dict[str, set[str]] = {}
     for identifier, migration in migrations.items():

@@ -1934,7 +1934,7 @@ def test_migration_compatibility_rejects_added_branch_that_does_not_extend_curre
 
     result = deployment_agent.migration_compatibility(current, target)
 
-    assert result["risk"] == "divergent"
+    assert result["risk"] == "unknown"
     assert result["requires_acknowledgement"] is True
 
 
@@ -1996,6 +1996,72 @@ def test_migration_graph_accepts_multiple_dependencies_including_base_ancestor_a
     }
 
     assert deployment_agent._migration_graph_extends(base, extended)
+
+
+def test_migration_graph_rejects_unmerged_siblings_even_when_forward_extension():
+    base = {"billing.0001_initial": {"dependencies": []}}
+    branched = {
+        **base,
+        "billing.0002a_first": {"dependencies": ["billing.0001_initial"]},
+        "billing.0002b_second": {"dependencies": ["billing.0001_initial"]},
+    }
+
+    assert not deployment_agent._migration_graph_is_valid(branched)
+    assert not deployment_agent._migration_graph_extends(base, branched)
+
+
+def test_identical_conflicting_migration_graph_requires_acknowledgement():
+    digest = "a" * 64
+    manifest = {
+        "version": 1,
+        "files": [
+            {"path": f"billing/migrations/{name}.py", "sha256": digest}
+            for name in ("0001_initial", "0002a_first", "0002b_second")
+        ],
+        "migrations": [
+            {"identifier": "billing.0001_initial", "dependencies": [], "reversible": True, "sha256": digest},
+            {
+                "identifier": "billing.0002a_first",
+                "dependencies": ["billing.0001_initial"],
+                "reversible": True,
+                "sha256": digest,
+            },
+            {
+                "identifier": "billing.0002b_second",
+                "dependencies": ["billing.0001_initial"],
+                "reversible": True,
+                "sha256": digest,
+            },
+        ],
+    }
+
+    assert deployment_agent.migration_compatibility(manifest, manifest) == {
+        "risk": "unknown",
+        "requires_acknowledgement": True,
+        "affected_migrations": [],
+    }
+
+
+def test_migration_graph_accepts_merge_that_joins_sibling_branches():
+    base = {"billing.0001_initial": {"dependencies": []}}
+    merged = {
+        **base,
+        "billing.0002a_first": {"dependencies": ["billing.0001_initial"]},
+        "billing.0002b_second": {"dependencies": ["billing.0001_initial"]},
+        "billing.0003_merge": {"dependencies": ["billing.0002a_first", "billing.0002b_second"]},
+    }
+
+    assert deployment_agent._migration_graph_is_valid(merged)
+    assert deployment_agent._migration_graph_extends(base, merged)
+
+
+def test_migration_graph_allows_leaves_in_different_apps():
+    migrations = {
+        "billing.0001_initial": {"dependencies": []},
+        "reports.0001_initial": {"dependencies": []},
+    }
+
+    assert deployment_agent._migration_graph_is_valid(migrations)
 
 
 @pytest.mark.parametrize(
@@ -2164,6 +2230,8 @@ def test_build_version_catalog_limits_channels_and_deduplicates_digests(monkeypa
     )
 
     def metadata(image):
+        if image.endswith(":prod") or image.endswith(":latest"):
+            raise deployment_agent.RegistryTagNotFoundError("pointer absent")
         revision = image.rsplit("-", 1)[-1]
         digest_character = {"a": "1", "b": "2", "c": "3"}[revision[0]]
         return {
@@ -2345,6 +2413,8 @@ def test_catalog_selects_newest_by_package_publication_time_not_tag_text(monkeyp
     def metadata(image):
         fetched.append(image.rsplit(":", 1)[-1])
         tag = fetched[-1]
+        if tag == "prod":
+            raise deployment_agent.RegistryTagNotFoundError("pointer absent")
         expected = next(version for version in old + [newest] if tag in version["tags"])
         return {"id": expected["digest"], "version": tag, "build_date": expected["created_at"]}
 
@@ -2352,7 +2422,7 @@ def test_catalog_selects_newest_by_package_publication_time_not_tag_text(monkeyp
 
     catalog = deployment_agent.build_version_catalog("ghcr.io/example/app:prod", environment="prod")
 
-    assert len(catalog) == 20
+    assert len(catalog) == 19
     assert newest["tags"][0] in fetched
     assert old[0]["tags"][0] not in fetched
 
@@ -2455,6 +2525,200 @@ def test_catalog_candidate_limit_always_reserves_a_slot_for_channel_pointer():
     assert next(tag for tag, _digest, _date, is_pointer in candidates if is_pointer) == "dev"
 
 
+@pytest.mark.parametrize(
+    ("environment", "expected_channels"),
+    [("prod", ["prod"]), ("staging", ["prod", "staging"]), ("dev", ["prod", "staging", "dev"])],
+)
+def test_ghcr_catalog_resolves_unlisted_pointers_independently_of_truncated_history(
+    monkeypatch, environment, expected_channels
+):
+    monkeypatch.setattr(deployment_agent, "CATALOG_REFRESH_WORKERS", 1)
+    versions = []
+    historical_digests = {}
+    for index in range(300):
+        channel = "dev" if index % 2 else "staging"
+        tag = f"dev-{index + 1}-{index:040x}" if channel == "dev" else f"staging-{index:040x}"
+        digest = f"sha256:{index + 1:064x}"
+        historical_digests[tag] = digest
+        versions.append({"digest": digest, "created_at": f"2026-09-{index:03d}T00:00:00+00:00", "tags": [tag]})
+    monkeypatch.setattr(deployment_agent, "list_package_versions", lambda *_args, **_kwargs: versions)
+    pointer_digests = {"prod": image_digest("b"), "latest": image_digest("c"), "dev": image_digest("d")}
+    fetched = []
+
+    def metadata(image):
+        tag = image.rsplit(":", 1)[-1]
+        fetched.append(tag)
+        digest = pointer_digests[tag] if tag in pointer_digests else historical_digests[tag]
+        return {"id": digest, "version": tag, "build_date": "2026-09-20T00:00:00+00:00"}
+
+    monkeypatch.setattr(deployment_agent, "fetch_image_metadata", metadata)
+
+    catalog = deployment_agent.build_version_catalog("ghcr.io/example/app:prod", environment=environment)
+
+    expected_tags = {"prod": "prod", "staging": "latest", "dev": "dev"}
+    assert set(expected_tags[channel] for channel in expected_channels) <= set(fetched)
+    assert fetched[0] == expected_tags[environment]
+    assert len(fetched) <= 60
+    assert all(
+        sum(deployment_agent.channel_for_tag(tag) == channel for tag in fetched) <= 20 for channel in expected_channels
+    )
+    assert {channel for entry in catalog for channel in entry["channels"]} == set(expected_channels)
+    for channel in expected_channels:
+        tag = expected_tags[channel]
+        entry = next(entry for entry in catalog if tag in entry["channel_pointers"])
+        assert entry["catalog_id"] == pointer_digests[tag]
+
+
+def test_ghcr_catalog_propagates_failure_from_unlisted_pointer(monkeypatch):
+    monkeypatch.setattr(deployment_agent, "list_package_versions", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        deployment_agent,
+        "fetch_image_metadata",
+        Mock(side_effect=deployment_agent.RegistryMetadataError("authentication failed")),
+    )
+
+    with pytest.raises(deployment_agent.RegistryMetadataError, match="authentication failed"):
+        deployment_agent.build_version_catalog("ghcr.io/example/app:prod", environment="prod")
+
+
+def test_ghcr_direct_pointers_are_scheduled_before_stalled_history(monkeypatch):
+    history = [
+        ("prod-" + "a" * 40, image_digest("a"), "2026-09-19T00:00:00+00:00", False),
+        ("staging-" + "b" * 40, image_digest("b"), "2026-09-19T00:00:00+00:00", False),
+        ("dev-1-" + "c" * 40, image_digest("c"), "2026-09-19T00:00:00+00:00", False),
+    ]
+    monkeypatch.setattr(deployment_agent, "catalog_candidates", lambda *_args, **_kwargs: history)
+    pointer_digests = {"prod": image_digest("d"), "latest": image_digest("e"), "dev": image_digest("f")}
+    fetched_pointers = []
+    submitted = []
+
+    def fetch(image):
+        tag = image.rsplit(":", 1)[-1]
+        fetched_pointers.append(tag)
+        return {"id": pointer_digests[tag], "version": tag}
+
+    monkeypatch.setattr(deployment_agent, "fetch_image_metadata", fetch)
+
+    class ControlledExecutor:
+        def submit(self, function, candidate):
+            tag = candidate[0]
+            submitted.append(tag)
+            future = deployment_agent.Future()
+            if tag in pointer_digests:
+                future.set_result(function(candidate))
+            return future
+
+    def completed_only(futures, **_kwargs):
+        done = {future for future in futures if future.done()}
+        return done, set(futures) - done
+
+    monkeypatch.setattr(deployment_agent, "catalog_executor", ControlledExecutor())
+    monkeypatch.setattr(deployment_agent, "wait", completed_only)
+    monkeypatch.setattr(deployment_agent, "CATALOG_REFRESH_WORKERS", 4)
+
+    catalog = deployment_agent.build_version_catalog("ghcr.io/example/app:prod", environment="dev")
+
+    assert submitted[:3] == ["dev", "prod", "latest"]
+    assert set(fetched_pointers) == set(pointer_digests)
+    assert any(entry["channel_pointers"] == ["prod"] for entry in catalog)
+
+
+def test_ghcr_catalog_skips_unlisted_missing_optional_pointer(monkeypatch):
+    monkeypatch.setattr(deployment_agent, "list_package_versions", lambda *_args, **_kwargs: [])
+    fetch = Mock(side_effect=deployment_agent.RegistryTagNotFoundError("tag absent"))
+    monkeypatch.setattr(deployment_agent, "fetch_image_metadata", fetch)
+
+    assert deployment_agent.build_version_catalog("ghcr.io/example/app:prod", environment="dev") == []
+    assert {call.args[0].rsplit(":", 1)[-1] for call in fetch.call_args_list} == {"prod", "latest", "dev"}
+
+
+def test_ghcr_catalog_skips_listed_pointer_that_is_missing_from_registry(monkeypatch):
+    monkeypatch.setattr(
+        deployment_agent,
+        "list_package_versions",
+        lambda *_args, **_kwargs: [
+            {"digest": image_digest("a"), "created_at": "2026-09-20T00:00:00+00:00", "tags": ["prod"]}
+        ],
+    )
+    fetch = Mock(side_effect=deployment_agent.RegistryTagNotFoundError("pointer absent"))
+    monkeypatch.setattr(deployment_agent, "fetch_image_metadata", fetch)
+
+    assert deployment_agent.build_version_catalog("ghcr.io/example/app:prod", environment="prod") == []
+    fetch.assert_called_once_with("ghcr.io/example/app:prod")
+
+
+def test_ghcr_catalog_uses_verified_pointer_build_date_when_history_digest_is_stale(monkeypatch):
+    historical_digest = image_digest("b")
+    current_pointer_digest = image_digest("c")
+    monkeypatch.setattr(
+        deployment_agent,
+        "list_package_versions",
+        lambda *_args, **_kwargs: [
+            {"digest": image_digest("a"), "created_at": "2099-01-01T00:00:00+00:00", "tags": ["prod"]},
+            {
+                "digest": historical_digest,
+                "created_at": "2026-02-01T00:00:00+00:00",
+                "tags": [f"prod-{'b' * 40}"],
+            },
+        ],
+    )
+
+    def metadata(image):
+        if image.endswith(":prod"):
+            return {"id": current_pointer_digest, "version": "pointer", "build_date": "2026-01-01T00:00:00+00:00"}
+        return {"id": historical_digest, "version": "history", "build_date": "2026-02-01T00:00:00+00:00"}
+
+    monkeypatch.setattr(deployment_agent, "fetch_image_metadata", metadata)
+
+    catalog = deployment_agent.build_version_catalog("ghcr.io/example/app:prod", environment="prod")
+
+    assert [entry["catalog_id"] for entry in catalog] == [historical_digest, current_pointer_digest]
+
+
+def test_ghcr_catalog_resolves_current_pointer_when_package_history_digest_is_stale(monkeypatch):
+    monkeypatch.setattr(
+        deployment_agent,
+        "list_package_versions",
+        lambda *_args, **_kwargs: [
+            {
+                "digest": image_digest("a"),
+                "created_at": "2026-09-20T00:00:00+00:00",
+                "tags": ["prod"],
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        deployment_agent,
+        "fetch_image_metadata",
+        lambda _image: {"id": image_digest("b"), "version": "1"},
+    )
+
+    catalog = deployment_agent.build_version_catalog("ghcr.io/example/app:prod", environment="prod")
+
+    assert len(catalog) == 1
+    assert catalog[0]["catalog_id"] == image_digest("b")
+    assert catalog[0]["channel_pointers"] == ["prod"]
+
+
+def test_ghcr_catalog_keeps_immutable_history_digest_binding(monkeypatch):
+    immutable_tag = f"prod-{'a' * 40}"
+    monkeypatch.setattr(
+        deployment_agent,
+        "list_package_versions",
+        lambda *_args, **_kwargs: [
+            {"digest": image_digest("a"), "created_at": "2026-09-20T00:00:00+00:00", "tags": [immutable_tag]}
+        ],
+    )
+    monkeypatch.setattr(
+        deployment_agent,
+        "fetch_image_metadata",
+        lambda _image: {"id": image_digest("b"), "version": "1"},
+    )
+
+    with pytest.raises(deployment_agent.RegistryMetadataError, match="unterschiedliche Digests"):
+        deployment_agent.build_version_catalog("ghcr.io/example/app:prod", environment="prod")
+
+
 def test_catalog_refresh_returns_bounded_partial_result_with_small_worker_pool(monkeypatch):
     digests = [image_digest(character) for character in "abcdef"]
     candidates = [
@@ -2474,6 +2738,8 @@ def test_catalog_refresh_returns_bounded_partial_result_with_small_worker_pool(m
             maximum_active = max(maximum_active, active)
         try:
             tag = image.rsplit(":", 1)[-1]
+            if tag == "prod":
+                raise deployment_agent.RegistryTagNotFoundError("pointer absent")
             index = int(tag.removeprefix("prod-"), 16)
             if index:
                 time.sleep(0.1)
@@ -2577,7 +2843,11 @@ def test_catalog_rejects_package_and_registry_digest_disagreement(monkeypatch):
         deployment_agent,
         "list_package_versions",
         lambda _image, _channels, **_kwargs: [
-            {"digest": image_digest("a"), "created_at": "2026-09-20T00:00:00+00:00", "tags": ["prod"]}
+            {
+                "digest": image_digest("a"),
+                "created_at": "2026-09-20T00:00:00+00:00",
+                "tags": [f"prod-{'a' * 40}"],
+            }
         ],
     )
     monkeypatch.setattr(deployment_agent, "fetch_image_metadata", lambda _image: {"id": image_digest("b")})

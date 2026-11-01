@@ -287,8 +287,12 @@ wird als `complete` mit `target_verified` abgeschlossen. Ohne diesen Nachweis bl
 
 Ein Django-Superuser öffnet **Updates**, prüft die ausgewählte erlaubte Version und bestätigt die Installation.
 Die Standardauswahl bevorzugt den verifizierten Zeiger des eigenen Kanals (`prod`, `latest` oder `dev`).
+Die erlaubten Kanalzeiger werden direkt aufgelöst, unabhängig davon, ob sie im begrenzten GHCR-Verlauf
+enthalten sind. Die Zeit-, Parallelitäts- und Versionslimits des Katalogs bleiben dabei erhalten.
 Fehlt dieser, wird der neueste gültige Eintrag aus dem für die Umgebung erlaubten Katalog vorgeschlagen,
 einschließlich geerbter Releases. Ein leerer Katalog bleibt ein Fehler.
+Nicht zusammengeführte Migrationszweige gelten als bestätigungspflichtiges Risiko; erst eine gültige
+Merge-Migration stellt wieder einen eindeutigen Endknoten der jeweiligen App her.
 Der Updater liest die OCI-Metadaten aus GHCR und speichert den dabei validierten `repo@sha256:...`-Digest als freigegebenen
 Installationskandidaten. `/install` verwendet ausschließlich diesen gespeicherten Digest und fragt das bewegliche Tag
 nicht erneut ab. Vor dem Update ermittelt der Updater den unveränderlichen Digest des laufenden App-Containers,

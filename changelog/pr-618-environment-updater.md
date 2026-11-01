@@ -33,3 +33,5 @@
 - Übernimmt berechnete Abhängigkeiten installierter Apps aus Djangos Migrationsgraphen und bricht nicht vollständig auswertbare Manifest-Erzeugungen ab.
 - Rendert Versionsänderungen auch bei kompakten Statusantworten ohne Changelog und erhält die Installationsbedienung.
 - Behält bei Größen- und Eintragslimits die neuesten Changelog-Einträge in chronologischer Reihenfolge.
+- Löst erlaubte Kanalzeiger unabhängig vom begrenzten GHCR-Versionsverlauf auf, damit ältere Prod-Releases auswählbar bleiben.
+- Verlangt eine Risikobestätigung für nicht zusammengeführte Migrationszweige und erkennt gültige Merge-Migrationen weiterhin als Vorwärtsupdate.
