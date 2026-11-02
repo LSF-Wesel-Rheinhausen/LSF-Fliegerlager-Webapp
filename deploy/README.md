@@ -289,6 +289,9 @@ Ein Django-Superuser öffnet **Updates**, prüft die ausgewählte erlaubte Versi
 Die Standardauswahl bevorzugt den verifizierten Zeiger des eigenen Kanals (`prod`, `latest` oder `dev`).
 Die erlaubten Kanalzeiger werden direkt aufgelöst, unabhängig davon, ob sie im begrenzten GHCR-Verlauf
 enthalten sind. Die Zeit-, Parallelitäts- und Versionslimits des Katalogs bleiben dabei erhalten.
+Endet die Paginierung durch einen Timeout am Ablauf ihres Zeitbudgets, werden bereits validierte
+Verlaufseinträge weiterverwendet und die Kanalzeiger im verbleibenden Budget geprüft. Authentifizierungs-
+und Formatfehler bleiben Fehler.
 Fehlt dieser, wird der neueste gültige Eintrag aus dem für die Umgebung erlaubten Katalog vorgeschlagen,
 einschließlich geerbter Releases. Ein leerer Katalog bleibt ein Fehler.
 Nicht zusammengeführte Migrationszweige gelten als bestätigungspflichtiges Risiko; erst eine gültige

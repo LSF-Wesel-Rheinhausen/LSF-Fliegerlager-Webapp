@@ -2786,6 +2786,137 @@ def test_package_request_timeout_is_capped_by_catalog_remaining_budget(monkeypat
     assert urlopen.call_args.kwargs["timeout"] == pytest.approx(1.5)
 
 
+@pytest.mark.parametrize("wrapped", [False, True])
+def test_package_versions_return_valid_history_when_request_timeout_expires_history_budget(monkeypatch, wrapped):
+    monkeypatch.setattr(deployment_agent, "GHCR_TOKEN", "read-only-token")
+    now = [100.0]
+    monkeypatch.setattr(deployment_agent.time, "monotonic", lambda: now[0])
+    response = Mock()
+    response.__enter__ = Mock(return_value=response)
+    response.__exit__ = Mock(return_value=False)
+    response.headers = {}
+    payload = [
+        {
+            "name": f"sha256:{index:064x}",
+            "created_at": "2026-09-20T00:00:00Z",
+            "metadata": {"container": {"tags": ["prod"] if index == 0 else [f"other-{index}"]}},
+        }
+        for index in range(100)
+    ]
+    response_body = json.dumps(payload).encode()
+    response.read.side_effect = lambda *_args: (now.__setitem__(0, 105.0), response_body)[1]
+    wrapped_timeout = urllib.error.URLError(TimeoutError("request timed out"))
+    second_page_timeouts = []
+
+    def request(_request, *, timeout):
+        if _request.full_url.endswith("page=2"):
+            second_page_timeouts.append(timeout)
+            now[0] = 108.0
+            raise wrapped_timeout if wrapped else TimeoutError("request timed out")
+        return response
+
+    with patch.object(deployment_agent, "registry_urlopen", side_effect=request):
+        versions = deployment_agent.list_package_versions("ghcr.io/example/app:prod", ("prod",), deadline=108.0)
+
+    assert len(versions) == 100
+    assert versions[0]["digest"] == f"sha256:{0:064x}"
+    assert second_page_timeouts == [pytest.approx(3.0)]
+
+
+def test_package_versions_expired_first_request_timeout_returns_empty_history(monkeypatch):
+    monkeypatch.setattr(deployment_agent, "GHCR_TOKEN", "read-only-token")
+    monkeypatch.setattr(deployment_agent.time, "monotonic", lambda: 108.0)
+    with patch.object(deployment_agent, "registry_urlopen", side_effect=TimeoutError("request timed out")):
+        versions = deployment_agent.list_package_versions("ghcr.io/example/app:prod", ("prod",), deadline=108.0)
+    assert versions == []
+
+
+@pytest.mark.parametrize(("deadline", "wrapped"), [(None, False), (108.0, False), (108.0, True)])
+def test_package_versions_timeout_before_deadline_remains_hard_error(monkeypatch, deadline, wrapped):
+    monkeypatch.setattr(deployment_agent, "GHCR_TOKEN", "read-only-token")
+    monkeypatch.setattr(deployment_agent.time, "monotonic", lambda: 107.0)
+    timeout = TimeoutError("request timed out")
+    error = urllib.error.URLError(timeout) if wrapped else timeout
+    with patch.object(deployment_agent, "registry_urlopen", side_effect=error):
+        with pytest.raises(deployment_agent.RegistryMetadataError, match="GitHub-Paketversionen konnten"):
+            deployment_agent.list_package_versions("ghcr.io/example/app:prod", ("prod",), deadline=deadline)
+
+
+def test_package_versions_non_timeout_oserror_remains_hard_error_after_deadline(monkeypatch):
+    monkeypatch.setattr(deployment_agent, "GHCR_TOKEN", "read-only-token")
+    now = [107.0]
+    monkeypatch.setattr(deployment_agent.time, "monotonic", lambda: now[0])
+
+    def reset_connection(*_args, **_kwargs):
+        now[0] = 109.0
+        raise OSError("connection reset")
+
+    with patch.object(deployment_agent, "registry_urlopen", side_effect=reset_connection):
+        with pytest.raises(deployment_agent.RegistryMetadataError, match="GitHub-Paketversionen konnten"):
+            deployment_agent.list_package_versions("ghcr.io/example/app:prod", ("prod",), deadline=108.0)
+
+
+@pytest.mark.parametrize("body", [b"not json", json.dumps({"message": "not a list"}).encode()])
+def test_package_versions_malformed_response_remains_hard_error_after_deadline(monkeypatch, body):
+    monkeypatch.setattr(deployment_agent, "GHCR_TOKEN", "read-only-token")
+    now = [107.0]
+    monkeypatch.setattr(deployment_agent.time, "monotonic", lambda: now[0])
+    response = Mock()
+    response.__enter__ = Mock(return_value=response)
+    response.__exit__ = Mock(return_value=False)
+    response.read.side_effect = lambda *_args: (now.__setitem__(0, 109.0), body)[1]
+    with patch.object(deployment_agent, "registry_urlopen", return_value=response):
+        with pytest.raises(deployment_agent.RegistryMetadataError):
+            deployment_agent.list_package_versions("ghcr.io/example/app:prod", ("prod",), deadline=108.0)
+
+
+def test_build_catalog_keeps_direct_prod_pointer_after_history_request_deadline(monkeypatch):
+    monkeypatch.setattr(deployment_agent, "GHCR_TOKEN", "read-only-token")
+    now = [100.0]
+    monkeypatch.setattr(deployment_agent.time, "monotonic", lambda: now[0])
+    history = Mock()
+    history.__enter__ = Mock(return_value=history)
+    history.__exit__ = Mock(return_value=False)
+    history.headers = {}
+    payload = [
+        {
+            "name": image_digest("a"),
+            "created_at": "2026-09-20T00:00:00Z",
+            "metadata": {"container": {"tags": ["prod"] if index == 0 else [f"other-{index}"]}},
+        }
+        for index in range(100)
+    ]
+    history_body = json.dumps(payload).encode()
+    history.read.side_effect = lambda *_args: (now.__setitem__(0, 105.0), history_body)[1]
+    second_page_timeouts = []
+
+    def request(request, *, timeout):
+        if request.full_url.endswith("page=2"):
+            second_page_timeouts.append(timeout)
+            now[0] = 108.0
+            raise TimeoutError("history request exhausted its deadline")
+        return history
+
+    monkeypatch.setattr(deployment_agent, "registry_urlopen", request)
+    pointer_digest = image_digest("b")
+    fetched = []
+
+    def metadata(image):
+        fetched.append(image)
+        if image.endswith(":prod"):
+            return {"id": pointer_digest, "image": image, "version": "pointer"}
+        raise deployment_agent.RegistryTagNotFoundError("optional pointer absent")
+
+    monkeypatch.setattr(deployment_agent, "fetch_image_metadata", metadata)
+
+    catalog = deployment_agent.build_version_catalog("ghcr.io/example/app:prod", environment="prod")
+
+    assert catalog[0]["catalog_id"] == pointer_digest
+    assert catalog[0]["channel_pointers"] == ["prod"]
+    assert fetched[0] == "ghcr.io/example/app:prod"
+    assert second_page_timeouts == [pytest.approx(3.0)]
+
+
 def test_catalog_workers_reserve_time_for_remaining_version_details(monkeypatch):
     monkeypatch.setattr(deployment_agent.time, "monotonic", lambda: 100.0)
     monkeypatch.setattr(

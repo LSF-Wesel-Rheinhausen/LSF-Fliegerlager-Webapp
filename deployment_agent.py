@@ -1334,6 +1334,7 @@ def _package_versions_from_endpoint(
     """Return bounded package versions from one GitHub organization or user endpoint."""
     versions: list[dict[str, Any]] = []
     channel_counts = dict.fromkeys(allowed_channels, 0)
+    active_deadline = deadline if deadline is not None else getattr(catalog_request_context, "deadline", None)
     for page in range(1, MAX_GITHUB_PACKAGE_VERSION_PAGES + 1):
         request = urllib.request.Request(
             f"{endpoint}?per_page=100&page={page}",
@@ -1358,6 +1359,11 @@ def _package_versions_from_endpoint(
                 raise RegistryMetadataError("GHCR_TOKEN benoetigt read:packages fuer den Versionskatalog.") from error
             raise RegistryMetadataError("GitHub-Paketversionen konnten nicht geladen werden.") from error
         except (OSError, TimeoutError, json.JSONDecodeError) as error:
+            transport_timeout = isinstance(error, TimeoutError) or (
+                isinstance(error, urllib.error.URLError) and isinstance(error.reason, TimeoutError)
+            )
+            if transport_timeout and active_deadline is not None and time.monotonic() >= active_deadline:
+                return versions
             raise RegistryMetadataError("GitHub-Paketversionen konnten nicht geladen werden.") from error
         if not isinstance(payload, list) or len(payload) > 100:
             raise RegistryMetadataError("GitHub-Paketversionen sind ungueltig oder zu gross.")
