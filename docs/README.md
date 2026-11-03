@@ -34,6 +34,9 @@ Der typische Ablauf:
 
 ## Projektstruktur
 
+- [`codex-cloud.md`](codex-cloud.md): vollständige Arbeitsübergabe vom lokalen Mac zu Codex Cloud.
+- [`agent-skills.md`](agent-skills.md): synchronisierte Skills für Entwicklung, Reviews und Sicherheit.
+- [`local-demo.md`](local-demo.md): reproduzierbare Dummy-Datenbank und lokale Testzugänge.
 - [`../README.md`](../README.md): Einstieg, Setup, Tests, Rollen und Roadmap.
 - [`../FILES.md`](../FILES.md): schnelle Dateiübersicht.
 - [`../src/billing/README.md`](../src/billing/README.md): Domain-App mit Modellen, Services, Views, Import/Export und Rollen.

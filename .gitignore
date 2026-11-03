@@ -33,4 +33,15 @@ tmp/
 !.agents/skills/
 .agents/skills/*
 !.agents/skills/cost-aware-subagent-orchestrator/
+!.agents/skills/graphify/
+!.agents/skills/agent-browser/
+!.agents/skills/address-github-comments/
+!.agents/skills/commit/
+!.agents/skills/test-driven-development/
+!.agents/skills/systematic-debugging/
+!.agents/skills/verification-before-completion/
+!.agents/skills/django-pro/
+!.agents/skills/python-testing-patterns/
+!.agents/skills/python-pro/
+!.agents/skills/threat-modeling-expert/
 !.agents/skills/cost-aware-subagent-orchestrator/**

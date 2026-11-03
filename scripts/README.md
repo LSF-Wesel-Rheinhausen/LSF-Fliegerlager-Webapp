@@ -2,6 +2,7 @@
 
 Lokale Hilfsskripte nach dem Muster des Windenbuch-Projekts.
 
+- `local_demo.py`: Stellt die versionierte Dummy-Datenbank wieder her, prüft sie und startet einen lokalen Testserver; siehe [`../docs/local-demo.md`](../docs/local-demo.md).
 - `codex-setup.sh`: Erstellt `.venv`, installiert Python- und Node-Abhaengigkeiten.
 - `codex-start.sh`: Fuehrt Migrationen aus und startet den Django-Entwicklungsserver auf `0.0.0.0:8000`; fuer rein lokale Nutzung kann direkt `python src/manage.py runserver 127.0.0.1:8000` verwendet werden.
 - `codex-cleanup.sh`: Entfernt lokale Caches und Testartefakte.

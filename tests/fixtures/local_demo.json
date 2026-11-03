@@ -1,0 +1,1865 @@
+[
+  {
+    "model": "auth.user",
+    "pk": 1,
+    "fields": {
+      "password": "!",
+      "last_login": null,
+      "is_superuser": true,
+      "username": "local-admin",
+      "first_name": "Local",
+      "last_name": "Admin",
+      "email": "local-admin@example.test",
+      "is_staff": true,
+      "is_active": true,
+      "date_joined": "2026-11-03T08:25:37.670Z",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "auth.user",
+    "pk": 2,
+    "fields": {
+      "password": "!",
+      "last_login": null,
+      "is_superuser": false,
+      "username": "local-editor",
+      "first_name": "Local",
+      "last_name": "Editor",
+      "email": "local-editor@example.test",
+      "is_staff": false,
+      "is_active": true,
+      "date_joined": "2026-11-03T08:25:37.836Z",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "auth.user",
+    "pk": 3,
+    "fields": {
+      "password": "!",
+      "last_login": null,
+      "is_superuser": false,
+      "username": "local-huebers",
+      "first_name": "Local",
+      "last_name": "Huebers",
+      "email": "local-huebers@example.test",
+      "is_staff": false,
+      "is_active": true,
+      "date_joined": "2026-11-03T08:25:37.996Z",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "auth.user",
+    "pk": 4,
+    "fields": {
+      "password": "!",
+      "last_login": null,
+      "is_superuser": false,
+      "username": "local-inactive",
+      "first_name": "Local",
+      "last_name": "Inactive",
+      "email": "local-inactive@example.test",
+      "is_staff": false,
+      "is_active": false,
+      "date_joined": "2026-11-03T08:25:38.158Z",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "billing.camp",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-11-03T08:25:38.336Z",
+      "updated_at": "2026-11-03T08:25:38.336Z",
+      "name": "Local Testlager Pre-Camp",
+      "year": 2027,
+      "starts_on": "2027-07-01",
+      "ends_on": "2027-07-10",
+      "is_active": false,
+      "meal_booking_cutoff_time": "12:00:00",
+      "meal_participant_reminders_enabled": true,
+      "meal_order_reminders_enabled": true,
+      "allow_breakfast_prebooking_before_camp": true,
+      "allow_dinner_prebooking_before_camp": false,
+      "shift_ratio_per_night": "0.0000",
+      "iban": "",
+      "paypal_link": "",
+      "notes": "",
+      "show_kiosk_invoices": true
+    }
+  },
+  {
+    "model": "billing.camp",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-11-03T08:25:38.335Z",
+      "updated_at": "2026-11-03T08:25:38.335Z",
+      "name": "Local Testlager Active",
+      "year": 2026,
+      "starts_on": "2026-10-31",
+      "ends_on": "2026-11-10",
+      "is_active": true,
+      "meal_booking_cutoff_time": "12:00:00",
+      "meal_participant_reminders_enabled": true,
+      "meal_order_reminders_enabled": true,
+      "allow_breakfast_prebooking_before_camp": true,
+      "allow_dinner_prebooking_before_camp": true,
+      "shift_ratio_per_night": "0.2000",
+      "iban": "",
+      "paypal_link": "",
+      "notes": "Synthetische Testumgebung für PR #618. Keine echten Personen oder Zahlungsdaten.",
+      "show_kiosk_invoices": true
+    }
+  },
+  {
+    "model": "billing.camp",
+    "pk": 3,
+    "fields": {
+      "created_at": "2026-11-03T08:25:38.336Z",
+      "updated_at": "2026-11-03T08:25:38.336Z",
+      "name": "Local Testlager Archived",
+      "year": 2025,
+      "starts_on": "2025-07-01",
+      "ends_on": "2025-07-10",
+      "is_active": false,
+      "meal_booking_cutoff_time": "12:00:00",
+      "meal_participant_reminders_enabled": true,
+      "meal_order_reminders_enabled": true,
+      "allow_breakfast_prebooking_before_camp": false,
+      "allow_dinner_prebooking_before_camp": false,
+      "shift_ratio_per_night": "0.0000",
+      "iban": "",
+      "paypal_link": "",
+      "notes": "",
+      "show_kiosk_invoices": false
+    }
+  },
+  {
+    "model": "billing.participant",
+    "pk": 6,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.402Z",
+      "updated_at": "2026-11-03T08:28:18.402Z",
+      "camp": 1,
+      "first_name": "Anmeldung",
+      "last_name": "Demo",
+      "email": "anmeldung@example.test",
+      "phone": "",
+      "status": "pending_approval",
+      "is_child": false,
+      "is_youth_group": false,
+      "is_companion": false,
+      "hilfssatz": "0.0000",
+      "berufssatz": "0.0000",
+      "arrival_date": "2026-11-03",
+      "departure_date": "2026-11-10",
+      "birth_date": "2000-01-01",
+      "attendance_tracking_enabled": false,
+      "booked_nights": 7,
+      "actual_nights": 0,
+      "notes": "",
+      "archived_at": null,
+      "archived_by": null
+    }
+  },
+  {
+    "model": "billing.participant",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-11-03T08:25:38.499Z",
+      "updated_at": "2026-11-03T08:25:38.499Z",
+      "camp": 1,
+      "first_name": "AdultComplete",
+      "last_name": "Synthetic",
+      "email": "adultcomplete@example.test",
+      "phone": "+49 000 1001",
+      "status": "active",
+      "is_child": false,
+      "is_youth_group": false,
+      "is_companion": false,
+      "hilfssatz": "0.0000",
+      "berufssatz": "0.0000",
+      "arrival_date": "2026-10-31",
+      "departure_date": "2026-11-10",
+      "birth_date": "1990-01-02",
+      "attendance_tracking_enabled": true,
+      "booked_nights": 10,
+      "actual_nights": 3,
+      "notes": "",
+      "archived_at": null,
+      "archived_by": null
+    }
+  },
+  {
+    "model": "billing.participant",
+    "pk": 5,
+    "fields": {
+      "created_at": "2026-11-03T08:25:38.502Z",
+      "updated_at": "2026-11-03T08:25:38.502Z",
+      "camp": 3,
+      "first_name": "ArchivedSettled",
+      "last_name": "Synthetic",
+      "email": "archivedsettled@example.test",
+      "phone": "",
+      "status": "settled",
+      "is_child": false,
+      "is_youth_group": false,
+      "is_companion": false,
+      "hilfssatz": "0.0000",
+      "berufssatz": "0.0000",
+      "arrival_date": null,
+      "departure_date": null,
+      "birth_date": "1985-03-04",
+      "attendance_tracking_enabled": false,
+      "booked_nights": 0,
+      "actual_nights": 0,
+      "notes": "",
+      "archived_at": "2026-11-03T08:25:38.502Z",
+      "archived_by": 1
+    }
+  },
+  {
+    "model": "billing.participant",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-11-03T08:25:38.500Z",
+      "updated_at": "2026-11-03T08:25:38.500Z",
+      "camp": 1,
+      "first_name": "ChildPartial",
+      "last_name": "Synthetic",
+      "email": "childpartial@example.test",
+      "phone": "",
+      "status": "registered",
+      "is_child": true,
+      "is_youth_group": false,
+      "is_companion": false,
+      "hilfssatz": "0.0000",
+      "berufssatz": "0.0000",
+      "arrival_date": "2026-11-02",
+      "departure_date": "2026-11-07",
+      "birth_date": "2015-05-06",
+      "attendance_tracking_enabled": true,
+      "booked_nights": 5,
+      "actual_nights": 1,
+      "notes": "",
+      "archived_at": null,
+      "archived_by": null
+    }
+  },
+  {
+    "model": "billing.participant",
+    "pk": 3,
+    "fields": {
+      "created_at": "2026-11-03T08:25:38.501Z",
+      "updated_at": "2026-11-03T08:25:38.501Z",
+      "camp": 1,
+      "first_name": "InfantNoDob",
+      "last_name": "Synthetic",
+      "email": "infantnodob@example.test",
+      "phone": "",
+      "status": "registered",
+      "is_child": false,
+      "is_youth_group": false,
+      "is_companion": false,
+      "hilfssatz": "0.0000",
+      "berufssatz": "0.0000",
+      "arrival_date": null,
+      "departure_date": null,
+      "birth_date": "2024-06-01",
+      "attendance_tracking_enabled": true,
+      "booked_nights": 0,
+      "actual_nights": 0,
+      "notes": "",
+      "archived_at": null,
+      "archived_by": null
+    }
+  },
+  {
+    "model": "billing.participant",
+    "pk": 4,
+    "fields": {
+      "created_at": "2026-11-03T08:25:38.501Z",
+      "updated_at": "2026-11-03T08:25:38.501Z",
+      "camp": 1,
+      "first_name": "MissingDob",
+      "last_name": "Synthetic",
+      "email": "",
+      "phone": "",
+      "status": "registered",
+      "is_child": false,
+      "is_youth_group": false,
+      "is_companion": false,
+      "hilfssatz": "0.0000",
+      "berufssatz": "0.0000",
+      "arrival_date": null,
+      "departure_date": null,
+      "birth_date": null,
+      "attendance_tracking_enabled": false,
+      "booked_nights": 0,
+      "actual_nights": 0,
+      "notes": "",
+      "archived_at": null,
+      "archived_by": null
+    }
+  },
+  {
+    "model": "billing.participantfamilymember",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-11-03T08:25:38.826Z",
+      "updated_at": "2026-11-03T08:25:38.826Z",
+      "guardian": 1,
+      "first_name": "FamilyChild",
+      "last_name": "Synthetic",
+      "email": "familychild@example.test",
+      "phone": "",
+      "role": "child",
+      "is_youth_group": false,
+      "arrival_date": "2026-11-02",
+      "departure_date": "2026-11-07",
+      "birth_date": "2016-02-03",
+      "attendance_tracking_enabled": true,
+      "is_active": true
+    }
+  },
+  {
+    "model": "billing.participantfamilymember",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-11-03T08:25:38.827Z",
+      "updated_at": "2026-11-03T08:25:38.827Z",
+      "guardian": 1,
+      "first_name": "FamilyCompanion",
+      "last_name": "Synthetic",
+      "email": "familycompanion@example.test",
+      "phone": "+49 000 1002",
+      "role": "companion",
+      "is_youth_group": false,
+      "arrival_date": null,
+      "departure_date": null,
+      "birth_date": "1988-04-05",
+      "attendance_tracking_enabled": false,
+      "is_active": true
+    }
+  },
+  {
+    "model": "billing.participantfamilymember",
+    "pk": 3,
+    "fields": {
+      "created_at": "2026-11-03T08:25:38.827Z",
+      "updated_at": "2026-11-03T08:25:38.827Z",
+      "guardian": 1,
+      "first_name": "InactiveFamily",
+      "last_name": "Synthetic",
+      "email": "",
+      "phone": "",
+      "role": "child",
+      "is_youth_group": false,
+      "arrival_date": null,
+      "departure_date": null,
+      "birth_date": null,
+      "attendance_tracking_enabled": false,
+      "is_active": false
+    }
+  },
+  {
+    "model": "billing.participantbookinglink",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-11-03T08:25:38.989Z",
+      "updated_at": "2026-11-03T08:25:38.989Z",
+      "inviter": 1,
+      "invitee": 2,
+      "status": "accepted"
+    }
+  },
+  {
+    "model": "billing.attendanceday",
+    "pk": 5,
+    "fields": {
+      "created_at": "2026-11-03T08:25:38.994Z",
+      "updated_at": "2026-11-03T08:25:38.994Z",
+      "participant": 3,
+      "family_member": null,
+      "date": "2026-10-27",
+      "is_present": true,
+      "comment": ""
+    }
+  },
+  {
+    "model": "billing.attendanceday",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-11-03T08:25:38.991Z",
+      "updated_at": "2026-11-03T08:25:38.991Z",
+      "participant": 1,
+      "family_member": null,
+      "date": "2026-10-31",
+      "is_present": true,
+      "comment": ""
+    }
+  },
+  {
+    "model": "billing.attendanceday",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-11-03T08:25:38.992Z",
+      "updated_at": "2026-11-03T08:25:38.992Z",
+      "participant": 1,
+      "family_member": null,
+      "date": "2026-11-01",
+      "is_present": false,
+      "comment": "Seed attendance note"
+    }
+  },
+  {
+    "model": "billing.attendanceday",
+    "pk": 3,
+    "fields": {
+      "created_at": "2026-11-03T08:25:38.993Z",
+      "updated_at": "2026-11-03T08:25:38.993Z",
+      "participant": 1,
+      "family_member": null,
+      "date": "2026-11-02",
+      "is_present": true,
+      "comment": ""
+    }
+  },
+  {
+    "model": "billing.attendanceday",
+    "pk": 7,
+    "fields": {
+      "created_at": "2026-11-03T08:25:38.996Z",
+      "updated_at": "2026-11-03T08:25:38.996Z",
+      "participant": 2,
+      "family_member": null,
+      "date": "2026-11-03",
+      "is_present": true,
+      "comment": ""
+    }
+  },
+  {
+    "model": "billing.attendanceday",
+    "pk": 8,
+    "fields": {
+      "created_at": "2026-11-03T08:25:38.997Z",
+      "updated_at": "2026-11-03T08:25:38.997Z",
+      "participant": 1,
+      "family_member": 1,
+      "date": "2026-11-03",
+      "is_present": true,
+      "comment": ""
+    }
+  },
+  {
+    "model": "billing.attendanceday",
+    "pk": 4,
+    "fields": {
+      "created_at": "2026-11-03T08:25:38.993Z",
+      "updated_at": "2026-11-03T08:25:38.993Z",
+      "participant": 1,
+      "family_member": null,
+      "date": "2026-11-09",
+      "is_present": true,
+      "comment": ""
+    }
+  },
+  {
+    "model": "billing.attendanceday",
+    "pk": 6,
+    "fields": {
+      "created_at": "2026-11-03T08:25:38.995Z",
+      "updated_at": "2026-11-03T08:25:38.995Z",
+      "participant": 3,
+      "family_member": null,
+      "date": "2026-11-13",
+      "is_present": false,
+      "comment": ""
+    }
+  },
+  {
+    "model": "billing.pricerule",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.003Z",
+      "updated_at": "2026-11-03T08:25:39.003Z",
+      "camp": 1,
+      "kind": "camp_flat",
+      "name": "Seed 1 week",
+      "unit_price": "100.00",
+      "camp_flat_duration": "1w",
+      "camp_flat_role": "",
+      "meal_type": "",
+      "meal_date": null,
+      "applies_to_children": true,
+      "applies_to_adults": true,
+      "applies_to_companions": true,
+      "foerdersatz": "0.0000",
+      "is_default": true,
+      "is_archived": false
+    }
+  },
+  {
+    "model": "billing.pricerule",
+    "pk": 6,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.005Z",
+      "updated_at": "2026-11-03T08:25:39.005Z",
+      "camp": 1,
+      "kind": "donation",
+      "name": "Seed donation",
+      "unit_price": "0.00",
+      "camp_flat_duration": "",
+      "camp_flat_role": "",
+      "meal_type": "",
+      "meal_date": null,
+      "applies_to_children": true,
+      "applies_to_adults": true,
+      "applies_to_companions": true,
+      "foerdersatz": "0.0000",
+      "is_default": false,
+      "is_archived": false
+    }
+  },
+  {
+    "model": "billing.pricerule",
+    "pk": 4,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.004Z",
+      "updated_at": "2026-11-03T08:25:39.004Z",
+      "camp": 1,
+      "kind": "drink",
+      "name": "Seed drink price",
+      "unit_price": "3.00",
+      "camp_flat_duration": "",
+      "camp_flat_role": "",
+      "meal_type": "",
+      "meal_date": null,
+      "applies_to_children": true,
+      "applies_to_adults": true,
+      "applies_to_companions": true,
+      "foerdersatz": "0.0000",
+      "is_default": true,
+      "is_archived": false
+    }
+  },
+  {
+    "model": "billing.pricerule",
+    "pk": 3,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.004Z",
+      "updated_at": "2026-11-03T08:25:39.004Z",
+      "camp": 1,
+      "kind": "meal",
+      "name": "Seed vegan breakfast",
+      "unit_price": "8.00",
+      "camp_flat_duration": "",
+      "camp_flat_role": "",
+      "meal_type": "breakfast",
+      "meal_date": null,
+      "applies_to_children": true,
+      "applies_to_adults": true,
+      "applies_to_companions": true,
+      "foerdersatz": "0.0000",
+      "is_default": true,
+      "is_archived": false
+    }
+  },
+  {
+    "model": "billing.pricerule",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.004Z",
+      "updated_at": "2026-11-03T08:25:39.004Z",
+      "camp": 1,
+      "kind": "night",
+      "name": "Seed night",
+      "unit_price": "10.00",
+      "camp_flat_duration": "",
+      "camp_flat_role": "",
+      "meal_type": "",
+      "meal_date": null,
+      "applies_to_children": true,
+      "applies_to_adults": true,
+      "applies_to_companions": true,
+      "foerdersatz": "0.0000",
+      "is_default": true,
+      "is_archived": false
+    }
+  },
+  {
+    "model": "billing.pricerule",
+    "pk": 7,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.005Z",
+      "updated_at": "2026-11-03T08:25:39.005Z",
+      "camp": 1,
+      "kind": "other",
+      "name": "Seed archived price",
+      "unit_price": "9.00",
+      "camp_flat_duration": "",
+      "camp_flat_role": "",
+      "meal_type": "",
+      "meal_date": null,
+      "applies_to_children": true,
+      "applies_to_adults": true,
+      "applies_to_companions": true,
+      "foerdersatz": "0.0000",
+      "is_default": false,
+      "is_archived": true
+    }
+  },
+  {
+    "model": "billing.pricerule",
+    "pk": 5,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.005Z",
+      "updated_at": "2026-11-03T08:25:39.005Z",
+      "camp": 1,
+      "kind": "other",
+      "name": "Seed other",
+      "unit_price": "5.00",
+      "camp_flat_duration": "",
+      "camp_flat_role": "",
+      "meal_type": "",
+      "meal_date": null,
+      "applies_to_children": true,
+      "applies_to_adults": true,
+      "applies_to_companions": true,
+      "foerdersatz": "0.0000",
+      "is_default": true,
+      "is_archived": false
+    }
+  },
+  {
+    "model": "billing.charge",
+    "pk": 4,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.006Z",
+      "updated_at": "2026-11-03T08:25:39.006Z",
+      "participant": 1,
+      "family_member": null,
+      "kind": "camp_flat",
+      "description": "Seed camp flat",
+      "position_report_description": null,
+      "quantity": "1.00",
+      "unit_price": "100.00",
+      "foerdersatz": "0.0000",
+      "occurred_on": "2026-11-04",
+      "deleted_at": null,
+      "deleted_by": null,
+      "kiosk_booked_by": null
+    }
+  },
+  {
+    "model": "billing.charge",
+    "pk": 6,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.006Z",
+      "updated_at": "2026-11-03T08:25:39.006Z",
+      "participant": 1,
+      "family_member": null,
+      "kind": "donation",
+      "description": "Seed donation",
+      "position_report_description": null,
+      "quantity": "1.00",
+      "unit_price": "15.00",
+      "foerdersatz": "0.0000",
+      "occurred_on": "2026-11-04",
+      "deleted_at": null,
+      "deleted_by": null,
+      "kiosk_booked_by": null
+    }
+  },
+  {
+    "model": "billing.charge",
+    "pk": 5,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.006Z",
+      "updated_at": "2026-11-03T08:25:39.006Z",
+      "participant": 1,
+      "family_member": null,
+      "kind": "drink",
+      "description": "Seed drink",
+      "position_report_description": null,
+      "quantity": "1.00",
+      "unit_price": "3.00",
+      "foerdersatz": "0.0000",
+      "occurred_on": "2026-11-04",
+      "deleted_at": null,
+      "deleted_by": null,
+      "kiosk_booked_by": null
+    }
+  },
+  {
+    "model": "billing.charge",
+    "pk": 3,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.002Z",
+      "updated_at": "2026-11-03T08:25:39.002Z",
+      "participant": 1,
+      "family_member": 1,
+      "kind": "food",
+      "description": "Seed child meal booking",
+      "position_report_description": null,
+      "quantity": "1.00",
+      "unit_price": "5.00",
+      "foerdersatz": "0.0000",
+      "occurred_on": "2026-11-04",
+      "deleted_at": null,
+      "deleted_by": null,
+      "kiosk_booked_by": null
+    }
+  },
+  {
+    "model": "billing.charge",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.000Z",
+      "updated_at": "2026-11-03T08:25:39.000Z",
+      "participant": 1,
+      "family_member": null,
+      "kind": "food",
+      "description": "Seed meal booking",
+      "position_report_description": null,
+      "quantity": "1.00",
+      "unit_price": "12.00",
+      "foerdersatz": "0.0000",
+      "occurred_on": "2026-11-04",
+      "deleted_at": null,
+      "deleted_by": null,
+      "kiosk_booked_by": null
+    }
+  },
+  {
+    "model": "billing.charge",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.001Z",
+      "updated_at": "2026-11-03T08:25:39.001Z",
+      "participant": 1,
+      "family_member": null,
+      "kind": "food",
+      "description": "Seed retracted meal",
+      "position_report_description": null,
+      "quantity": "1.00",
+      "unit_price": "8.00",
+      "foerdersatz": "0.0000",
+      "occurred_on": "2026-11-04",
+      "deleted_at": null,
+      "deleted_by": null,
+      "kiosk_booked_by": null
+    }
+  },
+  {
+    "model": "billing.charge",
+    "pk": 7,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.007Z",
+      "updated_at": "2026-11-03T08:25:39.007Z",
+      "participant": 1,
+      "family_member": null,
+      "kind": "other",
+      "description": "Seed deleted charge",
+      "position_report_description": null,
+      "quantity": "1.00",
+      "unit_price": "7.00",
+      "foerdersatz": "0.0000",
+      "occurred_on": "2026-11-04",
+      "deleted_at": "2026-11-03T08:25:39.007Z",
+      "deleted_by": 1,
+      "kiosk_booked_by": null
+    }
+  },
+  {
+    "model": "billing.payment",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.008Z",
+      "updated_at": "2026-11-03T08:25:39.008Z",
+      "participant": 1,
+      "amount": "0.00",
+      "paid_on": "2026-11-04",
+      "method": "Bar",
+      "note": "No payment",
+      "deleted_at": null,
+      "deleted_by": null
+    }
+  },
+  {
+    "model": "billing.payment",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.008Z",
+      "updated_at": "2026-11-03T08:25:39.008Z",
+      "participant": 1,
+      "amount": "25.00",
+      "paid_on": "2026-11-04",
+      "method": "Bar",
+      "note": "Partial payment",
+      "deleted_at": null,
+      "deleted_by": null
+    }
+  },
+  {
+    "model": "billing.payment",
+    "pk": 3,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.009Z",
+      "updated_at": "2026-11-03T08:25:39.009Z",
+      "participant": 1,
+      "amount": "200.00",
+      "paid_on": "2026-11-04",
+      "method": "Bar",
+      "note": "Overpayment",
+      "deleted_at": null,
+      "deleted_by": null
+    }
+  },
+  {
+    "model": "billing.expense",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.009Z",
+      "updated_at": "2026-11-03T08:25:39.009Z",
+      "camp": 1,
+      "participant": 1,
+      "category": "Unterkunft/Verpflegung",
+      "description": "Seed expense food_breakfast",
+      "amount": "10.00",
+      "receipt": "",
+      "paid_on": "2026-11-04",
+      "reimbursable": true,
+      "status": "approved",
+      "rejection_reason": "",
+      "allocation_method": "cost_center",
+      "cost_center": "food_breakfast",
+      "approved_at": "2026-11-03T08:25:39.009Z",
+      "approved_by": 1
+    }
+  },
+  {
+    "model": "billing.expense",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.010Z",
+      "updated_at": "2026-11-03T08:25:39.010Z",
+      "camp": 1,
+      "participant": 1,
+      "category": "Unterkunft/Verpflegung",
+      "description": "Seed expense food_dinner",
+      "amount": "20.00",
+      "receipt": "",
+      "paid_on": "2026-11-04",
+      "reimbursable": true,
+      "status": "approved",
+      "rejection_reason": "",
+      "allocation_method": "cost_center",
+      "cost_center": "food_breakfast",
+      "approved_at": "2026-11-03T08:41:12.852Z",
+      "approved_by": 1
+    }
+  },
+  {
+    "model": "billing.expense",
+    "pk": 3,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.010Z",
+      "updated_at": "2026-11-03T08:25:39.010Z",
+      "camp": 1,
+      "participant": 1,
+      "category": "Unterkunft/Verpflegung",
+      "description": "Seed expense food_other",
+      "amount": "30.00",
+      "receipt": "",
+      "paid_on": "2026-11-04",
+      "reimbursable": true,
+      "status": "rejected",
+      "rejection_reason": "spende ma",
+      "allocation_method": "cost_center",
+      "cost_center": "food_other",
+      "approved_at": "2026-11-03T08:41:22.930Z",
+      "approved_by": 1
+    }
+  },
+  {
+    "model": "billing.expense",
+    "pk": 5,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.011Z",
+      "updated_at": "2026-11-03T08:25:39.011Z",
+      "camp": 1,
+      "participant": 1,
+      "category": "Unterkunft/Verpflegung",
+      "description": "Seed expense materials",
+      "amount": "50.00",
+      "receipt": "",
+      "paid_on": "2026-11-04",
+      "reimbursable": true,
+      "status": "pending",
+      "rejection_reason": "",
+      "allocation_method": "cost_center",
+      "cost_center": "materials",
+      "approved_at": null,
+      "approved_by": null
+    }
+  },
+  {
+    "model": "billing.expense",
+    "pk": 6,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.011Z",
+      "updated_at": "2026-11-03T08:25:39.011Z",
+      "camp": 1,
+      "participant": 1,
+      "category": "Unterkunft/Verpflegung",
+      "description": "Seed expense rent_other",
+      "amount": "60.00",
+      "receipt": "",
+      "paid_on": "2026-11-04",
+      "reimbursable": true,
+      "status": "pending",
+      "rejection_reason": "",
+      "allocation_method": "cost_center",
+      "cost_center": "rent_other",
+      "approved_at": null,
+      "approved_by": null
+    }
+  },
+  {
+    "model": "billing.expense",
+    "pk": 4,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.011Z",
+      "updated_at": "2026-11-03T08:25:39.011Z",
+      "camp": 1,
+      "participant": 1,
+      "category": "Unterkunft/Verpflegung",
+      "description": "Seed expense travel",
+      "amount": "40.00",
+      "receipt": "",
+      "paid_on": "2026-11-04",
+      "reimbursable": true,
+      "status": "pending",
+      "rejection_reason": "",
+      "allocation_method": "cost_center",
+      "cost_center": "travel",
+      "approved_at": null,
+      "approved_by": null
+    }
+  },
+  {
+    "model": "billing.expenseallocation",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.009Z",
+      "updated_at": "2026-11-03T08:25:39.009Z",
+      "expense": 1,
+      "participant": 1,
+      "amount": "10.00"
+    }
+  },
+  {
+    "model": "billing.mealsignup",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.001Z",
+      "updated_at": "2026-11-03T08:25:39.001Z",
+      "participant": 1,
+      "family_member": null,
+      "meal_date": "2026-11-03",
+      "meal": "breakfast",
+      "variant": "vegan",
+      "status": "active",
+      "foerdersatz": "0.0000",
+      "retraction_version": 0,
+      "retracted_at": null,
+      "charge": 1
+    }
+  },
+  {
+    "model": "billing.mealsignup",
+    "pk": 3,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.003Z",
+      "updated_at": "2026-11-03T08:25:39.003Z",
+      "participant": 1,
+      "family_member": 1,
+      "meal_date": "2026-11-03",
+      "meal": "dinner",
+      "variant": "vegan_child",
+      "status": "active",
+      "foerdersatz": "0.0000",
+      "retraction_version": 0,
+      "retracted_at": null,
+      "charge": 3
+    }
+  },
+  {
+    "model": "billing.mealsignup",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.002Z",
+      "updated_at": "2026-11-03T08:25:39.002Z",
+      "participant": 1,
+      "family_member": null,
+      "meal_date": "2026-11-04",
+      "meal": "dinner",
+      "variant": "normal",
+      "status": "retracted",
+      "foerdersatz": "0.0000",
+      "retraction_version": 0,
+      "retracted_at": "2026-11-03T08:25:39.002Z",
+      "charge": 2
+    }
+  },
+  {
+    "model": "billing.mealorder",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.000Z",
+      "updated_at": "2026-11-03T08:25:39.000Z",
+      "camp": 1,
+      "meal_date": "2026-11-03",
+      "ordered_at": "2026-11-03T08:25:39.000Z",
+      "ordered_by": 1,
+      "is_sent": true,
+      "unmarked_at": null,
+      "unmarked_by": null
+    }
+  },
+  {
+    "model": "billing.mealbookingoverride",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-11-03T08:25:38.999Z",
+      "updated_at": "2026-11-03T08:25:38.999Z",
+      "camp": 1,
+      "meal_date": "2026-11-03",
+      "meal": "dinner",
+      "state": "closed",
+      "changed_at": "2026-11-03T08:25:38.999Z",
+      "changed_by": 1
+    }
+  },
+  {
+    "model": "billing.mealbookingoverride",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.000Z",
+      "updated_at": "2026-11-03T08:25:39.000Z",
+      "camp": 1,
+      "meal_date": "2026-11-04",
+      "meal": "dinner",
+      "state": "open",
+      "changed_at": "2026-11-03T08:25:38.999Z",
+      "changed_by": 1
+    }
+  },
+  {
+    "model": "billing.mealplanentry",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-11-03T08:25:38.998Z",
+      "updated_at": "2026-11-03T08:25:38.998Z",
+      "camp": 1,
+      "meal_date": "2026-11-03",
+      "meal": "breakfast",
+      "description": "Synthetisches Testmenü"
+    }
+  },
+  {
+    "model": "billing.mealplanentry",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-11-03T08:25:38.998Z",
+      "updated_at": "2026-11-03T08:25:38.998Z",
+      "camp": 1,
+      "meal_date": "2026-11-03",
+      "meal": "dinner",
+      "description": "Synthetisches Testmenü"
+    }
+  },
+  {
+    "model": "billing.mealplanentry",
+    "pk": 3,
+    "fields": {
+      "created_at": "2026-11-03T08:25:38.998Z",
+      "updated_at": "2026-11-03T08:25:38.998Z",
+      "camp": 1,
+      "meal_date": "2026-11-04",
+      "meal": "breakfast",
+      "description": "Synthetisches Testmenü"
+    }
+  },
+  {
+    "model": "billing.mealplanentry",
+    "pk": 4,
+    "fields": {
+      "created_at": "2026-11-03T08:25:38.999Z",
+      "updated_at": "2026-11-03T08:25:38.999Z",
+      "camp": 1,
+      "meal_date": "2026-11-04",
+      "meal": "dinner",
+      "description": "Synthetisches Testmenü"
+    }
+  },
+  {
+    "model": "billing.drinkentry",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.405Z",
+      "updated_at": "2026-11-03T08:28:18.405Z",
+      "participant": 1,
+      "drink": "softdrink",
+      "quantity": 2,
+      "unit_price": "2.50",
+      "foerdersatz": "0.0000",
+      "booked_at": "2026-11-03T08:28:18.405Z"
+    }
+  },
+  {
+    "model": "billing.drinkentry",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.404Z",
+      "updated_at": "2026-11-03T08:28:18.404Z",
+      "participant": 1,
+      "drink": "water",
+      "quantity": 2,
+      "unit_price": "1.00",
+      "foerdersatz": "0.0000",
+      "booked_at": "2026-11-03T08:28:18.404Z"
+    }
+  },
+  {
+    "model": "billing.settlementrun",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.013Z",
+      "updated_at": "2026-11-03T08:25:39.013Z",
+      "camp": 1,
+      "version": 2,
+      "run_type": "daily_backup",
+      "calculated_by": 1,
+      "participant_count": 1,
+      "total_gross": "0.00",
+      "total_subsidy": "0.00",
+      "total_due": "0.00",
+      "total_paid": "0.00",
+      "total_advanced": "0.00",
+      "total_payouts": "0.00",
+      "balance": "0.00",
+      "cost_center_data": {}
+    }
+  },
+  {
+    "model": "billing.settlementrun",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.012Z",
+      "updated_at": "2026-11-03T08:25:39.012Z",
+      "camp": 1,
+      "version": 1,
+      "run_type": "manual",
+      "calculated_by": 1,
+      "participant_count": 1,
+      "total_gross": "0.00",
+      "total_subsidy": "0.00",
+      "total_due": "0.00",
+      "total_paid": "0.00",
+      "total_advanced": "0.00",
+      "total_payouts": "0.00",
+      "balance": "0.00",
+      "cost_center_data": {}
+    }
+  },
+  {
+    "model": "billing.settlement",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.013Z",
+      "updated_at": "2026-11-03T08:25:39.013Z",
+      "run": 2,
+      "participant": 1,
+      "calculated_by": 1,
+      "participant_name": "AdultComplete Synthetic",
+      "participant_status": "active",
+      "total_gross": "125.00",
+      "total_subsidy": "0.00",
+      "total_due": "125.00",
+      "total_paid": "225.00",
+      "total_advanced": "40.00",
+      "total_payouts": "0.00",
+      "balance": "-100.00",
+      "data": {
+        "source": "local-seed",
+        "cost_centers": [
+          "food_breakfast"
+        ]
+      }
+    }
+  },
+  {
+    "model": "billing.settlement",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-11-03T08:25:39.013Z",
+      "updated_at": "2026-11-03T08:25:39.013Z",
+      "run": 1,
+      "participant": 1,
+      "calculated_by": 1,
+      "participant_name": "AdultComplete Synthetic",
+      "participant_status": "active",
+      "total_gross": "125.00",
+      "total_subsidy": "0.00",
+      "total_due": "125.00",
+      "total_paid": "225.00",
+      "total_advanced": "40.00",
+      "total_payouts": "0.00",
+      "balance": "-100.00",
+      "data": {
+        "source": "local-seed",
+        "cost_centers": [
+          "food_breakfast"
+        ]
+      }
+    }
+  },
+  {
+    "model": "billing.dailyshifttemplate",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.370Z",
+      "updated_at": "2026-11-03T08:32:41.122Z",
+      "camp": 1,
+      "name": "Frühstücksdienst",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "start_time": "06:00:00",
+      "end_time": "08:00:00",
+      "required_slots": 2
+    }
+  },
+  {
+    "model": "billing.dailyshifttemplate",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.370Z",
+      "updated_at": "2026-11-03T08:32:41.123Z",
+      "camp": 1,
+      "name": "Flugbetrieb",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "start_time": "09:00:00",
+      "end_time": "12:00:00",
+      "required_slots": 3
+    }
+  },
+  {
+    "model": "billing.dailyshifttemplate",
+    "pk": 3,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.371Z",
+      "updated_at": "2026-11-03T08:32:41.123Z",
+      "camp": 1,
+      "name": "Küchendienst",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "start_time": "18:00:00",
+      "end_time": "20:00:00",
+      "required_slots": 2
+    }
+  },
+  {
+    "model": "billing.dailyshiftexception",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.371Z",
+      "updated_at": "2026-11-03T08:32:41.123Z",
+      "template": 2,
+      "date": "2026-11-05",
+      "is_skipped": true,
+      "custom_required_slots": null,
+      "custom_start_time": null,
+      "custom_end_time": null
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.373Z",
+      "updated_at": "2026-11-03T08:32:41.126Z",
+      "camp": 1,
+      "name": "Frühstücksdienst",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-10-31",
+      "start_time": "06:00:00",
+      "end_time": "08:00:00",
+      "required_slots": 2,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 12,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.379Z",
+      "updated_at": "2026-11-03T08:32:41.140Z",
+      "camp": 1,
+      "name": "Flugbetrieb",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-10-31",
+      "start_time": "09:00:00",
+      "end_time": "12:00:00",
+      "required_slots": 3,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 22,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.385Z",
+      "updated_at": "2026-11-03T08:32:41.152Z",
+      "camp": 1,
+      "name": "Küchendienst",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-10-31",
+      "start_time": "18:00:00",
+      "end_time": "20:00:00",
+      "required_slots": 2,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.374Z",
+      "updated_at": "2026-11-03T08:32:41.128Z",
+      "camp": 1,
+      "name": "Frühstücksdienst",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-01",
+      "start_time": "06:00:00",
+      "end_time": "08:00:00",
+      "required_slots": 2,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 13,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.380Z",
+      "updated_at": "2026-11-03T08:32:41.141Z",
+      "camp": 1,
+      "name": "Flugbetrieb",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-01",
+      "start_time": "09:00:00",
+      "end_time": "12:00:00",
+      "required_slots": 3,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 23,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.385Z",
+      "updated_at": "2026-11-03T08:32:41.153Z",
+      "camp": 1,
+      "name": "Küchendienst",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-01",
+      "start_time": "18:00:00",
+      "end_time": "20:00:00",
+      "required_slots": 2,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 3,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.374Z",
+      "updated_at": "2026-11-03T08:32:41.129Z",
+      "camp": 1,
+      "name": "Frühstücksdienst",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-02",
+      "start_time": "06:00:00",
+      "end_time": "08:00:00",
+      "required_slots": 2,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 14,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.380Z",
+      "updated_at": "2026-11-03T08:32:41.142Z",
+      "camp": 1,
+      "name": "Flugbetrieb",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-02",
+      "start_time": "09:00:00",
+      "end_time": "12:00:00",
+      "required_slots": 3,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 24,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.386Z",
+      "updated_at": "2026-11-03T08:32:41.154Z",
+      "camp": 1,
+      "name": "Küchendienst",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-02",
+      "start_time": "18:00:00",
+      "end_time": "20:00:00",
+      "required_slots": 2,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 4,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.375Z",
+      "updated_at": "2026-11-03T08:32:41.130Z",
+      "camp": 1,
+      "name": "Frühstücksdienst",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-03",
+      "start_time": "06:00:00",
+      "end_time": "08:00:00",
+      "required_slots": 2,
+      "assignment_revision": 1
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 15,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.381Z",
+      "updated_at": "2026-11-03T08:32:41.143Z",
+      "camp": 1,
+      "name": "Flugbetrieb",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-03",
+      "start_time": "09:00:00",
+      "end_time": "12:00:00",
+      "required_slots": 3,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 25,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.386Z",
+      "updated_at": "2026-11-03T08:32:41.155Z",
+      "camp": 1,
+      "name": "Küchendienst",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-03",
+      "start_time": "18:00:00",
+      "end_time": "20:00:00",
+      "required_slots": 2,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 5,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.375Z",
+      "updated_at": "2026-11-03T08:32:41.131Z",
+      "camp": 1,
+      "name": "Frühstücksdienst",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-04",
+      "start_time": "06:00:00",
+      "end_time": "08:00:00",
+      "required_slots": 2,
+      "assignment_revision": 1
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 16,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.382Z",
+      "updated_at": "2026-11-03T08:32:41.145Z",
+      "camp": 1,
+      "name": "Flugbetrieb",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-04",
+      "start_time": "09:00:00",
+      "end_time": "12:00:00",
+      "required_slots": 3,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 26,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.387Z",
+      "updated_at": "2026-11-03T08:32:41.157Z",
+      "camp": 1,
+      "name": "Küchendienst",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-04",
+      "start_time": "18:00:00",
+      "end_time": "20:00:00",
+      "required_slots": 2,
+      "assignment_revision": 1
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 6,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.376Z",
+      "updated_at": "2026-11-03T08:32:41.133Z",
+      "camp": 1,
+      "name": "Frühstücksdienst",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-05",
+      "start_time": "06:00:00",
+      "end_time": "08:00:00",
+      "required_slots": 2,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 27,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.388Z",
+      "updated_at": "2026-11-03T08:32:41.158Z",
+      "camp": 1,
+      "name": "Küchendienst",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-05",
+      "start_time": "18:00:00",
+      "end_time": "20:00:00",
+      "required_slots": 2,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 7,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.377Z",
+      "updated_at": "2026-11-03T08:32:41.134Z",
+      "camp": 1,
+      "name": "Frühstücksdienst",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-06",
+      "start_time": "06:00:00",
+      "end_time": "08:00:00",
+      "required_slots": 2,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 17,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.382Z",
+      "updated_at": "2026-11-03T08:32:41.146Z",
+      "camp": 1,
+      "name": "Flugbetrieb",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-06",
+      "start_time": "09:00:00",
+      "end_time": "12:00:00",
+      "required_slots": 3,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 28,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.388Z",
+      "updated_at": "2026-11-03T08:32:41.159Z",
+      "camp": 1,
+      "name": "Küchendienst",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-06",
+      "start_time": "18:00:00",
+      "end_time": "20:00:00",
+      "required_slots": 2,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 8,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.377Z",
+      "updated_at": "2026-11-03T08:32:41.135Z",
+      "camp": 1,
+      "name": "Frühstücksdienst",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-07",
+      "start_time": "06:00:00",
+      "end_time": "08:00:00",
+      "required_slots": 2,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 18,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.383Z",
+      "updated_at": "2026-11-03T08:32:41.147Z",
+      "camp": 1,
+      "name": "Flugbetrieb",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-07",
+      "start_time": "09:00:00",
+      "end_time": "12:00:00",
+      "required_slots": 3,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 29,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.389Z",
+      "updated_at": "2026-11-03T08:32:41.160Z",
+      "camp": 1,
+      "name": "Küchendienst",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-07",
+      "start_time": "18:00:00",
+      "end_time": "20:00:00",
+      "required_slots": 2,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 9,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.378Z",
+      "updated_at": "2026-11-03T08:32:41.136Z",
+      "camp": 1,
+      "name": "Frühstücksdienst",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-08",
+      "start_time": "06:00:00",
+      "end_time": "08:00:00",
+      "required_slots": 2,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 19,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.383Z",
+      "updated_at": "2026-11-03T08:32:41.148Z",
+      "camp": 1,
+      "name": "Flugbetrieb",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-08",
+      "start_time": "09:00:00",
+      "end_time": "12:00:00",
+      "required_slots": 3,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 30,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.390Z",
+      "updated_at": "2026-11-03T08:32:41.161Z",
+      "camp": 1,
+      "name": "Küchendienst",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-08",
+      "start_time": "18:00:00",
+      "end_time": "20:00:00",
+      "required_slots": 2,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 10,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.378Z",
+      "updated_at": "2026-11-03T08:32:41.138Z",
+      "camp": 1,
+      "name": "Frühstücksdienst",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-09",
+      "start_time": "06:00:00",
+      "end_time": "08:00:00",
+      "required_slots": 2,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 20,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.384Z",
+      "updated_at": "2026-11-03T08:32:41.149Z",
+      "camp": 1,
+      "name": "Flugbetrieb",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-09",
+      "start_time": "09:00:00",
+      "end_time": "12:00:00",
+      "required_slots": 3,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 31,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.390Z",
+      "updated_at": "2026-11-03T08:32:41.162Z",
+      "camp": 1,
+      "name": "Küchendienst",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-09",
+      "start_time": "18:00:00",
+      "end_time": "20:00:00",
+      "required_slots": 2,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 11,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.379Z",
+      "updated_at": "2026-11-03T08:32:41.139Z",
+      "camp": 1,
+      "name": "Frühstücksdienst",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-10",
+      "start_time": "06:00:00",
+      "end_time": "08:00:00",
+      "required_slots": 2,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 21,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.384Z",
+      "updated_at": "2026-11-03T08:32:41.151Z",
+      "camp": 1,
+      "name": "Flugbetrieb",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-10",
+      "start_time": "09:00:00",
+      "end_time": "12:00:00",
+      "required_slots": 3,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shift",
+    "pk": 32,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.391Z",
+      "updated_at": "2026-11-03T08:32:41.164Z",
+      "camp": 1,
+      "name": "Küchendienst",
+      "description": "Beispieldienst für die lokale Testumgebung.",
+      "date": "2026-11-10",
+      "start_time": "18:00:00",
+      "end_time": "20:00:00",
+      "required_slots": 2,
+      "assignment_revision": 0
+    }
+  },
+  {
+    "model": "billing.shiftassignment",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.393Z",
+      "updated_at": "2026-11-03T08:40:07.810Z",
+      "shift": 4,
+      "participant": 1,
+      "family_member": null,
+      "offered_for_exchange": true
+    }
+  },
+  {
+    "model": "billing.shiftassignment",
+    "pk": 3,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.401Z",
+      "updated_at": "2026-11-03T08:28:18.401Z",
+      "shift": 5,
+      "participant": 1,
+      "family_member": 2,
+      "offered_for_exchange": false
+    }
+  },
+  {
+    "model": "billing.shiftassignment",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.396Z",
+      "updated_at": "2026-11-03T08:28:18.396Z",
+      "shift": 26,
+      "participant": 1,
+      "family_member": null,
+      "offered_for_exchange": true
+    }
+  },
+  {
+    "model": "billing.campannouncement",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.404Z",
+      "updated_at": "2026-11-03T08:32:41.166Z",
+      "camp": 1,
+      "title": "Treffpunkt heute",
+      "body": "Die tägliche Besprechung findet um 18 Uhr am Vereinsheim statt.",
+      "created_by": 1,
+      "is_active": true
+    }
+  },
+  {
+    "model": "billing.campannouncement",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-11-03T08:28:18.404Z",
+      "updated_at": "2026-11-03T08:32:41.166Z",
+      "camp": 1,
+      "title": "Willkommen im Testlager",
+      "body": "Teilnehmer, Familien, Essen, Dienste und Abrechnungen sind mit Beispielen gefüllt.",
+      "created_by": 1,
+      "is_active": true
+    }
+  }
+]
