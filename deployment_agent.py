@@ -183,6 +183,7 @@ RECOVERY_CONTRACT_VERSION = 1
 update_lock = threading.Lock()
 backup_lock = threading.Lock()
 state_lock = threading.Lock()
+metadata_cache_lock = threading.Lock()
 catalog_request_context = threading.local()
 catalog_executor = ThreadPoolExecutor(
     max_workers=CATALOG_REFRESH_WORKERS,
@@ -1722,11 +1723,19 @@ def _cache_metadata(entry: dict[str, Any]) -> None:
     normalized = _normalized_cache_metadata(entry)
     digest = normalized["id"]
     _remaining_io_timeout(30)
-    _atomic_json_write(_metadata_cache_path(digest), normalized)
-    cache_directory = _metadata_cache_path(digest).parent
-    cached = sorted(cache_directory.glob("*.json"), key=lambda path: (path.stat().st_mtime_ns, path.name), reverse=True)
-    for stale in cached[60:]:
-        stale.unlink(missing_ok=True)
+    with metadata_cache_lock:
+        _atomic_json_write(_metadata_cache_path(digest), normalized)
+        cache_directory = _metadata_cache_path(digest).parent
+        cached_with_mtime = []
+        for path in cache_directory.glob("*.json"):
+            try:
+                modified_ns = path.stat().st_mtime_ns
+            except FileNotFoundError:
+                continue
+            cached_with_mtime.append((modified_ns, path.name, path))
+        cached = sorted(cached_with_mtime, key=lambda item: (item[0], item[1]), reverse=True)
+        for _modified_ns, _name, stale in cached[60:]:
+            stale.unlink(missing_ok=True)
 
 
 def cached_version_catalog(image: str, *, force: bool = False) -> list[dict[str, Any]]:

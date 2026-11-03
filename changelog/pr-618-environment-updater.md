@@ -38,3 +38,4 @@
 - Verwendet beim zeitbedingten Abbruch der GHCR-Paginierung bereits geladene Versionen weiter, damit direkte Kanalzeiger noch geprüft werden können.
 - Folgt nach Prüfungen ohne verfügbares Update wieder dem aktuellen Kanalzeiger, statt die installierte Version dauerhaft vorauszuwählen.
 - Berechnet Migrations-Endknoten je App, damit gültige Erweiterungen referenzierter Apps nicht als divergierend gelten.
+- Sichert parallele Bereinigungen des Versionsdetail-Caches gegen Dateizugriffsrennen ab.

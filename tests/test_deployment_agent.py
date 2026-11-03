@@ -2578,6 +2578,7 @@ def test_dev_pointer_determines_default_even_when_an_old_run_was_published_later
     monkeypatch.setattr(deployment_agent, "list_package_versions", lambda _image, _channels, **_kwargs: versions)
     monkeypatch.setattr(deployment_agent, "UPDATE_ENVIRONMENT", "dev")
     fetched: list[str] = []
+    submitted: list[str] = []
 
     monkeypatch.setattr(
         deployment_agent,
@@ -2597,11 +2598,20 @@ def test_dev_pointer_determines_default_even_when_an_old_run_was_published_later
         ),
     )
 
+    class RecordingExecutor:
+        def submit(self, function, candidate):
+            submitted.append(candidate[0])
+            future = deployment_agent.Future()
+            future.set_result(function(candidate))
+            return future
+
+    monkeypatch.setattr(deployment_agent, "catalog_executor", RecordingExecutor())
+
     catalog = deployment_agent.build_version_catalog("ghcr.io/example/app:dev", environment="dev")
 
     assert [entry["catalog_id"] for entry in catalog] == [delayed_old_digest, pointer_digest]
     assert deployment_agent.selected_catalog_entry(catalog)["catalog_id"] == pointer_digest
-    assert fetched[0].endswith(":dev")
+    assert submitted[0] == "dev"
 
 
 def test_catalog_candidate_limit_always_reserves_a_slot_for_channel_pointer():
@@ -3426,6 +3436,90 @@ def test_detail_cache_prunes_deterministically_to_sixty_digests(monkeypatch, tmp
     assert len(cached) == 60
     assert f"{newest_digest}.json" in cached
     assert f"{0:064x}.json" not in cached
+
+
+def test_detail_cache_pruning_skips_files_removed_before_stat(monkeypatch, tmp_path):
+    monkeypatch.setattr(deployment_agent, "STATE_FILE", tmp_path / "status.json")
+    cache_directory = tmp_path / "version-metadata"
+    cache_directory.mkdir()
+    digest = "f" * 64
+    entry = {"id": "sha256:" + digest, "image": target_digest_reference("sha256:" + digest)}
+    original_stat = Path.stat
+    disappeared = False
+
+    def stat_with_disappearing_file(path, *args, **kwargs):
+        nonlocal disappeared
+        if path.parent == cache_directory and path.name != f"{digest}.json" and not disappeared:
+            disappeared = True
+            path.unlink()
+        return original_stat(path, *args, **kwargs)
+
+    for index in range(60):
+        path = cache_directory / f"{index:064x}.json"
+        path.write_text("{}", encoding="utf-8")
+        os.utime(path, (index + 1, index + 1))
+    monkeypatch.setattr(Path, "stat", stat_with_disappearing_file)
+
+    deployment_agent._cache_metadata(entry)
+
+    assert disappeared
+    cached_entry = json.loads(deployment_agent._metadata_cache_path("sha256:" + digest).read_text())
+    assert cached_entry["id"] == entry["id"]
+
+
+def test_detail_cache_concurrent_writes_keep_json_and_sixty_file_limit(monkeypatch, tmp_path):
+    monkeypatch.setattr(deployment_agent, "STATE_FILE", tmp_path / "status.json")
+    cache_directory = tmp_path / "version-metadata"
+    cache_directory.mkdir()
+    for index in range(60):
+        path = cache_directory / f"{index:064x}.json"
+        path.write_text("{}", encoding="utf-8")
+        os.utime(path, (index + 1, index + 1))
+    errors = []
+
+    def cache_entry(character):
+        digest = "sha256:" + character * 64
+        try:
+            deployment_agent._cache_metadata({"id": digest, "image": target_digest_reference(digest)})
+        except OSError as error:
+            errors.append(error)
+
+    writers = [threading.Thread(target=cache_entry, args=(character,)) for character in ("a", "b")]
+    for writer in writers:
+        writer.start()
+    for writer in writers:
+        writer.join(timeout=3)
+
+    cached = list(cache_directory.glob("*.json"))
+    assert not any(writer.is_alive() for writer in writers)
+    assert errors == []
+    assert len(cached) == 60
+    assert all(isinstance(json.loads(path.read_text(encoding="utf-8")), dict) for path in cached)
+    for character in ("a", "b"):
+        digest = "sha256:" + character * 64
+        metadata = json.loads((cache_directory / f"{character * 64}.json").read_text(encoding="utf-8"))
+        assert metadata["id"] == digest
+        assert metadata["image"] == target_digest_reference(digest)
+
+
+def test_detail_cache_pruning_propagates_non_missing_stat_errors(monkeypatch, tmp_path):
+    monkeypatch.setattr(deployment_agent, "STATE_FILE", tmp_path / "status.json")
+    cache_directory = tmp_path / "version-metadata"
+    cache_directory.mkdir()
+    digest = "f" * 64
+    entry = {"id": "sha256:" + digest, "image": target_digest_reference("sha256:" + digest)}
+    (cache_directory / f"{'a' * 64}.json").write_text("{}", encoding="utf-8")
+    original_stat = Path.stat
+
+    def failing_stat(path, *args, **kwargs):
+        if path.parent == cache_directory and path.name == f"{'a' * 64}.json":
+            raise PermissionError("stat denied")
+        return original_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", failing_stat)
+
+    with pytest.raises(PermissionError, match="stat denied"):
+        deployment_agent._cache_metadata(entry)
 
 
 def test_default_catalog_selection_prefers_own_environment_channel(monkeypatch):
