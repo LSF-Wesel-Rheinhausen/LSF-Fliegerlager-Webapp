@@ -1,0 +1,24 @@
+{
+  "recorded_on": "2026-11-03",
+  "source_revision": "8b83db9bfbd842bd71b5b213e1c6c1319a53978f",
+  "purpose": "Measured local environment; informational, not a dependency lock or downgrade recommendation",
+  "python": "3.12.16",
+  "platform": "Darwin",
+  "architecture": "arm64",
+  "node": "26.13.0",
+  "npm": "11.20.0",
+  "playwright": "1.62.1",
+  "python_packages": {
+    "Django": "6.1",
+    "pytest": "9.1.1",
+    "pytest-django": "4.14.0",
+    "pytest-xdist": "3.8.0",
+    "ruff": "0.16.5",
+    "mypy": "2.3.1",
+    "reportlab": "5.0.1",
+    "openpyxl": "3.1.5",
+    "Pillow": "12.2.0",
+    "dj-database-url": "3.1.2",
+    "whitenoise": "6.12.0"
+  }
+}

@@ -34,6 +34,7 @@ Der typische Ablauf:
 
 ## Projektstruktur
 
+- [`local-demo.md`](local-demo.md): Agentenübergabe für die reproduzierbare lokale Umgebung mit bereinigter Dummy-Datenbank.
 - [`../README.md`](../README.md): Einstieg, Setup, Tests, Rollen und Roadmap.
 - [`../FILES.md`](../FILES.md): schnelle Dateiübersicht.
 - [`../src/billing/README.md`](../src/billing/README.md): Domain-App mit Modellen, Services, Views, Import/Export und Rollen.
