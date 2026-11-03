@@ -2064,6 +2064,107 @@ def test_migration_graph_allows_leaves_in_different_apps():
     assert deployment_agent._migration_graph_is_valid(migrations)
 
 
+def _migration_manifest(migrations):
+    digest = "a" * 64
+    return {
+        "version": 1,
+        "files": [
+            {"path": f"{identifier.split('.', 1)[0]}/migrations/{identifier.split('.', 1)[1]}.py", "sha256": digest}
+            for identifier in migrations
+        ],
+        "migrations": [
+            {
+                "identifier": identifier,
+                "dependencies": migration["dependencies"],
+                "reversible": True,
+                "sha256": digest,
+            }
+            for identifier, migration in migrations.items()
+        ],
+    }
+
+
+def test_migration_graph_extends_app_leaf_when_another_app_depends_on_it():
+    base = {
+        "auth.0012_previous": {"dependencies": []},
+        "billing.0051_previous": {"dependencies": ["auth.0012_previous"]},
+    }
+    extended = {
+        **base,
+        "auth.0013_next": {"dependencies": ["auth.0012_previous"]},
+    }
+
+    assert deployment_agent._migration_graph_extends(base, extended)
+    assert deployment_agent.migration_compatibility(_migration_manifest(base), _migration_manifest(extended)) == {
+        "risk": "forward",
+        "requires_acknowledgement": False,
+        "affected_migrations": ["auth.0013_next"],
+    }
+
+
+def test_migration_graph_downgrade_keeps_cross_app_leaf_as_lineage():
+    extended = {
+        "auth.0012_previous": {"dependencies": []},
+        "billing.0051_previous": {"dependencies": ["auth.0012_previous"]},
+        "auth.0013_next": {"dependencies": ["auth.0012_previous"]},
+    }
+    base = {key: value for key, value in extended.items() if key != "auth.0013_next"}
+
+    assert deployment_agent.migration_compatibility(_migration_manifest(extended), _migration_manifest(base)) == {
+        "risk": "downgrade",
+        "requires_acknowledgement": True,
+        "affected_migrations": ["auth.0013_next"],
+    }
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        {
+            "auth.0012_previous": {"dependencies": []},
+            "billing.0051_previous": {"dependencies": ["auth.0012_previous"]},
+            "auth.0013_next": {"dependencies": ["missing.0001_initial"]},
+        },
+        {
+            "auth.0012_previous": {"dependencies": []},
+            "billing.0051_previous": {"dependencies": ["auth.0012_previous"]},
+            "auth.0013_first": {"dependencies": ["auth.0012_previous"]},
+            "auth.0013_second": {"dependencies": ["auth.0012_previous"]},
+        },
+    ],
+)
+def test_migration_compatibility_keeps_invalid_cross_app_extensions_unknown(target):
+    base = {
+        "auth.0012_previous": {"dependencies": []},
+        "billing.0051_previous": {"dependencies": ["auth.0012_previous"]},
+    }
+
+    result = deployment_agent.migration_compatibility(_migration_manifest(base), _migration_manifest(target))
+
+    assert result["risk"] == "unknown"
+    assert result["requires_acknowledgement"] is True
+
+
+def test_installed_manifest_with_cross_app_dependency_classifies_added_app_migration():
+    from scripts.build_migration_manifest import installed_manifest
+
+    manifest = json.loads(installed_manifest())
+    next_migration = {
+        "identifier": "auth.0013_next",
+        "dependencies": ["auth.0012_alter_user_first_name_max_length"],
+        "reversible": True,
+        "sha256": "a" * 64,
+    }
+    target = {**manifest, "migrations": [*manifest["migrations"], next_migration]}
+    target["files"] = [*manifest["files"], {"path": "auth/migrations/0013_next.py", "sha256": "a" * 64}]
+
+    result = deployment_agent.migration_compatibility(manifest, target)
+
+    assert result["risk"] == "forward"
+    assert result["requires_acknowledgement"] is False
+    assert result["affected_migrations"] == ["auth.0013_next"]
+
+
 @pytest.mark.parametrize(
     ("identifier", "dependencies", "expected"),
     [

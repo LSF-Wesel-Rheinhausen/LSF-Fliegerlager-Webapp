@@ -287,6 +287,8 @@ wird als `complete` mit `target_verified` abgeschlossen. Ohne diesen Nachweis bl
 
 Ein Django-Superuser öffnet **Updates**, prüft die ausgewählte erlaubte Version und bestätigt die Installation.
 Die Standardauswahl bevorzugt den verifizierten Zeiger des eigenen Kanals (`prod`, `latest` oder `dev`).
+Ein geprüfter, noch installierbarer Kandidat bleibt ausgewählt. Nach einer Prüfung ohne verfügbares
+Update folgt die Auswahl wieder dem aktuellen Kanalzeiger; eine ausdrückliche Versionsauswahl hat Vorrang.
 Die erlaubten Kanalzeiger werden direkt aufgelöst, unabhängig davon, ob sie im begrenzten GHCR-Verlauf
 enthalten sind. Die Zeit-, Parallelitäts- und Versionslimits des Katalogs bleiben dabei erhalten.
 Endet die Paginierung durch einen Timeout am Ablauf ihres Zeitbudgets, werden bereits validierte

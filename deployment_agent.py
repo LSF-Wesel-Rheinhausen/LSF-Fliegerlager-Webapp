@@ -2138,7 +2138,12 @@ def _migration_graph_extends(base: dict[str, dict[str, Any]], extended: dict[str
         return False
     if any(dependencies[identifier] != base_dependencies[identifier] for identifier in base):
         return False
-    depended_on = {dependency for identifier in base for dependency in dependencies[identifier] if dependency in base}
+    depended_on = {
+        dependency
+        for identifier in base
+        for dependency in dependencies[identifier]
+        if dependency in base and dependency.split(".", 1)[0] == identifier.split(".", 1)[0]
+    }
     lineage = set(base) - depended_on
     available = set(base)
     remaining = set(extended) - set(base)

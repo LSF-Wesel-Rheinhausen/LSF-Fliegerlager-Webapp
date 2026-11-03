@@ -590,6 +590,110 @@ def test_deployment_page_hides_install_for_selection_other_than_checked_candidat
     assert 'data-dialog-open="update-confirmation"' not in content
 
 
+@pytest.mark.django_db
+def test_checked_no_update_uses_current_catalog_pointer_and_hidden_selection(client, superuser):
+    client.force_login(superuser)
+    status = {
+        "phase": "checked",
+        "update_available": False,
+        "selected_catalog_id": "sha256:" + "a" * 64,
+        "candidate_id": "",
+    }
+    catalog = {
+        "selected": {"catalog_id": "sha256:" + "b" * 64},
+        "versions": [],
+    }
+    with (
+        patch("billing.views.deployment_status", return_value=status),
+        patch("billing.views.deployment_versions", return_value=catalog) as versions,
+    ):
+        response = client.get(reverse("deployment-update"))
+
+    versions.assert_called_once_with("")
+    assert response.status_code == 200
+    assert f'name="catalog_id" value="{catalog["selected"]["catalog_id"]}"' in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_checked_update_keeps_persisted_catalog_selection(client, superuser):
+    client.force_login(superuser)
+    digest = "sha256:" + "a" * 64
+    status = {
+        "phase": "checked",
+        "update_available": True,
+        "candidate_id": "checked-candidate-token",
+        "selected_catalog_id": digest,
+    }
+    with (
+        patch("billing.views.deployment_status", return_value=status),
+        patch(
+            "billing.views.deployment_versions",
+            return_value={"selected": {"catalog_id": digest}, "versions": []},
+        ) as versions,
+    ):
+        response = client.get(reverse("deployment-update"))
+
+    versions.assert_called_once_with(digest)
+    assert response.status_code == 200
+    assert 'data-dialog-open="update-confirmation"' in response.content.decode()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "status",
+    [
+        {"phase": "complete", "update_available": True, "selected_catalog_id": "old", "candidate_id": "token"},
+        {"phase": "error", "update_available": True, "selected_catalog_id": "old", "candidate_id": "token"},
+        {"phase": "installing", "update_available": True, "selected_catalog_id": "old", "candidate_id": "token"},
+        {"phase": "checked", "update_available": True, "selected_catalog_id": "old", "candidate_id": ""},
+        {"phase": "checked", "update_available": True, "selected_catalog_id": "old", "candidate_id": None},
+        {"phase": "checked", "update_available": True, "selected_catalog_id": "old"},
+    ],
+)
+def test_deployment_page_does_not_reuse_nonactionable_selection(client, superuser, status):
+    client.force_login(superuser)
+    with (
+        patch("billing.views.deployment_status", return_value=status),
+        patch("billing.views.deployment_versions", return_value={"selected": {}, "versions": []}) as versions,
+    ):
+        response = client.get(reverse("deployment-update"))
+
+    versions.assert_called_once_with("")
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_explicit_deployment_selection_overrides_checked_candidate(client, superuser):
+    client.force_login(superuser)
+    status = {
+        "phase": "checked",
+        "update_available": True,
+        "candidate_id": "checked-candidate-token",
+        "selected_catalog_id": "persisted-digest",
+    }
+    with (
+        patch("billing.views.deployment_status", return_value=status),
+        patch("billing.views.deployment_versions", return_value={"selected": {}, "versions": []}) as versions,
+    ):
+        response = client.get(reverse("deployment-update"), {"version": "explicit-digest"})
+
+    versions.assert_called_once_with("explicit-digest")
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_oversized_explicit_deployment_selection_is_ignored(client, superuser):
+    client.force_login(superuser)
+    with (
+        patch("billing.views.deployment_status", return_value={"phase": "idle", "selected_catalog_id": "persisted"}),
+        patch("billing.views.deployment_versions", return_value={"selected": {}, "versions": []}) as versions,
+    ):
+        response = client.get(reverse("deployment-update"), {"version": "x" * 161})
+
+    versions.assert_called_once_with("")
+    assert response.status_code == 200
+
+
 @override_settings(UPDATE_AGENT_URL="http://updater:8080", UPDATE_AGENT_TOKEN="secret-token")
 def test_create_backup_archive_sends_staging_payload():
     response = Mock()

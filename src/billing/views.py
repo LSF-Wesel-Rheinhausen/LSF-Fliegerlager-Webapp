@@ -814,7 +814,20 @@ def deployment_update(request: HttpRequest) -> HttpResponse:
     except UpdateAgentError as error:
         agent_error = str(error)
     else:
-        selected = request.GET.get("version", "") or str(status.get("selected_catalog_id", ""))
+        selected = request.GET.get("version", "")
+        if not selected:
+            candidate_id = status.get("candidate_id")
+            persisted_selection = status.get("selected_catalog_id")
+            if (
+                status.get("phase") == "checked"
+                and status.get("update_available")
+                and isinstance(candidate_id, str)
+                and candidate_id
+                and isinstance(persisted_selection, str)
+                and persisted_selection
+                and len(persisted_selection) <= 160
+            ):
+                selected = persisted_selection
         if len(selected) > 160:
             selected = ""
         changelog = status.get("changelog") or []
