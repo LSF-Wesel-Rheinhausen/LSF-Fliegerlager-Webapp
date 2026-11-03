@@ -1,5 +1,8 @@
 # Übergabe: lokale Entwicklungsumgebung mit Dummy-Daten
 
+Für den Wechsel der gesamten Entwicklungsarbeit zu Codex Cloud zuerst
+[`codex-cloud.md`](codex-cloud.md) lesen. Diese Seite beschreibt die Datenbank und den Demo-Server.
+
 ## Ausgangsstand
 
 - Reproduziert die am 3. November 2026 geprüfte Umgebung: Codebasis PR #618,

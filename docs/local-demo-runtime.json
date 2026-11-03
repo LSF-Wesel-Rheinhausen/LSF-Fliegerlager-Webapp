@@ -8,6 +8,12 @@
   "node": "26.13.0",
   "npm": "11.20.0",
   "playwright": "1.62.1",
+  "development_tools": {
+    "gh": "2.103.3",
+    "rtk": "1.1.0",
+    "graphify": "0.8.27",
+    "agent-browser": "0.33.1"
+  },
   "python_packages": {
     "Django": "6.1",
     "pytest": "9.1.1",
