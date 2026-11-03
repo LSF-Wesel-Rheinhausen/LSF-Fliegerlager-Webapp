@@ -7,7 +7,7 @@ import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DJANGO_ALLOWED_HOSTS = "${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}"
-APP_IMAGE_EXPRESSION = "${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:latest}"
+APP_IMAGE_EXPRESSION = "${APP_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp:prod}"
 
 FORBIDDEN_NON_UPDATER_ENVIRONMENT_KEYS = {
     "PORTAINER_URL",
@@ -109,7 +109,8 @@ def test_updater_configuration_is_independent_from_app_image(compose_path: str) 
     updater = services["updater"]
 
     assert "APP_IMAGE" not in updater["environment"]
-    assert updater["image"] == "${UPDATER_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater:latest}"
+    assert updater["image"] == "${UPDATER_IMAGE:-ghcr.io/lsf-wesel-rheinhausen/lsf-fliegerlager-webapp-updater:prod}"
+    assert updater["environment"]["UPDATE_ENVIRONMENT"] == "${UPDATE_ENVIRONMENT:-prod}"
 
     def resolved_hash(service: dict, app_image: str) -> str:
         serialized = json.dumps(service, sort_keys=True).replace(APP_IMAGE_EXPRESSION, app_image)
@@ -147,11 +148,34 @@ def test_example_environment_documents_local_recovery_origin_default() -> None:
 
 
 @pytest.mark.parametrize("compose_path", ["docker-compose.yml", "deploy/docker-compose.example.yml"])
+def test_updater_allows_custom_registry_without_ghcr_catalog_token(compose_path: str) -> None:
+    configuration = yaml.safe_load((PROJECT_ROOT / compose_path).read_text(encoding="utf-8"))
+
+    assert configuration["services"]["updater"]["environment"]["GHCR_TOKEN"] == "${GHCR_TOKEN:-}"
+
+
+@pytest.mark.parametrize("example_path", [".env.example", "deploy/.env.example"])
+def test_example_environment_requires_nonempty_ghcr_catalog_token(example_path: str) -> None:
+    example = (PROJECT_ROOT / example_path).read_text(encoding="utf-8")
+
+    assert "GHCR_TOKEN=replace-with-github-token-with-read-packages" in example
+    assert "Optional. Public GHCR images do not need a token." not in example
+
+
+@pytest.mark.parametrize("compose_path", ["docker-compose.yml", "deploy/docker-compose.example.yml"])
 def test_background_workers_disable_inherited_http_healthcheck(compose_path: str) -> None:
     configuration = yaml.safe_load((PROJECT_ROOT / compose_path).read_text(encoding="utf-8"))
 
     for service_name in ("daily-settlement-backup", "push-worker", "email-worker", "account-recovery-worker"):
         assert configuration["services"][service_name]["healthcheck"] == {"disable": True}
+
+
+@pytest.mark.parametrize("compose_path", ["docker-compose.yml", "deploy/docker-compose.example.yml"])
+def test_all_application_services_default_to_the_production_image(compose_path: str) -> None:
+    configuration = yaml.safe_load((PROJECT_ROOT / compose_path).read_text(encoding="utf-8"))
+
+    for service_name in ("app", *EXPECTED_SERVICE_ENVIRONMENT_KEYS):
+        assert configuration["services"][service_name]["image"] == APP_IMAGE_EXPRESSION
 
 
 @pytest.mark.parametrize("compose_path", ["docker-compose.yml", "deploy/docker-compose.example.yml"])
