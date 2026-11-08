@@ -255,6 +255,55 @@ Empfängervorschau ausdrücklich bestätigt hat. Er benötigt ausgehenden Zugrif
 veröffentlicht aber keinen Port. Betriebs- und Sicherheitshinweise stehen in
 [`../docs/email-delivery.md`](../docs/email-delivery.md).
 
+## Fehlerdiagnose bei Passwort- und PIN-Wiederherstellung
+
+Eine erfolgreiche Anfrage bestätigt nur, dass die App sie angenommen hat. Danach verarbeitet `account-recovery-worker`
+die gespeicherte Anfrage und legt je nach aktivem Kontaktweg Einträge für `email-worker` und/oder `push-worker` an.
+Der Browser zeigt aus Datenschutzgründen dieselbe Bestätigung auch dann, wenn kein passendes Konto oder kein nutzbarer
+Kontaktweg vorhanden ist. Eine Rücksetzung über die Teilnehmerauswahl und eine Rücksetzung per E-Mail laufen beide
+durch diese Worker-Kette.
+
+Bei einer Meldung, dass weder E-Mail noch Push angekommen ist, zuerst Zeitpunkt und verwendeten Stack festhalten und
+die drei Worker zusammen mit der App prüfen:
+
+```bash
+docker compose ps app account-recovery-worker email-worker push-worker
+docker compose logs --since=2h --tail=300 app account-recovery-worker email-worker push-worker
+```
+
+Die Logs nicht öffentlich teilen. Sie können Betriebsdetails enthalten. Prüfen, dass alle Container laufen und keine
+Migration, Datenbankverbindung oder Konfigurationsprüfung den Start des Recovery-Workers verhindert. App und
+Recovery-Worker benötigen denselben `ACCOUNT_RECOVERY_PUBLIC_ORIGIN`; der Worker bricht bei fehlender oder ungültiger
+Origin-Konfiguration ab.
+
+Danach in PostgreSQL ausschließlich aggregierte Zustände prüfen, ohne Identifikatoren, Nachrichtenkörper, Token oder
+Push-Endpunkte auszugeben:
+
+```sql
+SELECT status, count(*) FROM billing_accountrecoverydeliveryrequest GROUP BY status ORDER BY status;
+SELECT status, count(*) FROM billing_emaildelivery GROUP BY status ORDER BY status;
+SELECT status, count(*) FROM billing_pushmessage GROUP BY status ORDER BY status;
+```
+
+Tabellennamen können sich je nach projektspezifischem Django-Tabellenpräfix unterscheiden. `pending` oder länger
+`processing` bei Recovery-Anfragen weist auf den ersten Worker-Schritt oder eine abgelaufene Verarbeitung hin.
+Recovery-Anfragen verschwinden nach erfolgreicher Auflösung; anschließend sind die E-Mail- und Push-Outboxen
+maßgeblich. `pending`/`failed` bei E-Mail deutet auf SMTP-Konfiguration, Erreichbarkeit oder Empfängerprüfung.
+Bei Push zusätzlich `WEB_PUSH_ENABLED`, die VAPID-Konfiguration, `WEB_PUSH_ALLOWED_ORIGINS` und eine für
+PIN-Wiederherstellung bestätigte aktive Browser-Subscription prüfen. PIN-Recovery verwendet keine unbestätigten
+Push-Subscriptions.
+
+Vor einem erneuten Antrag zuerst feststellen, ob bereits ein Link zugestellt oder eingeplant wurde. Ein erneuter
+Antrag kann neue Recovery-Fähigkeiten ausstellen und bestehende ungültig machen; daher alte Links nicht weitergeben
+oder erneut verwenden. Weder PINs noch Passwörter oder Recovery-Links in Logs, SQL-Ausgaben oder Support-Nachrichten
+kopieren. Nach einer bestätigten PIN-Änderung werden die zugehörigen Push-Subscriptions widerrufen und müssen auf dem
+Gerät neu aktiviert werden.
+
+Die lokale Worker-Abdeckung prüft Dropdown- und E-Mail-Anfragen für Teilnehmer und Begleitpersonen über beide
+Delivery-Worker. Sie ersetzt keine Prüfung des tatsächlichen Produktionsstacks. Wenn die Zustände oder Logs einen
+laufenden Produktionsfehler zeigen, die Diagnose mit Zeitpunkt, Stack-Revision, Workerzustand und aggregierten
+Outbox-Counts an den Deployment-Verantwortlichen geben; daraus allein keine Produktionsbehebung ableiten.
+
 ## Updates
 
 ### First Upgrade auf den entkoppelten Updater
