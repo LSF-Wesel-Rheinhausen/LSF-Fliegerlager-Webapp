@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -51,6 +53,116 @@ def test_browser_matrix_runs_all_supported_playwright_projects() -> None:
     assert strategy["fail-fast"] == "false"
     run_commands = [step["run"] for step in job["steps"] if isinstance(step, dict) and "run" in step]
     assert "npx playwright test --project=${{ matrix.browser }}" in run_commands
+
+
+def test_browser_matrix_uses_digest_pinned_playwright_runtime_without_browser_caches() -> None:
+    job = _browser_matrix_job()
+    container = dict(job["container"])
+    steps = [dict(step) for step in job["steps"]]
+    run_commands = [step["run"] for step in steps if "run" in step]
+
+    assert container["image"] == (
+        "mcr.microsoft.com/playwright:v1.64.1-noble@sha256:"
+        "2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f"
+    )
+    assert "python scripts/check_playwright_image.py" in run_commands
+    assert "npm ci" in run_commands
+    assert not any("playwright install" in command for command in run_commands)
+    assert not any("actions/cache@" in step.get("uses", "") for step in steps)
+
+
+def test_playwright_image_version_guard_accepts_lock_match_and_rejects_mismatch(tmp_path: Path) -> None:
+    repository = Path(__file__).parents[1]
+    script = repository / "scripts" / "check_playwright_image.py"
+    workflow = tmp_path / "ci.yml"
+    lockfile = tmp_path / "package-lock.json"
+    workflow.write_text(
+        "jobs:\n  browser_matrix:\n    container:\n      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:"
+        "2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f\n",
+        encoding="utf-8",
+    )
+    packages = {
+        name: {"version": "1.64.1"}
+        for name in (
+            "node_modules/@playwright/test",
+            "node_modules/playwright",
+            "node_modules/playwright-core",
+        )
+    }
+    lockfile.write_text(json.dumps({"packages": packages}), encoding="utf-8")
+
+    match = subprocess.run(
+        [sys.executable, str(script), "--workflow", str(workflow), "--lockfile", str(lockfile)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert match.returncode == 0
+    assert "versions match" in match.stdout
+
+    packages["node_modules/playwright-core"]["version"] = "1.64.0"
+    lockfile.write_text(json.dumps({"packages": packages}), encoding="utf-8")
+    mismatch = subprocess.run(
+        [sys.executable, str(script), "--workflow", str(workflow), "--lockfile", str(lockfile)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert mismatch.returncode == 1
+    assert "package-lock.json has node_modules/playwright-core=1.64.0" in mismatch.stderr
+
+
+@pytest.mark.parametrize(
+    ("workflow_text", "lock_packages", "diagnostic"),
+    [
+        (
+            "# mcr.microsoft.com/playwright:v1.64.1-noble@sha256:"
+            "2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f\n"
+            "jobs:\n  other:\n    container:\n      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:"
+            "2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f\n",
+            {
+                name: {"version": "1.64.1"}
+                for name in ("node_modules/@playwright/test", "node_modules/playwright", "node_modules/playwright-core")
+            },
+            "jobs.browser_matrix",
+        ),
+        (
+            "jobs:\n  browser_matrix:\n    container:\n      image: mcr.microsoft.com/playwright:v1.64.1-noble\n"
+            "  other:\n    container:\n      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:"
+            "2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f\n",
+            {
+                name: {"version": "1.64.1"}
+                for name in ("node_modules/@playwright/test", "node_modules/playwright", "node_modules/playwright-core")
+            },
+            "official Playwright tag and sha256 digest",
+        ),
+        (
+            "jobs:\n  browser_matrix:\n    container:\n      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:"
+            "2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f\n",
+            {name: {"version": "1.64.1"} for name in ("node_modules/@playwright/test", "node_modules/playwright")},
+            "node_modules/playwright-core=missing",
+        ),
+    ],
+)
+def test_playwright_image_guard_rejects_decoys_unpinned_image_and_missing_lock_entry(
+    tmp_path: Path, workflow_text: str, lock_packages: dict[str, dict[str, str]], diagnostic: str
+) -> None:
+    repository = Path(__file__).parents[1]
+    script = repository / "scripts" / "check_playwright_image.py"
+    workflow = tmp_path / "ci.yml"
+    lockfile = tmp_path / "package-lock.json"
+    workflow.write_text(workflow_text, encoding="utf-8")
+    lockfile.write_text(json.dumps({"packages": lock_packages}), encoding="utf-8")
+
+    result = subprocess.run(
+        [sys.executable, str(script), "--workflow", str(workflow), "--lockfile", str(lockfile)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert diagnostic in result.stderr
 
 
 def test_browser_matrix_publishes_browser_specific_reports_and_results() -> None:
