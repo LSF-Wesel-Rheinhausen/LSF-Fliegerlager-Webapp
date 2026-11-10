@@ -2,6 +2,11 @@
 
 GitHub-Actions-Workflows.
 
+Die Docker-Test-Builds lesen vorhandene GitHub-Actions-Caches, exportieren aber
+keine Cache-Layer. Bei `workflow_run` kann dem Laufzeittoken ein beschreibbarer
+Cache-Scope fehlen; das darf die Containerabnahme nicht blockieren. Die
+Publish-Builds behalten ihre Cache-Exporte.
+
 ## Playwright-Laufzeit
 
 Die Browser-Matrix verwendet das offizielle Playwright-Image mit einem

@@ -82,7 +82,7 @@ jobs:
             APP_CHANGELOG=${{ steps.metadata.outputs.changelog }}
             MIGRATION_MANIFEST=${{ steps.metadata.outputs.migration }}
           cache-from: type=gha,scope=app
-          cache-to: ${{ github.event_name == 'workflow_run' && 'type=gha,mode=max,scope=app' || '' }}
+          # Test builds only read caches: workflow_run tokens may have no writable cache scope.
 
       - name: Build updater image for tests
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
@@ -96,7 +96,6 @@ jobs:
             APP_BUILD_DATE=${{ steps.metadata.outputs.created }}
             MIGRATION_MANIFEST=${{ steps.metadata.outputs.migration }}
           cache-from: type=gha,scope=updater
-          cache-to: ${{ github.event_name == 'workflow_run' && 'type=gha,mode=max,scope=updater' || '' }}
 
       - name: Test application image
         run: >-
