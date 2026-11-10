@@ -9,8 +9,8 @@ verifizierten SHA-256-Digest. Der Image-Tag muss zur Version von
 `@playwright/test`, `playwright` und `playwright-core` in `package-lock.json`
 passen; `scripts/check_playwright_image.py` prueft das vor der Installation
 weiterer Abhaengigkeiten. Image-Tag und Digest werden gemeinsam aktualisiert.
-Das Image enthaelt Node.js, Browser-Binaries und deren Systemabhaengigkeiten,
-darum installiert oder cached der Job diese Laufzeitbestandteile nicht.
+Das Image enthaelt Node.js, Browser-Binaries und Playwright-Systemabhängigkeiten;
+der Job installiert oder cached diese Laufzeitbestandteile nicht.
 `npm ci` und pip installieren weiterhin die durch die Projekt-Lock- bzw.
 Requirement-Dateien festgelegten Anwendungstest-Abhaengigkeiten.
 
