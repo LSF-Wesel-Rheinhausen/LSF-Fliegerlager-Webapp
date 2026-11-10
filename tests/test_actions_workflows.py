@@ -60,13 +60,16 @@ def test_browser_matrix_uses_digest_pinned_playwright_runtime_without_browser_ca
     container = dict(job["container"])
     steps = [dict(step) for step in job["steps"]]
     run_commands = [step["run"] for step in steps if "run" in step]
+    setup_python = next(step for step in steps if step.get("uses", "").startswith("actions/setup-python@"))
 
     assert container["image"] == (
         "mcr.microsoft.com/playwright:v1.64.1-noble@sha256:"
         "2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f"
     )
     assert "python scripts/check_playwright_image.py" in run_commands
+    assert "python -m pip install -r requirements-dev.txt" in run_commands
     assert "npm ci" in run_commands
+    assert "cache" not in dict(setup_python.get("with", {}))
     assert not any("playwright install" in command for command in run_commands)
     assert not any("actions/cache@" in step.get("uses", "") for step in steps)
 

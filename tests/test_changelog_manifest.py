@@ -132,10 +132,9 @@ def test_docker_publish_is_serialized_without_cancelling_an_active_pair():
     assert "    concurrency:\n      group: docker-publish-dev\n      cancel-in-progress: false" in workflow
 
 
-def test_playwright_system_dependencies_are_documented_as_uncacheable():
+def test_playwright_system_dependencies_are_provided_by_the_pinned_image():
     readme = (Path(__file__).parents[1] / ".github" / "workflows" / "README.md").read_text(encoding="utf-8")
 
     assert "Systemabhängigkeiten" in readme
-    assert "nicht gecacht" in readme
-    assert "stale" in readme
-    assert "install-deps" in readme
+    assert "Image enthaelt" in readme
+    assert "nicht pro Lauf installiert oder gecacht" in readme
