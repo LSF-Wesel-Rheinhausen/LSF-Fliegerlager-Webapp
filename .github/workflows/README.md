@@ -6,6 +6,10 @@ Die Docker-Test-Builds lesen vorhandene GitHub-Actions-Caches, exportieren aber
 keine Cache-Layer. Bei `workflow_run` kann dem Laufzeittoken ein beschreibbarer
 Cache-Scope fehlen; das darf die Containerabnahme nicht blockieren. Die
 Publish-Builds behalten ihre Cache-Exporte.
+Direkte Pull-Request-Laeufe fuehren auch den Multiarchitektur-Export und den
+Artefakt-Upload aus. Damit wird der komplette Build- und Testpfad vor einem
+Merge mit der Workflow-Datei aus dem PR geprueft. Registry-Publikationen bleiben
+an den erfolgreichen `workflow_run` gebunden.
 
 ## Playwright-Laufzeit
 

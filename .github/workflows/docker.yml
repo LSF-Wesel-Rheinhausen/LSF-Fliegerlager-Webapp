@@ -113,7 +113,7 @@ jobs:
           docker compose --project-directory deploy config --quiet
 
       - name: Export PR multi-architecture images
-        if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' }}
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request') }}
         env:
           APP_VERSION: ${{ steps.metadata.outputs.version }}
           APP_REVISION: ${{ steps.metadata.outputs.revision }}
@@ -152,7 +152,7 @@ jobs:
             .
 
       - name: Upload tested PR images
-        if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' }}
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request') }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: tested-pr-images
