@@ -19,6 +19,9 @@ Bibliotheksfehler in den Logs nicht sichtbar; belegt waren aber die
 Ubuntu-26-Runnerbasis und das Python-Image auf Noble.
 `npm ci` und pip installieren weiterhin die durch die Projekt-Lock- bzw.
 Requirement-Dateien festgelegten Anwendungstest-Abhaengigkeiten.
+Der Browser-Testschritt setzt `HOME=/root`, passend zum Benutzer des offiziellen
+Containers. Das von GitHub gemountete `/github/home` gehoert einem anderen
+Benutzer; Firefox verweigert damit bereits den Start.
 
 Externe Actions sind aus Supply-Chain-Sicherheitsgründen auf vollständige, lowercase
 40-stellige Commit-SHAs gepinnt. Der lesbare Release-Stand steht als Kommentar neben

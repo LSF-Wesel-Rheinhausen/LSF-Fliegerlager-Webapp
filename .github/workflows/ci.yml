@@ -161,6 +161,9 @@ jobs:
         run: npm ci
 
       - name: Browser UI tests
+        env:
+          # Firefox requires HOME to belong to the container's current user.
+          HOME: /root
         run: npx playwright test --project=${{ matrix.browser }}
 
       - name: Upload Playwright report
