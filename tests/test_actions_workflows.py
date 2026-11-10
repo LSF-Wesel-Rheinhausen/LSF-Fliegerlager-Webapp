@@ -61,13 +61,17 @@ def test_browser_matrix_uses_digest_pinned_playwright_runtime_without_browser_ca
     steps = [dict(step) for step in job["steps"]]
     run_commands = [step["run"] for step in steps if "run" in step]
     setup_python = next(step for step in steps if step.get("uses", "").startswith("actions/setup-python@"))
+    step_names = [step.get("name") for step in steps]
 
+    assert job["runs-on"] == "ubuntu-24.04"
     assert container["image"] == (
         "mcr.microsoft.com/playwright:v1.64.1-noble@sha256:"
         "2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f"
     )
     assert "python scripts/check_playwright_image.py" in run_commands
     assert "python -m pip install -r requirements-dev.txt" in run_commands
+    assert "python -c 'import ssl; print(ssl.OPENSSL_VERSION)'" in run_commands
+    assert step_names.index("Verify Python SSL support") < step_names.index("Install Python dependencies")
     assert "npm ci" in run_commands
     assert "cache" not in dict(setup_python.get("with", {}))
     assert not any("playwright install" in command for command in run_commands)

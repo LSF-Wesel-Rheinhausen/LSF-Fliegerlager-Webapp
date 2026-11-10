@@ -11,6 +11,12 @@ passen; `scripts/check_playwright_image.py` prueft das vor der Installation
 weiterer Abhaengigkeiten. Image-Tag und Digest werden gemeinsam aktualisiert.
 Das Image enthaelt Node.js, Browser-Binaries und Playwright-Systemabhängigkeiten;
 der Job installiert oder cached diese Laufzeitbestandteile nicht.
+Der Job verwendet Ubuntu 24.04 passend zum Noble-Image, damit die von
+`setup-python` bereitgestellte Python-Laufzeit dieselbe Systembibliotheksbasis
+hat. Ein SSL-Importtest laeuft vor pip, damit eine ABI-Abweichung frueh
+diagnostiziert wird. Im fehlgeschlagenen Ubuntu-26-Lauf war der konkrete
+Bibliotheksfehler in den Logs nicht sichtbar; belegt waren aber die
+Ubuntu-26-Runnerbasis und das Python-Image auf Noble.
 `npm ci` und pip installieren weiterhin die durch die Projekt-Lock- bzw.
 Requirement-Dateien festgelegten Anwendungstest-Abhaengigkeiten.
 
