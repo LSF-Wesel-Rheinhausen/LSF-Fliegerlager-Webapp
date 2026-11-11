@@ -125,7 +125,9 @@ jobs:
     name: Browser UI tests (${{ matrix.browser }})
     needs: change-scope
     if: ${{ needs.change-scope.outputs.docs_only != 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f
     timeout-minutes: 45
     permissions:
       contents: read
@@ -145,43 +147,23 @@ jobs:
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: "3.13"
-          cache: pip
 
-      - name: Setup Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-        with:
-          node-version: 22
-          cache: npm
+      - name: Verify Python SSL support
+        run: python -c 'import ssl; print(ssl.OPENSSL_VERSION)'
+
+      - name: Verify Playwright image matches package lock
+        run: python scripts/check_playwright_image.py
 
       - name: Install Python dependencies
-        run: pip install -r requirements-dev.txt
+        run: python -m pip install -r requirements-dev.txt
 
-      - name: Cache installed Node dependencies
-        id: node-modules-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-node-22-modules-${{ hashFiles('package.json', 'package-lock.json') }}
-
-      - name: Install Node dependencies
-        if: steps.node-modules-cache.outputs.cache-hit != 'true'
+      - name: Install locked Node dependencies
         run: npm ci
 
-      - name: Cache Playwright browsers
-        id: playwright-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('package-lock.json') }}
-
-      - name: Install Playwright system dependencies
-        run: npx playwright install-deps ${{ matrix.browser }}
-
-      - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install ${{ matrix.browser }}
-
       - name: Browser UI tests
+        env:
+          # Firefox requires HOME to belong to the container's current user.
+          HOME: /root
         run: npx playwright test --project=${{ matrix.browser }}
 
       - name: Upload Playwright report
