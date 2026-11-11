@@ -2,6 +2,11 @@
 
 GitHub-Actions-Workflows.
 
+Beim Prüfen von Registry-Tags erkennen die Veröffentlichungsjobs sowohl HTTP-404
+als auch die exakte Buildx-Meldung `ERROR: <angefragte Referenz>: not found`.
+Authentifizierungs-, Netzwerk- und andere Fehler bleiben Abbruchgründe; bestehende
+unveränderliche Tags mit abweichendem Digest werden weiterhin nicht überschrieben.
+
 Die Docker-Test-Builds lesen vorhandene GitHub-Actions-Caches, exportieren aber
 keine Cache-Layer. Bei `workflow_run` kann dem Laufzeittoken ein beschreibbarer
 Cache-Scope fehlen; das darf die Containerabnahme nicht blockieren. Die

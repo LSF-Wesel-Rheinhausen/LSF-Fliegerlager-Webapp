@@ -300,7 +300,7 @@ jobs:
             else
               inspect_status=$?
             fi
-            if grep -Fq "404 Not Found" "$inspect_error"; then
+            if grep -Fq "404 Not Found" "$inspect_error" || grep -Fxq "ERROR: $1: not found" "$inspect_error"; then
               rm -f "$inspect_error"
               return 44
             fi
@@ -354,7 +354,7 @@ jobs:
             else
               inspect_status=$?
             fi
-            if grep -Fq '404 Not Found' "$inspect_error"; then
+            if grep -Fq "404 Not Found" "$inspect_error" || grep -Fxq "ERROR: $1: not found" "$inspect_error"; then
               rm -f "$inspect_error"
               return 44
             fi
@@ -508,7 +508,7 @@ jobs:
             else
               inspect_status=$?
             fi
-            if grep -Fq "404 Not Found" "$inspect_error"; then
+            if grep -Fq "404 Not Found" "$inspect_error" || grep -Fxq "ERROR: $1: not found" "$inspect_error"; then
               rm -f "$inspect_error"
               return 44
             fi
@@ -594,7 +594,7 @@ jobs:
             else
               inspect_status=$?
             fi
-            if grep -Fq '404 Not Found' "$inspect_error"; then
+            if grep -Fq "404 Not Found" "$inspect_error" || grep -Fxq "ERROR: $1: not found" "$inspect_error"; then
               rm -f "$inspect_error"
               return 44
             fi
