@@ -82,6 +82,7 @@ Run commands from the repository root. Use the existing `.venv` and `package-loc
 ## Git And Pull Requests
 
 - After one completed user task with repository changes, automatically create a Conventional Commit, push the task branch, and create or update one pull request without asking again.
+- When implementation and the relevant verification are complete and no known blocker remains in the PR, automatically mark it ready for review (`gh pr ready`) so review can start. Draft is for unfinished work, not the default final state. Do not wait for a separate user request; readiness does not authorize merging or deployment.
 - Stage only files changed for the current task. Never include pre-existing staged or unstaged changes. Do not push directly to `main`.
 - Before committing changes under `src/` or `tests/`, run `.venv/bin/python -m pytest` and `npm run test:e2e` plus all other relevant checks. Never commit known failing checks.
 - Any change under `src/` requires a `changelog/` entry. Use `<branch-name>.md` until a PR number exists, then rename it to `pr-<number>-<short-title>.md`.

@@ -122,6 +122,7 @@ Apply this workflow by default to CI pipelines and long-running local tests; the
 4. Delegate passive remote monitoring back to Luna Low after a push.
 5. Report budget usage as agent runs, escalations, full forks, review passes, and full-suite runs. If platform token usage is unavailable, state that explicitly.
 6. Report the achieved outcome, remaining blockers, and any justified model escalation. Do not claim completion without verification.
+7. Consume the monitor's completion report and perform the resulting next action; delegation does not transfer responsibility for finishing the task. Once implementation and relevant checks are complete with no known PR blocker, automatically mark the PR ready for review. Keep unfinished or failing work in draft. Do not infer permission to merge or deploy from review readiness.
 
 ## Examples
 
