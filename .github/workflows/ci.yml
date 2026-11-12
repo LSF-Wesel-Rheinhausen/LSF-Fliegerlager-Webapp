@@ -226,9 +226,65 @@ jobs:
           DATABASE_URL: postgresql://fliegerlager:test-password@127.0.0.1:5432/fliegerlager_test
         run: pytest tests/test_security_concurrency.py
 
+  position-report-performance:
+    name: Position report benchmark (${{ matrix.database }})
+    needs: change-scope
+    if: ${{ needs.change-scope.outputs.docs_only != 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        database: [sqlite, postgresql]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: fliegerlager_test
+          POSTGRES_USER: fliegerlager
+          POSTGRES_PASSWORD: test-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fliegerlager -d fliegerlager_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run isolated position report benchmark
+        env:
+          DATABASE_URL: ${{ matrix.database == 'postgresql' && 'postgresql://fliegerlager:test-password@127.0.0.1:5432/fliegerlager_test' || '' }}
+          POSITION_REPORT_PERFORMANCE: "1"
+          POSITION_REPORT_BENCHMARK_JSON: position-report-benchmark-${{ matrix.database }}.json
+        run: pytest tests/test_position_report_performance.py -m position_report_performance -q
+
+      - name: Upload position report benchmark results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: position-report-benchmark-${{ matrix.database }}-${{ github.run_id }}
+          path: position-report-benchmark-${{ matrix.database }}.json
+          if-no-files-found: ignore
+          retention-days: 14
+
   ci-gate:
     name: CI gate
-    needs: [change-scope, quality, python, security-concurrency, browser_matrix]
+    needs: [change-scope, quality, python, security-concurrency, browser_matrix, position-report-performance]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -244,6 +300,7 @@ jobs:
           PYTHON_RESULT: ${{ needs.python.result }}
           SECURITY_RESULT: ${{ needs.security-concurrency.result }}
           BROWSER_RESULT: ${{ needs.browser_matrix.result }}
+          POSITION_REPORT_PERFORMANCE_RESULT: ${{ needs.position-report-performance.result }}
         run: |
           set -euo pipefail
           if [ "$CHANGE_SCOPE_RESULT" != "success" ]; then
@@ -256,7 +313,7 @@ jobs:
             allow_skipped=true
           fi
 
-          for result in "$QUALITY_RESULT" "$PYTHON_RESULT" "$SECURITY_RESULT" "$BROWSER_RESULT"; do
+          for result in "$QUALITY_RESULT" "$PYTHON_RESULT" "$SECURITY_RESULT" "$BROWSER_RESULT" "$POSITION_REPORT_PERFORMANCE_RESULT"; do
             if [ "$result" = "skipped" ] && [ "$allow_skipped" = "true" ]; then
               continue
             fi

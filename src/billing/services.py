@@ -1,4 +1,5 @@
 import re
+from bisect import bisect_left, bisect_right
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
@@ -9,7 +10,7 @@ from uuid import UUID
 
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import IntegrityError, connection, transaction
-from django.db.models import F, Max, Prefetch, Q, Sum
+from django.db.models import Count, F, Max, Prefetch, Q, Sum
 from django.utils import timezone
 
 from .models import (
@@ -1380,13 +1381,17 @@ def calculate_position_report(camp: Camp) -> PositionReport:
     """
     kind_labels = dict(Charge.Kind.choices)
     article_rows: dict[tuple[str, str], dict[str, Any]] = {}
-    charges = Charge.objects.filter(participant__camp=camp, deleted_at__isnull=True)
-    for charge in charges:
-        key = (charge.kind, charge.position_report_description or charge.description)
+    charges = (
+        Charge.objects.filter(participant__camp=camp, deleted_at__isnull=True)
+        .values_list("kind", "position_report_description", "description", "quantity", "unit_price")
+        .iterator(chunk_size=2000)
+    )
+    for kind, report_description, description, quantity, unit_price in charges:
+        key = (kind, report_description or description)
         row = article_rows.setdefault(key, {"count": 0, "quantity": ZERO, "gross": ZERO})
         row["count"] += 1
-        row["quantity"] += Decimal(str(charge.quantity))
-        row["gross"] += Decimal(str(charge.total))
+        row["quantity"] += Decimal(quantity)
+        row["gross"] += Decimal(quantity) * Decimal(unit_price)
     articles = [
         ArticleUsage(
             kind=kind,
@@ -1406,20 +1411,28 @@ def calculate_position_report(camp: Camp) -> PositionReport:
     meal_labels = dict(MealSignup.Meal.choices)
     if camp.starts_on and camp.ends_on and camp.starts_on <= camp.ends_on:
         dates = camp_meal_dates(camp)
-        signups = MealSignup.objects.filter(
-            participant__camp=camp,
-            status=MealSignup.Status.ACTIVE,
-            meal_date__range=(dates[0], dates[-1]),
-        ).values_list("meal", "variant")
+        signups = (
+            MealSignup.objects.filter(
+                participant__camp=camp,
+                status=MealSignup.Status.ACTIVE,
+                meal_date__range=(dates[0], dates[-1]),
+            )
+            .values_list("meal", "variant")
+            .annotate(total=Count("pk"))
+        )
     else:
-        signups = MealSignup.objects.filter(
-            participant__camp=camp,
-            status=MealSignup.Status.ACTIVE,
-        ).values_list("meal", "variant")
+        signups = (
+            MealSignup.objects.filter(
+                participant__camp=camp,
+                status=MealSignup.Status.ACTIVE,
+            )
+            .values_list("meal", "variant")
+            .annotate(total=Count("pk"))
+        )
     meal_rows: dict[str, dict[str, int]] = {}
-    for meal, variant in signups:
+    for meal, variant, total in signups:
         meal_rows.setdefault(meal, {})
-        meal_rows[meal][variant] = meal_rows[meal].get(variant, 0) + 1
+        meal_rows[meal][variant] = total
     meals = [
         MealUsage(
             meal=meal,
@@ -1432,65 +1445,124 @@ def calculate_position_report(camp: Camp) -> PositionReport:
         for meal in (MealSignup.Meal.DINNER, MealSignup.Meal.BREAKFAST)
     ]
 
-    participants = list(
-        Participant.objects.filter(camp=camp, archived_at__isnull=True)
-        .select_related("camp")
-        .prefetch_related(
-            Prefetch(
-                "attendance_days",
-                queryset=AttendanceDay.objects.filter(family_member__isnull=True, is_present=True),
-                to_attr=_ATTENDANCE_PREFETCH_ATTRIBUTE,
-            )
-        )
+    participant_rows = Participant.objects.filter(camp=camp, archived_at__isnull=True).values_list(
+        "pk", "arrival_date", "departure_date", "attendance_tracking_enabled", "actual_nights", "booked_nights"
     )
+    participants = list(participant_rows.iterator(chunk_size=2000))
     family_members = list(
         ParticipantFamilyMember.objects.filter(
             guardian__camp=camp,
             guardian__archived_at__isnull=True,
             is_active=True,
         )
-        .select_related("guardian__camp")
-        .prefetch_related(
-            Prefetch(
-                "attendance_days",
-                queryset=AttendanceDay.objects.filter(is_present=True),
-                to_attr=_ATTENDANCE_PREFETCH_ATTRIBUTE,
-            )
-        )
+        .values_list("pk", "guardian_id", "arrival_date", "departure_date", "attendance_tracking_enabled", "is_active")
+        .iterator(chunk_size=2000)
     )
-    attendance_days = [
-        PositionReportDay(
-            day=day,
-            participant_count=sum(
-                1
-                for participant in participants
-                if _covers_day(participant.arrival_date, participant.departure_date, day)
-            ),
-            family_member_count=sum(
-                1
-                for member in family_members
-                if _covers_day(
-                    member.arrival_date or member.guardian.arrival_date,
-                    member.departure_date or member.guardian.departure_date,
-                    day,
-                )
-            ),
-        )
-        for day in camp_meal_dates(camp)
-    ]
+    guardians = {row[0]: row[1:] for row in participants}
+    dates = camp_meal_dates(camp)
+    participant_delta: dict[date, int] = {}
+    family_delta: dict[date, int] = {}
 
-    participant_nights = sum(
-        (
-            participant.effective_attendance_nights
-            if participant.attendance_tracking_enabled
-            else participant.actual_nights or participant.booked_nights or 0
+    def attendance_indexes(arrival: date | None, departure: date | None) -> tuple[int, int] | None:
+        if arrival is None and departure is None:
+            return None
+        start_index = bisect_left(dates, arrival) if arrival is not None else 0
+        end_index = bisect_right(dates, departure) if departure is not None else len(dates)
+        if start_index >= end_index:
+            return None
+        return start_index, end_index
+
+    for _pk, arrival, departure, *_rest in participants:
+        indexes = attendance_indexes(arrival, departure)
+        if indexes is not None:
+            start_index, end_index = indexes
+            participant_delta[dates[start_index]] = participant_delta.get(dates[start_index], 0) + 1
+            if end_index < len(dates):
+                end_day = dates[end_index]
+                participant_delta[end_day] = participant_delta.get(end_day, 0) - 1
+    for _pk, guardian_id, arrival, departure, *_rest in family_members:
+        guard = guardians.get(guardian_id)
+        if guard is None:
+            continue
+        start_date = arrival or guard[0]
+        end_date = departure or guard[1]
+        indexes = attendance_indexes(start_date, end_date)
+        if indexes is not None:
+            start_index, end_index = indexes
+            family_delta[dates[start_index]] = family_delta.get(dates[start_index], 0) + 1
+            if end_index < len(dates):
+                end_day = dates[end_index]
+                family_delta[end_day] = family_delta.get(end_day, 0) - 1
+    participant_night_windows: dict[int, tuple[date, date]] = {}
+    family_night_windows: dict[int, tuple[date, date]] = {}
+    if camp.starts_on and camp.ends_on and camp.starts_on < camp.ends_on:
+        for person_id, arrival, departure, tracking, *_rest in participants:
+            if tracking and arrival is not None and departure is not None and arrival < departure:
+                participant_night_windows[person_id] = (
+                    max(camp.starts_on - timedelta(days=4), arrival),
+                    min(camp.ends_on + timedelta(days=4), departure),
+                )
+        for member_id, guardian_id, arrival, departure, tracking, _active in family_members:
+            guard = guardians.get(guardian_id)
+            if guard is None or not tracking:
+                continue
+            start: date | None
+            end: date | None
+            if arrival is not None and departure is not None:
+                start, end = arrival, departure
+            else:
+                start, end = guard[0], guard[1]
+            if start is not None and end is not None and start < end:
+                family_night_windows[member_id] = (
+                    max(camp.starts_on - timedelta(days=4), start),
+                    min(camp.ends_on + timedelta(days=4), end),
+                )
+    participant_night_counts: dict[int, int] = {}
+    family_night_counts: dict[int, int] = {}
+    attendance_query = AttendanceDay.objects.filter(is_present=True).filter(
+        Q(participant__camp=camp, participant__archived_at__isnull=True, family_member__isnull=True)
+        | Q(
+            family_member__guardian__camp=camp,
+            family_member__guardian__archived_at__isnull=True,
+            family_member__is_active=True,
         )
-        for participant in participants
     )
-    family_member_nights = sum(
-        member.effective_attendance_nights if member.attendance_tracking_enabled else member.booked_nights or 0
-        for member in family_members
+    attendance_rows = cast(
+        Iterable[tuple[int, int | None, date]],
+        attendance_query.values_list("participant_id", "family_member_id", "date").iterator(chunk_size=2000),
     )
+    for person_id, family_id, day in attendance_rows:
+        if family_id is None:
+            night_window = participant_night_windows.get(person_id)
+            if night_window is not None and night_window[0] <= day < night_window[1]:
+                participant_night_counts[person_id] = participant_night_counts.get(person_id, 0) + 1
+        else:
+            night_window = family_night_windows.get(family_id)
+            if night_window is not None and night_window[0] <= day < night_window[1]:
+                family_night_counts[family_id] = family_night_counts.get(family_id, 0) + 1
+    attendance_days = []
+    participant_running = family_running = 0
+    for day in dates:
+        participant_running += participant_delta.get(day, 0)
+        family_running += family_delta.get(day, 0)
+        attendance_days.append(PositionReportDay(day, participant_running, family_running))
+
+    participant_nights = 0
+    for person_id, _arrival, _departure, tracking, actual, booked in participants:
+        if tracking:
+            participant_nights += participant_night_counts.get(person_id, 0)
+        else:
+            participant_nights += actual or booked or 0
+    family_member_nights = 0
+    for member_id, guardian_id, arrival, departure, tracking, _active in family_members:
+        if tracking:
+            family_member_nights += family_night_counts.get(member_id, 0)
+        elif arrival is not None and departure is not None:
+            family_member_nights += max((departure - arrival).days, 0)
+        else:
+            guardian = guardians.get(guardian_id)
+            if guardian is not None:
+                family_member_nights += guardian[4] or 0
 
     return PositionReport(
         camp=camp,

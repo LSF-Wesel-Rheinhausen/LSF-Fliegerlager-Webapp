@@ -202,17 +202,51 @@ def test_ci_runs_for_documentation_changes_without_path_filters() -> None:
 def test_ci_has_diagnosable_jobs_and_stable_aggregate_gate() -> None:
     jobs = dict(_ci_workflow()["jobs"])
 
-    assert {"quality", "python", "security-concurrency", "browser_matrix", "ci-gate"} <= set(jobs)
+    assert {
+        "quality",
+        "python",
+        "security-concurrency",
+        "browser_matrix",
+        "position-report-performance",
+        "ci-gate",
+    } <= set(jobs)
     gate = dict(jobs["ci-gate"])
     assert gate["name"] == "CI gate"
     assert gate["if"] == "${{ always() }}"
-    assert set(gate["needs"]) == {"change-scope", "quality", "python", "security-concurrency", "browser_matrix"}
+    assert set(gate["needs"]) == {
+        "change-scope",
+        "quality",
+        "python",
+        "security-concurrency",
+        "browser_matrix",
+        "position-report-performance",
+    }
     assert "failure|cancelled|*) exit 1" in gate["steps"][0]["run"]
+
+
+def test_position_report_benchmark_uses_sqlite_and_postgres_matrix_and_uploads_results() -> None:
+    job = dict(_ci_workflow()["jobs"]["position-report-performance"])
+    assert job["if"] == "${{ needs.change-scope.outputs.docs_only != 'true' }}"
+    assert job["needs"] == "change-scope"
+    assert dict(dict(job["strategy"])["matrix"])["database"] == ["sqlite", "postgresql"]
+    assert dict(dict(job["services"])["postgres"])["image"] == "postgres:16"
+    steps = [dict(step) for step in job["steps"]]
+    commands = [step["run"] for step in steps if "run" in step]
+    assert "pytest tests/test_position_report_performance.py -m position_report_performance -q" in commands
+    upload = next(step for step in steps if step.get("name") == "Upload position report benchmark results")
+    assert upload["if"] == "${{ always() }}"
+    assert upload["uses"] == "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9"
 
 
 def test_expensive_jobs_skip_only_when_scope_job_classifies_docs_or_graphify() -> None:
     jobs = dict(_ci_workflow()["jobs"])
-    for job_name in ("quality", "python", "security-concurrency", "browser_matrix"):
+    for job_name in (
+        "quality",
+        "python",
+        "security-concurrency",
+        "browser_matrix",
+        "position-report-performance",
+    ):
         assert dict(jobs[job_name])["if"] == "${{ needs.change-scope.outputs.docs_only != 'true' }}"
         assert dict(jobs[job_name])["needs"] == "change-scope"
 
@@ -361,6 +395,7 @@ def test_ci_gate_result_matrix_has_no_false_green_skips(
         "PYTHON_RESULT": downstream,
         "SECURITY_RESULT": downstream,
         "BROWSER_RESULT": downstream,
+        "POSITION_REPORT_PERFORMANCE_RESULT": downstream,
     }
 
     result = subprocess.run(["bash", "-c", gate_run], env=environment, check=False)
@@ -421,7 +456,15 @@ def test_all_ci_jobs_have_bounded_timeouts_and_read_only_permissions() -> None:
     workflow = _ci_workflow()
     jobs = dict(workflow["jobs"])
 
-    for job_name in ("change-scope", "quality", "python", "security-concurrency", "browser_matrix", "ci-gate"):
+    for job_name in (
+        "change-scope",
+        "quality",
+        "python",
+        "security-concurrency",
+        "browser_matrix",
+        "position-report-performance",
+        "ci-gate",
+    ):
         job = dict(jobs[job_name])
         assert 1 <= int(job["timeout-minutes"]) <= 45
         assert dict(job["permissions"]) == {"contents": "read"}

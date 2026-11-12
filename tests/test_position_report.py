@@ -7,7 +7,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from billing.models import AttendanceDay, Charge, MealSignup
+from billing.models import AttendanceDay, Charge, MealSignup, Participant
 from billing.permissions import EDITOR_GROUP
 from billing.services import calculate_position_report
 from tests.factories import (
@@ -19,6 +19,7 @@ from tests.factories import (
     SuperUserFactory,
     UserFactory,
 )
+from tests.test_position_report_performance import calculate_position_report_reference
 
 CAMP_START = date(2026, 7, 1)
 CAMP_END = date(2026, 7, 4)
@@ -429,6 +430,101 @@ def test_family_member_without_dates_falls_back_to_guardian_window(camp):
 
 
 @pytest.mark.django_db
+def test_open_attendance_bounds_and_family_night_fallbacks_match_model_semantics(camp):
+    ParticipantFactory(camp=camp, arrival_date=None, departure_date=date(2026, 7, 2))
+    ParticipantFactory(camp=camp, arrival_date=date(2026, 7, 3), departure_date=None)
+    ParticipantFactory(camp=camp, arrival_date=None, departure_date=None)
+    guardian = ParticipantFactory(
+        camp=camp,
+        arrival_date=CAMP_START,
+        departure_date=CAMP_END,
+        actual_nights=8,
+        booked_nights=9,
+    )
+    ParticipantFamilyMemberFactory(guardian=guardian, arrival_date=date(2026, 7, 2), departure_date=None)
+    reversed_stay = ParticipantFamilyMemberFactory(
+        guardian=guardian,
+        arrival_date=date(2026, 7, 4),
+        departure_date=date(2026, 7, 2),
+    )
+    Participant.objects.filter(pk=guardian.pk).update(booked_nights=17)
+
+    report = calculate_position_report(camp)
+
+    participant_counts = {day.day: day.participant_count for day in report.attendance_days}
+    assert participant_counts == {
+        date(2026, 7, 1): 2,
+        date(2026, 7, 2): 2,
+        date(2026, 7, 3): 2,
+        date(2026, 7, 4): 2,
+    }
+    family_counts = {day.day: day.family_member_count for day in report.attendance_days}
+    assert family_counts == {
+        date(2026, 7, 1): 0,
+        date(2026, 7, 2): 1,
+        date(2026, 7, 3): 1,
+        date(2026, 7, 4): 1,
+    }
+    assert report.family_member_nights == 17 + reversed_stay.booked_nights
+
+
+@pytest.mark.django_db
+def test_optimized_report_matches_head_reference_for_mixed_edge_cases():
+    camp = CampFactory(starts_on=None, ends_on=None)
+    participant = ParticipantFactory(camp=camp, arrival_date=None, departure_date=CAMP_START)
+    guardian = ParticipantFactory(
+        camp=camp,
+        arrival_date=CAMP_START,
+        departure_date=CAMP_END,
+        actual_nights=11,
+        booked_nights=9,
+    )
+    ParticipantFamilyMemberFactory(guardian=guardian, arrival_date=CAMP_END, departure_date=CAMP_START)
+    ChargeFactory(
+        participant=participant,
+        quantity=Decimal("0.33"),
+        unit_price=Decimal("0.07"),
+        description="fractional",
+    )
+    ChargeFactory(
+        participant=participant,
+        quantity=Decimal("5.00"),
+        unit_price=Decimal("9.99"),
+        description="deleted",
+        deleted_at=timezone.now(),
+    )
+    Charge.objects.bulk_create(
+        [
+            Charge(
+                participant=participant,
+                kind=Charge.Kind.OTHER,
+                description=f"unique article {index}",
+                quantity=Decimal("0.25"),
+                unit_price=Decimal("1.03"),
+            )
+            for index in range(150)
+        ],
+        batch_size=200,
+    )
+    MealSignup.objects.create(
+        participant=participant,
+        meal_date=CAMP_START,
+        meal=MealSignup.Meal.DINNER,
+        variant=MealSignup.Variant.NORMAL,
+        status=MealSignup.Status.ACTIVE,
+    )
+    MealSignup.objects.create(
+        participant=participant,
+        meal_date=CAMP_END,
+        meal=MealSignup.Meal.BREAKFAST,
+        variant=MealSignup.Variant.VEGAN,
+        status=MealSignup.Status.RETRACTED,
+    )
+
+    assert calculate_position_report(camp) == calculate_position_report_reference(camp)
+
+
+@pytest.mark.django_db
 def test_people_without_any_dates_are_not_counted_as_present(camp):
     ParticipantFactory(camp=camp, arrival_date=None, departure_date=None)
 
@@ -701,4 +797,5 @@ def test_position_report_query_budget_is_bounded_as_camp_size_grows(camp):
     with CaptureQueriesContext(connection) as large_queries:
         calculate_position_report(larger_camp)
 
+    assert len(small_queries) <= 6
     assert len(large_queries) == len(small_queries)

@@ -1,0 +1,98 @@
+{
+  "reference_commit": "faad22a18dd610c531752401402df4a4a59afc92",
+  "working_tree_status": "M .github/workflows/ci.yml\n M pytest.ini\n M src/billing/services.py\n M tests/test_actions_workflows.py\n M tests/test_position_report.py",
+  "python_version": "3.13.5",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "database_vendor": "sqlite",
+  "database_driver": "sqlite3.dbapi2",
+  "database_sizes_bytes": {
+    "10000": 3756032,
+    "50000": 11128832,
+    "100000": 20496384
+  },
+  "samples": [
+    {
+      "charges": 10000,
+      "groups": 100,
+      "participants": 1000,
+      "family_members": 1000,
+      "calendar_days": 30,
+      "baseline_seconds": [
+        0.29332620599961956,
+        0.40039987299678614,
+        0.2864230660015892,
+        0.3764374710008269,
+        0.29506082399893785
+      ],
+      "optimized_seconds": [
+        0.06298817499919096,
+        0.06306560200027889,
+        0.06569313299769419,
+        0.0615201580003486,
+        0.07093579600041267
+      ],
+      "baseline_median_seconds": 0.29506082399893785,
+      "optimized_median_seconds": 0.06306560200027889,
+      "baseline_peak_bytes": 13545020,
+      "optimized_peak_bytes": 1175081
+    },
+    {
+      "charges": 50000,
+      "groups": 100,
+      "participants": 1000,
+      "family_members": 1000,
+      "calendar_days": 30,
+      "baseline_seconds": [
+        1.154386472000624,
+        1.1599878880006145,
+        1.1587567970018426,
+        1.167417126998771,
+        1.1543771309989097
+      ],
+      "optimized_seconds": [
+        0.30261033700298867,
+        0.28298064400223666,
+        0.36072345999855315,
+        0.31140402399978484,
+        0.27556668699980946
+      ],
+      "baseline_median_seconds": 1.1587567970018426,
+      "optimized_median_seconds": 0.30261033700298867,
+      "baseline_peak_bytes": 69118836,
+      "optimized_peak_bytes": 1179751
+    },
+    {
+      "charges": 100000,
+      "groups": 100,
+      "participants": 1000,
+      "family_members": 1000,
+      "calendar_days": 30,
+      "baseline_seconds": [
+        1.9989837350003654,
+        2.087697252001817,
+        2.089899094997236,
+        2.095693773997482,
+        1.9392151659994852
+      ],
+      "optimized_seconds": [
+        0.556227058001241,
+        0.5146848889999092,
+        0.5036557150015142,
+        0.5089973580033984,
+        0.5027480899989314
+      ],
+      "baseline_median_seconds": 2.087697252001817,
+      "optimized_median_seconds": 0.5089973580033984,
+      "baseline_peak_bytes": 138811166,
+      "optimized_peak_bytes": 1177981
+    }
+  ],
+  "budgets": {
+    "optimized_100k_median_seconds_max": 5.0,
+    "optimized_peak_bytes_max": 134217728
+  },
+  "base_commit": "faad22a18dd610c531752401402df4a4a59afc92",
+  "optimized_code_state": "working tree based on base_commit",
+  "optimized_services_sha256": "cf42244f816ec59eaebd4d39c5c5418836a3edd4f8ba80efc6b47f253d9aacf3",
+  "worktree_dirty": true
+}
