@@ -49,10 +49,10 @@ PARTNER_LINK_MUTATION_PERMISSION_CODENAMES = frozenset(
 )
 
 
-def bootstrap_default_roles():
-    admin_group, _ = Group.objects.get_or_create(name=ADMIN_GROUP)
-    editor_group, _ = Group.objects.get_or_create(name=EDITOR_GROUP)
-    huebers_group, _ = Group.objects.get_or_create(name=HUEBERS_GROUP)
+def bootstrap_default_roles(*, preserve_existing_permissions: bool = False):
+    admin_group, admin_created = Group.objects.get_or_create(name=ADMIN_GROUP)
+    editor_group, editor_created = Group.objects.get_or_create(name=EDITOR_GROUP)
+    huebers_group, huebers_created = Group.objects.get_or_create(name=HUEBERS_GROUP)
 
     admin_permissions = (
         Permission.objects.filter(
@@ -70,30 +70,36 @@ def bootstrap_default_roles():
         codename__startswith="view_",
     )
     admin_permissions = admin_permissions | view_only_permissions
-    admin_group.permissions.set(admin_permissions)
+    if admin_created or not preserve_existing_permissions:
+        admin_group.permissions.set(admin_permissions)
     editable = (
         Permission.objects.filter(content_type__app_label="billing")
         .filter(Q(codename__startswith="add_") | Q(codename__startswith="change_") | Q(codename__startswith="view_"))
         .exclude(content_type__model__in=VIEW_ONLY_PERMISSION_MODELS)
         .exclude(codename__in=PARTNER_LINK_MUTATION_PERMISSION_CODENAMES)
     )
-    editor_group.permissions.set(editable | view_only_permissions)
-    huebers_group.permissions.set(Permission.objects.none())
+    if editor_created or not preserve_existing_permissions:
+        editor_group.permissions.set(editable | view_only_permissions)
+    if huebers_created or not preserve_existing_permissions:
+        huebers_group.permissions.set(Permission.objects.none())
 
     return admin_group, editor_group, huebers_group
 
 
-def set_user_role(user: Any, role: str) -> None:
+def set_user_role(user: Any, role: str, *, preserve_existing_permissions: bool = False) -> None:
     """Assign the application role groups and staff flag for a user.
 
     Args:
         user: Django user instance to update.
+        preserve_existing_permissions: Keep shared group permissions during local seeding.
         role: One of ``ROLE_ADMIN``, ``ROLE_EDITOR`` or ``ROLE_HUEBERS``.
 
     Raises:
         ValueError: If ``role`` is not a supported application role.
     """
-    admin_group, editor_group, huebers_group = bootstrap_default_roles()
+    admin_group, editor_group, huebers_group = bootstrap_default_roles(
+        preserve_existing_permissions=preserve_existing_permissions
+    )
     user.groups.remove(admin_group, editor_group, huebers_group)
     if role == ROLE_ADMIN:
         user.groups.add(admin_group)

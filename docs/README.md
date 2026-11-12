@@ -100,7 +100,9 @@ Der Befehl ist idempotent, verwendet ausschließlich `example.test`-Daten und sc
 
 Die lokalen Demo-Zugangsdaten sind fest definiert: `local-admin` / `LocalAdmin-417-Only!`, `local-editor` / `LocalEditor-417-Only!`, gemeinsamer Lager-PIN `864208`, Teilnehmer-PIN `2468` und Begleitpersonen-PIN `9753`. Sie sind ausschließlich für lokale Tests bestimmt und werden vom Command nie ausgegeben.
 
-Ein fremder Benutzer mit einem deterministischen Seed-Benutzernamen wird aus Sicherheitsgründen nicht überschrieben; der Seed bricht dann vollständig und transaktional ab. Bereits erzeugte Seed-Benutzer werden nur anhand ihrer vollständigen deterministischen Identität und des passenden Passwort-Hashes wiedererkannt.
+Seed-Eigentum wird explizit in `LocalSeedOwnership` pro Modell und Datensatz gespeichert. Namen, E-Mail-Adressen und passende Passwörter begründen kein Eigentum. Jede Kollision mit einem unmarkierten oder mehrdeutigen Datensatz bricht den gesamten Lauf transaktional ab; das gilt auch für PINs, Anwesenheit und Finanzdaten. Bestehende gemeinsame Rollenrechte bleiben unverändert.
+
+Alte Seed-Daten ohne Eigentumsmarkierungen werden nicht automatisch übernommen. Für solche lokalen Demo-Daten eine separate neue Testdatenbank anlegen; gemischte Bestandsdaten weder löschen noch anhand ihrer Namen nachträglich markieren. Bei Löschung eines Seed-Datensatzes wird seine Markierung entfernt. Wiederholte Läufe aktualisieren nur explizit zugeordnete Seed-Daten; sonstige zusätzliche Datensätze bleiben erhalten.
 
 ## Tests
 
