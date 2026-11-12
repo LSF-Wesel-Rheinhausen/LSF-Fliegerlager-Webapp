@@ -45,6 +45,22 @@ class FirstAdminBootstrapLock(models.Model):
         return "Sperre für Ersteinrichtung"
 
 
+class LocalSeedOwnership(models.Model):
+    """Mark one row as owned by a named deterministic local seed."""
+
+    seed_key = models.CharField(max_length=80)
+    model_label = models.CharField(max_length=120)
+    object_id = models.CharField(max_length=64)
+
+    def __str__(self) -> str:
+        return f"{self.seed_key}: {self.model_label}/{self.object_id}"
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["seed_key", "model_label", "object_id"], name="unique_local_seed_owner")
+        ]
+
+
 class EmailConfiguration(TimeStampedModel):
     """Store the singleton SMTP configuration managed by administrators."""
 

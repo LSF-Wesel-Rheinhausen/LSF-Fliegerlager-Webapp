@@ -5,6 +5,7 @@ from io import BytesIO
 from threading import Barrier, Lock
 
 import pytest
+from django.apps import apps
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.hashers import check_password
 from django.contrib.auth.models import Group
@@ -24,6 +25,7 @@ from billing.models import (
     Expense,
     ExpenseAllocation,
     FirstAdminBootstrapLock,
+    LocalSeedOwnership,
     MealBookingOverride,
     MealOrder,
     MealPlanEntry,
@@ -166,6 +168,7 @@ def test_seed_is_idempotent_and_preserves_unrelated_records():
             ExpenseAllocation,
             MealSignup,
             MealOrder,
+            LocalSeedOwnership,
             MealBookingOverride,
             MealPlanEntry,
             SettlementRun,
@@ -380,3 +383,135 @@ def test_seeded_issue_417_attendance_export_is_person_rows_by_day_columns(client
     assert sheet.cell(people["FamilyChild Synthetic"], date_columns[date(2026, 8, 21)]).value == "AN"
     assert sheet.cell(people["FamilyChild Synthetic"], date_columns[date(2026, 8, 25)]).value == "–"
     assert summary.cell(summary_rows[date(2026, 8, 19)], 4).value == "Seed attendance note"
+
+
+@pytest.fixture
+def fast_seed_hashing(settings):
+    settings.PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+
+
+def _database_snapshot():
+    """Include all persisted fields and M2M relations, not only row counts."""
+    return {
+        model._meta.label_lower: list(model._default_manager.order_by("pk").values())
+        for model in apps.get_models(include_auto_created=True)
+    }
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "label",
+    [
+        "auth.user",
+        "billing.camp",
+        "billing.campkioskaccess",
+        "billing.participant",
+        "billing.participantpin",
+        "billing.participantfamilymember",
+        "billing.participantfamilymemberpin",
+        "billing.participantbookinglink",
+        "billing.attendanceday",
+        "billing.mealplanentry",
+        "billing.mealbookingoverride",
+        "billing.mealorder",
+        "billing.mealsignup",
+        "billing.charge",
+        "billing.bookingauditlog",
+        "billing.payment",
+        "billing.expense",
+        "billing.expenseallocation",
+        "billing.settlementrun",
+        "billing.settlement",
+        "billing.pricerule",
+    ],
+)
+def test_unmarked_exact_seed_collision_preserves_entire_database(label, fast_seed_hashing):
+    seed()
+    # Even an exact copy of a seed's values is foreign without explicit ownership.
+    marker = LocalSeedOwnership.objects.filter(model_label=label).first()
+    assert marker is not None
+    marker.delete()
+    before = _database_snapshot()
+    with pytest.raises(CommandError):
+        seed()
+    assert _database_snapshot() == before
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("year", [2026, 2099])
+def test_same_named_foreign_active_camp_is_never_deactivated(year, fast_seed_hashing):
+    Camp.objects.create(name=seed_module.ACTIVE_CAMP_NAME, year=year)
+    before = _database_snapshot()
+    with pytest.raises(CommandError):
+        seed()
+    assert _database_snapshot() == before
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("already_seeded", [False, True])
+def test_late_seed_failure_rolls_back_every_row_and_marker(monkeypatch, fast_seed_hashing, already_seeded):
+    if already_seeded:
+        seed()
+    foreign = User.objects.create_user(username="untouched", email="foreign@example.test")
+    group = Group.objects.create(name="Unrelated group")
+    foreign.groups.add(group)
+    before = _database_snapshot()
+    original = Command._seed_financials
+
+    def fail_after_financials(self, *args):
+        original(self, *args)
+        raise RuntimeError("injected failure after financial writes")
+
+    monkeypatch.setattr(Command, "_seed_financials", fail_after_financials)
+    with pytest.raises(RuntimeError, match="injected failure"):
+        seed()
+    assert _database_snapshot() == before
+
+
+@pytest.mark.django_db
+def test_deleted_seed_row_does_not_grant_ownership_to_reused_pk(fast_seed_hashing):
+    seed()
+    payment = Payment.objects.filter(note="Partial payment").get()
+    fields = {field.attname: getattr(payment, field.attname) for field in Payment._meta.concrete_fields}
+    old_pk = payment.pk
+    payment.delete()
+    assert not LocalSeedOwnership.objects.filter(model_label="billing.payment", object_id=str(old_pk)).exists()
+    Payment.objects.create(**fields)
+    before = _database_snapshot()
+    with pytest.raises(CommandError):
+        seed()
+    assert _database_snapshot() == before
+
+
+@pytest.mark.django_db
+def test_successful_seed_preserves_foreign_relations_and_shared_group_permissions(fast_seed_hashing):
+    seed()
+    adult = Participant.objects.get(first_name="AdultComplete")
+    foreign_payment = Payment.objects.create(
+        participant=adult, amount=Decimal("42"), note="Foreign payment", paid_on=date(2026, 8, 24)
+    )
+    foreign_attendance = AttendanceDay.objects.create(participant=adult, date=date(2026, 8, 24), comment="Foreign note")
+    group = Group.objects.get(name="Bearbeiter")
+    group.permissions.clear()
+    foreign_user = User.objects.create_user(username="foreign-member")
+    foreign_user.groups.add(group)
+    payment_before = Payment.objects.filter(pk=foreign_payment.pk).values().get()
+    attendance_before = AttendanceDay.objects.filter(pk=foreign_attendance.pk).values().get()
+    marker_count = LocalSeedOwnership.objects.count()
+    seed()
+    assert Payment.objects.filter(pk=foreign_payment.pk).values().get() == payment_before
+    assert AttendanceDay.objects.filter(pk=foreign_attendance.pk).values().get() == attendance_before
+    assert list(foreign_user.groups.all()) == [group]
+    assert group.permissions.count() == 0
+    assert LocalSeedOwnership.objects.count() == marker_count
+
+
+@pytest.mark.django_db
+def test_ambiguous_seed_lookup_refuses_both_matching_records(fast_seed_hashing):
+    seed()
+    adult = Participant.objects.get(first_name="AdultComplete")
+    Charge.objects.create(participant=adult, kind=Charge.Kind.DRINK, description="Seed drink", unit_price=Decimal("99"))
+    before = _database_snapshot()
+    with pytest.raises(CommandError, match="Mehrdeutiger"):
+        seed()
+    assert _database_snapshot() == before

@@ -7,6 +7,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import check_password
 from django.core.management.base import BaseCommand, CommandError
 from django.db import OperationalError, transaction
+from django.db.models import Model
 from django.utils import timezone
 
 from billing.models import (
@@ -18,6 +19,7 @@ from billing.models import (
     Expense,
     ExpenseAllocation,
     FirstAdminBootstrapLock,
+    LocalSeedOwnership,
     MealBookingOverride,
     MealOrder,
     MealPlanEntry,
@@ -47,6 +49,64 @@ HUEBERS_PASSWORD = "LocalHuebers-417-Only!"
 INACTIVE_PASSWORD = "LocalInactive-417-Only!"
 SHARED_KIOSK_PIN = "864208"
 SEED_LOCK_RETRY_DELAYS = (0.05, 0.15, 0.35, 0.75, 1.5, 2.5, 4.0, 5.0)
+SEED_KEY = "local-test-v1"
+
+
+def _mark_owned(instance: Model) -> None:
+    LocalSeedOwnership.objects.get_or_create(
+        seed_key=SEED_KEY, model_label=instance._meta.label_lower, object_id=str(instance.pk)
+    )
+
+
+def _require_owned(instance: Model) -> None:
+    if not LocalSeedOwnership.objects.filter(
+        seed_key=SEED_KEY, model_label=instance._meta.label_lower, object_id=str(instance.pk)
+    ).exists():
+        raise CommandError(f"Seed-Konflikt bei {instance._meta.label_lower}: nicht als Seed-eigen markiert.")
+
+
+def _owned_row[SeedModel: Model](
+    model: type[SeedModel],
+    *,
+    defaults: dict[str, Any] | None = None,
+    update: bool = True,
+    **lookup: Any,
+) -> tuple[SeedModel, bool]:
+    """Write only explicitly owned rows under the seed transaction's lock.
+
+    Existing unmarked or ambiguous lookup matches abort the entire transaction.
+    Defaults apply to new rows, and to existing rows only when update is true.
+    Signal-created PINs are claimed only when absent before this owned write.
+    """
+    matches = list(model._default_manager.select_for_update().filter(**lookup)[:2])
+    if len(matches) > 1:
+        raise CommandError(f"Mehrdeutiger Seed-Schlüssel bei {model._meta.label_lower}.")
+    instance = matches[0] if matches else None
+    if instance is not None:
+        _require_owned(instance)
+    pin_model: Any = None
+    pin_lookup: dict[str, Any] = {}
+    if model is Participant:
+        pin_model, pin_lookup = ParticipantPin, {"participant_id": instance.pk if instance else None}
+    elif model is ParticipantFamilyMember:
+        pin_model, pin_lookup = ParticipantFamilyMemberPin, {"family_member_id": instance.pk if instance else None}
+    previous_pin = pin_model.objects.filter(**pin_lookup).first() if pin_model and instance else None
+    if previous_pin is not None:
+        _require_owned(previous_pin)
+    if instance is not None:
+        if update:
+            for field, value in (defaults or {}).items():
+                setattr(instance, field, value)
+            instance.save()
+    else:
+        instance = model._default_manager.create(**{**lookup, **(defaults or {})})
+        _mark_owned(instance)
+    if pin_model and previous_pin is None:
+        key = next(iter(pin_lookup))
+        pin = pin_model.objects.filter(**{key: instance.pk}).first()
+        if pin is not None:
+            _mark_owned(pin)
+    return instance, not matches
 
 
 class Command(BaseCommand):
@@ -116,13 +176,13 @@ class Command(BaseCommand):
                 "local-inactive", "local-inactive@example.test", INACTIVE_PASSWORD, "Local", "Inactive", False, False
             ),
         }
-        set_user_role(users["admin"], ROLE_ADMIN)
+        set_user_role(users["admin"], ROLE_ADMIN, preserve_existing_permissions=True)
         users["admin"].is_superuser = True
         users["admin"].is_active = True
         users["admin"].save(update_fields=["is_superuser", "is_active"])
-        set_user_role(users["editor"], ROLE_EDITOR)
-        set_user_role(users["huebers"], ROLE_HUEBERS)
-        set_user_role(users["inactive"], ROLE_EDITOR)
+        set_user_role(users["editor"], ROLE_EDITOR, preserve_existing_permissions=True)
+        set_user_role(users["huebers"], ROLE_HUEBERS, preserve_existing_permissions=True)
+        set_user_role(users["inactive"], ROLE_EDITOR, preserve_existing_permissions=True)
         users["inactive"].is_active = False
         users["inactive"].save(update_fields=["is_active"])
         return users
@@ -137,24 +197,8 @@ class Command(BaseCommand):
         is_staff: bool,
         is_active: bool,
     ) -> Any:
-        user = User.objects.filter(username=username).first()
-        if user is not None:
-            has_full_seed_identity = (
-                user.email == email
-                and user.first_name == first_name
-                and user.last_name == last_name
-                and check_password(password, user.password)
-            )
-            has_legacy_seed_identity = (
-                user.email == email
-                and not user.first_name
-                and not user.last_name
-                and check_password(password, user.password)
-            )
-            if not (has_full_seed_identity or has_legacy_seed_identity):
-                raise CommandError(f"Deterministischer Seed-Benutzer '{username}' ist bereits fremd belegt.")
-        else:
-            user = User(username=username)
+        user, created = _owned_row(User, username=username, update=False)
+        if created or not check_password(password, user.password):
             user.set_password(password)
 
         user.email = email
@@ -166,8 +210,12 @@ class Command(BaseCommand):
         return user
 
     def _seed_camps(self) -> dict[str, Camp]:
-        names = {ACTIVE_CAMP_NAME, PRE_CAMP_NAME, ARCHIVED_CAMP_NAME}
-        foreign_active = Camp.objects.filter(is_active=True).exclude(name__in=names).first()
+        owned_ids = list(
+            LocalSeedOwnership.objects.filter(seed_key=SEED_KEY, model_label=Camp._meta.label_lower).values_list(
+                "object_id", flat=True
+            )
+        )
+        foreign_active = Camp.objects.filter(is_active=True).exclude(pk__in=owned_ids).first()
         if foreign_active is not None:
             raise CommandError(
                 "Das lokale Seed benötigt ein aktives Lager, würde aber das fremde aktive Lager "
@@ -208,12 +256,12 @@ class Command(BaseCommand):
 
     @staticmethod
     def _camp(name: str, year: int, **defaults: Any) -> Camp:
-        camp, _created = Camp.objects.update_or_create(name=name, year=year, defaults=defaults)
+        camp, _created = _owned_row(Camp, name=name, year=year, defaults=defaults)
         return camp
 
     @staticmethod
     def _seed_kiosk_access(camp: Camp, admin: Any) -> None:
-        access, _created = CampKioskAccess.objects.get_or_create(camp=camp)
+        access, _created = _owned_row(CampKioskAccess, camp=camp, update=False)
         if not access.check_pin(SHARED_KIOSK_PIN):
             access.set_pin(SHARED_KIOSK_PIN, changed_by=admin)
             access.save(update_fields=["pin_hash", "generation", "rotated_at", "changed_by", "updated_at"])
@@ -271,7 +319,7 @@ class Command(BaseCommand):
             ),
         }
 
-        pin, _created = ParticipantPin.objects.get_or_create(participant=participants["adult"])
+        pin, _created = _owned_row(ParticipantPin, update=False, participant=participants["adult"])
         if not pin.check_pin("2468"):
             pin.set_pin("2468", changed_by=admin)
             pin.save(
@@ -285,21 +333,22 @@ class Command(BaseCommand):
                 ]
             )
 
-        locked_pin, _created = ParticipantPin.objects.get_or_create(participant=participants["child"])
+        locked_pin, _created = _owned_row(ParticipantPin, update=False, participant=participants["child"])
         if not locked_pin.check_pin("8642"):
             locked_pin.set_pin("8642", changed_by=admin)
         locked_pin.locked_until = timezone.now() + timedelta(minutes=5)
         locked_pin.save(
             update_fields=["pin_hash", "must_set_pin", "failed_attempts", "locked_until", "changed_by", "updated_at"]
         )
-        ParticipantPin.objects.get_or_create(participant=participants["infant"])
-        ParticipantPin.objects.get_or_create(participant=participants["missing_dob"])
-        ParticipantPin.objects.get_or_create(participant=participants["archived"])
+        _owned_row(ParticipantPin, update=False, participant=participants["infant"])
+        _owned_row(ParticipantPin, update=False, participant=participants["missing_dob"])
+        _owned_row(ParticipantPin, update=False, participant=participants["archived"])
         return participants
 
     @staticmethod
     def _participant(camp: Camp, first_name: str, last_name: str, **defaults: Any) -> Participant:
-        participant, _created = Participant.objects.update_or_create(
+        participant, _created = _owned_row(
+            Participant,
             camp=camp,
             first_name=first_name,
             last_name=last_name,
@@ -310,7 +359,8 @@ class Command(BaseCommand):
     @staticmethod
     def _seed_family(participants: dict[str, Participant]) -> None:
         adult = participants["adult"]
-        family, _created = ParticipantFamilyMember.objects.update_or_create(
+        family, _created = _owned_row(
+            ParticipantFamilyMember,
             guardian=adult,
             first_name="FamilyChild",
             last_name="Synthetic",
@@ -324,7 +374,8 @@ class Command(BaseCommand):
                 "attendance_tracking_enabled": True,
             },
         )
-        companion, _created = ParticipantFamilyMember.objects.update_or_create(
+        companion, _created = _owned_row(
+            ParticipantFamilyMember,
             guardian=adult,
             first_name="FamilyCompanion",
             last_name="Synthetic",
@@ -336,18 +387,20 @@ class Command(BaseCommand):
                 "is_active": True,
             },
         )
-        ParticipantFamilyMember.objects.update_or_create(
+        _owned_row(
+            ParticipantFamilyMember,
             guardian=adult,
             first_name="InactiveFamily",
             last_name="Synthetic",
             defaults={"role": ParticipantFamilyMember.Role.CHILD, "is_active": False},
         )
-        family_pin, _created = ParticipantFamilyMemberPin.objects.get_or_create(family_member=companion)
+        family_pin, _created = _owned_row(ParticipantFamilyMemberPin, update=False, family_member=companion)
         if not family_pin.check_pin("9753"):
             family_pin.set_pin("9753")
             family_pin.save(update_fields=["pin_hash", "must_set_pin", "failed_attempts", "locked_until", "updated_at"])
-        ParticipantFamilyMemberPin.objects.get_or_create(family_member=family)
-        ParticipantBookingLink.objects.update_or_create(
+        _owned_row(ParticipantFamilyMemberPin, update=False, family_member=family)
+        _owned_row(
+            ParticipantBookingLink,
             inviter=adult,
             invitee=participants["child"],
             defaults={"status": ParticipantBookingLink.Status.ACCEPTED},
@@ -365,7 +418,8 @@ class Command(BaseCommand):
             (date(2026, 8, 20), True, ""),
             (date(2026, 8, 27), True, ""),
         ):
-            AttendanceDay.objects.update_or_create(
+            _owned_row(
+                AttendanceDay,
                 participant=adult,
                 family_member=None,
                 date=attendance_date,
@@ -373,25 +427,29 @@ class Command(BaseCommand):
             )
         assert camp.starts_on is not None
         assert camp.ends_on is not None
-        AttendanceDay.objects.update_or_create(
+        _owned_row(
+            AttendanceDay,
             participant=infant,
             family_member=None,
             date=camp.starts_on - timedelta(days=4),
             defaults={"is_present": True},
         )
-        AttendanceDay.objects.update_or_create(
+        _owned_row(
+            AttendanceDay,
             participant=infant,
             family_member=None,
             date=camp.ends_on + timedelta(days=3),
             defaults={"is_present": False},
         )
-        AttendanceDay.objects.update_or_create(
+        _owned_row(
+            AttendanceDay,
             participant=child,
             family_member=None,
             date=date(2026, 8, 21),
             defaults={"is_present": True},
         )
-        AttendanceDay.objects.update_or_create(
+        _owned_row(
+            AttendanceDay,
             participant=adult,
             family_member=family,
             date=date(2026, 8, 21),
@@ -402,25 +460,29 @@ class Command(BaseCommand):
         dates = (date(2026, 8, 21), date(2026, 8, 22))
         for meal_date in dates:
             for meal in (MealSignup.Meal.BREAKFAST, MealSignup.Meal.DINNER):
-                MealPlanEntry.objects.update_or_create(
+                _owned_row(
+                    MealPlanEntry,
                     camp=camp,
                     meal_date=meal_date,
                     meal=meal,
                     defaults={"description": "Synthetisches Testmenü"},
                 )
-        MealBookingOverride.objects.update_or_create(
+        _owned_row(
+            MealBookingOverride,
             camp=camp,
             meal_date=dates[0],
             meal=MealSignup.Meal.DINNER,
             defaults={"state": MealBookingOverride.State.CLOSED, "changed_by": admin},
         )
-        MealBookingOverride.objects.update_or_create(
+        _owned_row(
+            MealBookingOverride,
             camp=camp,
             meal_date=dates[1],
             meal=MealSignup.Meal.DINNER,
             defaults={"state": MealBookingOverride.State.OPEN, "changed_by": admin},
         )
-        MealOrder.objects.update_or_create(
+        _owned_row(
+            MealOrder,
             camp=camp,
             meal_date=dates[0],
             defaults={"ordered_by": admin, "is_sent": True},
@@ -432,7 +494,8 @@ class Command(BaseCommand):
             Decimal("12.00"),
             family_member=None,
         )
-        MealSignup.objects.update_or_create(
+        _owned_row(
+            MealSignup,
             participant=participants["adult"],
             family_member=None,
             meal_date=dates[0],
@@ -446,7 +509,8 @@ class Command(BaseCommand):
             Decimal("8.00"),
             family_member=None,
         )
-        MealSignup.objects.update_or_create(
+        _owned_row(
+            MealSignup,
             participant=participants["adult"],
             family_member=None,
             meal_date=dates[1],
@@ -466,7 +530,8 @@ class Command(BaseCommand):
             Decimal("5.00"),
             family_member=family,
         )
-        MealSignup.objects.update_or_create(
+        _owned_row(
+            MealSignup,
             participant=participants["adult"],
             family_member=family,
             meal_date=dates[0],
@@ -488,7 +553,9 @@ class Command(BaseCommand):
         deleted.deleted_at = timezone.now()
         deleted.deleted_by = admin
         deleted.save(update_fields=["deleted_at", "deleted_by", "updated_at"])
-        BookingAuditLog.objects.get_or_create(
+        _owned_row(
+            BookingAuditLog,
+            update=False,
             charge=deleted,
             action=BookingAuditLog.Action.DELETED,
             defaults={
@@ -498,7 +565,9 @@ class Command(BaseCommand):
                 "after": {"deleted": True},
             },
         )
-        BookingAuditLog.objects.get_or_create(
+        _owned_row(
+            BookingAuditLog,
+            update=False,
             charge=donation,
             action=BookingAuditLog.Action.RESTORED,
             defaults={
@@ -513,7 +582,8 @@ class Command(BaseCommand):
             (Decimal("25.00"), "Partial payment"),
             (Decimal("200.00"), "Overpayment"),
         ):
-            Payment.objects.update_or_create(
+            _owned_row(
+                Payment,
                 participant=adult,
                 amount=amount,
                 note=note,
@@ -523,7 +593,8 @@ class Command(BaseCommand):
             status = (
                 Expense.Status.APPROVED if cost_center == Expense.CostCenter.FOOD_BREAKFAST else Expense.Status.PENDING
             )
-            expense = Expense.objects.update_or_create(
+            expense = _owned_row(
+                Expense,
                 camp=camp,
                 description=f"Seed expense {cost_center}",
                 defaults={
@@ -540,18 +611,21 @@ class Command(BaseCommand):
                 },
             )[0]
             if status == Expense.Status.APPROVED:
-                ExpenseAllocation.objects.update_or_create(
+                _owned_row(
+                    ExpenseAllocation,
                     expense=expense,
                     participant=adult,
                     defaults={"amount": Decimal(index * 10)},
                 )
         for version, run_type in ((1, SettlementRun.RunType.MANUAL), (2, SettlementRun.RunType.DAILY_BACKUP)):
-            run, _created = SettlementRun.objects.update_or_create(
+            run, _created = _owned_row(
+                SettlementRun,
                 camp=camp,
                 version=version,
                 defaults={"run_type": run_type, "calculated_by": admin, "participant_count": 1},
             )
-            Settlement.objects.update_or_create(
+            _owned_row(
+                Settlement,
                 run=run,
                 participant=adult,
                 defaults={
@@ -584,7 +658,8 @@ class Command(BaseCommand):
             (PriceRule.Kind.DONATION, "Seed donation", Decimal("0.00"), {}),
         )
         for kind, name, unit_price, extra in rules:
-            PriceRule.objects.update_or_create(
+            _owned_row(
+                PriceRule,
                 camp=camp,
                 name=name,
                 defaults={
@@ -594,7 +669,8 @@ class Command(BaseCommand):
                     **extra,
                 },
             )
-        PriceRule.objects.update_or_create(
+        _owned_row(
+            PriceRule,
             camp=camp,
             name="Seed archived price",
             defaults={"kind": PriceRule.Kind.OTHER, "unit_price": Decimal("9.00"), "is_archived": True},
@@ -609,7 +685,8 @@ class Command(BaseCommand):
         *,
         family_member: ParticipantFamilyMember | None = None,
     ) -> Charge:
-        charge, _created = Charge.objects.update_or_create(
+        charge, _created = _owned_row(
+            Charge,
             participant=participant,
             family_member=family_member,
             kind=kind,

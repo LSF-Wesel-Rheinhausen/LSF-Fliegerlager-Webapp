@@ -444,6 +444,8 @@ def test_kiosk_mode_reverse_invalidates_active_kiosk_tokens() -> None:
             expires_at=timezone.now() + timedelta(hours=1),
         )
 
+        # Refresh applied migrations after moving back from the current leaf.
+        executor = MigrationExecutor(connection)
         executor.migrate(KIOSK_MODE_OLD_TARGET)
         old_apps = executor.loader.project_state(KIOSK_MODE_OLD_TARGET).apps
         OldRecovery = old_apps.get_model("billing", "AccountRecoveryToken")
