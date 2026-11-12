@@ -90,7 +90,20 @@ Prefer a fresh, context-light agent for independent work. Pass file paths, invar
 - Review returned patches and evidence; do not redo delegated work from scratch.
 - If an agent is blocked by permissions or missing user authority, preserve its evidence and escalate to the user instead of spawning replacements.
 - Cap agent responses and command output to the evidence needed for the decision. Request failing sections, summaries, or log tails instead of complete logs.
-- Interrupt an agent that produces no new evidence across two status intervals or expands beyond scope. Count any replacement against the total-run budget.
+- Interrupt an implementation or diagnosis agent that produces no new evidence across two status intervals or expands beyond scope. A passive monitor waiting on an active job is exempt: silence is expected, not a reason to restart or replace it. Count any replacement against the total-run budget.
+
+## Standing CI and test monitoring policy
+
+Apply this workflow by default to CI pipelines and long-running local tests; the user does not need to request it again.
+
+1. Assign passive monitoring to one reusable Luna-Low agent. Give it the exact repository, branch, commit, run/job IDs or local process/log paths, and the complete set of checks to await. Reserve monitoring and diagnosis capacity in the execution budget before launching verification.
+2. The monitor is read-only. It must not edit code, rerun tests, cancel jobs, change permissions, publish artifacts, merge, or deploy. Prefer completion notifications or a blocking wait. When polling is necessary, poll no more frequently than once per minute, and never have the parent duplicate that polling.
+3. Send no routine progress reports, percentages, or notifications for individual successful jobs, either to the parent or to the user. Report once when the entire assigned set finishes successfully, or promptly when a concrete failure or observation blocker occurs. Explicit user status requests and higher-priority communication requirements remain exceptions. After delegation, the parent waits or handles separately authorized independent work; it does not generate repeated status messages.
+4. Success reports identify the verified commit/run, final job conclusions, test pass/skip counts when available, and evidence links or log paths. Pending, cancelled, inaccessible, stale, or interrupted runs are not success. Distinguish expected conditional skips from missing required checks. An unknown local session ID alone does not prove a process stopped; inspect process and log evidence without restarting it.
+5. Failure reports include the exact commit/run/job/test, failing step, exit status when available, a short relevant error excerpt, and evidence links or paths. Separate observations from hypotheses. Identify whether the failing workflow definition came from the PR branch or the default branch, and whether it represents a different revision from the successful checks. Do not declare the whole release successful merely because PR tests passed.
+6. The parent triages that report and delegates bounded diagnosis to another suitable subagent: Luna Medium for an isolated, well-understood failure; Terra Medium for cross-file or ambiguous failures; frontier only for the high-risk cases in the tier matrix. Follow the existing budget, evidence, and approval rules for tier escalation; do not silently raise them. The monitor does not become an implementation agent simply because it observed a failure.
+7. The diagnosis handoff includes the monitor's evidence, relevant files, reproduction scope, permitted writes, and a stop condition. Diagnose before rerunning. Delegate the bounded fix and focused regression checks, then integrate and run the required verification within the existing rerun budget. Return passive monitoring to the Low agent.
+8. If no Low agent is available, report that capacity blocker once and use a blocking wait for the existing test command rather than an active parent polling loop. Do not invent a successful result, spawn replacements to evade a usage limit, or expand the agent budget without authorization.
 
 ## Bound verification and review loops
 

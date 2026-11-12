@@ -9,6 +9,7 @@
 - These rules apply to the entire repository. A closer nested `AGENTS.md` may add or override rules for its subtree.
 - Inspect only the files needed for the task. Preserve all pre-existing working-tree changes and never stage, rewrite, or remove unrelated work.
 - Follow `CONTRIBUTING.md` for human-facing setup and pull-request conventions.
+- For CI and long-running test monitoring, always apply `.agents/skills/cost-aware-subagent-orchestrator/SKILL.md`: delegate passive monitoring to a Low agent and delegate any resulting diagnosis by complexity. This is standing authorization for that workflow, within the skill's budget and escalation rules.
 
 ## Workflow
 
