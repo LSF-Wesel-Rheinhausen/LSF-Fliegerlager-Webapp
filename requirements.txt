@@ -3,7 +3,7 @@ cryptography>=50.0.2,<51
 dj-database-url>=3.1.2,<4
 gunicorn==26.2.0
 openpyxl>=3.1.5,<4
-psycopg[binary]>=3.3.7,<4
+psycopg[binary]>=3.3.8,<4
 pywebpush>=2.5.0,<3
 reportlab>=5.1.0,<6
 webauthn>=3.0.1,<4
