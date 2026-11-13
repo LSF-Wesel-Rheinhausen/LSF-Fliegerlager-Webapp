@@ -268,7 +268,7 @@ jobs:
 
       - name: Run isolated position report benchmark
         env:
-          DATABASE_URL: ${{ matrix.database == 'postgresql' && 'postgresql://fliegerlager:test-password@127.0.0.1:5432/fliegerlager_test' || '' }}
+          DATABASE_URL: ${{ matrix.database == 'postgresql' && 'postgresql://fliegerlager:test-password@127.0.0.1:5432/fliegerlager_test' || 'sqlite:///:memory:' }}
           POSITION_REPORT_PERFORMANCE: "1"
           POSITION_REPORT_BENCHMARK_JSON: position-report-benchmark-${{ matrix.database }}.json
         run: pytest tests/test_position_report_performance.py -m position_report_performance -q

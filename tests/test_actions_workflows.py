@@ -231,6 +231,12 @@ def test_position_report_benchmark_uses_sqlite_and_postgres_matrix_and_uploads_r
     assert dict(dict(job["strategy"])["matrix"])["database"] == ["sqlite", "postgresql"]
     assert dict(dict(job["services"])["postgres"])["image"] == "postgres:16"
     steps = [dict(step) for step in job["steps"]]
+    benchmark_step = next(step for step in steps if step.get("name") == "Run isolated position report benchmark")
+    assert benchmark_step["env"]["DATABASE_URL"] == (
+        "${{ matrix.database == 'postgresql' && "
+        "'postgresql://fliegerlager:test-password@127.0.0.1:5432/fliegerlager_test' || 'sqlite:///:memory:' }}"
+    )
+    assert benchmark_step["env"]["POSITION_REPORT_PERFORMANCE"] == "1"
     commands = [step["run"] for step in steps if "run" in step]
     assert "pytest tests/test_position_report_performance.py -m position_report_performance -q" in commands
     upload = next(step for step in steps if step.get("name") == "Upload position report benchmark results")
