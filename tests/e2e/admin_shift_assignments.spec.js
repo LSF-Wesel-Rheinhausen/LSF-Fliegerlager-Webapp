@@ -43,7 +43,7 @@ async function setupAdminCampParticipantAndShift(page) {
   await page.getByLabel("Datum").fill(dateInputValue(tomorrow));
   await page.getByLabel("Benötigte Helfer").fill("1");
   await page.getByRole("button", { name: "Speichern" }).click();
-  await page.getByRole("link", { name: "Bearbeiten" }).click();
+  await page.getByRole("link", { name: "Bearbeiten", exact: true }).click();
 }
 
 test.describe("Admin-Dienstbesetzung ohne JavaScript", () => {

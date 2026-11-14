@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
-  <section class="panel">
-    <h1>{{ title }}</h1>
+  <section class="panel admin-form-panel">
+    <header class="page-heading"><div><p class="page-kicker">{% if camp %}{{ camp.name }} · {{ camp.year }}{% else %}Lagerverwaltung{% endif %}</p><h1>{{ title }}</h1></div></header>
     <form method="post" class="form-grid" enctype="multipart/form-data">
       {% csrf_token %}
       {{ form.as_p }}

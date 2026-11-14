@@ -1,26 +1,13 @@
 {% extends "base.html" %}
 {% load billing_format %}
 {% block content %}
-  <div class="toolbar">
+  <header class="toolbar camp-detail-heading">
     <div>
       <h1>Übersicht</h1>
       {% if camp.notes %}<p>{{ camp.notes }}</p>{% endif %}
     </div>
-    <div class="actions">
-      <a class="button button-secondary" href="{% url 'camp-edit' camp.pk %}">Lager bearbeiten</a>
-      <a class="button" href="{% url 'participant-create' camp.pk %}">Teilnehmer anlegen</a>
-      <a class="button" href="{% url 'price-rules-manage' camp.pk %}">Preise verwalten</a>
-      <a class="button" href="{% url 'camp-meal-overview' camp.pk %}">Essensübersicht</a>
-      <a class="button" href="{% url 'expense-create' camp.pk %}">Auslage erfassen</a>
-      <a class="button" href="{% url 'participant-import' camp.pk %}">Teilnehmer importieren</a>
-      {% if user|can_manage_users %}
-        <a class="button" href="{% url 'camp-position-report' camp.pk %}">Positionsauswertung</a>
-        <a class="button" href="{% url 'information-email-compose' camp.pk %}">Information versenden</a>
-        <a class="button" href="{% url 'camp-kiosk-access-settings' camp.pk %}">Lager-PIN verwalten</a>
-        <a class="button" href="{% url 'camp-attendance-overview' camp.pk %}">Anwesenheit</a>
-      {% endif %}
-    </div>
-  </div>
+    <a class="button camp-primary-action" href="{% url 'participant-create' camp.pk %}">Teilnehmer anlegen</a>
+  </header>
 
   <dl class="metrics" aria-label="Lagerkennzahlen">
     <div class="metric"><dt>Brutto</dt><dd><strong>{{ totals.gross }} EUR</strong></dd></div>
@@ -429,7 +416,7 @@
     </table>
   </section>
 
-  <section class="panel stack participant-settlements">
+  <section id="participant-settlements" class="panel stack participant-settlements">
     <h2>Teilnehmerabrechnungen</h2>
     <div class="table-responsive">
       <table data-sortable data-filterable>

@@ -1,5 +1,5 @@
 const { expect, test } = require("./fixtures");
-const { KIOSK_ACCESS_PIN, configureCampKioskAccess, openKiosk } = require("./kioskAccess");
+const { KIOSK_ACCESS_PIN, configureCampKioskAccess, openCampNavigation, openKiosk } = require("./kioskAccess");
 const { isBenignPageRequestFailure, requestFailureDetails } = require("./requestFailureFilter");
 
 test.use({ serviceWorkers: "block" });
@@ -330,6 +330,10 @@ async function setupFirstAdmin(page) {
 }
 
 async function logout(page) {
+  const globalMenu = page.locator(".admin-global-menu");
+  if (await globalMenu.count() && !(await globalMenu.evaluate(menu => menu.open))) {
+    await globalMenu.locator("summary").click();
+  }
   await page.getByRole("button", { name: "Abmelden" }).click();
 }
 
@@ -369,6 +373,7 @@ async function createParticipant(page, firstName, lastName, email = "", pin = nu
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(page.getByRole("heading", { name: `${firstName} ${lastName}` })).toBeVisible();
   if (pin) {
+    await page.locator(".participant-more-actions > summary").click();
     await page.getByRole("link", { name: "PIN setzen", exact: true }).click();
     await page.getByLabel("Neue PIN").fill(pin);
     await page.getByRole("button", { name: "Speichern", exact: true }).click();
@@ -751,6 +756,7 @@ test("Admin creates and edits a manual booking and sees the change log", async (
   await setupFirstAdmin(page);
   await createCamp(page);
 
+  await openCampNavigation(page);
   await page.getByRole("link", { name: "Preise verwalten" }).first().click();
   await page.getByRole("button", { name: "Getränk anlegen" }).click();
   const priceDialog = page.locator("dialog#price-rule-dialog");
@@ -867,6 +873,7 @@ test("PWA PDF preview opens in a closable wrapper without leaving the app", asyn
   await createParticipant(page, "Ada", "Lovelace");
 
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator(".participant-more-actions > summary").click();
   const previewLink = page.getByRole("link", { name: "Einzelabrechnung als PDF öffnen" });
   const participantUrl = page.url();
   const pdfResponsePromise = page.waitForResponse((response) => response.url().endsWith("/export/settlement.pdf"));
@@ -1041,6 +1048,7 @@ test("Admin archives a participant and creates a versioned settlement run", asyn
   await expect(page.getByRole("heading", { name: "Augusta Ada Lovelace" })).toBeVisible();
 
   page.once("dialog", (dialog) => dialog.accept());
+  await page.locator(".participant-more-actions > summary").click();
   await page.getByRole("button", { name: "Teilnehmer archivieren" }).click();
   await expect(page.getByRole("heading", { name: "Archivierte Teilnehmer" })).toBeVisible();
   await page.getByRole("button", { name: "Wiederherstellen" }).click();
@@ -1059,6 +1067,7 @@ test("Admin can open and close price rule dialogs natively", async ({ page }) =>
   await setupFirstAdmin(page);
   await createCamp(page);
 
+  await openCampNavigation(page);
   await page.getByRole("link", { name: "Preise verwalten" }).first().click();
 
   // Open dialog
@@ -1087,6 +1096,7 @@ async function setupKioskScenario(page, name = "Sommerlager Kiosk") {
 
   await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
   await page.getByRole("link", { name: campName, exact: true }).click();
+  await openCampNavigation(page);
   await page.getByRole("link", { name: "Preise verwalten" }).first().click();
   await page.getByRole("button", { name: "Getränk anlegen" }).click();
   await page.locator("#price-rule-dialog").getByLabel("Name").fill("Apfelsaft");
@@ -1829,6 +1839,7 @@ test("Meal booking shows one contextual back action", async ({ page }) => {
 
   await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
   await page.getByRole("link", { name: campName, exact: true }).click();
+  await openCampNavigation(page);
   await page.getByRole("link", { name: "Preise verwalten" }).first().click();
   await page.locator('input[name="meal-dinner_adult_price"]').fill("7.00");
   await page.getByRole("button", { name: "Standardpreise speichern" }).click();
@@ -1892,6 +1903,7 @@ test("Partner meal retraction requires explicit confirmation", async ({ page }) 
   await createParticipant(page, "Grace", "Hopper", "", "5678");
   await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
   await page.getByRole("link", { name: campName, exact: true }).click();
+  await openCampNavigation(page);
   await page.getByRole("link", { name: "Preise verwalten" }).first().click();
   await page.locator('input[name="meal-dinner_adult_price"]').fill("7.00");
   await page.getByRole("button", { name: "Standardpreise speichern" }).click();
@@ -1984,17 +1996,11 @@ test("Kiosk masonry and expense cards stay responsive and accessible", async ({ 
   await assertNoUnexpectedOverflow(page);
 
   await page.setViewportSize({ width: 390, height: 844 });
-  const mobileAdminHeader = await page.locator("header.topbar").evaluate((header) => {
-    const navigationItems = Array.from(header.querySelectorAll("nav > .nav-link, nav > .nav-user-group")).filter(
-      (item) => window.getComputedStyle(item).display !== "none"
-    );
-    return {
-      height: Math.round(header.getBoundingClientRect().height),
-      columns: new Set(navigationItems.map((item) => Math.round(item.getBoundingClientRect().left))).size,
-    };
-  });
-  expect(mobileAdminHeader.height, "Mobile Admin-Kopfzeile bleibt überschaubar").toBeLessThanOrEqual(280);
-  expect(mobileAdminHeader.columns, "Mobile Admin-Aktionen nutzen zwei Spalten").toBe(2);
+  const globalMenu = page.locator(".admin-global-menu");
+  await expect(globalMenu).not.toHaveAttribute("open", "");
+  await expect(globalMenu.locator("summary")).toBeVisible();
+  const mobileHeaderHeight = await page.locator("header.topbar").evaluate(header => header.getBoundingClientRect().height);
+  expect(mobileHeaderHeight, "Mobile Kopfzeile mit geschlossenem Verwaltungsmenü bleibt kompakt").toBeLessThanOrEqual(160);
   await assertNoUnexpectedOverflow(page);
   await page.setViewportSize({ width: 1280, height: 900 });
   await logout(page);
@@ -2172,10 +2178,16 @@ test("Mobile admin header keeps visual, DOM, and keyboard order aligned", async 
     expect(order.visual, `Visuelle Reihenfolge bei ${viewport.width}px`).toEqual(order.dom);
 
     const themeToggle = navigation.locator(".theme-toggle");
-    const visibleNavigationItems = navigation.locator(":scope > :not([hidden])");
+    const menuToggle = navigation.locator(".admin-global-menu > summary");
     await themeToggle.focus();
     await page.keyboard.press("Tab");
-    await expect(visibleNavigationItems.nth(1)).toBeFocused();
+    await expect(menuToggle).toBeFocused();
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Tab");
+    await expect(navigation.locator(".admin-global-menu__items button:visible, .admin-global-menu__items a:visible").first()).toBeFocused();
+    await menuToggle.focus();
+    await page.keyboard.press("Enter");
+    await expect(navigation.locator(".admin-global-menu")).not.toHaveAttribute("open", "");
   }
 });
 
@@ -2273,6 +2285,7 @@ test("Finance flow: payments and expenses", async ({ page }) => {
   await createCamp(page, "Sommerlager Finance");
   await createParticipant(page, "Marie", "Curie");
 
+  await page.locator(".participant-more-actions > summary").click();
   await page.getByRole("link", { name: "Zahlung erfassen" }).click();
   await page.getByLabel("Betrag").fill("50.00");
   await page.locator("#id_paid_on").fill("2026-07-01");
@@ -2518,7 +2531,8 @@ for (const viewport of [
 
     await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
     await page.getByRole("link", { name: campName, exact: true }).click();
-    await page.getByRole("link", { name: "Preise verwalten" }).first().click();
+    await openCampNavigation(page);
+  await page.getByRole("link", { name: "Preise verwalten" }).first().click();
     await page.locator('input[name="meal-breakfast_adult_price"]').fill("5.00");
     await page.locator('input[name="meal-dinner_adult_price"]').fill("7.00");
     await page.getByRole("button", { name: "Standardpreise speichern" }).click();
@@ -2554,6 +2568,7 @@ test("Admin can batch delete and restore booking charges via table checkboxes", 
   await createCamp(page, "Batch-Lager");
   const serviceDate = dateInputValue(addDays(new Date(), 2));
 
+  await openCampNavigation(page);
   await page.getByRole("link", { name: "Preise verwalten" }).first().click();
   await page.getByRole("button", { name: "Getränk anlegen" }).click();
   const priceDialog = page.locator("dialog#price-rule-dialog");
@@ -2619,6 +2634,7 @@ test("Admin can batch delete and restore booking charges via table checkboxes", 
 test("Price rule checkbox and radio labels are touch-sized in portrait and landscape", async ({ page }) => {
   await setupFirstAdmin(page);
   await createCamp(page, "Touchziel-Preisregel");
+  await openCampNavigation(page);
   await page.getByRole("link", { name: "Preise verwalten" }).first().click();
   const priceManageUrl = page.url();
   const priceRuleUrl = priceManageUrl.replace(/\/prices\/?$/, "/prices/new/");
@@ -2734,6 +2750,7 @@ test("Admin can unlock participant PIN timeout after kiosk lockout", async ({ pa
   // Admin logs in and unlocks participant
   await loginAsAdmin(page);
   await page.goto(participantUrl);
+  await page.locator(".participant-more-actions > summary").click();
   await expect(page.getByRole("button", { name: "Timeout zurücksetzen" })).toBeVisible();
   await page.getByRole("button", { name: "Timeout zurücksetzen" }).click();
   await expect(page.getByText("Timeout wurde zurückgesetzt.")).toBeVisible();

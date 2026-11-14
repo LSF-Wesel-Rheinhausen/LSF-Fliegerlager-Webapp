@@ -6,6 +6,7 @@
 {% block extrastyle %}
   {{ block.super }}
   <link rel="stylesheet" href="{% static 'billing/admin-mobile.css' %}">
+  <link rel="stylesheet" href="{% static 'billing/admin-redesign.css' %}">
 {% endblock %}
 
 {% block extrahead %}
@@ -19,8 +20,10 @@
 {% endblock %}
 
 {% block branding %}
-  <div id="site-name"><a href="{% url 'admin:index' %}">Fliegerlager-Administration</a></div>
+  <div id="site-name"><a href="{% url 'admin:index' %}"><img src="{% static 'billing/logo.jpg' %}" alt="" width="34" height="34"> Fliegerlager-Administration</a></div>
 {% endblock %}
+
+{% block bodyclass %}{{ block.super }} admin-redesign-root{% endblock %}
 
 {% block nav-sidebar %}
   <button class="admin-mobile-menu-toggle" type="button" aria-expanded="false" aria-controls="admin-nav-drawer">

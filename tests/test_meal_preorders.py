@@ -55,7 +55,7 @@ def test_preorder_settings_are_admin_only(client):
 def test_admin_navigation_links_to_preorders_and_non_admin_does_not_see_it(client):
     client.force_login(SuperUserFactory())
     admin_content = client.get(reverse("camp-list")).content.decode()
-    toolbar = admin_content.split('<div class="toolbar">', 1)[1].split("</div>", 1)[0]
+    toolbar = admin_content.split('<header class="page-heading">', 1)[1].split("</header>", 1)[0]
 
     assert reverse("preorder-settings") in admin_content
     assert toolbar.count("Vorbestellungen") == 1

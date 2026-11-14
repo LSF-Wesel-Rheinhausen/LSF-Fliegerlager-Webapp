@@ -2,7 +2,15 @@ const { expect } = require("@playwright/test");
 
 const KIOSK_ACCESS_PIN = "864208";
 
+async function openCampNavigation(page) {
+  const navigation = page.locator(".camp-task-nav");
+  if (await navigation.count() && !(await navigation.evaluate(menu => menu.open))) {
+    await navigation.locator("summary").click();
+  }
+}
+
 async function configureCampKioskAccess(page) {
+  await openCampNavigation(page);
   await page.getByRole("link", { name: "Lager-PIN verwalten" }).click();
   await expect(page.getByRole("heading", { name: "Lager-PIN verwalten" })).toBeVisible();
   await page.getByLabel("Neue Lager-PIN").fill(KIOSK_ACCESS_PIN);
@@ -26,5 +34,6 @@ async function openKiosk(page, path = "/kiosk/login/") {
 module.exports = {
   KIOSK_ACCESS_PIN,
   configureCampKioskAccess,
+  openCampNavigation,
   openKiosk,
 };
