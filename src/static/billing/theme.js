@@ -42,7 +42,7 @@
 
     const campNavigation = document.querySelector(".camp-task-nav");
     if (campNavigation) {
-      const desktopNavigation = window.matchMedia("(min-width: 701px)");
+      const desktopNavigation = window.matchMedia("(min-width: 1101px)");
       const syncNavigation = () => {
         campNavigation.open = desktopNavigation.matches;
       };
@@ -52,7 +52,7 @@
 
     const globalNavigation = document.querySelector(".admin-global-menu");
     if (globalNavigation) {
-      const desktopGlobalNavigation = window.matchMedia("(min-width: 781px)");
+      const desktopGlobalNavigation = window.matchMedia("(min-width: 901px)");
       const syncGlobalNavigation = () => {
         globalNavigation.open = desktopGlobalNavigation.matches;
       };

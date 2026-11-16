@@ -10,7 +10,7 @@
     <link rel="manifest" href="{{ pwa_manifest_url }}">
     <meta name="theme-color" content="#1f5d42">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <script src="{% static 'billing/theme.js' %}?v=1"></script>
+    <script src="{% static 'billing/theme.js' %}?v=2"></script>
     <script src="{% static 'billing/dialog-scroll-lock.js' %}?v=1"></script>
     <script src="{% static 'billing/pwa.js' %}?v=3" defer></script>
     <script src="{% static 'billing/table_tools.js' %}?v=1" defer></script>
@@ -34,7 +34,7 @@
       <nav aria-label="Kopfzeile">
         {% include "includes/theme_toggle.html" %}
         {% if user.is_authenticated %}
-          <details class="admin-global-menu">
+          <details class="admin-global-menu" open>
             <summary>Verwaltung und Konto</summary>
             <div class="admin-global-menu__items">
               <button class="button button-secondary nav-link" type="button" data-pwa-install hidden>Installieren</button>

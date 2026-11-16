@@ -228,7 +228,7 @@
       });
     }
 
-    const anchor = table.closest(".table-responsive, .kiosk-table__wrapper") ?? table;
+    const anchor = table.closest(".admin-table-scroll, .table-responsive, .kiosk-table__wrapper") ?? table;
     anchor.parentElement.insertBefore(toolbar, anchor);
   }
 

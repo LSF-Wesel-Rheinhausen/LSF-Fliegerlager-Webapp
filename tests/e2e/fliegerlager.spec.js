@@ -397,16 +397,16 @@ test("Admin completes setup, login, camp workflow and logout", async ({ page }) 
 
   await page.setViewportSize({ width: 390, height: 844 });
   const settlementLayout = await page.locator(".participant-settlements").evaluate((panel) => {
-    const table = panel.querySelector("table");
+    const tableViewport = panel.querySelector(".admin-table-scroll");
     return {
       panelClientWidth: panel.clientWidth,
       panelScrollWidth: panel.scrollWidth,
-      tableClientWidth: table.clientWidth,
-      tableScrollWidth: table.scrollWidth,
+      tableViewportClientWidth: tableViewport.clientWidth,
+      tableViewportScrollWidth: tableViewport.scrollWidth,
     };
   });
   expect(settlementLayout.panelScrollWidth).toBeLessThanOrEqual(settlementLayout.panelClientWidth + 1);
-  expect(settlementLayout.tableScrollWidth).toBeGreaterThan(settlementLayout.tableClientWidth);
+  expect(settlementLayout.tableViewportScrollWidth).toBeGreaterThan(settlementLayout.tableViewportClientWidth);
   await assertNoUnexpectedOverflow(page);
   await logout(page);
   await expect(page).toHaveURL(/\/login\/?$/);
@@ -2157,6 +2157,7 @@ test("Mobile admin header keeps visual, DOM, and keyboard order aligned", async 
     { width: 780, height: 900 },
   ]) {
     await page.setViewportSize(viewport);
+    await expect(page.locator(".admin-global-menu")).not.toHaveAttribute("open", "");
     const navigation = page.locator("header.admin-topbar > nav");
     const order = await navigation.evaluate((nav) => {
       const visibleItems = Array.from(nav.children).filter(
@@ -3025,6 +3026,7 @@ test("Issues #417/#461/#505/#506: Admin attendance matrix/export and accessible 
   expect(await participantRow.locator('[data-status="disabled"]').count()).toBeGreaterThan(0);
 
   await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator(".admin-global-menu")).not.toHaveAttribute("open", "");
   const matrixLayout = await matrix.evaluate((region) => ({
     clientWidth: region.clientWidth,
     scrollWidth: region.scrollWidth,

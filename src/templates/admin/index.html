@@ -9,10 +9,10 @@
 {% block nav-sidebar %}{% endblock %}
 
 {% block content %}
-  <header class="admin-page-intro">
-    <div><p>Technische Administration</p><h1>{{ title }}</h1><span>Modelle, Konten und Systemdaten verwalten.</span></div>
-  </header>
   <div id="content-main" class="app-list">
+    <header class="admin-page-intro">
+      <div><p>Technische Administration</p><h1>{{ title }}</h1><span>Modelle, Konten und Systemdaten verwalten.</span></div>
+    </header>
     {% if app_list %}
       {% include "admin/app_list.html" with app_list=app_list show_changelinks=True %}
     {% else %}
