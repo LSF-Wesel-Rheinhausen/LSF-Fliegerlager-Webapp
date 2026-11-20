@@ -31,10 +31,14 @@ def test_admin_attendance_matrix_is_scrollable_and_uses_explicit_table_semantics
 
     assert response.status_code == 200
     content = response.content.decode("utf-8")
-    assert 'class="kiosk-table__wrapper attendance-matrix-scroll"' in content
+    assert re.search(
+        r'class="kiosk-table__wrapper attendance-matrix-scroll comparison-table-viewport"',
+        content,
+    )
     assert 'tabindex="0"' in content
     assert 'role="region"' in content
     assert 'aria-label="Anwesenheitsmatrix"' in content
+    assert 'data-scroll-viewport data-scroll-hint-id="attendance-matrix-help"' in content
     assert '<th id="attendance-person-heading" scope="col">Person</th>' in content
     assert '<th id="attendance-day-20250701" scope="col">01.07.2025</th>' in content
     assert re.search(

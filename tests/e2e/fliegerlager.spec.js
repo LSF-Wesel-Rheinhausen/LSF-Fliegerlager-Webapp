@@ -1589,6 +1589,7 @@ test("Breakfast booking cards retain their responsive grid without JavaScript de
   await page.locator("dialog#food-dialog").getByRole("button", { name: "Für später vorbestellen" }).click();
   const breakfastCalendar = page.locator("dialog#breakfast-meal-dialog");
   await expectOnlyModal(page, "breakfast-meal-dialog");
+  await expect(breakfastCalendar.getByRole("heading", { name: "Frühstück vorbestellen" })).toBeFocused();
   const card = breakfastCalendar.locator(".meal-booking-day").first();
 
   for (const viewport of [
@@ -1849,6 +1850,7 @@ test("Meal booking shows one contextual back action", async ({ page }) => {
   await page.getByLabel("Teilnehmer").selectOption({ label: "Marie Curie" });
   await page.getByLabel("PIN:", { exact: true }).fill("1234");
   await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await expect(page).toHaveURL(/\/kiosk\/$/);
 
   // Existing meal-deadline notifications still use the legacy hash deep link.
   await page.goto("/kiosk/#meal-calendar");

@@ -105,8 +105,24 @@ test("camp overview groups finance figures and keeps wide tables inside the page
     await expect(page.locator(".overview-summary__group")).toHaveCount(2);
     await expect(page.locator(".metric")).toHaveCount(6);
     await expect(page.getByRole("navigation", { name: "Lagerberichte und Exporte" }).getByRole("link").first()).toBeVisible();
-    await expect(page.locator(".admin-table-scroll").first()).toHaveAttribute("role", "region");
-    await expect(page.locator(".admin-table-scroll").first()).toHaveAttribute("tabindex", "0");
+    const firstTableViewport = page.locator(".admin-table-scroll").first();
+    await expect(firstTableViewport).toHaveAttribute("role", "region");
+    const firstTableHasOverflow = await firstTableViewport.evaluate((element) => {
+      const table = element.querySelector("table");
+      return table.scrollWidth > element.clientWidth + 1;
+    });
+    await expect(firstTableViewport).toHaveAttribute("tabindex", firstTableHasOverflow ? "0" : "-1");
+    const comparisonViewport = page.locator(".participant-settlements .comparison-table-viewport");
+    const comparisonHasOverflow = await comparisonViewport.evaluate((element) => element.scrollWidth > element.clientWidth + 1);
+    await expect(comparisonViewport).toHaveAttribute("tabindex", comparisonHasOverflow ? "0" : "-1");
+    const comparisonHint = page.locator("#participant-settlements-scroll-hint");
+    if (comparisonHasOverflow) {
+      await expect(comparisonHint).toBeVisible();
+      await expect(comparisonViewport).toHaveAttribute("aria-describedby", "participant-settlements-scroll-hint");
+    } else {
+      await expect(comparisonHint).toBeHidden();
+      await expect(comparisonViewport).not.toHaveAttribute("aria-describedby");
+    }
 
     const dimensions = await page.evaluate(() => ({
       viewport: document.documentElement.clientWidth,
@@ -129,8 +145,14 @@ test("camp overview groups finance figures and keeps wide tables inside the page
       await page.evaluate(() => {
         document.documentElement.style.fontSize = "200%";
       });
-      const expandedDocumentWidth = await page.evaluate(() => document.documentElement.scrollWidth);
-      expect(expandedDocumentWidth, "320px viewport remains page-scrollable with expanded text and a long amount").toBeLessThanOrEqual(321);
+      const expandedLayout = await page.evaluate(() => ({
+        documentWidth: document.documentElement.scrollWidth,
+        overflowingElements: Array.from(document.querySelectorAll("#pending-registrations h2, #pending-registrations td"))
+          .filter((element) => element.scrollWidth > element.clientWidth + 1)
+          .map((element) => `${element.tagName}.${element.className}`),
+      }));
+      expect(expandedLayout.documentWidth, "320px viewport has no page overflow with expanded text and a long amount").toBeLessThanOrEqual(321);
+      expect(expandedLayout.overflowingElements, "expanded labels and values remain visible in registration cards").toEqual([]);
     }
   }
 
@@ -187,7 +209,8 @@ test("pending registration review wraps long identity and date fields without hi
   for (const width of [320, 390, 768, 1128, 1440]) {
     await page.setViewportSize({ width, height: 960 });
     await page.goto(campUrl);
-    const row = page.locator("#pending-registrations tbody tr").filter({ hasText: "Alexandria-Maria-Winterlagerteilnehmerin" });
+    const section = page.locator("#pending-registrations");
+    const row = section.locator("tbody tr").filter({ hasText: "Alexandria-Maria-Winterlagerteilnehmerin" });
     await expect(row).toBeVisible();
     await expect(row.getByRole("button", { name: "Freigeben" })).toBeVisible();
 
@@ -196,15 +219,29 @@ test("pending registration review wraps long identity and date fields without hi
       return {
         cellsFit: cells.every((cell) => cell.scrollWidth <= cell.clientWidth + 1),
         ordered: cells.every((cell, index) => index === 0 || cells[index - 1].getBoundingClientRect().right <= cell.getBoundingClientRect().left + 1),
+        rowDisplay: getComputedStyle(element).display,
         pageWidth: document.documentElement.scrollWidth,
       };
     });
-    expect(layout.cellsFit, `${width}px applicant names, email and dates wrap inside cells`).toBe(true);
-    expect(layout.ordered, `${width}px review columns stay separated`).toBe(true);
+    expect(layout.cellsFit, `${width}px applicant names, email and dates fit their cells`).toBe(true);
+    if (width <= 900) {
+      expect(layout.rowDisplay, `${width}px registrations render as labeled records`).toBe("grid");
+      await expect(row.locator(".responsive-record-table__label")).toHaveCount(6);
+      await expect(section.getByRole("columnheader", { name: "Name" })).toBeAttached();
+      await expect(section.locator("thead .table-sort-button").first()).toHaveAttribute("tabindex", "-1");
+      await expect(section.locator(".table-tools__sort select")).toBeVisible();
+      const viewport = section.locator(".responsive-record-viewport");
+      await expect(viewport).toHaveAttribute("tabindex", "-1");
+      expect(await viewport.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+      await section.locator(".table-tools input[type=search]").fill("Alexandria-Maria");
+      await expect(section.locator(".table-tools__count")).toHaveText("1 von 1 Zeilen");
+      await section.locator(".table-tools input[type=search]").fill("Name");
+      await expect(section.locator(".table-tools__count")).toHaveText("0 von 1 Zeilen");
+    } else {
+      expect(layout.ordered, `${width}px review columns stay separated`).toBe(true);
+    }
     expect(layout.pageWidth, `${width}px has no page-level horizontal overflow`).toBeLessThanOrEqual(width + 1);
 
-    const viewport = page.locator("#pending-registrations .admin-table-scroll");
-    if (width <= 390) expect(await viewport.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
   }
 });
 

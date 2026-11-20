@@ -82,31 +82,33 @@
     <section id="pending-registrations" class="panel stack pending-registrations">
       <h2>Offene Registrierungsanfragen <span class="section-count">{{ pending_registration_rows|length }}</span></h2>
       <p class="section-intro">Prüfe vor der Freigabe die PIN-Einrichtung und alle preisrelevanten Merkmale.</p>
-      <div class="admin-table-scroll" role="region" tabindex="0" aria-label="Offene Registrierungsanfragen"><table class="responsive-record-table pending-registration-table" data-sortable data-filterable>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>E-Mail</th>
-            <th>Telefon</th>
-            <th data-sort-type="date">Anreise / Abreise</th>
-            <th data-sort-type="date">Eingereicht am</th>
-            <th data-sort="none">Prüfung und Aktionen</th>
+      <div class="admin-table-scroll responsive-record-viewport" role="region" tabindex="0" aria-label="Offene Registrierungsanfragen"><table class="responsive-record-table pending-registration-table" role="table" data-sortable data-filterable>
+        <thead role="rowgroup">
+          <tr role="row">
+            <th scope="col" role="columnheader">Name</th>
+            <th scope="col" role="columnheader">E-Mail</th>
+            <th scope="col" role="columnheader">Telefon</th>
+            <th scope="col" role="columnheader" data-sort-type="date">Anreise / Abreise</th>
+            <th scope="col" role="columnheader" data-sort-type="date">Eingereicht am</th>
+            <th scope="col" role="columnheader" data-sort="none">Prüfung und Aktionen</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody role="rowgroup">
           {% for row in pending_registration_rows %}
             {% with p=row.participant approval_form=row.approval_form %}
-            <tr>
-              <td data-label="Name"><strong>{{ p.full_name }}</strong></td>
-              <td data-label="E-Mail">{{ p.email|default:"-" }}</td>
-              <td data-label="Telefon">{{ p.phone|default:"-" }}</td>
-              <td data-label="Anreise / Abreise">
+            <tr role="row">
+              <td role="cell" data-label="Name"><span class="responsive-record-table__label" aria-hidden="true">Name</span><strong>{{ p.full_name }}</strong></td>
+              <td role="cell" data-label="E-Mail"><span class="responsive-record-table__label" aria-hidden="true">E-Mail</span>{{ p.email|default:"-" }}</td>
+              <td role="cell" data-label="Telefon"><span class="responsive-record-table__label" aria-hidden="true">Telefon</span>{{ p.phone|default:"-" }}</td>
+              <td role="cell" data-label="Anreise / Abreise">
+                <span class="responsive-record-table__label" aria-hidden="true">Anreise / Abreise</span>
                 {% if p.arrival_date %}{{ p.arrival_date|date:"d.m.Y" }}{% else %}-{% endif %}
                 bis
                 {% if p.departure_date %}{{ p.departure_date|date:"d.m.Y" }}{% else %}-{% endif %}
               </td>
-              <td data-label="Eingereicht am">{{ p.created_at|date:"d.m.Y H:i" }}</td>
-              <td data-label="Aktionen" class="responsive-record-table__actions">
+              <td role="cell" data-label="Eingereicht am"><span class="responsive-record-table__label" aria-hidden="true">Eingereicht am</span>{{ p.created_at|date:"d.m.Y H:i" }}</td>
+              <td role="cell" data-label="Aktionen" class="responsive-record-table__actions">
+                <span class="responsive-record-table__label" aria-hidden="true">Prüfung und Aktionen</span>
                 <div class="stack">
                 <form method="post" action="{% url 'participant-approve-registration' camp.pk p.pk %}">
                   {% csrf_token %}
@@ -189,16 +191,16 @@
   {% if pending_expenses %}
   <section class="panel stack">
     <h2>Ausstehende Gemeinschaftsausgaben</h2>
-    <div class="admin-table-scroll" role="region" tabindex="0" aria-label="Ausstehende Gemeinschaftsausgaben"><table data-sortable data-filterable>
-      <thead><tr><th data-sort-type="date">Datum</th><th>Person</th><th>Beschreibung</th><th data-sort-type="number">Betrag</th><th data-sort="none">Beleg</th><th></th></tr></thead>
-      <tbody>
+    <div class="admin-table-scroll responsive-record-viewport" role="region" tabindex="0" aria-label="Ausstehende Gemeinschaftsausgaben"><table class="responsive-record-table pending-expense-table" role="table" data-sortable data-filterable>
+      <thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader" data-sort-type="date">Datum</th><th scope="col" role="columnheader">Person</th><th scope="col" role="columnheader">Beschreibung</th><th scope="col" role="columnheader" data-sort-type="number">Betrag</th><th scope="col" role="columnheader" data-sort="none">Beleg</th><th scope="col" role="columnheader" data-sort="none">Aktionen</th></tr></thead>
+      <tbody role="rowgroup">
         {% for expense in pending_expenses %}
-          <tr>
-            <td>{{ expense.paid_on|default:expense.created_at|date:"d.m.Y" }}</td>
-            <td>{{ expense.participant.first_name }} {{ expense.participant.last_name }}</td>
-            <td>{{ expense.description }}</td>
-            <td>{{ expense.amount }} €</td>
-            <td>
+          <tr role="row">
+            <td role="cell" data-label="Datum"><span class="responsive-record-table__label" aria-hidden="true">Datum</span>{{ expense.paid_on|default:expense.created_at|date:"d.m.Y" }}</td>
+            <td role="cell" data-label="Person"><span class="responsive-record-table__label" aria-hidden="true">Person</span>{{ expense.participant.first_name }} {{ expense.participant.last_name }}</td>
+            <td role="cell" data-label="Beschreibung"><span class="responsive-record-table__label" aria-hidden="true">Beschreibung</span>{{ expense.description }}</td>
+            <td role="cell" data-label="Betrag"><span class="responsive-record-table__label" aria-hidden="true">Betrag</span>{{ expense.amount }} €</td>
+            <td role="cell" data-label="Beleg"><span class="responsive-record-table__label" aria-hidden="true">Beleg</span>
               {% if expense.receipt %}
                 <a
                   href="{% url 'expense-receipt' expense.pk %}"
@@ -207,9 +209,11 @@
                   class="button button-small button-secondary"
                   {% if expense.receipt_preview_kind == "pdf" %}data-pdf-preview="true"{% elif expense.receipt_preview_kind == "image" %}data-receipt-preview="image" data-receipt-alt="{{ expense.receipt_preview_alt }}" aria-haspopup="dialog"{% endif %}
                 >Beleg ansehen</a>
+              {% else %}
+                Kein Beleg vorhanden
               {% endif %}
             </td>
-            <td>
+            <td role="cell" data-label="Aktionen" class="responsive-record-table__actions"><span class="responsive-record-table__label" aria-hidden="true">Aktionen</span>
               <div class="row-actions">
                 <a href="{% url 'shared-expense-approve' expense.pk %}" class="button button-small">Genehmigen &amp; Umlegen</a>
                 <button type="button" class="button button-small button-danger" data-open-reject-dialog data-expense-id="{{ expense.pk }}" data-expense-desc="{{ expense.description }}">Ablehnen</button>
@@ -224,30 +228,30 @@
 
   <section class="panel stack">
     <h2>Genehmigte Gemeinschaftsausgaben</h2>
-    <div class="admin-table-scroll" role="region" tabindex="0" aria-label="Genehmigte Gemeinschaftsausgaben"><table class="responsive-record-table" data-sortable data-filterable>
-      <thead>
+    <div class="admin-table-scroll responsive-record-viewport" role="region" tabindex="0" aria-label="Genehmigte Gemeinschaftsausgaben"><table class="responsive-record-table approved-expense-table" role="table" data-sortable data-filterable>
+      <thead role="rowgroup">
         <tr>
-          <th data-sort-type="date">Genehmigt am</th>
-          <th>Person</th>
-          <th>Beschreibung</th>
-          <th>Kategorie</th>
-          <th data-sort-type="number">Betrag</th>
-          <th>Umlage</th>
-          <th>Genehmiger</th>
-          <th data-sort="none">Beleg</th>
+          <th scope="col" role="columnheader" data-sort-type="date">Genehmigt am</th>
+          <th scope="col" role="columnheader">Person</th>
+          <th scope="col" role="columnheader">Beschreibung</th>
+          <th scope="col" role="columnheader">Kategorie</th>
+          <th scope="col" role="columnheader" data-sort-type="number">Betrag</th>
+          <th scope="col" role="columnheader">Umlage</th>
+          <th scope="col" role="columnheader">Genehmiger</th>
+          <th scope="col" role="columnheader" data-sort="none">Beleg</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody role="rowgroup">
         {% for expense in approved_expenses %}
-          <tr>
-            <td data-label="Genehmigt am">{% if expense.approved_at %}{{ expense.approved_at|date:"d.m.Y H:i" }}{% else %}Nicht angegeben{% endif %}</td>
-            <td data-label="Person">{% if expense.participant %}{{ expense.participant.first_name }} {{ expense.participant.last_name }}{% else %}Keine Person angegeben{% endif %}</td>
-            <td data-label="Beschreibung">{{ expense.description|default:"Keine Beschreibung angegeben" }}</td>
-            <td data-label="Kategorie">{{ expense.category|default:"Keine Kategorie angegeben" }}</td>
-            <td data-label="Betrag">{{ expense.amount }} €</td>
-            <td data-label="Umlage">{{ expense.get_allocation_method_display }}</td>
-            <td data-label="Genehmiger">{% if expense.approved_by %}{{ expense.approved_by.get_full_name|default:expense.approved_by.username }}{% else %}Kein Genehmiger angegeben{% endif %}</td>
-            <td data-label="Beleg">
+          <tr role="row">
+            <td role="cell" data-label="Genehmigt am"><span class="responsive-record-table__label" aria-hidden="true">Genehmigt am</span>{% if expense.approved_at %}{{ expense.approved_at|date:"d.m.Y H:i" }}{% else %}Nicht angegeben{% endif %}</td>
+            <td role="cell" data-label="Person"><span class="responsive-record-table__label" aria-hidden="true">Person</span>{% if expense.participant %}{{ expense.participant.first_name }} {{ expense.participant.last_name }}{% else %}Keine Person angegeben{% endif %}</td>
+            <td role="cell" data-label="Beschreibung"><span class="responsive-record-table__label" aria-hidden="true">Beschreibung</span>{{ expense.description|default:"Keine Beschreibung angegeben" }}</td>
+            <td role="cell" data-label="Kategorie" class="expense-category"><span class="responsive-record-table__label" aria-hidden="true">Kategorie</span>{{ expense.category|default:"Keine Kategorie angegeben" }}</td>
+            <td role="cell" data-label="Betrag"><span class="responsive-record-table__label" aria-hidden="true">Betrag</span>{{ expense.amount }} €</td>
+            <td role="cell" data-label="Umlage"><span class="responsive-record-table__label" aria-hidden="true">Umlage</span>{{ expense.get_allocation_method_display }}</td>
+            <td role="cell" data-label="Genehmiger"><span class="responsive-record-table__label" aria-hidden="true">Genehmiger</span>{% if expense.approved_by %}{{ expense.approved_by.get_full_name|default:expense.approved_by.username }}{% else %}Kein Genehmiger angegeben{% endif %}</td>
+            <td role="cell" data-label="Beleg"><span class="responsive-record-table__label" aria-hidden="true">Beleg</span>
               {% if expense.receipt and expense.receipt_storage_available %}
                 <a
                   href="{% url 'expense-receipt' expense.pk %}"
@@ -264,7 +268,7 @@
             </td>
           </tr>
         {% empty %}
-          <tr><td colspan="8">Keine genehmigten Gemeinschaftsausgaben vorhanden.</td></tr>
+          <tr role="row"><td role="cell" colspan="8">Keine genehmigten Gemeinschaftsausgaben vorhanden.</td></tr>
         {% endfor %}
       </tbody>
     </table></div>
@@ -436,7 +440,8 @@
 
   <section id="participant-settlements" class="panel stack participant-settlements">
     <h2>Teilnehmerabrechnungen</h2>
-    <div class="admin-table-scroll" role="region" tabindex="0" aria-label="Teilnehmerabrechnungen"><table data-sortable data-filterable>
+    <p id="participant-settlements-scroll-hint" class="table-scroll-hint" data-scroll-hint>Bei schmalem Bildschirm kannst du die Tabelle seitlich scrollen.</p>
+    <div class="admin-table-scroll comparison-table-viewport" role="region" tabindex="0" aria-label="Teilnehmerabrechnungen" aria-describedby="participant-settlements-scroll-hint" data-scroll-viewport data-scroll-hint-id="participant-settlements-scroll-hint"><table class="comparison-table" data-sortable data-filterable>
         <thead>
           <tr>
             <th>Teilnehmer</th><th>Status</th><th data-sort-type="number">Nächte</th><th data-sort-type="number">Soll</th><th data-sort-type="number">Gezahlt</th><th data-sort-type="number">Vorgestreckt</th><th data-sort-type="number">Offen</th>

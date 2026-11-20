@@ -25,9 +25,9 @@
       </table>
 
       <h2 id="attendance-matrix-title">Kalender</h2>
-      <p id="attendance-matrix-help" class="helptext">Auf kleinen Bildschirmen kannst du die Matrix horizontal scrollen. Jede Zelle enthält zusätzlich den Status als Text.</p>
-      <div class="kiosk-table__wrapper attendance-matrix-scroll" tabindex="0" role="region" aria-label="Anwesenheitsmatrix" aria-describedby="attendance-matrix-help">
-        <table data-filterable>
+      <p id="attendance-matrix-help" class="helptext table-scroll-hint" data-scroll-hint>Bei schmalem Bildschirm kannst du die Matrix seitlich scrollen. Jede Zelle enthält zusätzlich den Status als Text.</p>
+      <div class="kiosk-table__wrapper attendance-matrix-scroll comparison-table-viewport" tabindex="0" role="region" aria-label="Anwesenheitsmatrix" aria-describedby="attendance-matrix-help" data-scroll-viewport data-scroll-hint-id="attendance-matrix-help">
+        <table class="comparison-table" data-filterable>
           <caption>Anwesenheit je Person und Übernachtung</caption>
           <thead>
             <tr>

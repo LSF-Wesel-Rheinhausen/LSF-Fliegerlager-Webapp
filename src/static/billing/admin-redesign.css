@@ -264,6 +264,7 @@ body:has(.admin-shell) {
 }
 .admin-shell .admin-table-scroll:focus-visible,
 .admin-shell .table-responsive:focus-visible { outline: 3px solid var(--admin-focus); outline-offset: 2px; }
+.admin-shell .comparison-table-viewport:focus-visible { outline: 3px solid var(--admin-focus); outline-offset: 2px; }
 .admin-shell table {
   width: 100%;
   min-width: 0;
@@ -279,7 +280,7 @@ body:has(.admin-shell) {
 .admin-shell .table-responsive > table {
   display: table;
   width: 100%;
-  min-width: 42rem;
+  min-width: 0;
   max-width: none;
   overflow: visible;
   -webkit-overflow-scrolling: auto;
@@ -291,11 +292,12 @@ body:has(.admin-shell) {
   font-size: .78rem;
   font-weight: 700;
   letter-spacing: .01em;
-  white-space: nowrap;
+  white-space: normal;
 }
 .admin-shell td,
 .admin-shell th { padding: .62rem .75rem; vertical-align: top; }
-.admin-shell td { white-space: normal; overflow-wrap: anywhere; }
+.admin-shell td { white-space: normal; overflow-wrap: break-word; word-break: normal; }
+.admin-shell .table-sort-button { max-width: 100%; white-space: inherit; text-align: inherit; }
 .admin-shell tbody tr + tr { border-top: 1px solid var(--admin-line); }
 .admin-shell tbody tr:hover { background: var(--admin-surface-muted); }
 .admin-shell td.number,
@@ -305,7 +307,8 @@ body:has(.admin-shell) {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.admin-shell .participant-settlements .admin-table-scroll > table { min-width: 54rem; }
+.admin-shell .comparison-table-viewport > .comparison-table { width: max-content; min-width: max-content; }
+.admin-shell .participant-settlements .comparison-table { min-width: 54rem; }
 .admin-shell .admin-table-scroll > .pending-registration-table {
   min-width: 62rem;
   table-layout: fixed;
@@ -316,6 +319,9 @@ body:has(.admin-shell) {
 .admin-shell .pending-registration-table th:nth-child(4) { width: 15%; }
 .admin-shell .pending-registration-table th:nth-child(5) { width: 13%; }
 .admin-shell .pending-registration-table th:nth-child(6) { width: 34%; }
+.admin-shell .table-scroll-hint { margin: -.25rem 0 0; color: var(--admin-muted); font-size: .875rem; }
+.admin-shell .table-scroll-hint[hidden] { display: none !important; }
+.admin-shell .responsive-record-table__label { display: none; }
 .admin-shell .admin-table-scroll [hidden] { display: none !important; }
 .admin-shell .table-tools {
   display: flex;
@@ -476,7 +482,7 @@ body:has(.admin-shell) {
 .admin-shell dialog .dialog-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; }
 .admin-shell dialog .dialog-heading h2 { margin: 0; }
 .admin-shell dialog .stack { gap: .8rem; }
-.admin-shell dialog .admin-table-scroll > table { min-width: 40rem; }
+.admin-shell dialog .admin-table-scroll > table { min-width: 0; }
 .admin-shell dialog :focus-visible { outline-offset: 1px; }
 
 /* Global application navigation. Details remains usable without JavaScript. */
@@ -697,43 +703,112 @@ body.admin-redesign-root :focus-visible { outline: 3px solid var(--primary); out
 }
 @media (max-width: 900px) {
   .admin-shell.page { width: min(100% - 1.5rem, 760px); margin-block: 1rem 2rem; }
+  .admin-shell .camp-overview h1,
+  .admin-shell .camp-overview h2 { min-width: 0; overflow-wrap: break-word; }
   .admin-shell .table-tools label.table-tools__sort { display: inline-flex; }
   .admin-shell .table-tools input[type="search"] { min-width: 0; width: min(100%, 19rem); }
-  .admin-shell .camp-overview table.responsive-record-table {
-    display: table;
-    overflow: visible;
-    border: 0;
-    box-shadow: none;
-    background: transparent;
-  }
-  .admin-shell .camp-overview table.responsive-record-table thead {
-    position: static;
-    width: auto;
-    height: auto;
-    padding: 0;
-    margin: 0;
-    overflow: visible;
-    clip: auto;
-    white-space: normal;
-    border: 0;
-  }
-  .admin-shell .camp-overview table.responsive-record-table tbody { display: table-row-group; gap: 0; }
-  .admin-shell .camp-overview table.responsive-record-table tr {
-    display: table-row;
-    min-width: 0;
+  .admin-shell .camp-overview .responsive-record-viewport {
     overflow: visible;
     border: 0;
     border-radius: 0;
     background: transparent;
+  }
+  .admin-shell .camp-overview .responsive-record-viewport > table.responsive-record-table {
+    display: table;
+    width: 100%;
+    min-width: 0;
+    table-layout: auto;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    font-size: 1rem;
+  }
+  .admin-shell .camp-overview .responsive-record-table thead {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+    clip-path: none;
+  }
+  .admin-shell .camp-overview .responsive-record-table thead th {
+    position: absolute;
+    inset-inline-start: 0;
+    top: 0;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+  .admin-shell .camp-overview .responsive-record-table thead,
+  .admin-shell .camp-overview .responsive-record-table thead tr {
+    height: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
     box-shadow: none;
   }
-  .admin-shell .camp-overview table.responsive-record-table td {
-    display: table-cell;
-    grid-template-columns: none;
-    gap: 0;
-    padding: .62rem .75rem;
+  .admin-shell .camp-overview .responsive-record-table td::before { content: none; }
+  .admin-shell .camp-overview .responsive-record-table tbody {
+    display: grid;
+    gap: .75rem;
   }
-  .admin-shell .camp-overview table.responsive-record-table td::before { content: none; }
+  .admin-shell .camp-overview .responsive-record-table tr {
+    display: grid;
+    min-width: 0;
+    padding: .4rem .8rem;
+    overflow: visible;
+    border: 1px solid var(--admin-line);
+    border-radius: var(--admin-radius);
+    background: var(--admin-surface);
+    box-shadow: none;
+  }
+  .admin-shell .camp-overview .responsive-record-table tbody tr[hidden] { display: none !important; }
+  .admin-shell .camp-overview .responsive-record-table td {
+    display: block;
+    min-width: 0;
+    padding: .55rem 0;
+    border: 0;
+    text-align: start;
+    overflow-wrap: break-word;
+    word-break: normal;
+  }
+  .admin-shell .camp-overview .responsive-record-table td + td { border-top: 1px solid var(--admin-line); }
+  .admin-shell .camp-overview .responsive-record-table td.number { text-align: start; }
+  .admin-shell .camp-overview .responsive-record-table .responsive-record-table__label {
+    display: block;
+    margin-bottom: .2rem;
+    color: var(--admin-muted);
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.35;
+    overflow-wrap: normal;
+  }
+  .admin-shell .camp-overview .responsive-record-table td[colspan] {
+    display: block;
+    grid-column: 1 / -1;
+  }
+  .admin-shell .camp-overview .responsive-record-table__actions .stack,
+  .admin-shell .camp-overview .responsive-record-table__actions .row-actions { min-width: 0; }
+  .admin-shell .camp-overview .responsive-record-table__actions > form,
+  .admin-shell .camp-overview .responsive-record-table__actions .stack > form { width: 100%; }
+  .admin-shell .camp-overview .responsive-record-table fieldset > label {
+    display: inline-flex;
+    flex: 1 1 9rem;
+    align-items: center;
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: normal;
+  }
+  .admin-shell .camp-overview .responsive-record-table__actions .row-actions > * { flex: 1 1 100%; }
+  .admin-shell .camp-overview .responsive-record-table__actions .button { width: 100%; white-space: normal; }
+  .admin-shell .camp-overview .responsive-record-table fieldset { min-width: 0; }
+  .admin-shell .camp-overview .responsive-record-table input,
+  .admin-shell .camp-overview .responsive-record-table select { max-width: 100%; }
+  .admin-shell .camp-overview .responsive-record-table [data-label="Kategorie"] { overflow-wrap: break-word; }
   body:has(.admin-shell) .admin-topbar { align-items: center; flex-wrap: wrap; gap: .5rem; }
   body:has(.admin-shell) .admin-brand { flex: 1 1 auto; justify-content: flex-start; min-width: 0; }
   body:has(.admin-shell) .admin-brand__copy { max-width: 13rem; min-width: 0; }
