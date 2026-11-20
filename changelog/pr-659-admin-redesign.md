@@ -10,4 +10,3 @@
 - Fokussierte Prüfung des Follow-ups: 33 Python-Tests aus `test_admin_redesign.py`, `test_pwa.py` und `test_issue_417_ui.py` bestanden; zehn Chromium-Prüfungen aus `admin_redesign.spec.js` und `admin_table_tools.spec.js` bestanden.
 - Browser-Regressionen nach dem Review: 15 gezielte Prüfungen zu Tabellenkopf, Registrierung und mobilen Ansichten bestanden in Chromium, Firefox und WebKit. Drei gezielte WebKit-Abläufe für Essensübersicht, Frühstücksdialog-Fokus und Kiosk-Anmeldung bestanden.
 - Responsive Playwright-Prüfungen: 320, 390, 768, 1024, 1280, 1440 und 1920 Pixel; lange Registrierungsdaten bei 320, 390, 768, 1128 und 1440 Pixeln; zusätzlich 200 % Textgröße, Reduced Motion und Navigation ohne JavaScript.
-
