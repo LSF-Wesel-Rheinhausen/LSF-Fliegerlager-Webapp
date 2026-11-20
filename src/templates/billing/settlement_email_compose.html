@@ -44,27 +44,29 @@
       <input type="hidden" name="preview_token" value="{{ preview_token }}">
       <section class="panel stack" aria-labelledby="settlement-email-preview-heading">
         <h2 id="settlement-email-preview-heading">Versandvorschau</h2>
-        <table data-sortable data-filterable>
-          <thead><tr><th>Adresse</th><th>Teilnehmer</th><th>Anhang</th><th>Vorheriger Versand</th></tr></thead>
-          <tbody>
-            {% for recipient in preview %}
-              <tr>
-                <td>{{ recipient.email }}</td>
-                <td>{{ recipient.name }}</td>
-                <td>{{ recipient.filename }}</td>
-                <td>
-                  {% if recipient.already_queued %}
-                    Zum Versand vorgemerkt
-                  {% elif recipient.previously_sent %}
-                    Bereits versendet
-                  {% else %}
-                    -
-                  {% endif %}
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+        <div class="admin-table-scroll" role="region" tabindex="0" aria-label="Versandvorschau">
+          <table data-sortable data-filterable>
+            <thead><tr><th>Adresse</th><th>Teilnehmer</th><th>Anhang</th><th>Vorheriger Versand</th></tr></thead>
+            <tbody>
+              {% for recipient in preview %}
+                <tr>
+                  <td>{{ recipient.email }}</td>
+                  <td>{{ recipient.name }}</td>
+                  <td>{{ recipient.filename }}</td>
+                  <td>
+                    {% if recipient.already_queued %}
+                      Zum Versand vorgemerkt
+                    {% elif recipient.previously_sent %}
+                      Bereits versendet
+                    {% else %}
+                      -
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
         <p>Die Zuordnung von Adresse, Teilnehmer und PDF wird mit der Bestätigung eingefroren.</p>
         {% if has_already_queued %}
           <p class="message warning" role="status">

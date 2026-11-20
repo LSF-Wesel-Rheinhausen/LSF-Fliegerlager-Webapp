@@ -204,9 +204,9 @@ def test_kiosk_brand_uses_authoritative_club_logo_without_changing_other_surface
 @pytest.mark.parametrize(
     ("route_name", "expected_scope", "expected_cache_name"),
     [
-        ("pwa-worker-admin", "/", "fliegerlager-admin-v41"),
-        ("pwa-worker-kiosk", "/kiosk/", "fliegerlager-kiosk-v42"),
-        ("pwa-worker-central", "/central/kiosk/", "fliegerlager-central-v41"),
+        ("pwa-worker-admin", "/", "fliegerlager-admin-v44"),
+        ("pwa-worker-kiosk", "/kiosk/", "fliegerlager-kiosk-v45"),
+        ("pwa-worker-central", "/central/kiosk/", "fliegerlager-central-v44"),
     ],
 )
 def test_service_workers_have_explicit_scopes(client, route_name, expected_scope, expected_cache_name):
@@ -219,6 +219,7 @@ def test_service_workers_have_explicit_scopes(client, route_name, expected_scope
     javascript = response.content.decode().replace("\\u002D", "-")
     assert expected_cache_name in javascript
     assert "/static/billing/app-v8.css" in javascript
+    assert "/static/billing/admin-redesign.css" in javascript
     assert "/static/billing/dialog-scroll-lock.js" in javascript
     assert "/static/billing/table_tools.js" in javascript
     assert '"/static/billing/app.css"' not in javascript

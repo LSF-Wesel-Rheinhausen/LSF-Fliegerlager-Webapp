@@ -1,13 +1,14 @@
 {% extends "base.html" %}
 {% load billing_format %}
 {% block content %}
-  <div class="toolbar">
+  <header class="toolbar participant-heading">
     <div>
       <h1>{{ participant.full_name }}</h1>
       <p>{{ participant.get_status_display }}</p>
     </div>
     <div class="actions">
-      <a class="button button-secondary" href="{% url 'participant-edit' participant.pk %}">Teilnehmer bearbeiten</a>
+      <a class="button participant-primary-action" href="{% url 'participant-edit' participant.pk %}">Teilnehmer bearbeiten</a>
+      <details class="participant-more-actions"><summary>Weitere Aktionen</summary><div class="participant-more-actions__menu">
       {% if user|can_manage_users %}
         {% if participant.is_archived %}
           <form method="post" action="{% url 'participant-restore' participant.pk %}">
@@ -37,8 +38,16 @@
         </form>
       {% endif %}
       <a class="button" href="{% url 'export-participant-pdf' participant.pk %}" target="_blank" rel="noopener" data-pdf-preview="true">Einzelabrechnung als PDF öffnen</a>
+      </div></details>
     </div>
-  </div>
+  </header>
+
+  <nav class="participant-section-nav" aria-label="Teilnehmerbereiche">
+    {% if can_view_profile_pii %}<a href="#participant-profile">Stammdaten und Aufenthalt</a>{% endif %}
+    <a href="#participant-accounting">Abrechnung</a><a href="#participant-bookings">Buchungen</a>
+    <a href="#participant-family">Angehörige</a>{% if attendance_people %}<a href="#attendance-title">Anwesenheit</a>{% endif %}
+    <a href="#participant-snapshots">Gespeicherte Abrechnungen</a><a href="#participant-audit">Änderungsprotokoll</a>
+  </nav>
 
   {% if participant.is_archived %}
     <section class="panel notice notice-warning">
@@ -48,18 +57,20 @@
   {% endif %}
 
   {% if can_view_profile_pii %}
-    <section class="panel stack" aria-labelledby="participant-profile-title">
-      <h2 id="participant-profile-title">Stammdaten</h2>
+    <section id="participant-profile" class="panel stack" aria-labelledby="participant-profile-title">
+      <h2 id="participant-profile-title">Stammdaten und Aufenthalt</h2>
       <dl>
         <dt>E-Mail</dt><dd>{{ participant.email|default:"-" }}</dd>
         <dt>Telefon</dt><dd>{{ participant.phone|default:"-" }}</dd>
         <dt>Geburtsdatum</dt><dd>{{ participant.birth_date|date:"d.m.Y"|default:"-" }}</dd>
         <dt>Alter bei Lagerbeginn</dt><dd>{{ participant_age|default_if_none:"-" }}</dd>
+        <dt>Anreise</dt><dd>{{ participant.arrival_date|date:"d.m.Y"|default:"-" }}</dd>
+        <dt>Abreise</dt><dd>{{ participant.departure_date|date:"d.m.Y"|default:"-" }}</dd>
       </dl>
     </section>
   {% endif %}
 
-  <section class="metrics" aria-label="Teilnehmerkennzahlen">
+  <section id="participant-accounting" class="metrics" aria-label="Teilnehmerkennzahlen">
     <article class="metric"><span>Brutto</span><strong>{{ settlement.total_gross }} EUR</strong></article>
     <article class="metric"><span>Förderung</span><strong>{{ settlement.total_subsidy }} EUR</strong></article>
     <article class="metric"><span>Soll</span><strong>{{ settlement.total_due }} EUR</strong></article>
@@ -134,7 +145,7 @@
     {% endif %}
   </section>
 
-  <section class="panel stack">
+  <section id="participant-bookings" class="panel stack">
     <form class="booking-records-form" method="post" action="{% url 'charge-batch-delete' participant.pk %}">
       {% csrf_token %}
       <div class="toolbar compact-toolbar">
@@ -323,7 +334,7 @@
     </table>
   </section>
 
-  <section class="panel stack">
+  <section id="participant-family" class="panel stack">
     <div class="toolbar compact-toolbar">
       <div>
         <h2>Familienmitglieder</h2>
@@ -397,7 +408,7 @@
     </section>
   {% endif %}
 
-  <section class="panel stack">
+  <section id="participant-snapshots" class="panel stack">
     <h2>Gespeicherte Abrechnungen</h2>
     <table data-sortable>
       <thead><tr><th>Version</th><th>Typ</th><th data-sort-type="date">Zeitpunkt</th><th data-sort-type="number">Soll</th><th data-sort-type="number">Offen</th><th></th></tr></thead>
@@ -418,7 +429,7 @@
     </table>
   </section>
 
-  <section class="panel stack">
+  <section id="participant-audit" class="panel stack">
     <form class="booking-audit-form" method="post" action="{% url 'booking-audit-batch-restore' participant.pk %}">
       {% csrf_token %}
       <div class="toolbar compact-toolbar">

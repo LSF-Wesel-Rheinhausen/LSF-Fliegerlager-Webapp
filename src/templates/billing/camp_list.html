@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 {% load billing_format %}
 {% block content %}
-  <div class="toolbar">
-    <h1>Lager</h1>
+  <header class="page-heading">
+    <div><p class="page-kicker">Verwaltung</p><h1>Lager</h1><p>Abrechnungen und Teilnehmende der Lager verwalten.</p></div>
     {% if user|can_manage_users %}
-      <a class="button" href="{% url 'camp-create' %}">Lager anlegen</a>
-      <a class="button button-secondary" href="{% url 'preorder-settings' %}">Vorbestellungen</a>
+      <div class="actions"><a class="button" href="{% url 'camp-create' %}">Lager anlegen</a><a class="button button-secondary" href="{% url 'preorder-settings' %}">Vorbestellungen</a></div>
     {% endif %}
-  </div>
-  <table data-sortable data-filterable>
+  </header>
+  <section class="panel camp-list-panel" aria-label="Lagerliste">
+  <div class="table-responsive"><table data-sortable data-filterable>
     <thead>
       <tr><th>Name</th><th data-sort-type="number">Jahr</th><th data-sort-type="date">Zeitraum</th><th>Status</th></tr>
     </thead>
@@ -30,5 +30,6 @@
         <tr><td colspan="4">Noch keine Lager vorhanden.</td></tr>
       {% endfor %}
     </tbody>
-  </table>
+  </table></div>
+  </section>
 {% endblock %}

@@ -1,42 +1,40 @@
 {% extends "base.html" %}
 {% load billing_format %}
 {% block content %}
-  <div class="toolbar">
+  <div class="camp-overview">
+  <header class="toolbar camp-detail-heading">
     <div>
       <h1>Übersicht</h1>
       {% if camp.notes %}<p>{{ camp.notes }}</p>{% endif %}
     </div>
-    <div class="actions">
-      <a class="button button-secondary" href="{% url 'camp-edit' camp.pk %}">Lager bearbeiten</a>
-      <a class="button" href="{% url 'participant-create' camp.pk %}">Teilnehmer anlegen</a>
-      <a class="button" href="{% url 'price-rules-manage' camp.pk %}">Preise verwalten</a>
-      <a class="button" href="{% url 'camp-meal-overview' camp.pk %}">Essensübersicht</a>
-      <a class="button" href="{% url 'expense-create' camp.pk %}">Auslage erfassen</a>
-      <a class="button" href="{% url 'participant-import' camp.pk %}">Teilnehmer importieren</a>
-      {% if user|can_manage_users %}
-        <a class="button" href="{% url 'camp-position-report' camp.pk %}">Positionsauswertung</a>
-        <a class="button" href="{% url 'information-email-compose' camp.pk %}">Information versenden</a>
-        <a class="button" href="{% url 'camp-kiosk-access-settings' camp.pk %}">Lager-PIN verwalten</a>
-        <a class="button" href="{% url 'camp-attendance-overview' camp.pk %}">Anwesenheit</a>
-      {% endif %}
+    <a class="button camp-primary-action" href="{% url 'participant-create' camp.pk %}">Teilnehmer anlegen</a>
+  </header>
+
+  <section class="overview-summary" aria-label="Finanzübersicht">
+    <div class="overview-summary__group">
+      <h2>Abrechnung</h2>
+      <dl class="metrics metrics--three">
+        <div class="metric"><dt>Brutto</dt><dd><strong>{{ totals.gross }} <span>EUR</span></strong></dd></div>
+        <div class="metric"><dt>Förderung</dt><dd><strong>{{ totals.subsidy }} <span>EUR</span></strong></dd></div>
+        <div class="metric"><dt>Soll</dt><dd><strong>{{ totals.due }} <span>EUR</span></strong></dd></div>
+      </dl>
     </div>
-  </div>
+    <div class="overview-summary__group">
+      <h2>Zahlungsstand</h2>
+      <dl class="metrics metrics--three">
+        <div class="metric"><dt>Gezahlt</dt><dd><strong>{{ totals.paid }} <span>EUR</span></strong></dd></div>
+        <div class="metric"><dt>Vorgestreckt</dt><dd><strong>{{ totals.advanced }} <span>EUR</span></strong></dd></div>
+        <div class="metric"><dt>Offen</dt><dd><strong>{{ totals.balance }} <span>EUR</span></strong></dd></div>
+      </dl>
+    </div>
+  </section>
 
-  <dl class="metrics" aria-label="Lagerkennzahlen">
-    <div class="metric"><dt>Brutto</dt><dd><strong>{{ totals.gross }} EUR</strong></dd></div>
-    <div class="metric"><dt>Förderung</dt><dd><strong>{{ totals.subsidy }} EUR</strong></dd></div>
-    <div class="metric"><dt>Soll</dt><dd><strong>{{ totals.due }} EUR</strong></dd></div>
-    <div class="metric"><dt>Gezahlt</dt><dd><strong>{{ totals.paid }} EUR</strong></dd></div>
-    <div class="metric"><dt>Vorgestreckt</dt><dd><strong>{{ totals.advanced }} EUR</strong></dd></div>
-    <div class="metric"><dt>Offen</dt><dd><strong>{{ totals.balance }} EUR</strong></dd></div>
-  </dl>
-
-  <nav class="exportbar" aria-label="Exporte">
-    <a href="{% url 'export-settlements-csv' camp.pk %}">Abrechnung als CSV herunterladen</a>
-    <a href="{% url 'export-workbook' camp.pk %}">Arbeitsmappe herunterladen</a>
-    <a href="{% url 'export-drinks-csv' camp.pk %}">Getränke als CSV herunterladen</a>
-    <a href="{% url 'camp-meal-overview' camp.pk %}">Essensübersicht öffnen</a>
-    {% if user|can_manage_users %}<a href="{% url 'attendance-workbook' camp.pk %}">Anwesenheit als Arbeitsmappe herunterladen</a>{% endif %}
+  <nav class="exportbar" aria-label="Lagerberichte und Exporte">
+    <a class="button button-secondary" href="{% url 'export-settlements-csv' camp.pk %}">Abrechnung als CSV herunterladen</a>
+    <a class="button button-secondary" href="{% url 'export-workbook' camp.pk %}">Arbeitsmappe herunterladen</a>
+    <a class="button button-secondary" href="{% url 'export-drinks-csv' camp.pk %}">Getränke als CSV herunterladen</a>
+    <a class="button button-secondary" href="{% url 'camp-meal-overview' camp.pk %}">Essensübersicht öffnen</a>
+    {% if user|can_manage_users %}<a class="button button-secondary" href="{% url 'attendance-workbook' camp.pk %}">Anwesenheit als Arbeitsmappe herunterladen</a>{% endif %}
   </nav>
 
   <section class="panel stack">
@@ -55,7 +53,7 @@
     <div class="info-callout info-callout--compact">
       <strong>Kurzhilfe:</strong> Ein <em>Abrechnungslauf</em> friert den aktuellen Stand (Auslagen, Getränke, Dienste) dauerhaft ein. Erstelle ihn erst, wenn das Lager vorbei ist oder eine finale Zwischenabrechnung benötigt wird. Nach dem Fixieren können für diesen Lauf keine Änderungen mehr vorgenommen werden.
     </div>
-    <table data-sortable>
+    <div class="admin-table-scroll" role="region" tabindex="0" aria-label="Gespeicherte Abrechnungsläufe"><table data-sortable>
       <thead><tr><th>Version</th><th>Typ</th><th data-sort-type="date">Zeitpunkt</th><th>Bearbeiter</th><th data-sort-type="number">Teilnehmer</th><th data-sort-type="number">Offen</th></tr></thead>
       <tbody>
         {% for run in settlement_runs %}
@@ -77,41 +75,50 @@
           <tr><td colspan="6">Noch keine Abrechnungsläufe gespeichert.</td></tr>
         {% endfor %}
       </tbody>
-    </table>
+    </table></div>
   </section>
 
   {% if pending_registration_rows %}
-    <section id="pending-registrations" class="panel" style="margin-bottom: 1.5rem; border-left: 4px solid var(--accent);">
-      <h2 style="font-size: 1.25rem; margin-bottom: 0.5rem;">⏳ Offene Registrierungsanfragen ({{ pending_registration_rows|length }})</h2>
-      <p style="color: var(--muted); font-size: 0.9rem;">Prüfe vor der Freigabe die PIN-Einrichtung und alle preisrelevanten Merkmale.</p>
-      <table class="responsive-record-table pending-registration-table" data-sortable data-filterable>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>E-Mail</th>
-            <th>Telefon</th>
-            <th data-sort-type="date">Anreise / Abreise</th>
-            <th data-sort-type="date">Eingereicht am</th>
-            <th data-sort="none">Prüfung und Aktionen</th>
+    <section id="pending-registrations" class="panel stack pending-registrations">
+      <h2>Offene Registrierungsanfragen <span class="section-count">{{ pending_registration_rows|length }}</span></h2>
+      <p class="section-intro">Prüfe vor der Freigabe die PIN-Einrichtung und alle preisrelevanten Merkmale.</p>
+      <div class="admin-table-scroll responsive-record-viewport" role="region" tabindex="0" aria-label="Offene Registrierungsanfragen"><table class="responsive-record-table pending-registration-table" role="table" data-sortable data-filterable>
+        <thead role="rowgroup">
+          <tr role="row">
+            <th scope="col" role="columnheader">Name</th>
+            <th scope="col" role="columnheader">E-Mail</th>
+            <th scope="col" role="columnheader">Telefon</th>
+            <th scope="col" role="columnheader" data-sort-type="date">Anreise / Abreise</th>
+            <th scope="col" role="columnheader" data-sort-type="date">Eingereicht am</th>
+            <th scope="col" role="columnheader" data-sort="none">Prüfung und Aktionen</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody role="rowgroup">
           {% for row in pending_registration_rows %}
             {% with p=row.participant approval_form=row.approval_form %}
-            <tr>
-              <td data-label="Name"><strong>{{ p.full_name }}</strong></td>
-              <td data-label="E-Mail">{{ p.email|default:"-" }}</td>
-              <td data-label="Telefon">{{ p.phone|default:"-" }}</td>
-              <td data-label="Anreise / Abreise">
+            <tr role="row">
+              <td role="cell" data-label="Name"><span class="responsive-record-table__label" aria-hidden="true">Name</span><strong>{{ p.full_name }}</strong></td>
+              <td role="cell" data-label="E-Mail"><span class="responsive-record-table__label" aria-hidden="true">E-Mail</span>{{ p.email|default:"-" }}</td>
+              <td role="cell" data-label="Telefon"><span class="responsive-record-table__label" aria-hidden="true">Telefon</span>{{ p.phone|default:"-" }}</td>
+              <td role="cell" data-label="Anreise / Abreise">
+                <span class="responsive-record-table__label" aria-hidden="true">Anreise / Abreise</span>
                 {% if p.arrival_date %}{{ p.arrival_date|date:"d.m.Y" }}{% else %}-{% endif %}
                 bis
                 {% if p.departure_date %}{{ p.departure_date|date:"d.m.Y" }}{% else %}-{% endif %}
               </td>
-              <td data-label="Eingereicht am">{{ p.created_at|date:"d.m.Y H:i" }}</td>
-              <td data-label="Aktionen" class="responsive-record-table__actions">
+              <td role="cell" data-label="Eingereicht am"><span class="responsive-record-table__label" aria-hidden="true">Eingereicht am</span>{{ p.created_at|date:"d.m.Y H:i" }}</td>
+              <td role="cell" data-label="Aktionen" class="responsive-record-table__actions">
+                <span class="responsive-record-table__label" aria-hidden="true">Prüfung und Aktionen</span>
                 <div class="stack">
                 <form method="post" action="{% url 'participant-approve-registration' camp.pk p.pk %}">
                   {% csrf_token %}
+                  {% if approval_form.errors %}
+                    <div class="form-errors" role="alert">
+                      <strong>Bitte korrigiere die Angaben zur Freigabe.</strong>
+                      {{ approval_form.non_field_errors }}
+                      {% for field in approval_form %}{% if field.errors %}<p>{{ field.label }}: {{ field.errors|striptags }}</p>{% endif %}{% endfor %}
+                    </div>
+                  {% endif %}
                   <fieldset>
                     <legend>Preismerkmale</legend>
                     <label for="approval-{{ p.pk }}-is-child">
@@ -163,13 +170,13 @@
                     <input id="approval-{{ p.pk }}-confirmed" type="checkbox" name="price_attributes_confirmed" class="mobile-touch-target" required>
                     Preisrelevante Angaben geprüft
                   </label>
-                  <div class="inline-actions">
-                    <button type="submit" class="button button-small button-success">✅ Freigeben</button>
+                  <div class="inline-actions overview-actions">
+                    <button type="submit" class="button button-small button-success">Freigeben</button>
                   </div>
                 </form>
                 <form method="post" action="{% url 'participant-reject-registration' camp.pk p.pk %}">
                   {% csrf_token %}
-                  <button type="submit" class="button button-small button-danger" onclick="return confirm('Möchtest du diese Registrierungsanfrage wirklich ablehnen und löschen?');">❌ Ablehnen</button>
+                  <button type="submit" class="button button-small button-danger" onclick="return confirm('Möchtest du diese Registrierungsanfrage wirklich ablehnen und löschen?');">Ablehnen</button>
                 </form>
                 </div>
               </td>
@@ -177,23 +184,23 @@
             {% endwith %}
           {% endfor %}
         </tbody>
-      </table>
+      </table></div>
     </section>
   {% endif %}
 
   {% if pending_expenses %}
   <section class="panel stack">
     <h2>Ausstehende Gemeinschaftsausgaben</h2>
-    <table data-sortable data-filterable>
-      <thead><tr><th data-sort-type="date">Datum</th><th>Person</th><th>Beschreibung</th><th data-sort-type="number">Betrag</th><th data-sort="none">Beleg</th><th></th></tr></thead>
-      <tbody>
+    <div class="admin-table-scroll responsive-record-viewport" role="region" tabindex="0" aria-label="Ausstehende Gemeinschaftsausgaben"><table class="responsive-record-table pending-expense-table" role="table" data-sortable data-filterable>
+      <thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader" data-sort-type="date">Datum</th><th scope="col" role="columnheader">Person</th><th scope="col" role="columnheader">Beschreibung</th><th scope="col" role="columnheader" data-sort-type="number">Betrag</th><th scope="col" role="columnheader" data-sort="none">Beleg</th><th scope="col" role="columnheader" data-sort="none">Aktionen</th></tr></thead>
+      <tbody role="rowgroup">
         {% for expense in pending_expenses %}
-          <tr>
-            <td>{{ expense.paid_on|default:expense.created_at|date:"d.m.Y" }}</td>
-            <td>{{ expense.participant.first_name }} {{ expense.participant.last_name }}</td>
-            <td>{{ expense.description }}</td>
-            <td>{{ expense.amount }} €</td>
-            <td>
+          <tr role="row">
+            <td role="cell" data-label="Datum"><span class="responsive-record-table__label" aria-hidden="true">Datum</span>{{ expense.paid_on|default:expense.created_at|date:"d.m.Y" }}</td>
+            <td role="cell" data-label="Person"><span class="responsive-record-table__label" aria-hidden="true">Person</span>{{ expense.participant.first_name }} {{ expense.participant.last_name }}</td>
+            <td role="cell" data-label="Beschreibung"><span class="responsive-record-table__label" aria-hidden="true">Beschreibung</span>{{ expense.description }}</td>
+            <td role="cell" data-label="Betrag"><span class="responsive-record-table__label" aria-hidden="true">Betrag</span>{{ expense.amount }} €</td>
+            <td role="cell" data-label="Beleg"><span class="responsive-record-table__label" aria-hidden="true">Beleg</span>
               {% if expense.receipt %}
                 <a
                   href="{% url 'expense-receipt' expense.pk %}"
@@ -202,9 +209,11 @@
                   class="button button-small button-secondary"
                   {% if expense.receipt_preview_kind == "pdf" %}data-pdf-preview="true"{% elif expense.receipt_preview_kind == "image" %}data-receipt-preview="image" data-receipt-alt="{{ expense.receipt_preview_alt }}" aria-haspopup="dialog"{% endif %}
                 >Beleg ansehen</a>
+              {% else %}
+                Kein Beleg vorhanden
               {% endif %}
             </td>
-            <td>
+            <td role="cell" data-label="Aktionen" class="responsive-record-table__actions"><span class="responsive-record-table__label" aria-hidden="true">Aktionen</span>
               <div class="row-actions">
                 <a href="{% url 'shared-expense-approve' expense.pk %}" class="button button-small">Genehmigen &amp; Umlegen</a>
                 <button type="button" class="button button-small button-danger" data-open-reject-dialog data-expense-id="{{ expense.pk }}" data-expense-desc="{{ expense.description }}">Ablehnen</button>
@@ -213,36 +222,36 @@
           </tr>
         {% endfor %}
       </tbody>
-    </table>
+    </table></div>
   </section>
   {% endif %}
 
   <section class="panel stack">
     <h2>Genehmigte Gemeinschaftsausgaben</h2>
-    <table class="responsive-record-table" data-sortable data-filterable>
-      <thead>
+    <div class="admin-table-scroll responsive-record-viewport" role="region" tabindex="0" aria-label="Genehmigte Gemeinschaftsausgaben"><table class="responsive-record-table approved-expense-table" role="table" data-sortable data-filterable>
+      <thead role="rowgroup">
         <tr>
-          <th data-sort-type="date">Genehmigt am</th>
-          <th>Person</th>
-          <th>Beschreibung</th>
-          <th>Kategorie</th>
-          <th data-sort-type="number">Betrag</th>
-          <th>Umlage</th>
-          <th>Genehmiger</th>
-          <th data-sort="none">Beleg</th>
+          <th scope="col" role="columnheader" data-sort-type="date">Genehmigt am</th>
+          <th scope="col" role="columnheader">Person</th>
+          <th scope="col" role="columnheader">Beschreibung</th>
+          <th scope="col" role="columnheader">Kategorie</th>
+          <th scope="col" role="columnheader" data-sort-type="number">Betrag</th>
+          <th scope="col" role="columnheader">Umlage</th>
+          <th scope="col" role="columnheader">Genehmiger</th>
+          <th scope="col" role="columnheader" data-sort="none">Beleg</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody role="rowgroup">
         {% for expense in approved_expenses %}
-          <tr>
-            <td data-label="Genehmigt am">{% if expense.approved_at %}{{ expense.approved_at|date:"d.m.Y H:i" }}{% else %}Nicht angegeben{% endif %}</td>
-            <td data-label="Person">{% if expense.participant %}{{ expense.participant.first_name }} {{ expense.participant.last_name }}{% else %}Keine Person angegeben{% endif %}</td>
-            <td data-label="Beschreibung">{{ expense.description|default:"Keine Beschreibung angegeben" }}</td>
-            <td data-label="Kategorie">{{ expense.category|default:"Keine Kategorie angegeben" }}</td>
-            <td data-label="Betrag">{{ expense.amount }} €</td>
-            <td data-label="Umlage">{{ expense.get_allocation_method_display }}</td>
-            <td data-label="Genehmiger">{% if expense.approved_by %}{{ expense.approved_by.get_full_name|default:expense.approved_by.username }}{% else %}Kein Genehmiger angegeben{% endif %}</td>
-            <td data-label="Beleg">
+          <tr role="row">
+            <td role="cell" data-label="Genehmigt am"><span class="responsive-record-table__label" aria-hidden="true">Genehmigt am</span>{% if expense.approved_at %}{{ expense.approved_at|date:"d.m.Y H:i" }}{% else %}Nicht angegeben{% endif %}</td>
+            <td role="cell" data-label="Person"><span class="responsive-record-table__label" aria-hidden="true">Person</span>{% if expense.participant %}{{ expense.participant.first_name }} {{ expense.participant.last_name }}{% else %}Keine Person angegeben{% endif %}</td>
+            <td role="cell" data-label="Beschreibung"><span class="responsive-record-table__label" aria-hidden="true">Beschreibung</span>{{ expense.description|default:"Keine Beschreibung angegeben" }}</td>
+            <td role="cell" data-label="Kategorie" class="expense-category"><span class="responsive-record-table__label" aria-hidden="true">Kategorie</span>{{ expense.category|default:"Keine Kategorie angegeben" }}</td>
+            <td role="cell" data-label="Betrag"><span class="responsive-record-table__label" aria-hidden="true">Betrag</span>{{ expense.amount }} €</td>
+            <td role="cell" data-label="Umlage"><span class="responsive-record-table__label" aria-hidden="true">Umlage</span>{{ expense.get_allocation_method_display }}</td>
+            <td role="cell" data-label="Genehmiger"><span class="responsive-record-table__label" aria-hidden="true">Genehmiger</span>{% if expense.approved_by %}{{ expense.approved_by.get_full_name|default:expense.approved_by.username }}{% else %}Kein Genehmiger angegeben{% endif %}</td>
+            <td role="cell" data-label="Beleg"><span class="responsive-record-table__label" aria-hidden="true">Beleg</span>
               {% if expense.receipt and expense.receipt_storage_available %}
                 <a
                   href="{% url 'expense-receipt' expense.pk %}"
@@ -259,16 +268,16 @@
             </td>
           </tr>
         {% empty %}
-          <tr><td colspan="8">Keine genehmigten Gemeinschaftsausgaben vorhanden.</td></tr>
+          <tr role="row"><td role="cell" colspan="8">Keine genehmigten Gemeinschaftsausgaben vorhanden.</td></tr>
         {% endfor %}
       </tbody>
-    </table>
+    </table></div>
   </section>
 
   <section class="panel stack">
     <h2>Kostenstellenauswertung</h2>
     {% if cost_centers %}
-      <table data-sortable>
+      <div class="admin-table-scroll" role="region" tabindex="0" aria-label="Kostenstellenauswertung"><table data-sortable>
         <thead>
           <tr>
             <th>Kostenstelle</th>
@@ -295,7 +304,7 @@
             </tr>
           {% endfor %}
         </tbody>
-      </table>
+      </table></div>
       {% for code, data in cost_centers.items %}
         <dialog id="cost-center-dialog-{{ forloop.counter }}" closedby="any" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="cost-center-dialog-title-{{ forloop.counter }}">
           <form method="dialog" class="dialog-heading">
@@ -312,7 +321,7 @@
           <section class="stack">
             <h3>Einnahmen</h3>
             {% if data.income_details %}
-              <table data-sortable>
+              <div class="admin-table-scroll" role="region" tabindex="0" aria-label="Einnahmendetails"><table data-sortable>
                 <thead>
                   <tr>
                     <th data-sort-type="date">Datum</th>
@@ -341,7 +350,7 @@
                     </tr>
                   {% endfor %}
                 </tbody>
-              </table>
+              </table></div>
             {% else %}
               <p class="hint">Keine Einnahmen erfasst.</p>
             {% endif %}
@@ -350,7 +359,7 @@
           <section class="stack">
             <h3>Ausgaben</h3>
             {% if data.expense_details %}
-              <table data-sortable>
+              <div class="admin-table-scroll" role="region" tabindex="0" aria-label="Ausgabedetails"><table data-sortable>
                 <thead>
                   <tr>
                     <th data-sort-type="date">Datum</th>
@@ -369,7 +378,7 @@
                     </tr>
                   {% endfor %}
                 </tbody>
-              </table>
+              </table></div>
             {% else %}
               <p class="hint">Keine Ausgaben erfasst.</p>
             {% endif %}
@@ -384,7 +393,7 @@
   <section class="panel">
     <h2>Dienste & Aufgaben</h2>
     <p>Hier kannst du Lagerdienste (wie Spülen, Kochen, Putzen) anlegen und Teilnehmern zuweisen.</p>
-    <div class="actions" style="margin-top: 1rem;">
+    <div class="actions overview-actions">
       <a href="{% url 'shift-manage' camp.pk %}" class="button">Liste aller Dienste & Belegungen</a>
       <a href="{% url 'shift-report' camp.pk %}" class="button button-secondary">Teilnehmer-Ranking (Auswertung)</a>
       <a href="{% url 'shift-templates-manage' camp.pk %}" class="button button-secondary">Tägliche Vorlagen verwalten</a>
@@ -399,7 +408,7 @@
       </div>
       <a class="button" href="{% url 'price-rules-manage' camp.pk %}">Preise verwalten</a>
     </div>
-    <table data-sortable>
+    <div class="admin-table-scroll" role="region" tabindex="0" aria-label="Preisregeln"><table data-sortable>
       <thead>
         <tr>
           <th>Art</th><th>Name</th><th data-sort-type="number">Preis</th><th>Lagerpauschale</th><th data-sort-type="number">Fördersatz</th><th>Standard</th><th></th>
@@ -426,13 +435,13 @@
           <tr><td colspan="7">Noch keine Preisregeln vorhanden.</td></tr>
         {% endfor %}
       </tbody>
-    </table>
+    </table></div>
   </section>
 
-  <section class="panel stack participant-settlements">
+  <section id="participant-settlements" class="panel stack participant-settlements">
     <h2>Teilnehmerabrechnungen</h2>
-    <div class="table-responsive">
-      <table data-sortable data-filterable>
+    <p id="participant-settlements-scroll-hint" class="table-scroll-hint" data-scroll-hint>Bei schmalem Bildschirm kannst du die Tabelle seitlich scrollen.</p>
+    <div class="admin-table-scroll comparison-table-viewport" role="region" tabindex="0" aria-label="Teilnehmerabrechnungen" aria-describedby="participant-settlements-scroll-hint" data-scroll-viewport data-scroll-hint-id="participant-settlements-scroll-hint"><table class="comparison-table" data-sortable data-filterable>
         <thead>
           <tr>
             <th>Teilnehmer</th><th>Status</th><th data-sort-type="number">Nächte</th><th data-sort-type="number">Soll</th><th data-sort-type="number">Gezahlt</th><th data-sort-type="number">Vorgestreckt</th><th data-sort-type="number">Offen</th>
@@ -453,14 +462,13 @@
             <tr><td colspan="7">Noch keine Teilnehmer vorhanden.</td></tr>
           {% endfor %}
         </tbody>
-      </table>
-    </div>
+    </table></div>
   </section>
 
   {% if archived_participants %}
     <section class="panel stack">
       <h2>Archivierte Teilnehmer</h2>
-      <table data-sortable>
+      <div class="admin-table-scroll" role="region" tabindex="0" aria-label="Archivierte Teilnehmer"><table data-sortable>
         <thead><tr><th>Teilnehmer</th><th data-sort-type="date">Archiviert am</th><th></th></tr></thead>
         <tbody>
           {% for participant in archived_participants %}
@@ -478,7 +486,7 @@
             </tr>
           {% endfor %}
         </tbody>
-      </table>
+      </table></div>
     </section>
   {% endif %}
 
@@ -538,4 +546,5 @@
     });
   })();
 </script>
+  </div>
 {% endblock %}

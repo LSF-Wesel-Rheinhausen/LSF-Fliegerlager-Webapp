@@ -38,7 +38,7 @@
   function cellSortKey(row, columnIndex, sortType) {
     const cell = row.children[columnIndex];
     if (!cell) return null;
-    const raw = (cell.dataset.sortValue ?? cell.textContent).trim();
+    const raw = (cell.dataset.sortValue ?? contentWithoutResponsiveLabels(cell)).trim();
     if (EMPTY_DISPLAY_VALUES.has(raw)) return null;
     if (sortType === "number") return parseGermanNumber(raw);
     if (sortType === "date") return parseGermanDate(raw);
@@ -62,6 +62,46 @@
   function headerCells(table) {
     const headRow = table.tHead?.rows[0];
     return headRow ? Array.from(headRow.cells) : [];
+  }
+
+  function contentWithoutResponsiveLabels(element) {
+    const clone = element.cloneNode(true);
+    clone.querySelectorAll(".responsive-record-table__label").forEach((label) => label.remove());
+    return clone.textContent;
+  }
+
+  function refreshResponsiveTableState() {
+    const mobileLayout = window.matchMedia("(max-width: 900px)").matches;
+    document.querySelectorAll("table.responsive-record-table").forEach((table) => {
+      table.querySelectorAll("thead .table-sort-button").forEach((button) => {
+        if (mobileLayout) button.tabIndex = -1;
+        else button.removeAttribute("tabindex");
+      });
+    });
+
+    document.querySelectorAll(".admin-table-scroll[role='region'], .table-responsive[role='region']").forEach((viewport) => {
+      const table = viewport.querySelector("table");
+      if (!table) return;
+      const hasOverflow = table.scrollWidth > viewport.clientWidth + 1;
+      viewport.tabIndex = hasOverflow ? 0 : -1;
+    });
+
+    document.querySelectorAll("[data-scroll-viewport]").forEach((viewport) => {
+      const table = viewport.querySelector("table");
+      if (!table) return;
+      const hasOverflow = table.scrollWidth > viewport.clientWidth + 1;
+      viewport.dataset.hasHorizontalOverflow = String(hasOverflow);
+      const hint = document.getElementById(viewport.dataset.scrollHintId);
+      if (hint) {
+        hint.hidden = !hasOverflow;
+        if (hasOverflow) viewport.setAttribute("aria-describedby", hint.id);
+        else viewport.removeAttribute("aria-describedby");
+      }
+    });
+  }
+
+  function scheduleResponsiveTableState() {
+    window.requestAnimationFrame(refreshResponsiveTableState);
   }
 
   function isSortableHeader(th) {
@@ -140,6 +180,7 @@
         state.sortSelect.value = value;
       }
     }
+    scheduleResponsiveTableState();
   }
 
   function restoreOriginalOrder(state) {
@@ -151,6 +192,7 @@
       tbody.appendChild(fragment);
     });
     headerCells(state.table).forEach((headerCell) => headerCell.removeAttribute("aria-sort"));
+    scheduleResponsiveTableState();
   }
 
   function applyFilter(state) {
@@ -158,7 +200,7 @@
     let visible = 0;
     Array.from(state.table.tBodies).forEach((tbody) => {
       dataRows(tbody).forEach((row) => {
-        const matches = !query || row.textContent.toLocaleLowerCase("de").includes(query);
+        const matches = !query || contentWithoutResponsiveLabels(row).toLocaleLowerCase("de").includes(query);
         row.hidden = !matches;
         if (matches) visible += 1;
       });
@@ -167,6 +209,7 @@
       state.countEl.hidden = !query;
       state.countEl.textContent = query ? `${visible} von ${state.totalRows} Zeilen` : "";
     }
+    scheduleResponsiveTableState();
   }
 
   function buildToolbar(state, { withFilter, withSortSelect, sortableHeaders }) {
@@ -228,9 +271,11 @@
       });
     }
 
-    const anchor = table.closest(".table-responsive, .kiosk-table__wrapper") ?? table;
+    const anchor = table.closest(".admin-table-scroll, .table-responsive, .kiosk-table__wrapper") ?? table;
     anchor.parentElement.insertBefore(toolbar, anchor);
   }
 
   document.querySelectorAll("table[data-sortable], table[data-filterable]").forEach(setupTable);
+  window.addEventListener("resize", scheduleResponsiveTableState, { passive: true });
+  scheduleResponsiveTableState();
 })();

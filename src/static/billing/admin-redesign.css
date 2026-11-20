@@ -1,0 +1,918 @@
+/* Shared tokens and components for private administration pages. */
+body:has(.admin-shell) {
+  --admin-bg: #f7f8fa;
+  --admin-surface: #fff;
+  --admin-surface-muted: #f2f5f9;
+  --admin-text: #182230;
+  --admin-muted: #596779;
+  --admin-line: #d9e0e9;
+  --admin-line-strong: #b8c4d3;
+  --admin-accent: #2457c5;
+  --admin-accent-hover: #19469f;
+  --admin-accent-soft: #eaf0fd;
+  --admin-focus: #2457c5;
+  --admin-danger: #b42318;
+  --admin-danger-soft: #fff0ef;
+  --admin-success: #18794e;
+  --admin-radius: 10px;
+  --admin-radius-small: 7px;
+  --bg: var(--admin-bg);
+  --panel: var(--admin-surface);
+  --panel-soft: var(--admin-surface-muted);
+  --text: var(--admin-text);
+  --muted: var(--admin-muted);
+  --line: var(--admin-line);
+  --line-strong: var(--admin-line-strong);
+  --accent: var(--admin-accent);
+  --accent-dark: var(--admin-accent-hover);
+  --accent-soft: var(--admin-accent-soft);
+  --focus: var(--admin-focus);
+  --button-bg: var(--admin-accent);
+  --button-hover: var(--admin-accent-hover);
+  --radius: var(--admin-radius);
+  --radius-sm: var(--admin-radius-small);
+  background: var(--admin-bg);
+  color: var(--admin-text);
+}
+
+:root[data-theme="dark"] body:has(.admin-shell) {
+  --admin-bg: #111923;
+  --admin-surface: #192330;
+  --admin-surface-muted: #202c3a;
+  --admin-text: #edf3fa;
+  --admin-muted: #b5c1d0;
+  --admin-line: #354455;
+  --admin-line-strong: #52657a;
+  --admin-accent: #a8c1ff;
+  --admin-accent-hover: #d0ddff;
+  --admin-accent-soft: #253753;
+  --admin-focus: #b5c9ff;
+  --admin-danger: #ffaaa2;
+  --admin-danger-soft: #472421;
+  --admin-success: #78d5a4;
+  --button-bg: #315fc3;
+  --button-hover: #4774d5;
+}
+
+.admin-shell.page {
+  box-sizing: border-box;
+  width: min(100% - 2.5rem, 1760px);
+  max-width: none;
+  margin: 1.5rem auto 3rem;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  column-gap: 1.5rem;
+}
+
+.admin-shell:has(.camp-task-nav) {
+  grid-template-columns: 14.5rem minmax(0, 1fr);
+}
+
+.admin-shell .camp-context-nav { grid-column: 1 / -1; }
+.admin-shell:has(.camp-task-nav) .camp-task-nav { grid-column: 1; grid-row: 2; }
+.admin-shell:has(.camp-task-nav) .admin-content { grid-column: 2; grid-row: 2; }
+.admin-shell .admin-content { min-width: 0; }
+.admin-shell h1,
+.admin-shell h2,
+.admin-shell h3 {
+  color: var(--admin-text);
+  letter-spacing: -.02em;
+  text-wrap: balance;
+}
+.admin-shell h1 { font-size: clamp(1.7rem, 2.4vw, 2.25rem); line-height: 1.12; }
+.admin-shell h2 { font-size: 1.2rem; line-height: 1.3; }
+.admin-shell .panel {
+  min-width: 0;
+  border-color: var(--admin-line);
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface);
+  box-shadow: 0 1px 2px rgb(24 34 48 / .045);
+}
+.admin-shell .panel + .panel { margin-top: 1rem; }
+
+/* Camp navigation and page headings. */
+.admin-shell .page-heading,
+.admin-shell .camp-detail-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .75rem 1.25rem;
+  margin: 0 0 1rem;
+}
+.admin-shell .page-heading h1,
+.admin-shell .camp-detail-heading h1 { margin: 0 0 .25rem; }
+.admin-shell .page-heading p,
+.admin-shell .camp-detail-heading p { margin: 0; color: var(--admin-muted); }
+.admin-shell .page-kicker { color: var(--admin-accent) !important; font-size: .85rem; font-weight: 700; }
+.admin-shell .camp-context-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .25rem .6rem;
+  margin: 0 0 .85rem;
+  color: var(--admin-muted);
+  font-size: .9rem;
+}
+.admin-shell .camp-context-nav a,
+.admin-shell .camp-context-nav [aria-current="page"] {
+  padding: .35rem .6rem;
+  border-radius: 6px;
+}
+.admin-shell .camp-context-nav a { color: var(--admin-muted); }
+.admin-shell .camp-context-nav a:hover,
+.admin-shell .camp-context-nav [aria-current="page"] { background: var(--admin-accent-soft); color: var(--admin-accent); }
+.admin-shell .camp-context-nav [aria-current="page"] { font-weight: 650; }
+
+.admin-shell .camp-overview {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.admin-shell .camp-overview > * { min-width: 0; }
+.admin-shell .camp-overview > .panel { margin-top: 0; }
+.admin-shell .overview-summary {
+  display: grid;
+  gap: .85rem;
+  padding: 1rem;
+  border: 1px solid var(--admin-line);
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface);
+}
+.admin-shell .overview-summary__group + .overview-summary__group {
+  padding-top: .85rem;
+  border-top: 1px solid var(--admin-line);
+}
+.admin-shell .overview-summary__group h2 {
+  margin: 0 0 .55rem;
+  color: var(--admin-muted);
+  font-size: .9rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.admin-shell .metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .55rem;
+  margin: 0;
+}
+.admin-shell .metric {
+  min-width: 0;
+  padding: .65rem .75rem;
+  border: 1px solid var(--admin-line);
+  border-radius: var(--admin-radius-small);
+  background: var(--admin-surface);
+}
+.admin-shell .metric dt { color: var(--admin-muted); font-size: .82rem; }
+.admin-shell .metric dd { min-width: 0; margin: .18rem 0 0; }
+.admin-shell .metric strong {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 .35em;
+  font-size: clamp(1rem, 1.25vw, 1.28rem);
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.admin-shell .metric strong span { color: var(--admin-muted); font-size: .78em; font-weight: 600; }
+.admin-shell .camp-primary-action,
+.admin-shell .participant-primary-action {
+  border: 1px solid var(--button-bg);
+  background: var(--button-bg);
+  color: var(--button-text, #fff);
+}
+.admin-shell .exportbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+  margin: 0;
+  padding: .75rem 0 0;
+  border-top: 1px solid var(--admin-line);
+}
+.admin-shell .exportbar .button { flex: 0 1 auto; }
+.admin-shell .button,
+.admin-shell button,
+.admin-shell input[type="submit"] {
+  touch-action: manipulation;
+}
+.admin-shell .button-secondary,
+.admin-shell button.button-secondary {
+  border-color: var(--admin-line-strong);
+  background: var(--admin-surface);
+  color: var(--admin-text);
+}
+.admin-shell .button-secondary:hover,
+.admin-shell button.button-secondary:hover {
+  border-color: var(--admin-accent);
+  background: var(--admin-accent-soft);
+  color: var(--admin-accent);
+}
+.admin-shell :where(button, .button, input[type="submit"], summary, select):disabled,
+.admin-shell :where(button, .button, input[type="submit"])[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: .62;
+}
+.admin-shell .toolbar { flex-wrap: wrap; align-items: flex-start; gap: .75rem 1.25rem; }
+.admin-shell .toolbar > div:first-child { flex: 1 1 18rem; min-width: 0; max-width: 100%; }
+.admin-shell .toolbar > *,
+.admin-shell .page-heading > * { min-width: 0; max-width: 100%; }
+.admin-shell .compact-toolbar { align-items: center; margin: 0; }
+.admin-shell .compact-toolbar h2 { margin: 0 0 .2rem; }
+.admin-shell .compact-toolbar p { margin: 0; color: var(--admin-muted); }
+.admin-shell .overview-actions,
+.admin-shell .row-actions,
+.admin-shell .inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+}
+.admin-shell .row-actions > *,
+.admin-shell .inline-actions > * { min-width: 0; }
+.admin-shell .section-intro { margin: -.25rem 0 0; color: var(--admin-muted); }
+.admin-shell .section-count {
+  display: inline-flex;
+  min-width: 1.65em;
+  justify-content: center;
+  margin-inline-start: .25rem;
+  padding: .12em .45em;
+  border-radius: 999px;
+  background: var(--admin-accent-soft);
+  color: var(--admin-accent);
+  font-size: .8em;
+  font-variant-numeric: tabular-nums;
+  vertical-align: .08em;
+}
+.admin-shell .pending-registrations { border-inline-start: 4px solid var(--admin-accent); }
+
+/* Readable tables use an explicit, keyboard-scrollable viewport. */
+.admin-shell .admin-table-scroll,
+.admin-shell .table-responsive {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--admin-line);
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface);
+}
+.admin-shell .admin-table-scroll:focus-visible,
+.admin-shell .table-responsive:focus-visible { outline: 3px solid var(--admin-focus); outline-offset: 2px; }
+.admin-shell .comparison-table-viewport:focus-visible { outline: 3px solid var(--admin-focus); outline-offset: 2px; }
+.admin-shell table {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: .9rem;
+}
+.admin-shell .admin-table-scroll > table,
+.admin-shell .table-responsive > table {
+  display: table;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  overflow: visible;
+  -webkit-overflow-scrolling: auto;
+}
+.admin-shell th {
+  position: relative;
+  background: var(--admin-surface-muted);
+  color: var(--admin-muted);
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: .01em;
+  white-space: normal;
+}
+.admin-shell td,
+.admin-shell th { padding: .62rem .75rem; vertical-align: top; }
+.admin-shell td { white-space: normal; overflow-wrap: break-word; word-break: normal; }
+.admin-shell .table-sort-button { max-width: 100%; white-space: inherit; text-align: inherit; }
+.admin-shell tbody tr + tr { border-top: 1px solid var(--admin-line); }
+.admin-shell tbody tr:hover { background: var(--admin-surface-muted); }
+.admin-shell td.number,
+.admin-shell th.number,
+.admin-shell .participant-settlements td:nth-child(n + 3) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.admin-shell .comparison-table-viewport > .comparison-table { width: max-content; min-width: max-content; }
+.admin-shell .participant-settlements .comparison-table { min-width: 54rem; }
+.admin-shell .admin-table-scroll > .pending-registration-table {
+  min-width: 62rem;
+  table-layout: fixed;
+}
+.admin-shell .pending-registration-table th:nth-child(1) { width: 13%; }
+.admin-shell .pending-registration-table th:nth-child(2) { width: 15%; }
+.admin-shell .pending-registration-table th:nth-child(3) { width: 10%; }
+.admin-shell .pending-registration-table th:nth-child(4) { width: 15%; }
+.admin-shell .pending-registration-table th:nth-child(5) { width: 13%; }
+.admin-shell .pending-registration-table th:nth-child(6) { width: 34%; }
+.admin-shell .table-scroll-hint { margin: -.25rem 0 0; color: var(--admin-muted); font-size: .875rem; }
+.admin-shell .table-scroll-hint[hidden] { display: none !important; }
+.admin-shell .responsive-record-table__label { display: none; }
+.admin-shell .admin-table-scroll [hidden] { display: none !important; }
+.admin-shell .table-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem .75rem;
+  margin: 0 0 .65rem;
+}
+.admin-shell .table-tools label {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .4rem;
+  color: var(--admin-muted);
+  font-size: .875rem;
+  font-weight: 650;
+}
+.admin-shell .table-tools input[type="search"] { min-width: min(15rem, 100%); }
+.admin-shell .table-tools__count { margin: 0; color: var(--admin-muted); font-size: .85rem; }
+.admin-shell .table-tools label.table-tools__sort { display: none; }
+
+/* Camp tasks, participant actions, settings forms and feedback. */
+.admin-shell .actions { display: flex; flex-wrap: wrap; gap: .55rem; }
+.admin-shell .camp-task-nav {
+  position: sticky;
+  top: 1rem;
+  overflow: hidden;
+  border: 1px solid var(--admin-line);
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface);
+}
+.admin-shell .camp-task-nav > summary {
+  list-style: none;
+  padding: .8rem .9rem;
+  background: var(--admin-surface-muted);
+  cursor: pointer;
+  font-weight: 700;
+}
+.admin-shell .camp-task-nav > summary::-webkit-details-marker,
+.admin-shell .participant-more-actions summary::-webkit-details-marker { display: none; }
+.admin-shell .camp-task-nav__context {
+  display: block;
+  margin-top: .1rem;
+  color: var(--admin-muted);
+  font-size: .82rem;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+.admin-shell .camp-task-nav__groups { padding: .45rem .85rem .85rem; }
+.admin-shell .camp-task-nav__groups section { display: grid; gap: .1rem; padding: .6rem 0; }
+.admin-shell .camp-task-nav__groups section + section { border-top: 1px solid var(--admin-line); }
+.admin-shell .camp-task-nav__groups h2 { margin: 0 0 .2rem; color: var(--admin-muted); font-size: .75rem; letter-spacing: 0; }
+.admin-shell .camp-task-nav__groups a {
+  display: block;
+  padding: .38rem .4rem;
+  border-radius: 5px;
+  color: var(--admin-text);
+  font-size: .88rem;
+  overflow-wrap: anywhere;
+}
+.admin-shell .camp-task-nav__groups a:hover,
+.admin-shell .camp-task-nav__groups a:focus-visible { background: var(--admin-accent-soft); color: var(--admin-accent); text-decoration: none; }
+.admin-shell .participant-more-actions { position: relative; }
+.admin-shell .participant-more-actions summary {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding: .55rem .9rem;
+  border: 1px solid var(--admin-line-strong);
+  border-radius: var(--admin-radius-small);
+  background: var(--admin-surface);
+  color: var(--admin-accent);
+  cursor: pointer;
+  font-weight: 650;
+}
+.admin-shell .participant-more-actions__menu {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + .35rem);
+  right: 0;
+  display: grid;
+  gap: .45rem;
+  min-width: min(16rem, calc(100vw - 2rem));
+  max-height: 70vh;
+  overflow: auto;
+  padding: .75rem;
+  border: 1px solid var(--admin-line);
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface);
+  box-shadow: 0 8px 24px rgb(24 34 48 / .16);
+}
+.admin-shell .participant-more-actions__menu > *,
+.admin-shell .participant-more-actions__menu a.button,
+.admin-shell .participant-more-actions__menu button { width: 100%; justify-content: flex-start; }
+.admin-shell .participant-section-nav {
+  display: flex;
+  gap: .4rem;
+  overflow-x: auto;
+  margin: 0 0 1rem;
+  padding: .25rem 0;
+}
+.admin-shell .participant-section-nav a {
+  flex: none;
+  padding: .45rem .7rem;
+  border: 1px solid var(--admin-line);
+  border-radius: 999px;
+  background: var(--admin-surface);
+  font-size: .85rem;
+}
+.admin-shell #participant-profile,
+.admin-shell #participant-accounting,
+.admin-shell #participant-bookings,
+.admin-shell #participant-family,
+.admin-shell #participant-snapshots,
+.admin-shell #participant-audit,
+.admin-shell #participant-settlements { scroll-margin-top: 1rem; }
+.admin-shell .admin-form-panel { max-width: 960px; margin-inline: auto; }
+.admin-shell .admin-form-panel .form-grid > p { display: grid; gap: .35rem; }
+.admin-shell .admin-form-panel input,
+.admin-shell .admin-form-panel select,
+.admin-shell .admin-form-panel textarea { max-width: 100%; }
+.admin-shell .settings-table td label { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
+.admin-shell .settings-table td input[type="number"] { width: min(11rem, 100%); min-width: 0; max-width: 100%; }
+.admin-shell .form-errors,
+.admin-shell .errorlist {
+  margin: 0 0 .75rem;
+  padding: .75rem .9rem;
+  border: 1px solid var(--admin-danger);
+  border-radius: var(--admin-radius-small);
+  background: var(--admin-danger-soft);
+  color: var(--admin-danger);
+}
+.admin-shell .form-errors p { margin: .35rem 0 0; }
+.admin-shell .hint,
+.admin-shell .section-intro { color: var(--admin-muted); }
+.admin-shell .cost-center-result { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.admin-shell .cost-center-result-positive { color: var(--admin-success); }
+.admin-shell .cost-center-result-negative { color: var(--admin-danger); }
+.admin-shell .cost-center-result-neutral { color: var(--admin-muted); }
+.admin-shell :focus-visible {
+  outline: 3px solid var(--admin-focus);
+  outline-offset: 3px;
+}
+.admin-shell dialog {
+  box-sizing: border-box;
+  width: min(56rem, calc(100vw - 2rem));
+  max-width: 56rem;
+  max-height: min(88vh, 56rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--admin-line);
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface);
+  color: var(--admin-text);
+  box-shadow: 0 20px 64px rgb(10 20 32 / .3);
+}
+.admin-shell dialog::backdrop { background: rgb(8 16 28 / .55); }
+.admin-shell dialog .dialog-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; }
+.admin-shell dialog .dialog-heading h2 { margin: 0; }
+.admin-shell dialog .stack { gap: .8rem; }
+.admin-shell dialog .admin-table-scroll > table { min-width: 0; }
+.admin-shell dialog :focus-visible { outline-offset: 1px; }
+
+/* Global application navigation. Details remains usable without JavaScript. */
+body:has(.admin-shell) .admin-topbar {
+  background: var(--admin-surface);
+  color: var(--admin-text);
+  border-bottom: 1px solid var(--admin-line);
+}
+body:has(.admin-shell) .admin-topbar .nav-link { white-space: nowrap; }
+body:has(.admin-shell) .admin-brand__context { background: var(--admin-accent-soft); color: var(--admin-accent); }
+body:has(.admin-shell) .admin-global-menu { position: relative; }
+body:has(.admin-shell) .admin-global-menu > summary {
+  display: none;
+  align-items: center;
+  min-height: 44px;
+  padding: .5rem .7rem;
+  border: 1px solid var(--admin-line-strong);
+  border-radius: var(--admin-radius-small);
+  background: var(--admin-surface);
+  color: var(--admin-text);
+  cursor: pointer;
+  font-weight: 650;
+  white-space: nowrap;
+}
+body:has(.admin-shell) .admin-global-menu__items {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .5rem;
+}
+.admin-shell .camp-task-nav:not([open]) .camp-task-nav__groups,
+.admin-shell .participant-more-actions:not([open]) .participant-more-actions__menu,
+body:has(.admin-shell) .admin-global-menu:not([open]) .admin-global-menu__items { display: none; }
+
+/* Django technical administration shares the same blue, neutral and contrast tokens. */
+body.admin-redesign-root {
+  --primary: #2457c5;
+  --secondary: #182230;
+  --link-fg: #2457c5;
+  --link-hover-color: #19469f;
+  --body-bg: #f7f8fa;
+  --body-fg: #182230;
+  --body-quiet-color: #596779;
+  --body-loud-color: #182230;
+  --header-bg: #182230;
+  --header-color: #fff;
+  --header-link-color: #fff;
+  --breadcrumbs-bg: #24364d;
+  --breadcrumbs-fg: #e5edf7;
+  --breadcrumbs-link-fg: #fff;
+  --darkened-bg: #f2f5f9;
+  --selected-bg: #eaf0fd;
+  --selected-row: #eaf0fd;
+  --hairline-color: #d9e0e9;
+  --border-color: #b8c4d3;
+  --default-button-bg: #2457c5;
+  --default-button-hover-bg: #19469f;
+  --button-bg: #2457c5;
+  --button-hover-bg: #19469f;
+  color-scheme: light;
+}
+:root[data-theme="dark"] body.admin-redesign-root {
+  --primary: #a8c1ff;
+  --secondary: #c2d0e0;
+  --link-fg: #a8c1ff;
+  --link-hover-color: #d0ddff;
+  --body-bg: #111923;
+  --body-fg: #edf3fa;
+  --body-quiet-color: #b5c1d0;
+  --body-loud-color: #fff;
+  --header-bg: #192330;
+  --header-color: #edf3fa;
+  --breadcrumbs-bg: #202c3a;
+  --breadcrumbs-fg: #d8e3ef;
+  --darkened-bg: #202c3a;
+  --selected-bg: #253753;
+  --selected-row: #253753;
+  --hairline-color: #354455;
+  --border-color: #52657a;
+  --default-button-bg: #315fc3;
+  --default-button-hover-bg: #4774d5;
+  --button-bg: #315fc3;
+  --button-hover-bg: #4774d5;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="auto"] body.admin-redesign-root {
+    --primary: #a8c1ff;
+    --secondary: #c2d0e0;
+    --link-fg: #a8c1ff;
+    --link-hover-color: #d0ddff;
+    --body-bg: #111923;
+    --body-fg: #edf3fa;
+    --body-quiet-color: #b5c1d0;
+    --body-loud-color: #fff;
+    --header-bg: #192330;
+    --header-color: #edf3fa;
+    --breadcrumbs-bg: #202c3a;
+    --breadcrumbs-fg: #d8e3ef;
+    --darkened-bg: #202c3a;
+    --selected-bg: #253753;
+    --selected-row: #253753;
+    --hairline-color: #354455;
+    --border-color: #52657a;
+    --default-button-bg: #315fc3;
+    --default-button-hover-bg: #4774d5;
+    --button-bg: #315fc3;
+    --button-hover-bg: #4774d5;
+    color-scheme: dark;
+  }
+  :root[data-theme="auto"] body.admin-redesign-root.dashboard #content-main.app-list .module a:link,
+  :root[data-theme="auto"] body.admin-redesign-root.dashboard #content-main.app-list .module a:visited {
+    color: #a8c1ff !important;
+  }
+  :root[data-theme="auto"] body.admin-redesign-root.dashboard #content-main.app-list .module a:hover,
+  :root[data-theme="auto"] body.admin-redesign-root.dashboard #content-main.app-list .module a:focus {
+    color: #d0ddff !important;
+  }
+}
+
+:root[data-theme="dark"] body.admin-redesign-root.dashboard #content-main.app-list .module a:link,
+:root[data-theme="dark"] body.admin-redesign-root.dashboard #content-main.app-list .module a:visited {
+  color: #a8c1ff !important;
+}
+:root[data-theme="dark"] body.admin-redesign-root.dashboard #content-main.app-list .module a:hover,
+:root[data-theme="dark"] body.admin-redesign-root.dashboard #content-main.app-list .module a:focus {
+  color: #d0ddff !important;
+}
+
+body.admin-redesign-root #header {
+  background: var(--header-bg);
+  color: var(--header-color);
+  border-bottom: 3px solid #2457c5;
+}
+body.admin-redesign-root #header #site-name a,
+body.admin-redesign-root #header #site-name a:link,
+body.admin-redesign-root #header #site-name a:visited { color: var(--header-link-color); }
+body.admin-redesign-root #branding h1 { font-weight: 700; letter-spacing: -.02em; }
+body.admin-redesign-root #site-name a { display: inline-flex; align-items: center; gap: .65rem; }
+body.admin-redesign-root #site-name img { display: block; border-radius: 50%; object-fit: contain; }
+body.admin-redesign-root #content {
+  box-sizing: border-box;
+  width: min(100% - 3rem, 1680px);
+  max-width: none;
+  margin-inline: auto;
+}
+body.admin-redesign-root .main > .content { flex: 1 1 0; width: auto; min-width: 0; }
+body.admin-redesign-root.dashboard #content {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr);
+  grid-template-rows: auto auto;
+  align-items: start;
+  gap: 0 1.5rem;
+  margin-block: 1.5rem;
+}
+body.admin-redesign-root.dashboard .titles-and-tools { grid-column: 1 / -1; grid-row: 1; }
+body.admin-redesign-root.dashboard #content-main,
+body.admin-redesign-root.dashboard #content-related { float: none; width: auto; min-width: 0; margin: 0; }
+body.admin-redesign-root.dashboard #content-main { grid-column: 1; grid-row: 2; }
+body.admin-redesign-root.dashboard #content-related { grid-column: 2; grid-row: 2; }
+body.admin-redesign-root.dashboard .clear { display: none; }
+body.admin-redesign-root #content-main { min-width: 0; }
+body.admin-redesign-root #content h1 { color: var(--body-loud-color); letter-spacing: -.02em; }
+body.admin-redesign-root .admin-page-intro {
+  grid-column: 1 / -1;
+  margin: 0 0 1rem;
+  padding: .25rem 0 .85rem;
+  border-bottom: 1px solid var(--hairline-color);
+}
+body.admin-redesign-root .admin-page-intro p { margin: 0 0 .25rem; color: var(--primary); font-size: .85rem; font-weight: 700; }
+body.admin-redesign-root .admin-page-intro h1 { margin: 0 0 .3rem; font-size: clamp(1.7rem, 2.4vw, 2.25rem); }
+body.admin-redesign-root .admin-page-intro span { color: var(--body-quiet-color); }
+body.admin-redesign-root .module,
+body.admin-redesign-root .inline-group,
+body.admin-redesign-root #changelist-filter {
+  overflow: hidden;
+  border: 1px solid var(--hairline-color);
+  border-radius: 9px;
+}
+body.admin-redesign-root .module h2,
+body.admin-redesign-root .module caption,
+body.admin-redesign-root .inline-group h2 { background: var(--darkened-bg); color: var(--body-fg); }
+body.admin-redesign-root .module caption a { color: var(--body-fg); font-size: 1rem; font-weight: 700; }
+body.admin-redesign-root.dashboard #content-main.app-list .module > table > caption {
+  background: var(--darkened-bg);
+  color: var(--body-fg);
+}
+body.admin-redesign-root.dashboard #content-main.app-list .module > table > caption a,
+body.admin-redesign-root.dashboard #content-main.app-list .module > table tbody th a {
+  color: var(--link-fg);
+}
+body.admin-redesign-root .app-list .module { float: none; width: auto; margin: 0; }
+body.admin-redesign-root #content-main.app-list {
+  display: grid;
+  align-content: start;
+  align-items: start;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+body.admin-redesign-root #nav-sidebar { border-right: 1px solid var(--hairline-color); }
+body.admin-redesign-root input,
+body.admin-redesign-root select,
+body.admin-redesign-root textarea { border-color: var(--border-color); border-radius: 5px; }
+body.admin-redesign-root select { background-color: var(--body-bg); color: var(--body-fg); }
+body.admin-redesign-root :focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+
+@media (max-width: 1100px) {
+  .admin-shell:has(.camp-task-nav) { grid-template-columns: 1fr; }
+  .admin-shell:has(.camp-task-nav) .camp-context-nav,
+  .admin-shell:has(.camp-task-nav) .camp-task-nav,
+  .admin-shell:has(.camp-task-nav) .admin-content { grid-column: 1; grid-row: auto; }
+  .admin-shell .camp-task-nav { position: static; margin-bottom: .85rem; }
+  .admin-shell .camp-task-nav > summary { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: .75rem; }
+  .admin-shell .camp-task-nav__groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .25rem 1rem; }
+  .admin-shell .camp-task-nav__groups section { align-content: start; }
+}
+@media (max-width: 900px) {
+  .admin-shell.page { width: min(100% - 1.5rem, 760px); margin-block: 1rem 2rem; }
+  .admin-shell .camp-overview h1,
+  .admin-shell .camp-overview h2 { min-width: 0; overflow-wrap: break-word; }
+  .admin-shell .table-tools label.table-tools__sort { display: inline-flex; }
+  .admin-shell .table-tools input[type="search"] { min-width: 0; width: min(100%, 19rem); }
+  .admin-shell .camp-overview .responsive-record-viewport {
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+  .admin-shell .camp-overview .responsive-record-viewport > table.responsive-record-table {
+    display: table;
+    width: 100%;
+    min-width: 0;
+    table-layout: auto;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    font-size: 1rem;
+  }
+  .admin-shell .camp-overview .responsive-record-table thead {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+    clip-path: none;
+  }
+  .admin-shell .camp-overview .responsive-record-table thead th {
+    position: absolute;
+    inset-inline-start: 0;
+    top: 0;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+  .admin-shell .camp-overview .responsive-record-table thead,
+  .admin-shell .camp-overview .responsive-record-table thead tr {
+    height: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .admin-shell .camp-overview .responsive-record-table td::before { content: none; }
+  .admin-shell .camp-overview .responsive-record-table tbody {
+    display: grid;
+    gap: .75rem;
+  }
+  .admin-shell .camp-overview .responsive-record-table tr {
+    display: grid;
+    min-width: 0;
+    padding: .4rem .8rem;
+    overflow: visible;
+    border: 1px solid var(--admin-line);
+    border-radius: var(--admin-radius);
+    background: var(--admin-surface);
+    box-shadow: none;
+  }
+  .admin-shell .camp-overview .responsive-record-table tbody tr[hidden] { display: none !important; }
+  .admin-shell .camp-overview .responsive-record-table td {
+    display: block;
+    min-width: 0;
+    padding: .55rem 0;
+    border: 0;
+    text-align: start;
+    overflow-wrap: break-word;
+    word-break: normal;
+  }
+  .admin-shell .camp-overview .responsive-record-table td + td { border-top: 1px solid var(--admin-line); }
+  .admin-shell .camp-overview .responsive-record-table td.number { text-align: start; }
+  .admin-shell .camp-overview .responsive-record-table .responsive-record-table__label {
+    display: block;
+    margin-bottom: .2rem;
+    color: var(--admin-muted);
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.35;
+    overflow-wrap: normal;
+  }
+  .admin-shell .camp-overview .responsive-record-table td[colspan] {
+    display: block;
+    grid-column: 1 / -1;
+  }
+  .admin-shell .camp-overview .responsive-record-table__actions .stack,
+  .admin-shell .camp-overview .responsive-record-table__actions .row-actions { min-width: 0; }
+  .admin-shell .camp-overview .responsive-record-table__actions > form,
+  .admin-shell .camp-overview .responsive-record-table__actions .stack > form { width: 100%; }
+  .admin-shell .camp-overview .responsive-record-table fieldset > label {
+    display: inline-flex;
+    flex: 1 1 9rem;
+    align-items: center;
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: normal;
+  }
+  .admin-shell .camp-overview .responsive-record-table__actions .row-actions > * { flex: 1 1 100%; }
+  .admin-shell .camp-overview .responsive-record-table__actions .button { width: 100%; white-space: normal; }
+  .admin-shell .camp-overview .responsive-record-table fieldset { min-width: 0; }
+  .admin-shell .camp-overview .responsive-record-table input,
+  .admin-shell .camp-overview .responsive-record-table select { max-width: 100%; }
+  .admin-shell .camp-overview .responsive-record-table [data-label="Kategorie"] { overflow-wrap: break-word; }
+  body:has(.admin-shell) .admin-topbar { align-items: center; flex-wrap: wrap; gap: .5rem; }
+  body:has(.admin-shell) .admin-brand { flex: 1 1 auto; justify-content: flex-start; min-width: 0; }
+  body:has(.admin-shell) .admin-brand__copy { max-width: 13rem; min-width: 0; }
+  body:has(.admin-shell) .admin-topbar > nav { display: flex; flex: 1 0 100%; width: 100%; align-items: flex-start; gap: .5rem; }
+  body:has(.admin-shell) .admin-global-menu { flex: 1; min-width: 0; }
+  body:has(.admin-shell) .admin-global-menu > summary { display: flex; width: fit-content; max-width: 100%; }
+  body:has(.admin-shell) .admin-global-menu__items { display: none; }
+  body:has(.admin-shell) .admin-global-menu[open] .admin-global-menu__items {
+    position: static;
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+    min-width: 0;
+    max-height: 70vh;
+    overflow-y: auto;
+    box-sizing: border-box;
+    margin-top: .5rem;
+    padding: .65rem;
+    border: 1px solid var(--admin-line);
+    border-radius: var(--admin-radius);
+    background: var(--admin-surface);
+    box-shadow: 0 8px 24px rgb(24 34 48 / .16);
+  }
+  body:has(.admin-shell) .admin-global-menu__items .nav-link,
+  body:has(.admin-shell) .admin-global-menu__items .nav-user-group .button { width: 100%; justify-content: flex-start; }
+  body:has(.admin-shell) .admin-global-menu__items .nav-user-group {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: .5rem;
+    padding-top: .5rem;
+    border-top: 1px solid var(--admin-line);
+    text-align: left;
+  }
+  body:has(.admin-shell) .admin-global-menu__items .nav-user-group > span {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    padding: .25rem 0;
+    overflow: visible;
+    clip: auto;
+    clip-path: none;
+    color: var(--admin-muted);
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  body.admin-redesign-root #content { width: calc(100% - 1.5rem); padding-inline: 0; }
+  body.admin-redesign-root.dashboard #content { grid-template-columns: minmax(0, 1fr); margin-block: .75rem; }
+  body.admin-redesign-root.dashboard .titles-and-tools { grid-row: 1; }
+  body.admin-redesign-root.dashboard #content-main { grid-column: 1; grid-row: 2; }
+  body.admin-redesign-root.dashboard #content-related { grid-column: 1; grid-row: 3; margin-top: 1rem; }
+  body.admin-redesign-root #content-main.app-list { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .admin-shell.page { width: calc(100% - 1rem); margin-block: .75rem 1.5rem; }
+  .admin-shell .camp-detail-heading { align-items: stretch; }
+  .admin-shell .camp-detail-heading .camp-primary-action { width: 100%; justify-content: center; }
+  .admin-shell .overview-summary { padding: .75rem; gap: .65rem; }
+  .admin-shell .overview-summary__group + .overview-summary__group { padding-top: .65rem; }
+  .admin-shell .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .4rem; }
+  .admin-shell .metric { padding: .55rem; }
+  .admin-shell .metric dt { font-size: .78rem; }
+  .admin-shell .metric strong { font-size: clamp(.9rem, 4vw, 1.05rem); gap: 0 .22em; }
+  .admin-shell .exportbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-shell .exportbar .button { min-width: 0; min-height: 44px; padding-inline: .55rem; font-size: .84rem; line-height: 1.25; }
+  .admin-shell .camp-task-nav__groups { grid-template-columns: 1fr; }
+  .admin-shell .page-heading,
+  .admin-shell .toolbar { align-items: stretch; flex-direction: column; }
+  .admin-shell .toolbar > div:first-child { flex-basis: auto; }
+  .admin-shell .row-actions { align-items: stretch; }
+  .admin-shell .row-actions > * { flex: 1 1 auto; }
+  .admin-shell .row-actions .button { justify-content: center; }
+  .admin-shell .table-tools { align-items: stretch; flex-direction: column; }
+  .admin-shell .table-tools label { align-items: flex-start; }
+  .admin-shell .table-tools input[type="search"] { width: 100%; }
+  body:has(.admin-shell) .admin-topbar { padding-block: .5rem; }
+  body:has(.admin-shell) .admin-brand__copy { max-width: 10rem; }
+  body.admin-redesign-root.dashboard #content { width: calc(100% - 1rem); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-shell *,
+  body:has(.admin-shell) .admin-topbar * {
+    scroll-behavior: auto !important;
+    transition: none !important;
+    animation: none !important;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .admin-shell dialog::backdrop { background: rgb(8 16 28 / .72); }
+}
+@media (forced-colors: active) {
+  .admin-shell .camp-task-nav,
+  .admin-shell .participant-more-actions__menu,
+  .admin-shell .panel,
+  .admin-shell .admin-table-scroll,
+  .admin-shell table,
+  .admin-shell .camp-context-nav [aria-current="page"],
+  body:has(.admin-shell) .admin-global-menu > summary,
+  body:has(.admin-shell) .admin-global-menu[open] .admin-global-menu__items,
+  body.admin-redesign-root .module,
+  body.admin-redesign-root .inline-group,
+  body.admin-redesign-root #changelist-filter { border: 1px solid CanvasText; }
+  .admin-shell :focus-visible,
+  body.admin-redesign-root :focus-visible { outline: 3px solid Highlight; }
+}

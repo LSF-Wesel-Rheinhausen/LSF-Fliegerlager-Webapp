@@ -97,5 +97,5 @@ def test_camp_detail_groups_participant_settlements_and_avoids_duplicate_shift_a
     content = response.content.decode("utf-8")
     heading_actions = content.split('<dl class="metrics"', maxsplit=1)[0]
     assert "Dienste verwalten" not in heading_actions
-    assert '<section class="panel stack participant-settlements">' in content
+    assert '<section id="participant-settlements" class="panel stack participant-settlements">' in content
     assert "Teilnehmerabrechnungen" in content

@@ -192,6 +192,7 @@ test("Admin meal overview shows populated details and contains long names on mob
     await page.getByLabel("Vorname").fill("Alexandra");
     await page.getByLabel("Nachname").fill(longName);
     await page.getByRole("button", { name: "Speichern" }).click();
+    await page.locator(".participant-more-actions > summary").click();
     await page.getByRole("link", { name: "PIN setzen", exact: true }).click();
     await page.getByLabel("Neue PIN").fill("1234");
     await page.getByRole("button", { name: "Speichern", exact: true }).click();

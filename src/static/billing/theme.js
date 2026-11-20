@@ -39,6 +39,26 @@
         applyTheme(theme);
       });
     });
+
+    const campNavigation = document.querySelector(".camp-task-nav");
+    if (campNavigation) {
+      const desktopNavigation = window.matchMedia("(min-width: 1101px)");
+      const syncNavigation = () => {
+        campNavigation.open = desktopNavigation.matches;
+      };
+      syncNavigation();
+      desktopNavigation.addEventListener("change", syncNavigation);
+    }
+
+    const globalNavigation = document.querySelector(".admin-global-menu");
+    if (globalNavigation) {
+      const desktopGlobalNavigation = window.matchMedia("(min-width: 901px)");
+      const syncGlobalNavigation = () => {
+        globalNavigation.open = desktopGlobalNavigation.matches;
+      };
+      syncGlobalNavigation();
+      desktopGlobalNavigation.addEventListener("change", syncGlobalNavigation);
+    }
   });
 
   colorSchemeQuery.addEventListener("change", () => {

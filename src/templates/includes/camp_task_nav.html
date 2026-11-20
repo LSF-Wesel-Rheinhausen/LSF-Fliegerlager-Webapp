@@ -1,0 +1,34 @@
+{% load billing_format %}
+<nav class="camp-context-nav" aria-label="Lagerbereich">
+  <a href="{% url 'camp-list' %}">Alle Lager</a>
+  <span>{{ active_camp.name }} · {{ active_camp.year }}</span>
+  {% if current_participant %}<span aria-current="page">{{ current_participant.full_name }}</span>{% endif %}
+</nav>
+<details class="camp-task-nav" open>
+  <summary><span>Lageraufgaben</span><span class="camp-task-nav__context">{{ active_camp.name }}</span></summary>
+  <div class="camp-task-nav__groups">
+    <section><h2>Lager</h2>
+      <a href="{% url 'camp-detail' active_camp.pk %}">Übersicht</a>
+      <a href="{% url 'camp-edit' active_camp.pk %}">Lager bearbeiten</a>
+    </section>
+    <section><h2>Teilnehmende</h2>
+      <a href="{% url 'camp-detail' active_camp.pk %}#participant-settlements">Abrechnungen und Liste</a>
+      {% if request.resolver_match.url_name != "camp-detail" %}<a href="{% url 'participant-create' active_camp.pk %}">Teilnehmer anlegen</a>{% endif %}
+      <a href="{% url 'participant-import' active_camp.pk %}">Teilnehmer importieren</a>
+      {% if user|can_manage_users %}<a href="{% url 'camp-attendance-overview' active_camp.pk %}">Anwesenheit</a>{% endif %}
+      <a href="{% url 'camp-meal-overview' active_camp.pk %}">Essensübersicht</a>
+    </section>
+    <section><h2>Finanzen</h2>
+      <a href="{% url 'price-rules-manage' active_camp.pk %}">Preise verwalten</a>
+      <a href="{% url 'expense-create' active_camp.pk %}">Auslage erfassen</a>
+      <a href="{% url 'export-settlements-csv' active_camp.pk %}">Abrechnung exportieren</a>
+      <a href="{% url 'export-workbook' active_camp.pk %}">Arbeitsmappe</a>
+    </section>
+    {% if user|can_manage_users %}<section><h2>Berichte und Einstellungen</h2>
+      <a href="{% url 'camp-position-report' active_camp.pk %}">Positionsauswertung</a>
+      <a href="{% url 'attendance-workbook' active_camp.pk %}">Anwesenheitsmappe</a>
+      <a href="{% url 'camp-kiosk-access-settings' active_camp.pk %}">Lager-PIN verwalten</a>
+      <a href="{% url 'information-email-compose' active_camp.pk %}">Information versenden</a>
+    </section>{% endif %}
+  </div>
+</details>
