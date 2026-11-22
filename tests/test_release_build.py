@@ -24,11 +24,18 @@ def _docker_workflow() -> dict:
     )
 
 
+def _dev_migration_workflow() -> dict:
+    return yaml.load(
+        (ROOT / ".github/workflows/dev-migration.yml").read_text(encoding="utf-8"),
+        Loader=yaml.BaseLoader,
+    )
+
+
 def test_pull_request_release_publishes_only_tested_same_repo_dev_tags() -> None:
     workflow = _docker_workflow()
     job = workflow["jobs"]["docker-publish-dev"]
 
-    assert set(workflow["on"]) == {"pull_request", "workflow_run", "workflow_dispatch"}
+    assert set(workflow["on"]) == {"pull_request", "workflow_run"}
     assert job["needs"] == "docker-test"
     assert "needs.docker-test.result == 'success'" in job["if"]
     assert "github.event_name == 'workflow_run'" in job["if"]
@@ -585,8 +592,10 @@ def test_dev_pair_guard_rejects_missing_half_and_restores_after_second_write() -
 
 
 def test_legacy_dev_migration_is_manual_trusted_and_serialized() -> None:
-    workflow = _docker_workflow()
+    workflow = _dev_migration_workflow()
+    assert "workflow_dispatch" not in _docker_workflow()["on"]
     assert "workflow_dispatch" in workflow["on"]
+    assert set(workflow["on"]) == {"workflow_dispatch"}
     migration = workflow["jobs"]["docker-migrate-legacy-dev"]
     assert "github.event_name == 'workflow_dispatch'" in migration["if"]
     assert "github.ref == 'refs/heads/main'" in migration["if"]
@@ -611,7 +620,7 @@ def test_legacy_dev_migration_is_manual_trusted_and_serialized() -> None:
     assert 'readonly TESTS_WORKFLOW_ID="281374633"' in (ROOT / "scripts/migrate-legacy-dev-pointers.sh").read_text(
         encoding="utf-8"
     )
-    normal_promotion = workflow["jobs"]["docker-publish-dev"]
+    normal_promotion = _docker_workflow()["jobs"]["docker-publish-dev"]
     assert normal_promotion["concurrency"] == migration["concurrency"]
 
 
@@ -688,9 +697,11 @@ def test_docker_metadata_jobs_install_django_before_building_migration_manifest(
 
     for job_name in ("docker-test", "docker-publish"):
         steps = workflow["jobs"][job_name]["steps"]
+        setup_python = next(step for step in steps if step.get("uses", "").startswith("actions/setup-python@"))
         names = [step.get("name") for step in steps]
         metadata_index = names.index("Read build metadata")
         assert names.index("Setup Python") < metadata_index
         assert names.index("Install migration manifest dependencies") < metadata_index
+        assert "cache" not in setup_python.get("with", {})
         install = next(step for step in steps if step.get("name") == "Install migration manifest dependencies")
         assert install["run"] == "pip install -r requirements.txt"

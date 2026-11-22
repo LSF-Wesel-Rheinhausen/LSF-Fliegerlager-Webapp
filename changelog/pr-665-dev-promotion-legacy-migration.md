@@ -29,3 +29,12 @@ mit genauer Referenz.
 - GHCR bietet keinen atomaren Compare-and-swap für das App-/Updater-Paar.
   Derselbe Concurrency-Key serialisiert Repository-Workflows; externe
   Registry-Schreiber bleiben eine Betriebsannahme.
+
+## Getrennte Workflow-Ausführung
+
+Die manuelle Migration liegt in `dev-migration.yml`, getrennt von PR- und
+`workflow_run`-Builds. Die Docker-Jobs nutzen keinen gespeicherten pip-Cache mehr,
+um Cache-Poisoning über ausgeführten PR-Code zu verhindern. Die Prüfungen,
+Berechtigungen, der Checkout von `main` und die gemeinsame Parallelitätssperre
+der Migration bleiben erhalten. Regressionstests sichern die getrennten Trigger
+und den Verzicht auf den pip-Cache ab.

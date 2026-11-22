@@ -14,7 +14,7 @@ Publish-Builds behalten ihre Cache-Exporte.
 
 ## Veraltete Dev-Pointer einmalig migrieren
 
-`docker.yml` bietet einen manuellen Lauf auf `main`, um ausschließlich das
+`dev-migration.yml` bietet einen manuellen Lauf auf `main`, um ausschließlich das
 bekannte, unannotierte Legacy-Paar der beweglichen `:dev`-Tags zu ersetzen. Der
 Lauf benötigt PR-Nummer und Run-ID eines erfolgreichen ersten `Tests`-Runs des
 aktuellen Same-Repository-PR-Heads. Er verlangt den ersten Run-Versuch, da
@@ -35,10 +35,10 @@ bleiben daher eine Betriebsannahme. Bei einem Fehler während der zwei
 Pointer-Schreibvorgänge versucht der Job, beide zuvor geprüften Digests
 wiederherzustellen und verifiziert das Ergebnis.
 
-Der manuelle Job checkt nur den vertrauenswürdigen Main-Commit aus, führt keine
-PR-Dateien aus und erhält nur die für Paket-Push sowie Run-/PR-Lesezugriff
-benötigten Berechtigungen. Der separate manuelle Produktions-Workflow wird
-nicht verwendet.
+Der manuelle Job ist in einem eigenen `workflow_dispatch`-Workflow isoliert,
+checkt nur den vertrauenswürdigen Main-Commit aus, führt keine PR-Dateien aus
+und erhält nur die für Paket-Push sowie Run-/PR-Lesezugriff benötigten
+Berechtigungen. Der separate manuelle Produktions-Workflow wird nicht verwendet.
 
 Direkte Pull-Request-Laeufe fuehren auch den Multiarchitektur-Export und den
 Artefakt-Upload aus. Damit wird der komplette Build- und Testpfad vor einem

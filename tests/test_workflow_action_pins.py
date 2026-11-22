@@ -77,7 +77,7 @@ def test_action_pin_validator_rejects_tags_branches_expressions_short_shas_and_u
 
 
 def test_docker_permissions_are_job_scoped_and_publish_waits_for_tests() -> None:
-    workflow = dict(_workflow_documents()[3][1])
+    workflow = _docker_workflow()
     assert "packages" not in dict(workflow.get("permissions", {}))
 
     jobs = dict(workflow["jobs"])
@@ -171,7 +171,7 @@ def test_docker_builds_pull_requests_and_main_without_publishing() -> None:
     docker_test = dict(jobs["docker-test"])
     publish = dict(jobs["docker-publish"])
 
-    assert set(events) == {"pull_request", "workflow_run", "workflow_dispatch"}
+    assert set(events) == {"pull_request", "workflow_run"}
     assert "push" not in events
     assert "workflow_run" in events
     assert "workflow_run.event == 'pull_request'" in docker_test["if"]
