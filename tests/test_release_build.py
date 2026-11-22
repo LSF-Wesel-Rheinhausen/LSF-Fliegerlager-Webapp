@@ -28,7 +28,7 @@ def test_pull_request_release_publishes_only_tested_same_repo_dev_tags() -> None
     workflow = _docker_workflow()
     job = workflow["jobs"]["docker-publish-dev"]
 
-    assert set(workflow["on"]) == {"pull_request", "workflow_run"}
+    assert set(workflow["on"]) == {"pull_request", "workflow_run", "workflow_dispatch"}
     assert job["needs"] == "docker-test"
     assert "needs.docker-test.result == 'success'" in job["if"]
     assert "github.event_name == 'workflow_run'" in job["if"]
@@ -566,6 +566,8 @@ print(json.dumps({"state": state, "head": {"sha": sha}}))
     else:
         assert final["tags"][f"{app}:dev"] == old_app
         assert final["tags"][f"{updater}:dev"] == old_updater
+    if failure == "missing-annotation":
+        assert "Missing or invalid workflow-run provenance annotation" in result.stderr
 
 
 def test_dev_pair_guard_rejects_missing_half_and_restores_after_second_write() -> None:
@@ -580,6 +582,37 @@ def test_dev_pair_guard_rejects_missing_half_and_restores_after_second_write() -
     assert script.count("--annotation") == 0
     assert 'trusted_run_id "$APP_REPOSITORY@$PREVIOUS_APP_DEV_DIGEST"' in script
     assert 'trusted_run_id "$UPDATER_REPOSITORY@$PREVIOUS_UPDATER_DEV_DIGEST"' in script
+
+
+def test_legacy_dev_migration_is_manual_trusted_and_serialized() -> None:
+    workflow = _docker_workflow()
+    assert "workflow_dispatch" in workflow["on"]
+    migration = workflow["jobs"]["docker-migrate-legacy-dev"]
+    assert "github.event_name == 'workflow_dispatch'" in migration["if"]
+    assert "github.ref == 'refs/heads/main'" in migration["if"]
+    assert migration["concurrency"] == {
+        "group": "docker-publish-dev",
+        "cancel-in-progress": "false",
+    }
+    assert migration["permissions"] == {
+        "contents": "read",
+        "packages": "write",
+        "actions": "read",
+        "pull-requests": "read",
+    }
+    checkout = next(step for step in migration["steps"] if "actions/checkout@" in step.get("uses", ""))
+    assert checkout["with"] == {"ref": "${{ github.sha }}", "persist-credentials": "false"}
+    migration_step = next(
+        step
+        for step in migration["steps"]
+        if step.get("name") == "Migrate the explicitly confirmed legacy pointer pair"
+    )
+    assert migration_step["run"] == "bash scripts/migrate-legacy-dev-pointers.sh"
+    assert 'readonly TESTS_WORKFLOW_ID="281374633"' in (ROOT / "scripts/migrate-legacy-dev-pointers.sh").read_text(
+        encoding="utf-8"
+    )
+    normal_promotion = workflow["jobs"]["docker-publish-dev"]
+    assert normal_promotion["concurrency"] == migration["concurrency"]
 
 
 def test_prod_workflow_serializes_complete_image_pair_promotions() -> None:

@@ -171,7 +171,7 @@ def test_docker_builds_pull_requests_and_main_without_publishing() -> None:
     docker_test = dict(jobs["docker-test"])
     publish = dict(jobs["docker-publish"])
 
-    assert set(events) == {"pull_request", "workflow_run"}
+    assert set(events) == {"pull_request", "workflow_run", "workflow_dispatch"}
     assert "push" not in events
     assert "workflow_run" in events
     assert "workflow_run.event == 'pull_request'" in docker_test["if"]
