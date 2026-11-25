@@ -1,0 +1,67 @@
+name: Migrate legacy development pointers
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Same-repository PR to promote after verifying its successful Tests run
+        required: true
+        type: string
+      test_run_id:
+        description: Successful Tests workflow run ID for the current PR head
+        required: true
+        type: string
+      expected_legacy_app_digest:
+        description: Confirm the verified legacy app dev pointer digest
+        required: true
+        type: string
+        default: sha256:81278d20e8dff6632a41ffd47513a0281e18daa4dbbbc0d068e0c0fd9ef1ce86
+      expected_legacy_updater_digest:
+        description: Confirm the verified legacy updater dev pointer digest
+        required: true
+        type: string
+        default: sha256:6d44ebe288f85954c36e3df08c7049302ff3a0c1181b2ce91188ebcd9e95de1a
+
+permissions:
+  contents: read
+
+jobs:
+  docker-migrate-legacy-dev:
+    name: Migrate verified legacy development pointers
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: docker-publish-dev
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+      actions: read
+      pull-requests: read
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+
+      - name: Checkout trusted default-branch workflow code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Migrate the explicitly confirmed legacy pointer pair
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REF: ${{ github.ref }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          TEST_RUN_ID: ${{ inputs.test_run_id }}
+          EXPECTED_LEGACY_APP_DIGEST: ${{ inputs.expected_legacy_app_digest }}
+          EXPECTED_LEGACY_UPDATER_DIGEST: ${{ inputs.expected_legacy_updater_digest }}
+        run: bash scripts/migrate-legacy-dev-pointers.sh

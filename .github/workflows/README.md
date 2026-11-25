@@ -11,6 +11,35 @@ Die Docker-Test-Builds lesen vorhandene GitHub-Actions-Caches, exportieren aber
 keine Cache-Layer. Bei `workflow_run` kann dem Laufzeittoken ein beschreibbarer
 Cache-Scope fehlen; das darf die Containerabnahme nicht blockieren. Die
 Publish-Builds behalten ihre Cache-Exporte.
+
+## Veraltete Dev-Pointer einmalig migrieren
+
+`dev-migration.yml` bietet einen manuellen Lauf auf `main`, um ausschließlich das
+bekannte, unannotierte Legacy-Paar der beweglichen `:dev`-Tags zu ersetzen. Der
+Lauf benötigt PR-Nummer und Run-ID eines erfolgreichen ersten `Tests`-Runs des
+aktuellen Same-Repository-PR-Heads. Er verlangt den ersten Run-Versuch, da
+unveränderliche Quelltags nach Run-ID statt Run-Versuch benannt sind. Er prüft
+Workflow-ID und -Pfad, Status, Run-Event, PR-Zuordnung, beide
+Quell-Run-ID-Annotationen und die tatsächlichen Plattform- und Revisionslabels
+der Linux-amd64- und Linux-arm64-Images. Die erwarteten alten Digests sind auf
+das zuvor geprüfte Paar begrenzt; vor der Migration müssen beide `:dev`-Tags
+weiterhin genau darauf zeigen.
+
+Normale PR-Promotionen bleiben provenance-strikt. Fehlende oder ungültige
+Annotationen werden gemeldet und nicht als Run-ID `0` oder als geordnete
+Version behandelt. Die manuelle Migration ist nur für dieses einzelne
+Legacy-Paar vorgesehen. Sie läuft seriell zu normalen Dev-Promotionen und prüft
+die alten Digests unmittelbar vor dem Schreiben erneut. GHCR bietet für zwei
+Tags keinen gemeinsamen atomaren Compare-and-swap; externe Registry-Schreiber
+bleiben daher eine Betriebsannahme. Bei einem Fehler während der zwei
+Pointer-Schreibvorgänge versucht der Job, beide zuvor geprüften Digests
+wiederherzustellen und verifiziert das Ergebnis.
+
+Der manuelle Job ist in einem eigenen `workflow_dispatch`-Workflow isoliert,
+checkt nur den vertrauenswürdigen Main-Commit aus, führt keine PR-Dateien aus
+und erhält nur die für Paket-Push sowie Run-/PR-Lesezugriff benötigten
+Berechtigungen. Der separate manuelle Produktions-Workflow wird nicht verwendet.
+
 Direkte Pull-Request-Laeufe fuehren auch den Multiarchitektur-Export und den
 Artefakt-Upload aus. Damit wird der komplette Build- und Testpfad vor einem
 Merge mit der Workflow-Datei aus dem PR geprueft. Registry-Publikationen bleiben
