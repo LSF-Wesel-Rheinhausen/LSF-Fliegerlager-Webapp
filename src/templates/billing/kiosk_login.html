@@ -45,7 +45,7 @@
           <strong>Neu hier?</strong>
           <p>Bei der Selbstregistrierung vergibst du direkt deine persönliche PIN. Für durch die Lagerleitung angelegte Konten setzt die Lagerleitung die PIN vor der ersten Anmeldung.</p>
         </div>
-        {% if not is_post_camp %}<div class="kiosk-note" style="margin-top: 0.75rem;">
+        {% if kiosk_features.self_registration and not is_post_camp %}<div class="kiosk-note" style="margin-top: 0.75rem;">
           <strong>Du fehlst in der Liste?</strong>
           <p>Melde dich hier direkt für das Fliegerlager an. Nach der Freigabe durch die Lagerleitung kannst du dich anmelden.</p>
           <button type="button" class="button button-secondary" style="margin-top: 0.5rem; width: 100%;" data-dialog-target="self-registration-dialog">
@@ -56,7 +56,7 @@
     </div>
   </section>
 
-  {% if not is_post_camp %}
+  {% if kiosk_features.self_registration and not is_post_camp %}
   <dialog id="self-registration-dialog"{% if enrollment_form.errors %} open{% endif %} class="dialog wizard-dialog">
     <div id="wizard-step-announcer" class="sr-only" aria-live="polite" role="status"></div>
     <form method="post" action="{% if kiosk_mode == 'central' %}{% url 'central-kiosk-self-register' %}{% else %}{% url 'kiosk-self-register' %}{% endif %}" id="self-registration-form" novalidate>

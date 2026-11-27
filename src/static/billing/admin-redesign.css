@@ -443,6 +443,44 @@ body:has(.admin-shell) {
 .admin-shell .admin-form-panel input,
 .admin-shell .admin-form-panel select,
 .admin-shell .admin-form-panel textarea { max-width: 100%; }
+.admin-shell .camp-feature-controls {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 0;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.admin-shell .camp-feature-controls h2 { margin: 0; font-size: 1.1rem; }
+.admin-shell .camp-feature-controls__help { margin: .25rem 0 .75rem; color: var(--muted); }
+.admin-shell .camp-feature-toggle {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .35rem 0;
+  border-top: 1px solid var(--line);
+}
+.admin-shell .camp-feature-toggle > label {
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  cursor: pointer;
+}
+.admin-shell .camp-feature-toggle input[type="checkbox"] {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  margin: 0;
+  margin-left: auto;
+}
 .admin-shell .settings-table td label { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
 .admin-shell .settings-table td input[type="number"] { width: min(11rem, 100%); min-width: 0; max-width: 100%; }
 .admin-shell .form-errors,

@@ -68,7 +68,7 @@
         </div>
         <div style="display: flex; gap: 0.5rem; justify-content: center; margin-top: 1rem;">
           <button type="button" class="button" data-open-summary-dialog>Details öffnen</button>
-          <button type="button" class="button button-secondary" data-open-donate-dialog>Spenden</button>
+          {% if kiosk_features.donations %}<button type="button" class="button button-secondary" data-open-donate-dialog>Spenden</button>{% endif %}
         </div>
       </aside>{% endif %}
     </section>
@@ -84,13 +84,13 @@
         <div style="margin: 1.5rem 0; padding: 1.5rem; background: var(--panel); border: 2px dashed var(--accent); border-radius: var(--radius); text-align: center;">
           <h3 style="margin-top: 0;">Du hast noch Guthaben! ({{ summary.balance|abs_value|money_eur }})</h3>
           <p style="margin-bottom: 1rem;">Möchtest du dein verbleibendes Guthaben dem Verein spenden?</p>
-          <button type="button" class="button button-primary" data-open-donate-dialog>Jetzt spenden</button>
+          {% if kiosk_features.donations %}<button type="button" class="button button-primary" data-open-donate-dialog>Jetzt spenden</button>{% endif %}
         </div>
       {% else %}
         <div style="margin: 1.5rem 0; padding: 1.5rem; background: var(--panel); border: 2px dashed var(--accent); border-radius: var(--radius); text-align: center;">
           <h3 style="margin-top: 0;">Spenden</h3>
           <p style="margin-bottom: 1rem;">Möchtest du den Verein mit einer Spende unterstützen? Der Betrag wird einfach auf deine Endabrechnung aufgeschlagen.</p>
-          <button type="button" class="button button-primary" data-open-donate-dialog>Jetzt spenden</button>
+          {% if kiosk_features.donations %}<button type="button" class="button button-primary" data-open-donate-dialog>Jetzt spenden</button>{% endif %}
         </div>
       {% endif %}
 
@@ -160,7 +160,7 @@
     </section>
   {% endif %}
 
-  {% if pending_invites and not kiosk_actor_is_family_member and not is_pre_camp and not is_post_camp %}
+  {% if kiosk_features.partners and pending_invites and not kiosk_actor_is_family_member and not is_pre_camp and not is_post_camp %}
     <section class="panel kiosk-card kiosk-card--muted">
       <div class="kiosk-card__header">
         <div class="kiosk-card__header-main">
@@ -181,13 +181,13 @@
     <nav class="kiosk-menu" aria-label="Kiosk-Bereiche">
       <a class="kiosk-menu__item" href="{{ kiosk_profile_url }}">
         <span>Mein Profil</span>
-        <small>Kontaktdaten und Geburtsdatum bearbeiten.</small>
+        <small>{% if kiosk_features.profile %}Kontaktdaten und Geburtsdatum bearbeiten.{% else %}Kontaktdaten ansehen.{% endif %}</small>
       </a>
       {% if not is_pre_camp and not is_post_camp %}
-        <button type="button" class="kiosk-menu__item hide-on-mobile" data-dialog-target="meal-calendar-dialog">
+        {% if kiosk_features.meals %}<button type="button" class="kiosk-menu__item hide-on-mobile" data-dialog-target="meal-calendar-dialog">
           <span>Abendessen (Kalender)</span>
           <small>Abendessen nach Lagertag buchen und verwalten.</small>
-        </button>
+        </button>{% endif %}
         <button type="button" class="kiosk-menu__item" data-dialog-target="quick-bookings-dialog">
           <span>Letzte Schnellbuchungen</span>
           <small>Getränke, Frühstück und Snacks prüfen oder stornieren.</small>
@@ -197,7 +197,7 @@
         <span>Gemeinschaftsausgaben</span>
         <small>{% if is_post_camp %}Bisherige Anträge ansehen.{% else %}Vorgestreckte Ausgaben einreichen und ihren Status sehen.{% endif %}</small>
       </button>{% endif %}
-      {% if not is_post_camp %}
+      {% if kiosk_features.family and not is_post_camp %}
       {% if not kiosk_actor_is_family_member %}
       <button type="button" class="kiosk-menu__item" data-dialog-target="family-management-dialog">
         <span>Familie</span>
@@ -261,7 +261,7 @@
     </form>
   </dialog>
 
-  {% if is_pre_camp and preorder_meals %}
+  {% if kiosk_features.meals and is_pre_camp and preorder_meals %}
     <section class="panel kiosk-card kiosk-card--accent" data-kiosk-card="preorders">
       <div class="kiosk-card__header">
         <div class="kiosk-card__header-main">
@@ -281,9 +281,9 @@
     </section>
   {% endif %}
 
-  {% if show_meal_area or is_pre_camp and preorder_meals %}
+  {% if kiosk_features.meals and show_meal_area or kiosk_features.meals and is_pre_camp and preorder_meals or kiosk_features.drinks and show_meal_area or kiosk_features.shifts and show_meal_area or kiosk_features.attendance and show_meal_area %}
     <div class="kiosk-masonry" data-kiosk-masonry>
-      {% if show_meal_area %}
+      {% if show_meal_area and kiosk_features.drinks or show_meal_area and kiosk_features.meals %}
         <form method="post" id="quick-booking-form" class="kiosk-masonry__contents">
           {% csrf_token %}
           <input type="hidden" name="action" value="quick">
@@ -292,7 +292,7 @@
           <input type="hidden" name="quick-quantity" id="id_quick-quantity" value="1">
           <span data-quick-submitted-targets></span>
 
-        <section class="panel kiosk-card kiosk-card--accent" data-kiosk-card="drinks">
+        {% if kiosk_features.drinks %}<section class="panel kiosk-card kiosk-card--accent" data-kiosk-card="drinks">
           <div class="kiosk-card__header">
             <div class="kiosk-card__header-main">
               <span class="kiosk-card__eyebrow">Schnellaktion</span>
@@ -321,9 +321,9 @@
             {% endfor %}
           </div>
           </div>
-        </section>
+        </section>{% endif %}
 
-        <section class="panel kiosk-card kiosk-card--accent" data-kiosk-card="food">
+        {% if kiosk_features.meals %}<section class="panel kiosk-card kiosk-card--accent" data-kiosk-card="food">
           <div class="kiosk-card__header">
             <div class="kiosk-card__header-main">
               <span class="kiosk-card__eyebrow">Aktion</span>
@@ -356,7 +356,7 @@
               {% endfor %}
             </div>
           </div>
-        </section>
+        </section>{% endif %}
 
 
         {% for error in quick_form.price_rule.errors %}
@@ -369,7 +369,7 @@
       </form>
       {% endif %}
 
-      {% if not is_pre_camp or "dinner" in preorder_meals %}
+      {% if kiosk_features.meals and not is_pre_camp or kiosk_features.meals and "dinner" in preorder_meals %}
       <dialog id="meal-calendar-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="meal-calendar-dialog-title">
         <div class="kiosk-card__header kiosk-section-heading">
           <div class="kiosk-card__header-main">
@@ -429,7 +429,7 @@
       </dialog>
       {% endif %}
 
-      {% if not is_pre_camp or "breakfast" in preorder_meals %}
+      {% if kiosk_features.meals and not is_pre_camp or kiosk_features.meals and "breakfast" in preorder_meals %}
       <dialog id="breakfast-meal-calendar" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="breakfast-meal-calendar-title">
         <div class="kiosk-card__header kiosk-section-heading">
           <div class="kiosk-card__header-main">
@@ -472,7 +472,7 @@
       </dialog>
       {% endif %}
 
-      {% if show_meal_area %}
+      {% if kiosk_features.shifts and show_meal_area %}
       <section class="panel kiosk-card kiosk-card--muted" data-kiosk-card="shifts">
         <div class="kiosk-card__header kiosk-section-heading">
           <div>
@@ -485,7 +485,7 @@
 
       {% endif %}
 
-      {% if checkin_available %}
+      {% if kiosk_features.attendance and checkin_available %}
         <section class="panel kiosk-card kiosk-card--muted" data-kiosk-card="check-in">
           <div class="kiosk-card__header kiosk-section-heading">
             <div class="kiosk-card__header-main">
@@ -516,7 +516,7 @@
                 <time datetime="{{ entry.created_at|date:'c' }}">{{ entry.created_at|date:"d.m.Y H:i" }} Uhr</time>
               </div>
               <div class="quick-booking-row__action">
-                {% if entry.is_kiosk_cancelable %}
+                {% if entry.is_kiosk_cancelable and entry.kind == "drink" and kiosk_features.drinks or entry.is_kiosk_cancelable and entry.kind == "food" and kiosk_features.meals %}
                   <button
                     type="button"
                     class="button button-secondary"
@@ -552,7 +552,7 @@
             <p>{% if is_post_camp %}Bisherige Anträge im Lesemodus.{% else %}Geld für die Gemeinschaft vorgestreckt?{% endif %}</p>
           </div>
           <div class="inline-actions">
-            {% if not is_post_camp %}<a class="button button-secondary kiosk-card__action" href="{{ kiosk_urls.shared_expense_request }}">Antrag einreichen</a>{% endif %}
+            {% if not is_post_camp and kiosk_features.expenses %}<a class="button button-secondary kiosk-card__action" href="{{ kiosk_urls.shared_expense_request }}">Antrag einreichen</a>{% endif %}
             <button type="button" class="button button-secondary" data-close-dialog>Schließen</button>
           </div>
         </div>
@@ -615,7 +615,7 @@
           </div>
         {% endif %}
       </dialog>
-      {% if not is_post_camp %}{% if not kiosk_actor_is_family_member %}<dialog id="family-management-dialog"{% if family_member_pin_form.errors %} data-auto-open-dialog{% endif %} class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="family-management-dialog-title">
+      {% if kiosk_features.family and not is_post_camp %}{% if not kiosk_actor_is_family_member %}<dialog id="family-management-dialog"{% if family_member_pin_form.errors %} data-auto-open-dialog{% endif %} class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="family-management-dialog-title">
         <div class="kiosk-card__header kiosk-section-heading">
           <div class="kiosk-card__header-main">
             <h2 class="kiosk-title" id="family-management-dialog-title">
@@ -877,7 +877,7 @@
     </dialog>
   {% endif %}
 
-  {% if not is_pre_camp or "breakfast" in preorder_meals %}
+  {% if kiosk_features.meals and not is_pre_camp or kiosk_features.meals and "breakfast" in preorder_meals %}
   <dialog id="food-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="food-dialog-title">
     <form method="dialog" class="dialog-heading">
       <h2 id="food-dialog-title">Verpflegung buchen</h2>
@@ -898,7 +898,7 @@
   </dialog>
   {% endif %}
 
-  {% if not is_pre_camp or "dinner" in preorder_meals %}
+  {% if kiosk_features.meals and not is_pre_camp or kiosk_features.meals and "dinner" in preorder_meals %}
   {% for day in meal_calendar_days %}
     <dialog id="meal-day-detail-{{ day.date|date:'Y-m-d' }}" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="meal-day-detail-title-{{ day.date|date:'Y-m-d' }}">
       <form method="dialog" class="dialog-heading">
@@ -975,7 +975,7 @@
           </div>
         {% endif %}
         {% if not slot.locked and slot.price_rule %}
-          {% if not is_pre_camp or "dinner" in preorder_meals %}
+          {% if kiosk_features.meals and not is_pre_camp or kiosk_features.meals and "dinner" in preorder_meals %}
             <div class="dialog-actions">
               <button
                 type="button"
@@ -995,7 +995,7 @@
   {% endfor %}
   {% endif %}
 
-  {% if not is_pre_camp or "breakfast" in preorder_meals %}
+  {% if kiosk_features.meals and not is_pre_camp or kiosk_features.meals and "breakfast" in preorder_meals %}
   {% for day in breakfast_calendar_days %}
     <dialog id="breakfast-meal-day-detail-{{ day.date|date:'Y-m-d' }}" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="breakfast-meal-day-detail-title-{{ day.date|date:'Y-m-d' }}">
       <form method="dialog" class="dialog-heading">
@@ -1031,7 +1031,7 @@
           <div class="kiosk-empty"><strong>Keine Frühstücksbuchung für diesen Tag.</strong></div>
         {% endif %}
         {% if not slot.locked and slot.price_rule %}
-          {% if not is_pre_camp or "breakfast" in preorder_meals %}
+          {% if kiosk_features.meals and not is_pre_camp or kiosk_features.meals and "breakfast" in preorder_meals %}
             <div class="dialog-actions"><button type="button" class="button" data-open-breakfast-meal-dialog data-breakfast-meal-date="{{ day.date|date:'Y-m-d' }}">Frühstück für diesen Tag vorbestellen</button></div>
           {% endif %}
         {% endif %}
@@ -1040,7 +1040,7 @@
   {% endfor %}
   {% endif %}
 
-  {% if not is_pre_camp or "dinner" in preorder_meals %}
+  {% if kiosk_features.meals and not is_pre_camp or kiosk_features.meals and "dinner" in preorder_meals %}
   <dialog id="meal-dialog" class="kiosk-dialog kiosk-dialog--wide meal-booking-dialog" aria-labelledby="meal-dialog-title">
     <form method="dialog" class="dialog-heading">
       <div>
@@ -1123,7 +1123,7 @@
   </dialog>
   {% endif %}
 
-  {% if not is_pre_camp or "breakfast" in preorder_meals %}
+  {% if kiosk_features.meals and not is_pre_camp or kiosk_features.meals and "breakfast" in preorder_meals %}
   <dialog id="breakfast-meal-dialog" class="kiosk-dialog kiosk-dialog--wide meal-booking-dialog" aria-labelledby="breakfast-meal-dialog-title">
     <form method="dialog" class="dialog-heading">
       <div>
@@ -1157,7 +1157,7 @@
   </dialog>
   {% endif %}
 
-  {% if not kiosk_actor_is_family_member %}<dialog id="family-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="family-dialog-title">
+  {% if kiosk_features.family and not kiosk_actor_is_family_member %}<dialog id="family-dialog" class="kiosk-dialog kiosk-dialog--compact" aria-labelledby="family-dialog-title">
     <form method="dialog" class="dialog-heading">
       <h2 id="family-dialog-title">Familienmitglied anlegen</h2>
       <button class="button button-secondary">Schließen</button>
@@ -1172,7 +1172,7 @@
     </form>
   </dialog>{% endif %}
 
-  {% if not checkin_available %}
+  {% if kiosk_features.attendance and not checkin_available %}
     {% if not participant.camp.starts_on or not participant.camp.ends_on or participant.camp.starts_on >= participant.camp.ends_on %}
       <section class="panel notice notice-warning" role="status" aria-labelledby="checkin-data-warning-title">
         <h2 id="checkin-data-warning-title">Check-in derzeit nicht verfügbar</h2>
@@ -1181,7 +1181,7 @@
     {% endif %}
   {% endif %}
 
-  {% if checkin_available %}
+  {% if kiosk_features.attendance and checkin_available %}
   <dialog id="checkin-dialog" class="kiosk-dialog kiosk-dialog--wide" aria-labelledby="checkin-dialog-title">
     <form method="dialog" class="dialog-heading">
       <div>
@@ -1293,13 +1293,13 @@
 {% endblock %}
 {% block scripts %}
 
-  <dialog id="donate-dialog" class="kiosk-dialog" aria-labelledby="donate-dialog-title">
+  {% if kiosk_features.donations %}<dialog id="donate-dialog" class="kiosk-dialog" aria-labelledby="donate-dialog-title">
     <div class="kiosk-dialog__content">
       <div class="kiosk-dialog__header">
         <h2 id="donate-dialog-title">Spenden</h2>
         <button class="kiosk-dialog__close" type="button" aria-label="Schließen" data-close-donate-dialog>×</button>
       </div>
-      <form method="post" action="{% url 'kiosk-home' %}">
+      <form method="post" action="{% if kiosk_mode == 'central' %}{% url 'central-kiosk-home' %}{% else %}{% url 'kiosk-home' %}{% endif %}">
         {% csrf_token %}
         <input type="hidden" name="action" value="donate">
         <div class="kiosk-dialog__body">
@@ -1315,7 +1315,7 @@
         </div>
       </form>
     </div>
-  </dialog>
+  </dialog>{% endif %}
 
   <script nonce="{{ request.csp_nonce }}">
     (() => {

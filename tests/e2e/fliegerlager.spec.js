@@ -356,7 +356,7 @@ async function createCamp(page, name = "Sommerlager", startOffsetDays = 2, durat
   await page.getByLabel("Name").fill(campName);
   await page.getByLabel("Jahr").fill(campYear(startDate));
   await page.getByLabel("Beginn").fill(dateInputValue(startDate));
-  await page.getByLabel("Ende").fill(dateInputValue(endDate));
+  await page.getByLabel(/^Ende:?$/).fill(dateInputValue(endDate));
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(page.getByRole("heading", { name: "Übersicht" })).toBeVisible();
   await expect(page.getByText(campName).first()).toBeVisible();
@@ -462,7 +462,7 @@ test("Mobile touch targets follow the 780px portrait breakpoint", async ({ page 
       page.getByLabel("Name"),
       page.getByLabel("Jahr"),
       page.getByLabel("Beginn"),
-      page.getByLabel("Ende"),
+      page.getByLabel(/^Ende:?$/),
       page.getByRole("button", { name: "Speichern" }),
     ];
     const heights = await Promise.all(

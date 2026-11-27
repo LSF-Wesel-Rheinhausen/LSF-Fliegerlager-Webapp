@@ -58,6 +58,13 @@ ADMIN_CATEGORIES: dict[str, str] = {
 }
 ALL_CATEGORIES = {**PARTICIPANT_CATEGORIES, **ADMIN_CATEGORIES}
 SECURITY_CATEGORY = "account_security"
+PARTICIPANT_FEATURES = {
+    "shifts": "shifts",
+    "booking_links": "partners",
+    "meal_deadlines": "meals",
+    "expense_status": "expenses",
+    "announcement": "notifications",
+}
 RETRY_DELAYS = (60, 300, 1800, 7200, 21600)
 PROCESSING_LEASE = timedelta(minutes=15)
 PUSH_DELIVERY_TIMEOUT_SECONDS = 5
@@ -106,6 +113,7 @@ def queue_participant_notification(
         )
         if category in subscription.categories
     ]
+    feature_id = PARTICIPANT_FEATURES.get(category)
     return _queue_for_subscriptions(
         subscriptions,
         category=category,
@@ -114,6 +122,8 @@ def queue_participant_notification(
         target_url=target_url,
         dedupe_key=dedupe_key,
         scheduled_for=scheduled_for,
+        camp=participant.camp if feature_id else None,
+        feature_id=feature_id or "",
     )
 
 
@@ -144,6 +154,7 @@ def queue_user_notification(
     )
 
 
+@transaction.atomic
 def _queue_for_subscriptions(
     subscriptions: Any,
     *,
@@ -154,11 +165,22 @@ def _queue_for_subscriptions(
     dedupe_key: str,
     scheduled_for: Any | None,
     account_recovery: AccountRecoveryToken | None = None,
+    camp: Camp | None = None,
+    feature_id: str = "",
 ) -> int:
     if not settings.WEB_PUSH_ENABLED:
         return 0
     if category not in {*ALL_CATEGORIES, SECURITY_CATEGORY}:
         raise ValueError("Unsupported push category")
+    if category in PARTICIPANT_FEATURES:
+        from .feature_controls import feature_enabled
+
+        expected_feature = PARTICIPANT_FEATURES[category]
+        if camp is None or feature_id != expected_feature:
+            return 0
+        camp = Camp.objects.select_for_update().filter(pk=camp.pk).first()
+        if camp is None or not feature_enabled(camp, "notifications") or not feature_enabled(camp, feature_id):
+            return 0
     if not target_url.startswith("/") or target_url.startswith("//"):
         raise ValueError("Push target URL must be a same-origin relative path")
     due_at = scheduled_for or timezone.now()
@@ -175,6 +197,8 @@ def _queue_for_subscriptions(
                 "scheduled_for": due_at,
                 "next_attempt_at": due_at,
                 "account_recovery": account_recovery,
+                "camp": camp,
+                "feature_id": feature_id,
             },
         )
         created += int(was_created)
@@ -258,7 +282,7 @@ def _authorize_push_delivery(message_id: int) -> tuple[PushMessage, PushSubscrip
     """
     message_data = (
         PushMessage.objects.filter(pk=message_id, status=PushMessage.Status.PROCESSING)
-        .values("subscription_id", "account_recovery_id", "category", "target_url")
+        .values("subscription_id", "account_recovery_id", "category", "target_url", "camp_id", "feature_id")
         .first()
     )
     if message_data is None:
@@ -303,6 +327,31 @@ def _authorize_push_delivery(message_id: int) -> tuple[PushMessage, PushSubscrip
                 _terminally_fail_locked_push(message, "recovery_unavailable")
             return None
         return message, subscription, raw_token
+    if message_data["category"] in PARTICIPANT_FEATURES:
+        from .feature_controls import feature_enabled
+
+        camp_id = cast(int | None, message_data["camp_id"])
+        feature_id = message_data["feature_id"]
+        expected_feature = PARTICIPANT_FEATURES[message_data["category"]]
+        if not camp_id or feature_id != expected_feature:
+            message = (
+                PushMessage.objects.select_for_update()
+                .filter(pk=message_id, status=PushMessage.Status.PROCESSING)
+                .first()
+            )
+            if message is not None:
+                _terminally_fail_locked_push(message, "feature_unattributed")
+            return None
+        camp = Camp.objects.filter(pk=camp_id).first()
+        if camp is None or not feature_enabled(camp, "notifications") or not feature_enabled(camp, feature_id):
+            message = (
+                PushMessage.objects.select_for_update()
+                .filter(pk=message_id, status=PushMessage.Status.PROCESSING)
+                .first()
+            )
+            if message is not None:
+                _terminally_fail_locked_push(message, "feature_disabled")
+            return None
     subscription = PushSubscription.objects.select_for_update().filter(pk=message_data["subscription_id"]).first()
     if subscription is None:
         return None
@@ -832,6 +881,7 @@ def cleanup_push_messages(*, now: Any | None = None) -> int:
     return deleted
 
 
+@transaction.atomic
 def queue_information_push_batch(
     *,
     camp: Camp,
@@ -844,6 +894,12 @@ def queue_information_push_batch(
     p_ids = [int(p_id) for p_id in participant_ids]
     if not p_ids:
         return 0
+    from .feature_controls import feature_enabled
+
+    locked_camp = Camp.objects.select_for_update().filter(pk=camp.pk).first()
+    if locked_camp is None or not feature_enabled(locked_camp, "notifications"):
+        return 0
+    camp = locked_camp
 
     subscriptions = PushSubscription.objects.filter(
         Q(participant_id__in=p_ids) | Q(family_member__guardian_id__in=p_ids, family_member__is_active=True),
@@ -865,6 +921,8 @@ def queue_information_push_batch(
                 "target_url": target_url,
                 "scheduled_for": now,
                 "next_attempt_at": now,
+                "camp": camp,
+                "feature_id": "notifications",
             },
         )
         created_count += 1

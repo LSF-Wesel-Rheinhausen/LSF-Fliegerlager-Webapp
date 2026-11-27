@@ -65,15 +65,14 @@ async function setupFirstAdmin(page) {
   await page.getByRole("button", { name: "Admin anlegen" }).click();
 }
 
-async function createMealScenario(page) {
+async function createMealScenario(page, campName = `Detail-Lager ${Date.now()}`) {
   const startDate = new Date();
   const endDate = addDays(startDate, 2);
-  const campName = `Detail-Lager ${Date.now()}`;
   await page.getByRole("link", { name: "Lager anlegen" }).click();
   await page.getByLabel("Name").fill(campName);
   await page.getByLabel("Jahr").fill(dateInputValue(startDate).slice(0, 4));
   await page.getByLabel("Beginn").fill(dateInputValue(startDate));
-  await page.getByLabel("Ende").fill(dateInputValue(endDate));
+  await page.getByLabel(/^Ende:?$/).fill(dateInputValue(endDate));
   await page.getByRole("button", { name: "Speichern" }).click();
   await configureCampKioskAccess(page);
   await page.getByRole("link", { name: "Preise verwalten" }).first().click();
@@ -92,7 +91,7 @@ test("Admin meal overview keeps dinner and breakfast details separate and keyboa
   await page.getByLabel("Name").fill("Detail-Lager");
   await page.getByLabel("Jahr").fill("2026");
   await page.getByLabel("Beginn").fill("2026-07-01");
-  await page.getByLabel("Ende").fill("2026-07-02");
+  await page.getByLabel(/^Ende:?$/).fill("2026-07-02");
   await page.getByRole("button", { name: "Speichern" }).click();
   await page.getByRole("link", { name: "Essensübersicht" }).first().click();
 
@@ -139,7 +138,7 @@ test("Admin meal overview locks a dynamic dinner day without breakfast controls"
   await page.getByLabel("Name").fill(campName);
   await page.getByLabel("Jahr").fill(dateInputValue(startDate).slice(0, 4));
   await page.getByLabel("Beginn").fill(dateInputValue(startDate));
-  await page.getByLabel("Ende").fill(dateInputValue(endDate));
+  await page.getByLabel(/^Ende:?$/).fill(dateInputValue(endDate));
   await page.getByRole("button", { name: "Speichern" }).click();
   await page.getByRole("link", { name: "Essensübersicht" }).first().click();
   await page.setViewportSize({ width: 390, height: 844 });
@@ -158,76 +157,106 @@ test("Admin meal overview locks a dynamic dinner day without breakfast controls"
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
 });
 
-test("Admin meal overview shows populated details and contains long names on mobile", async ({ page, browser, baseURL }) => {
-  const browserErrors = [];
-  const failedRequests = [];
-  const trackPageIssues = (trackedPage) => {
-    trackedPage.on("console", (message) => {
+test.describe("Admin meal overview with populated mobile details", () => {
+  test.describe.configure({ mode: "serial" });
+
+  const campName = "E2E Meal Overview Long Names";
+  const longName = "Alexandra MitEinemSehrLangenNachnamenFuerOverflow";
+
+  test("creates breakfast and dinner bookings for a long participant name", async ({ page, browser, baseURL }) => {
+    const browserErrors = [];
+    const failedRequests = [];
+    const trackPageIssues = (trackedPage) => {
+      trackedPage.on("console", (message) => {
+        if (message.type() === "error") browserErrors.push(message.text());
+      });
+      trackedPage.on("pageerror", (error) => browserErrors.push(error.message));
+      trackedPage.on("requestfailed", (request) => {
+        const details = requestFailureDetails(request);
+        const isMissingE2ePwaIcon = details.url.endsWith("/static/billing/icons/kiosk-icon-192.png");
+        if (!isBenignPageRequestFailure(details) && !isMissingE2ePwaIcon) {
+          failedRequests.push(`${details.method} ${details.url}`);
+        }
+      });
+    };
+    trackPageIssues(page);
+
+    await setupFirstAdmin(page);
+    await createMealScenario(page, campName);
+    const campId = new URL(page.url()).pathname.match(/\/camps\/(\d+)\//)[1];
+
+    const kioskContext = await browser.newContext({
+      baseURL,
+      serviceWorkers: "block",
+    });
+    const kioskPage = await kioskContext.newPage();
+    trackPageIssues(kioskPage);
+
+    try {
+      await page.getByRole("link", { name: "Teilnehmer anlegen" }).click();
+      await page.getByLabel("Vorname").fill("Alexandra");
+      await page.getByLabel("Nachname").fill(longName);
+      await page.getByRole("button", { name: "Speichern" }).click();
+      await page.locator(".participant-more-actions > summary").click();
+      await page.getByRole("link", { name: "PIN setzen", exact: true }).click();
+      await page.getByLabel("Neue PIN").fill("1234");
+      await page.getByRole("button", { name: "Speichern", exact: true }).click();
+      await page.goto(`/camps/${campId}/`);
+
+      await openKiosk(kioskPage);
+      await kioskPage.getByLabel("Teilnehmer").selectOption({ label: `Alexandra ${longName}` });
+      await kioskPage.getByLabel("PIN:", { exact: true }).fill("1234");
+      await kioskPage.getByRole("button", { name: "Anmelden", exact: true }).click();
+      await kioskPage.locator('[data-kiosk-card="food"] [data-food-button][data-meal-type="breakfast"]').click();
+      await kioskPage.locator("dialog#food-dialog").getByRole("button", { name: "Für später vorbestellen" }).click();
+      await kioskPage.locator("dialog#breakfast-meal-dialog input[data-breakfast-meal-date-checkbox]:not([disabled])").first().check();
+      await kioskPage.locator("dialog#breakfast-meal-dialog").getByRole("button", { name: "Frühstücksvorbestellung speichern" }).click();
+      await expect(kioskPage.getByText(/Essensanmeldung wurde für 1 Tag und 1 Person gespeichert\./)).toBeVisible();
+      await kioskPage.goto("/kiosk/");
+      await kioskPage.locator('[data-kiosk-card="food"] [data-dialog-target="meal-calendar-dialog"]').click();
+      await kioskPage.locator("dialog#meal-calendar-dialog").getByRole("button", { name: "Essen buchen" }).click();
+      await kioskPage.locator("dialog#meal-dialog input[data-meal-date-checkbox]:not([disabled])").first().check();
+      await kioskPage.locator("dialog#meal-dialog").getByRole("button", { name: "Weiter" }).click();
+      await kioskPage.locator("dialog#meal-dialog").getByRole("button", { name: "Essensanmeldung speichern" }).click();
+      const mealDialog = kioskPage.locator("#meal-dialog");
+      if (await mealDialog.evaluate((dialog) => dialog.open)) {
+        await mealDialog.locator("#meal-dialog-close").click();
+        await expect(mealDialog).toBeHidden();
+      }
+      const mealCalendarDialog = kioskPage.locator("#meal-calendar-dialog");
+      await expect(mealCalendarDialog).toBeVisible();
+      await mealCalendarDialog.getByRole("button", { name: "Schließen" }).click();
+      await expect(mealCalendarDialog).toBeHidden();
+      await kioskPage.getByRole("link", { name: "Abmelden" }).first().click();
+      await expect(kioskPage).toHaveURL(/\/kiosk\/login\/?$/);
+
+      expect(browserErrors).toEqual([]);
+      expect(failedRequests).toEqual([]);
+    } finally {
+      await kioskContext.close();
+    }
+  });
+
+  test("shows populated breakfast and dinner details for long names on mobile", async ({ page }) => {
+    const browserErrors = [];
+    const failedRequests = [];
+    page.on("console", (message) => {
       if (message.type() === "error") browserErrors.push(message.text());
     });
-    trackedPage.on("pageerror", (error) => browserErrors.push(error.message));
-    trackedPage.on("requestfailed", (request) => {
+    page.on("pageerror", (error) => browserErrors.push(error.message));
+    page.on("requestfailed", (request) => {
       const details = requestFailureDetails(request);
       const isMissingE2ePwaIcon = details.url.endsWith("/static/billing/icons/kiosk-icon-192.png");
       if (!isBenignPageRequestFailure(details) && !isMissingE2ePwaIcon) {
         failedRequests.push(`${details.method} ${details.url}`);
       }
     });
-  };
-  trackPageIssues(page);
 
-  await setupFirstAdmin(page);
-  const { campName } = await createMealScenario(page);
-  const longName = "Alexandra MitEinemSehrLangenNachnamenFuerOverflow";
-
-  const kioskContext = await browser.newContext({
-    baseURL,
-    serviceWorkers: "block",
-  });
-  const kioskPage = await kioskContext.newPage();
-  trackPageIssues(kioskPage);
-
-  try {
-    await page.getByRole("link", { name: "Teilnehmer anlegen" }).click();
-    await page.getByLabel("Vorname").fill("Alexandra");
-    await page.getByLabel("Nachname").fill(longName);
-    await page.getByRole("button", { name: "Speichern" }).click();
-    await page.locator(".participant-more-actions > summary").click();
-    await page.getByRole("link", { name: "PIN setzen", exact: true }).click();
-    await page.getByLabel("Neue PIN").fill("1234");
-    await page.getByRole("button", { name: "Speichern", exact: true }).click();
+    await setupFirstAdmin(page);
     await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
     await page.getByRole("link", { name: campName, exact: true }).click();
-
-    await openKiosk(kioskPage);
-    await kioskPage.getByLabel("Teilnehmer").selectOption({ label: `Alexandra ${longName}` });
-    await kioskPage.getByLabel("PIN:", { exact: true }).fill("1234");
-    await kioskPage.getByRole("button", { name: "Anmelden", exact: true }).click();
-    await kioskPage.locator('[data-kiosk-card="food"] [data-food-button][data-meal-type="breakfast"]').click();
-    await kioskPage.locator("dialog#food-dialog").getByRole("button", { name: "Für später vorbestellen" }).click();
-    await kioskPage.locator("dialog#breakfast-meal-dialog input[data-breakfast-meal-date-checkbox]:not([disabled])").first().check();
-    await kioskPage.locator("dialog#breakfast-meal-dialog").getByRole("button", { name: "Frühstücksvorbestellung speichern" }).click();
-    await expect(kioskPage.getByText(/Essensanmeldung wurde für 1 Tag und 1 Person gespeichert\./)).toBeVisible();
-    await kioskPage.goto("/kiosk/");
-    await kioskPage.locator('[data-kiosk-card="food"] [data-dialog-target="meal-calendar-dialog"]').click();
-    await kioskPage.locator("dialog#meal-calendar-dialog").getByRole("button", { name: "Essen buchen" }).click();
-    await kioskPage.locator("dialog#meal-dialog input[data-meal-date-checkbox]:not([disabled])").first().check();
-    await kioskPage.locator("dialog#meal-dialog").getByRole("button", { name: "Weiter" }).click();
-    await kioskPage.locator("dialog#meal-dialog").getByRole("button", { name: "Essensanmeldung speichern" }).click();
-    const mealDialog = kioskPage.locator("#meal-dialog");
-    if (await mealDialog.evaluate((dialog) => dialog.open)) {
-      await mealDialog.locator("#meal-dialog-close").click();
-      await expect(mealDialog).toBeHidden();
-    }
-    const mealCalendarDialog = kioskPage.locator("#meal-calendar-dialog");
-    await expect(mealCalendarDialog).toBeVisible();
-    await mealCalendarDialog.getByRole("button", { name: "Schließen" }).click();
-    await expect(mealCalendarDialog).toBeHidden();
-    await kioskPage.getByRole("link", { name: "Abmelden" }).first().click();
-    await expect(kioskPage).toHaveURL(/\/kiosk\/login\/?$/);
-
-    await page.getByRole("link", { name: "Fliegerlager-Abrechnung" }).click();
-    await page.getByRole("link", { name: campName, exact: true }).click();
+    const campId = new URL(page.url()).pathname.match(/\/camps\/(\d+)\//)[1];
+    await page.goto(`/camps/${campId}/`);
     await page.getByRole("link", { name: "Essensübersicht" }).first().click();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.emulateMedia({ colorScheme: "dark" });
@@ -263,7 +292,5 @@ test("Admin meal overview shows populated details and contains long names on mob
     await expect(dinnerDay).toBeFocused();
     expect(browserErrors).toEqual([]);
     expect(failedRequests).toEqual([]);
-  } finally {
-    await kioskContext.close();
-  }
+  });
 });

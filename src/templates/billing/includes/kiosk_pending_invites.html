@@ -8,7 +8,7 @@
       <form method="post" action="{{ kiosk_urls.partner_activity }}" class="inline-actions kiosk-list-row__actions">
         {% csrf_token %}
         <input type="hidden" name="booking_link_id" value="{{ invite.pk }}">
-        <button type="submit" name="action" value="booking_link_accept">Annehmen</button>
+        {% if kiosk_features.partners %}<button type="submit" name="action" value="booking_link_accept">Annehmen</button>{% endif %}
         <button type="submit" name="action" value="booking_link_decline" class="button-secondary">Ablehnen</button>
       </form>
     </div>

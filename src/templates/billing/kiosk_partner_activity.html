@@ -83,14 +83,14 @@
         </div>
       </div>
       {% if not kiosk_actor_is_family_member and not is_post_camp %}
-        <form method="post" class="form-grid">
+        {% if kiosk_features.partners %}<form method="post" class="form-grid">
           {% csrf_token %}
           <input type="hidden" name="action" value="booking_link_invite">
           {{ booking_link_form.as_p }}
           <div class="form-actions">
             <button type="submit">Partner einladen</button>
           </div>
-        </form>
+        </form>{% endif %}
         {% if pending_invites %}
           <section class="stack stack--compact" aria-labelledby="pending-partner-invites-title">
             <h3 id="pending-partner-invites-title">Offene Einladungen</h3>

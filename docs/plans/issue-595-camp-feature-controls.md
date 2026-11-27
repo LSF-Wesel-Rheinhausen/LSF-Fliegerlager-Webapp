@@ -1,6 +1,6 @@
 # Issue #595: Nutzerfunktionen je Lager steuern
 
-**Status:** Plan; die Implementierung ist noch nicht erfolgt.
+**Status:** Implementiert und geprüft; bereit für Review in PR #666.
 **Issue:** Closes #595
 
 ## Ziel und Umfang
@@ -13,15 +13,15 @@ Bestehende Abschaltflags bleiben wirksam. Neue bekannte Funktionen sind ohne abw
 
 ## Umsetzung und Abnahme
 
-- [ ] Bestehende Camp-Einstellungen und Funktionsgrenzen inventarisieren; Katalog und sichere Defaults festlegen.
-- [ ] Pro-Lager-Einstellung mit Migration und Rückwärtskompatibilität für bestehende Off-Flags ergänzen.
-- [ ] Gemeinsame serverseitige Gate-Prüfung für alle betroffenen GET-/POST-Endpunkte in privatem und zentralem Kiosk einführen; Admin- und Recovery-Wege erhalten.
-- [ ] Kiosk-Navigation, Seiten, Formulare und Aktionen passend zur Freigabe darstellen; unbekannte IDs geschlossen behandeln.
-- [ ] Benachrichtigungswarteschlange beim tatsächlichen Versand erneut prüfen und veraltete Einträge ohne Replay verwerfen.
-- [ ] Django-Tests für Defaults, Migration/alte Flags, unbekannte IDs, direkte GET-/POST-Zugriffe, beide Kiosk-Modi, Admin-Ausnahmen, PIN-Recovery/-Widerruf und Benachrichtigungs-Recheck ergänzen.
-- [ ] Lagerübergreifende Isolation, bereits geöffnete Formulare nach Abschaltung, Wiederfreigabe und unveränderte Finanzberechnungen testen. Jede Nutzeraktion muss einem Gate oder einer ausdrücklich erhaltenen Grundfunktion zugeordnet sein.
-- [ ] E2E-Tests für die Admin-Konfiguration und gesperrte/freigegebene Nutzeraktionen in beiden Kiosk-Modi ergänzen.
-- [ ] Abnahme: abgeschaltete Nutzeraktion ist auch bei direktem Aufruf serverseitig unmöglich; Daten und Historie bleiben erhalten; Admin kann die Funktion wieder freigeben.
+- [x] Bestehende Camp-Einstellungen und Funktionsgrenzen inventarisieren; Katalog und sichere Defaults festlegen.
+- [x] Pro-Lager-Einstellung mit Migration und Rückwärtskompatibilität für bestehende Off-Flags ergänzen.
+- [x] Gemeinsame serverseitige Gate-Prüfung für alle betroffenen GET-/POST-Endpunkte in privatem und zentralem Kiosk einführen; Admin- und Recovery-Wege erhalten.
+- [x] Kiosk-Navigation, Seiten, Formulare und Aktionen passend zur Freigabe darstellen; unbekannte IDs geschlossen behandeln.
+- [x] Benachrichtigungswarteschlange beim tatsächlichen Versand erneut prüfen und veraltete Einträge ohne Replay verwerfen.
+- [x] Django-Tests für Defaults, Migration/alte Flags, unbekannte IDs, direkte GET-/POST-Zugriffe, beide Kiosk-Modi, Admin-Ausnahmen, PIN-Recovery/-Widerruf und Benachrichtigungs-Recheck ergänzen.
+- [x] Lagerübergreifende Isolation, bereits geöffnete Formulare nach Abschaltung, Wiederfreigabe und unveränderte Finanzberechnungen testen. Jede Nutzeraktion muss einem Gate oder einer ausdrücklich erhaltenen Grundfunktion zugeordnet sein.
+- [x] E2E-Tests für die Admin-Konfiguration und gesperrte/freigegebene Nutzeraktionen in beiden Kiosk-Modi ergänzen.
+- [x] Abnahme: abgeschaltete Nutzeraktion ist auch bei direktem Aufruf serverseitig unmöglich; Daten und Historie bleiben erhalten; Admin kann die Funktion wieder freigeben.
 
 ## Nicht-Ziele
 
@@ -29,8 +29,8 @@ Kein Plugin-Framework, keine neue Laufzeitabhängigkeit und keine Aufteilung in 
 
 ## Abschluss
 
-- [ ] Changelog und relevante Dokumentation ergänzen.
-- [ ] Ruff, Django-Checks, Migrationsabgleich, mypy, vollständige Python- und Browserprüfungen ohne lokales Docker abschließen.
-- [ ] Unabhängiges Review abschließen; danach PR auf Ready for review setzen. Kein automatischer Merge.
+- [x] Changelog und relevante Dokumentation ergänzen.
+- [x] Ruff, Django-Checks, Migrationsabgleich, mypy, vollständige Python- und Browserprüfungen ohne lokales Docker abschließen.
+- [x] Unabhängiges Review abschließen; danach PR auf Ready for review setzen. Kein automatischer Merge.
 
-Dieser Draft dokumentiert zunächst nur den Plan. Das Issue wird erst durch den Merge der vollständig implementierten und geprüften Änderung geschlossen.
+Die Zuordnung der Nutzeraktionen zu den Schaltern ist in [der Aktionsübersicht](issue-595-feature-action-inventory.md) dokumentiert. Das Issue wird erst durch den Merge der vollständig implementierten und geprüften Änderung geschlossen.

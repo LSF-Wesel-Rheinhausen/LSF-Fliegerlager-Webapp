@@ -566,6 +566,29 @@ class Camp(TimeStampedModel):
         return f"{self.name} ({self.year})"
 
 
+class CampFeatureOverride(TimeStampedModel):
+    """Persist an explicit per-camp state for one known participant feature."""
+
+    camp = models.ForeignKey(Camp, on_delete=models.CASCADE, related_name="feature_overrides")
+    feature_id = models.CharField(max_length=40)
+    enabled = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["camp", "feature_id"], name="unique_camp_feature_override"),
+        ]
+
+    def clean(self) -> None:
+        """Reject feature identifiers outside the application catalog."""
+        from .feature_controls import FEATURE_LABELS
+
+        if self.feature_id not in FEATURE_LABELS:
+            raise ValidationError({"feature_id": "Unbekannte Lagerfunktion."})
+
+    def __str__(self) -> str:
+        return f"{self.camp}: {self.feature_id} ({'an' if self.enabled else 'aus'})"
+
+
 class CampKioskAccess(TimeStampedModel):
     """Store the shared, revocable kiosk access credential for one camp."""
 
@@ -2464,6 +2487,8 @@ class PushMessage(TimeStampedModel):
         FAILED = "failed", "Fehlgeschlagen"
 
     subscription = models.ForeignKey(PushSubscription, on_delete=models.CASCADE, related_name="messages")
+    camp = models.ForeignKey(Camp, on_delete=models.SET_NULL, related_name="push_messages", null=True, blank=True)
+    feature_id = models.CharField(max_length=40, blank=True)
     account_recovery = models.ForeignKey(
         AccountRecoveryToken,
         on_delete=models.CASCADE,

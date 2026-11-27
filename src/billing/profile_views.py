@@ -8,11 +8,19 @@ from django.db import transaction
 from django.http import HttpRequest, HttpResponse, HttpResponseForbidden
 from django.shortcuts import redirect, render
 
+from .feature_controls import feature_enabled
 from .kiosk_access import KIOSK_FAMILY_MEMBER_SESSION_KEY, clear_kiosk_identity_session
 from .models import KioskActionAuditLog, Participant, ParticipantFamilyMember
 from .profile_forms import ParticipantFamilyMemberProfileForm, ParticipantProfileForm
 from .services import create_kiosk_action_audit_log
-from .views import _activate_kiosk_mode, _kiosk_context, _kiosk_family_member, _kiosk_participant, _kiosk_route
+from .views import (
+    _activate_kiosk_mode,
+    _feature_denied,
+    _kiosk_context,
+    _kiosk_family_member,
+    _kiosk_participant,
+    _kiosk_route,
+)
 
 
 def _profile_context(
@@ -21,13 +29,17 @@ def _profile_context(
     form: Any,
     kiosk_mode: str,
     managed_family_members: list[ParticipantFamilyMember],
+    profile_editable: bool,
+    family_editable: bool,
 ) -> dict[str, Any]:
     """Build the minimal presentational context shared by profile endpoints."""
     return {
-        **_kiosk_context(kiosk_mode),
+        **_kiosk_context(kiosk_mode, camp=participant.camp),
         "participant": participant,
         "form": form,
         "managed_family_members": managed_family_members,
+        "profile_editable": profile_editable,
+        "family_editable": family_editable,
     }
 
 
@@ -76,6 +88,9 @@ def kiosk_profile(request: HttpRequest, participant_id: int, kiosk_mode: str = "
     if identity is None:
         return redirect(_kiosk_route(kiosk_mode, "login"))
     actor, actor_family_member = identity
+    profile_editable = feature_enabled(actor.camp, "profile")
+    if request.method == "POST" and (denied := _feature_denied(actor.camp, "profile")):
+        return denied
     if actor_family_member is not None or actor.pk != participant_id:
         return HttpResponseForbidden("Dieses Profil darf nicht bearbeitet werden.")
 
@@ -89,6 +104,9 @@ def kiosk_profile(request: HttpRequest, participant_id: int, kiosk_mode: str = "
         if participant is None:
             return redirect(_kiosk_route(kiosk_mode, "login"))
         form = ParticipantProfileForm(request.POST or None, instance=participant)
+        if not profile_editable:
+            for field in form.fields.values():
+                field.disabled = True
         if request.method == "POST" and form.is_valid():
             changed_fields = form.changed_field_names
             form.save()
@@ -115,6 +133,8 @@ def kiosk_profile(request: HttpRequest, participant_id: int, kiosk_mode: str = "
                     role=ParticipantFamilyMember.Role.CHILD,
                 ).order_by("last_name", "first_name", "pk")
             ),
+            profile_editable=profile_editable,
+            family_editable=feature_enabled(actor.camp, "family"),
         ),
         status=400 if request.method == "POST" else 200,
     )
@@ -128,6 +148,10 @@ def kiosk_family_member_profile(
     if identity is None:
         return redirect(_kiosk_route(kiosk_mode, "login"))
     actor, actor_family_member = identity
+    profile_editable = feature_enabled(actor.camp, "profile")
+    family_editable = feature_enabled(actor.camp, "family")
+    if request.method == "POST" and not (profile_editable and family_editable):
+        return HttpResponseForbidden("Diese Funktion ist für dieses Lager nicht freigegeben.")
 
     with transaction.atomic():
         locked_actor = (
@@ -152,6 +176,9 @@ def kiosk_family_member_profile(
             return HttpResponseForbidden("Dieses Familienprofil darf nicht bearbeitet werden.")
 
         form = ParticipantFamilyMemberProfileForm(request.POST or None, instance=target)
+        if not profile_editable or not family_editable:
+            for field in form.fields.values():
+                field.disabled = True
         if request.method == "POST" and form.is_valid():
             changed_fields = form.changed_field_names
             form.save()
@@ -173,6 +200,8 @@ def kiosk_family_member_profile(
             form=form,
             kiosk_mode=kiosk_mode,
             managed_family_members=[target],
+            profile_editable=profile_editable and family_editable,
+            family_editable=family_editable,
         ),
         status=400 if request.method == "POST" else 200,
     )

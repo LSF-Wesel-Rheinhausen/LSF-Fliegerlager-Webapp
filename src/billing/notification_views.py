@@ -10,16 +10,18 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.http import require_POST
 
+from .feature_controls import feature_enabled
 from .kiosk_access import KIOSK_MODE_SESSION_KEY, clear_kiosk_identity_session
 from .models import AccountRecoveryToken, Participant, ParticipantFamilyMember, PushSubscription
 from .notifications import (
+    PARTICIPANT_FEATURES,
     _queue_for_subscriptions,
     allowed_categories,
 )
 from .push_endpoints import PUSH_ENDPOINT_ERROR, is_allowed_push_endpoint
 from .pwa_views import pwa_template_context
 from .recovery_tokens import credential_fingerprint, lock_push_subscription_registration, revoke_owned_push_subscription
-from .views import _kiosk_context, _kiosk_family_member, _kiosk_participant
+from .views import _feature_denied, _kiosk_context, _kiosk_family_member, _kiosk_participant
 
 
 def _json_payload(request: HttpRequest) -> dict[str, Any] | None:
@@ -104,13 +106,15 @@ def _settings_response(request: HttpRequest, owner: Any, *, participant_owner: b
         "notification_subscription_base_url": (
             "/kiosk/notifications/subscriptions/" if participant_owner else "/notifications/subscriptions/"
         ),
+        "participant_notifications_enabled": True,
     }
     if participant_owner:
         participant = owner.guardian if isinstance(owner, ParticipantFamilyMember) else owner
+        context["participant_notifications_enabled"] = feature_enabled(participant.camp, "notifications")
         return render(
             request,
             "billing/kiosk_notification_settings.html",
-            {**context, **_kiosk_context("private"), "participant": participant},
+            {**context, **_kiosk_context("private", camp=participant.camp), "participant": participant},
         )
     return render(request, "billing/notification_settings.html", {**context, **pwa_template_context("admin")})
 
@@ -238,6 +242,8 @@ def kiosk_notification_subscribe(request: HttpRequest) -> JsonResponse:
     participant = _private_participant(request)
     if participant is None:
         return JsonResponse({"error": "Private Kiosk-Anmeldung erforderlich."}, status=403)
+    if denied := _feature_denied(participant.camp, "notifications"):
+        return JsonResponse({"error": denied.content.decode(denied.charset)}, status=denied.status_code)
     return _subscribe(request, _kiosk_family_member(request, participant) or participant, participant_owner=True)
 
 
@@ -378,6 +384,10 @@ def queue_test_notification(owner: Any, *, participant_owner: bool, subscription
         target_url=kwargs["target_url"],
         dedupe_key=kwargs["dedupe_key"],
         scheduled_for=None,
+        camp=(owner.guardian if isinstance(owner, ParticipantFamilyMember) else owner).camp
+        if participant_owner and category in PARTICIPANT_FEATURES
+        else None,
+        feature_id=PARTICIPANT_FEATURES.get(category, "") if participant_owner else "",
     )
 
 
@@ -395,6 +405,8 @@ def kiosk_notification_test(request: HttpRequest, subscription_id: int) -> JsonR
     participant = _private_participant(request)
     if participant is None:
         return JsonResponse({"error": "Private Kiosk-Anmeldung erforderlich."}, status=403)
+    if denied := _feature_denied(participant.camp, "notifications"):
+        return JsonResponse({"error": denied.content.decode(denied.charset)}, status=denied.status_code)
     queue_test_notification(
         _kiosk_family_member(request, participant) or participant,
         participant_owner=True,

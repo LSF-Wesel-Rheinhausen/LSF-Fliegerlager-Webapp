@@ -4,7 +4,29 @@
     <header class="page-heading"><div><p class="page-kicker">{% if camp %}{{ camp.name }} · {{ camp.year }}{% else %}Lagerverwaltung{% endif %}</p><h1>{{ title }}</h1></div></header>
     <form method="post" class="form-grid" enctype="multipart/form-data">
       {% csrf_token %}
-      {{ form.as_p }}
+      {% if form.feature_meals %}
+        {{ form.non_field_errors }}
+        {% for field in form.hidden_fields %}{{ field }}{% if field.errors %}{{ field.errors }}{% endif %}{% endfor %}
+        {% for field in form.visible_fields %}
+          {% if not field.name|slice:"0:8" == "feature_" %}
+            <p>{{ field.errors }}{{ field.label_tag }}{{ field }}{% if field.help_text %}<span class="helptext">{{ field.help_text }}</span>{% endif %}</p>
+          {% endif %}
+        {% endfor %}
+        <section class="camp-feature-controls" aria-labelledby="camp-feature-controls-title">
+          <h2 id="camp-feature-controls-title">Nutzerfunktionen</h2>
+          <p class="camp-feature-controls__help">Gilt für dieses Lager. Bestehende Buchungen bleiben erhalten.</p>
+          {% for field in form.visible_fields %}
+            {% if field.name|slice:"0:8" == "feature_" %}
+              <div class="camp-feature-toggle">
+                {{ field.errors }}
+                <label for="{{ field.id_for_label }}">{{ field.label }}{{ field }}</label>
+              </div>
+            {% endif %}
+          {% endfor %}
+        </section>
+      {% else %}
+        {{ form.as_p }}
+      {% endif %}
       <div class="form-actions">
         <button type="submit">Speichern</button>
       </div>

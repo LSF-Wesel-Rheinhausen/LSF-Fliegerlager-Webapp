@@ -53,6 +53,7 @@ from .exporters import (
     settlement_run_workbook_response,
     settlement_snapshot_pdf_response,
 )
+from .feature_controls import feature_enabled, feature_states
 from .forms import (
     CampFlatRateSettingsForm,
     CampForm,
@@ -109,6 +110,7 @@ from .models import (
     AttendanceDay,
     BookingAuditLog,
     Camp,
+    CampFeatureOverride,
     Charge,
     DailySettlementBackupLog,
     DailySettlementBackupSettings,
@@ -661,11 +663,12 @@ def _activate_kiosk_mode(request: HttpRequest, kiosk_mode: str) -> None:
         request.session.set_expiry(120)
 
 
-def _kiosk_context(kiosk_mode: str) -> dict[str, Any]:
+def _kiosk_context(kiosk_mode: str, *, camp: Camp | None = None) -> dict[str, Any]:
     """Return shared routing, session, and PWA context for kiosk templates."""
     central = kiosk_mode == "central"
     return {
         "kiosk_mode": kiosk_mode,
+        "kiosk_features": feature_states(camp) if camp is not None else {},
         "kiosk_autologout": central,
         "kiosk_urls": {
             "home": reverse(_kiosk_route(kiosk_mode, "home")),
@@ -677,6 +680,13 @@ def _kiosk_context(kiosk_mode: str) -> dict[str, Any]:
         },
         **pwa_template_context("central" if central else "kiosk"),
     }
+
+
+def _feature_denied(camp: Camp, feature_id: str) -> HttpResponseForbidden | None:
+    """Return a consistent denial response when a participant feature is disabled."""
+    if feature_enabled(camp, feature_id):
+        return None
+    return HttpResponseForbidden("Diese Funktion ist für dieses Lager nicht freigegeben.")
 
 
 def _notify_shift_exchange_by_id(
@@ -2599,7 +2609,7 @@ def _render_kiosk_login(
             "is_pre_camp": is_pre_camp,
             "is_post_camp": is_post_camp,
             "days_until_start": days_until_start,
-            **_kiosk_context(kiosk_mode),
+            **_kiosk_context(kiosk_mode, camp=camp),
             "kiosk_autologout": False,
         },
         status=status,
@@ -2643,6 +2653,8 @@ def kiosk_self_register(request, kiosk_mode="private"):
     if not camp:
         messages.error(request, "Derzeit ist kein aktives Fliegerlager konfiguriert.")
         return redirect(_kiosk_route(kiosk_mode, "login"))
+    if denied := _feature_denied(camp, "self_registration"):
+        return denied
     if camp.is_post_camp():
         messages.error(request, "Das Lager ist beendet. Eine Registrierung ist nicht mehr möglich.")
         return redirect(_kiosk_route(kiosk_mode, "login"))
@@ -2903,6 +2915,15 @@ def _linked_booking_participants(participant):
             archived_at__isnull=True,
         )
         .exclude(pk=participant.pk)
+        .filter(
+            ~Exists(
+                CampFeatureOverride.objects.filter(
+                    camp_id=OuterRef("camp_id"),
+                    feature_id="partners",
+                    enabled=False,
+                )
+            )
+        )
         .select_related("camp")
         .distinct()
         .prefetch_related(
@@ -3009,6 +3030,9 @@ def kiosk_partner_activity(request, kiosk_mode="private"):
             return HttpResponseForbidden("Nur Hauptteilnehmer dürfen Partner-Vollmachten verwalten.")
 
         action = request.POST.get("action")
+        if action in {"booking_link_invite", "booking_link_accept"}:
+            if denied := _feature_denied(participant.camp, "partners"):
+                return denied
         if participant.camp.is_post_camp() and action != "booking_link_revoke":
             messages.error(request, "Das Lager ist beendet. Neue Partner-Vollmachten sind nicht mehr möglich.")
             return redirect(_kiosk_route(kiosk_mode, "partner-activity"))
@@ -3292,7 +3316,7 @@ def kiosk_partner_activity(request, kiosk_mode="private"):
             "activity_logs": activity_logs,
             "is_pre_camp": participant.camp.is_pre_camp(),
             "is_post_camp": participant.camp.is_post_camp(),
-            **_kiosk_context(kiosk_mode),
+            **_kiosk_context(kiosk_mode, camp=participant.camp),
         },
     )
 
@@ -4495,6 +4519,33 @@ def kiosk_home(request, kiosk_mode="private"):
     quick_confirmation = None
     if request.method == "POST":
         action = request.POST.get("action")
+        feature_id = {
+            "meal": "meals",
+            "meal_retract": "meals",
+            "family_member_create": "family",
+            "family_member_pin_set": "family",
+            "family_member_deactivate": "family",
+            "checkin": "attendance",
+            "update_attendance_dates": "attendance",
+            "donate": "donations",
+        }.get(action)
+        if action == "quick":
+            price_rule = PriceRule.objects.filter(
+                pk=_positive_int_or_none(request.POST.get("quick-price_rule")), camp=participant.camp
+            ).first()
+            if price_rule is not None:
+                feature_id = "drinks" if price_rule.kind == PriceRule.Kind.DRINK else "meals"
+        elif action == "quick_cancel":
+            charge = Charge.objects.filter(
+                pk=_positive_int_or_none(request.POST.get("charge_id")),
+                participant__camp=participant.camp,
+                kind__in=[Charge.Kind.DRINK, Charge.Kind.FOOD],
+                deleted_at__isnull=True,
+            ).first()
+            if charge is not None:
+                feature_id = "drinks" if charge.kind == Charge.Kind.DRINK else "meals"
+        if feature_id and (denied := _feature_denied(participant.camp, feature_id)):
+            return denied
         if is_post_camp and action not in POST_CAMP_KIOSK_ACTIONS and not (action == "checkin" and checkin_available):
             messages.error(request, "Das Lager ist beendet. Änderungen sind nicht mehr möglich.")
             return redirect(_kiosk_route(kiosk_mode, "home"))
@@ -5389,6 +5440,7 @@ def kiosk_home(request, kiosk_mode="private"):
         "quick_form": quick_form,
         "quick_booking_token": _sign_kiosk_quick_booking_token(participant),
         "quick_confirmation": quick_confirmation,
+        "kiosk_features": feature_states(participant.camp),
         "meal_targets": meal_targets,
         "checkin_participants": checkin_participants,
         "checkin_available": checkin_available,
@@ -5398,7 +5450,7 @@ def kiosk_home(request, kiosk_mode="private"):
         ),
         "family_members": family_members,
         "pending_invites": pending_invites,
-        **_kiosk_context(kiosk_mode),
+        **_kiosk_context(kiosk_mode, camp=participant.camp),
         "kiosk_contacts": admin_interface_contacts(User),
         "next_order_date": next_order_date,
         "next_meal_order": next_meal_order,
@@ -5426,6 +5478,8 @@ def kiosk_shared_expense_request(request, kiosk_mode="private"):
     participant = _kiosk_participant(request)
     if not participant:
         return redirect(_kiosk_route(kiosk_mode, "login"))
+    if denied := _feature_denied(participant.camp, "expenses"):
+        return denied
     if operation_redirect := _kiosk_operation_redirect(request, participant, kiosk_mode):
         return operation_redirect
 
@@ -5457,7 +5511,7 @@ def kiosk_shared_expense_request(request, kiosk_mode="private"):
             "title": "Gemeinschaftsausgabe beantragen",
             "camp": participant.camp,
             "cancel_url": reverse(_kiosk_route(kiosk_mode, "home")),
-            **_kiosk_context(kiosk_mode),
+            **_kiosk_context(kiosk_mode, camp=participant.camp),
         },
     )
 
@@ -5468,6 +5522,8 @@ def kiosk_shifts(request, kiosk_mode="private"):
     participant = _kiosk_participant(request)
     if not participant:
         return redirect(_kiosk_route(kiosk_mode, "login"))
+    if denied := _feature_denied(participant.camp, "shifts"):
+        return denied
     if operation_redirect := _kiosk_operation_redirect(request, participant, kiosk_mode):
         return operation_redirect
     session_family_member_id = request.session.get(KIOSK_FAMILY_MEMBER_SESSION_KEY)
@@ -5730,7 +5786,7 @@ def kiosk_shifts(request, kiosk_mode="private"):
             "shift_name_filter": shift_name_filter,
             "shift_name_choices": shift_name_choices,
             "today": today,
-            **_kiosk_context(kiosk_mode),
+            **_kiosk_context(kiosk_mode, camp=participant.camp),
         },
     )
 
