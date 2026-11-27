@@ -7,7 +7,7 @@
 {% block content %}
   <section class="card" aria-labelledby="profile-title">
     <h1 id="profile-title">Stammdaten</h1>
-    <p>Bitte halte deine Kontaktdaten aktuell.</p>
+    <p>{% if profile_editable %}Bitte halte deine Kontaktdaten aktuell.{% else %}Deine Kontaktdaten im Lesemodus.{% endif %}</p>
     <form method="post" class="kiosk-profile-form">
       {% csrf_token %}
       {% if form.non_field_errors %}<div id="profile-form-error" class="helptext error" role="alert">{{ form.non_field_errors }}</div>{% endif %}
@@ -23,7 +23,7 @@
         </div>
       {% endfor %}
       <div class="button-row kiosk-profile-form__actions">
-        <button class="button" type="submit">Speichern</button>
+        {% if profile_editable %}<button class="button" type="submit">Speichern</button>{% endif %}
         <a class="button button-secondary" href="{{ kiosk_urls.home }}">Abbrechen</a>
       </div>
     </form>

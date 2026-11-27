@@ -333,6 +333,8 @@ def test_push_worker_terminally_fails_ordinary_message_when_participant_becomes_
     message = PushMessage.objects.create(
         subscription=subscription,
         category="shifts",
+        camp=participant.camp,
+        feature_id="shifts",
         title="Hinweis",
         body="Text",
         target_url="/kiosk/",

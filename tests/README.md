@@ -57,3 +57,17 @@ Der Seed ist idempotent, lokal-only und nicht für Produktion bestimmt. Die dete
 pytest, CI und parallele Playwright-Worker verwenden weiterhin isolierte Datenbanken; nur ein serieller lokaler E2E-/Review-Lauf darf bewusst gegen dieselbe lokale Seed-Datenbank zeigen.
 
 Der lokale Sammellauf ist `npm run test:local`; die Logs werden unter `.test-local-logs/<timestamp>/` abgelegt. Dabei verteilt pytest die normalen Tests standardmaessig auf vier Prozesse und fuehrt die schemaveraendernden Migrationstests danach seriell aus. Der direkte Befehl `.venv/bin/python -m pytest` bleibt unveraendert seriell. Fuer ressourcenarme Systeme kann die Worker-Zahl beispielsweise mit `PYTEST_WORKERS=2` reduziert werden; `PYTEST_WORKERS=0 npm run test:local` erzwingt den seriellen Fallback.
+
+### Lange lokale Läufe detached starten
+
+Für lange lokale Läufe kann der Test-Runner gestartet werden, ohne die bestehende synchrone `npm run test:local`-Nutzung zu ändern:
+
+```sh
+python scripts/test-background.py start
+python scripts/test-background.py status <RUN-ID>
+python scripts/test-background.py start -- .venv/bin/python -m pytest tests/test_camp_feature_controls.py
+```
+
+`start` kehrt nach dem Spawn zurück. Die Run-ID verweist auf `status.json` und `stdout.log` unter `.test-local-logs/background/<RUN-ID>/`; dort stehen Prozessstartidentität, Kommando, Arbeitsverzeichnis, Git-Revision/Dirty-Status und das finale Ergebnis. `status` ist ein einzelner Snapshot, kein Watcher: `RUNNING` bedeutet, später erneut gezielt abzufragen; `PASSED`, `FAILED`, `INTERRUPTED` und `UNKNOWN` sind getrennt. Rückgabecodes des Statusbefehls: 0 bestanden, beim Fehler der exakte positive Kommando-Exitcode, 3 läuft noch, 4 unterbrochen, 2 Status unbekannt/ungültig. Kommandos nach `--` werden als Argumentliste ohne Shell-Auswertung gestartet.
+
+Der Runner benötigt Linux `/proc`, damit ein gespeicherter PID gegen PID-Wiederverwendung geprüft werden kann. Der Prozess überlebt das Ende der startenden Shell, aber ein Container- oder Rechnerneustart ist nicht abgedeckt. Ein fehlender oder ungültiger Status gilt niemals als bestanden.

@@ -1,0 +1,1 @@
+Ergänzt pro Lager steuerbare Teilnehmerfunktionen mit sicherem Katalog, lesbaren Historien und serverseitigen Sperren für private und zentrale Kioskaktionen. Optionale Push-Nachrichten werden bei Sperrung verworfen und vor Queue sowie Versand erneut geprüft.

@@ -204,9 +204,9 @@ def test_kiosk_brand_uses_authoritative_club_logo_without_changing_other_surface
 @pytest.mark.parametrize(
     ("route_name", "expected_scope", "expected_cache_name"),
     [
-        ("pwa-worker-admin", "/", "fliegerlager-admin-v44"),
-        ("pwa-worker-kiosk", "/kiosk/", "fliegerlager-kiosk-v45"),
-        ("pwa-worker-central", "/central/kiosk/", "fliegerlager-central-v44"),
+        ("pwa-worker-admin", "/", "fliegerlager-admin-v45"),
+        ("pwa-worker-kiosk", "/kiosk/", "fliegerlager-kiosk-v46"),
+        ("pwa-worker-central", "/central/kiosk/", "fliegerlager-central-v45"),
     ],
 )
 def test_service_workers_have_explicit_scopes(client, route_name, expected_scope, expected_cache_name):

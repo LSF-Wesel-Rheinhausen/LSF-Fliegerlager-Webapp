@@ -14,7 +14,7 @@
     <span class="status-badge" data-notification-status aria-live="polite">Wird geprüft</span>
   </div>
 
-  {% if web_push_enabled and web_push_public_key %}
+  {% if web_push_enabled and web_push_public_key and participant_notifications_enabled %}
     <div class="notification-setup">
       <section class="notification-step">
         <div class="notification-step__heading">
@@ -75,7 +75,7 @@
         <div class="actions">
           <button class="button button-secondary" type="button" data-preferences-subscription="{{ subscription.id }}">Nachrichten auswählen</button>
           <button class="button button-secondary" type="button" data-rename-subscription="{{ subscription.id }}">Umbenennen</button>
-          <button class="button button-secondary" type="button" data-test-subscription="{{ subscription.id }}">Testen</button>
+          {% if participant_notifications_enabled %}<button class="button button-secondary" type="button" data-test-subscription="{{ subscription.id }}">Testen</button>{% endif %}
           <button class="button button-danger" type="button" data-revoke-subscription="{{ subscription.id }}">Entfernen</button>
         </div>
         <dialog class="notification-preferences-dialog" aria-labelledby="notification-preferences-title-{{ subscription.id }}">

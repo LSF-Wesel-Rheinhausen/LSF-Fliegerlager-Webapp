@@ -12,8 +12,10 @@ from django.db import models, transaction
 from django.utils import timezone
 from django.utils.formats import number_format
 
+from .feature_controls import FEATURE_LABELS, feature_states, suppress_queued_feature_messages
 from .models import (
     Camp,
+    CampFeatureOverride,
     Charge,
     CreditPayout,
     DailySettlementBackupSettings,
@@ -364,6 +366,19 @@ class CampForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["meal_booking_cutoff_time"].required = False
         self.fields["meal_booking_cutoff_time"].initial = time(12, 0)
+        states = feature_states(self.instance) if self.instance.pk else {key: True for key in FEATURE_LABELS}
+        for feature_id, label in FEATURE_LABELS.items():
+            field_name = f"feature_{feature_id}"
+            self.fields[field_name] = forms.BooleanField(
+                label=label,
+                required=False,
+                initial=states[feature_id],
+            )
+            self.fields[f"feature_present_{feature_id}"] = forms.CharField(
+                required=False,
+                initial="1",
+                widget=forms.HiddenInput,
+            )
 
     class Meta:
         model = Camp
@@ -408,6 +423,49 @@ class CampForm(forms.ModelForm):
         if self.instance.pk and self.instance.is_active and not is_active:
             raise forms.ValidationError("Aktiviere stattdessen ein anderes Lager.")
         return is_active
+
+    def clean(self):
+        """Preserve defaults for older clients that do not submit feature fields."""
+        cleaned_data = super().clean()
+        current_states = feature_states(self.instance) if self.instance.pk else {key: True for key in FEATURE_LABELS}
+        for feature_id in FEATURE_LABELS:
+            if cleaned_data.get(f"feature_present_{feature_id}") != "1":
+                cleaned_data[f"feature_{feature_id}"] = current_states[feature_id]
+        return cleaned_data
+
+    def save(self, commit: bool = True):
+        """Save camp settings and the complete known feature state together."""
+        self._pending_feature_values = {key: self.cleaned_data[f"feature_{key}"] for key in FEATURE_LABELS}
+        self._previous_feature_values = (
+            feature_states(self.instance) if self.instance.pk else {key: True for key in FEATURE_LABELS}
+        )
+        if commit:
+            with transaction.atomic():
+                return super().save(commit=True)
+        return super().save(commit=False)
+
+    def _save_m2m(self):
+        """Persist deferred feature values when Django's commit=False flow is used."""
+        super()._save_m2m()
+        feature_values = getattr(self, "_pending_feature_values", None)
+        if feature_values is not None and self.instance.pk:
+            for feature_id, enabled in feature_values.items():
+                CampFeatureOverride.objects.update_or_create(
+                    camp=self.instance,
+                    feature_id=feature_id,
+                    defaults={"enabled": enabled},
+                )
+            turned_off = {
+                feature_id
+                for feature_id, enabled in feature_values.items()
+                if self._previous_feature_values[feature_id] and not enabled
+            }
+            if "notifications" in turned_off:
+                suppress_queued_feature_messages(
+                    self.instance, {"shifts", "partners", "meals", "expenses", "notifications"}
+                )
+            else:
+                suppress_queued_feature_messages(self.instance, turned_off)
 
 
 class MealPreorderSettingsForm(forms.ModelForm):

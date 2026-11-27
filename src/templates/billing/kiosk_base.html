@@ -71,13 +71,13 @@
           <span class="kiosk-mobile-bottom-nav__icon" aria-hidden="true">🏠</span>
           <span class="kiosk-mobile-bottom-nav__label">Kiosk</span>
         </a>
-        {% if not is_pre_camp and not is_post_camp %}
+        {% if kiosk_features.shifts and not is_pre_camp and not is_post_camp %}
           <a href="{{ kiosk_urls.shifts }}" class="kiosk-mobile-bottom-nav__item{% if request.resolver_match.url_name == 'kiosk-shifts' %} is-active{% endif %}"{% if request.resolver_match.url_name == 'kiosk-shifts' %} aria-current="page"{% endif %}>
             <span class="kiosk-mobile-bottom-nav__icon" aria-hidden="true">📋</span>
             <span class="kiosk-mobile-bottom-nav__label">Dienste</span>
           </a>
         {% endif %}
-        {% if not is_pre_camp and not is_post_camp %}
+        {% if kiosk_features.meals and not is_pre_camp and not is_post_camp %}
           <a href="{{ kiosk_urls.home }}#essen" class="kiosk-mobile-bottom-nav__item">
             <span class="kiosk-mobile-bottom-nav__icon" aria-hidden="true">🍽️</span>
             <span class="kiosk-mobile-bottom-nav__label">Essen</span>

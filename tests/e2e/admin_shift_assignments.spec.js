@@ -29,7 +29,7 @@ async function setupAdminCampParticipantAndShift(page) {
   await page.getByLabel("Name").fill("Dienstbesetzung E2E");
   await page.getByLabel("Jahr").fill(String(tomorrow.getFullYear()));
   await page.getByLabel("Beginn").fill(dateInputValue(tomorrow));
-  await page.getByLabel("Ende").fill(dateInputValue(endDate));
+  await page.getByLabel(/^Ende:?$/).fill(dateInputValue(endDate));
   await page.getByRole("button", { name: "Speichern" }).click();
   const campId = new URL(page.url()).pathname.match(/\/camps\/(\d+)\//)[1];
 
