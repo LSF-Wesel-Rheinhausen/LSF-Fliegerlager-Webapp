@@ -1,4 +1,5 @@
 {% extends "billing/kiosk_base.html" %}
+{% load billing_format %}
 {% block title %}Stammdaten | Kiosk{% endblock %}
 {% block kiosk_nav %}
   <a class="button button-secondary" href="{{ kiosk_urls.home }}">Abbrechen</a>
@@ -28,6 +29,43 @@
       </div>
     </form>
   </section>
+  {% if subsidy_profile %}
+    <section class="card kiosk-card" aria-labelledby="profile-subsidy-title" data-profile-subsidy>
+      <div class="kiosk-card__header-main">
+        <h2 id="profile-subsidy-title">Deine Förderfaktoren</h2>
+        <p>Diese Angaben dienen der Berechnung deiner Förderung.</p>
+      </div>
+      <dl>
+        <div>
+          <dt>Hilfssatz</dt>
+          <dd>{{ subsidy_profile.hilfssatz|percent }}</dd>
+        </div>
+        <div>
+          <dt>Berufssatz</dt>
+          <dd>{{ subsidy_profile.berufssatz|percent }}</dd>
+        </div>
+      </dl>
+      <h3 id="profile-rules-title">Förderung je Preisregel</h3>
+      {% if subsidy_profile.price_rules %}
+        <ul aria-labelledby="profile-rules-title">
+          {% for entry in subsidy_profile.price_rules %}
+            <li class="kiosk-list-row">
+              <div class="kiosk-list-row__content">
+                <strong>{{ entry.price_rule.name }}</strong>
+                <span>Grundförderung {{ entry.price_rule.foerdersatz|percent }}</span>
+              </div>
+              <div class="kiosk-list-row__actions">
+                <span>Dein Fördersatz</span>
+                <strong>{{ entry.effective_rate|percent }}</strong>
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p>Für dieses Lager sind keine anwendbaren Preisregeln hinterlegt.</p>
+      {% endif %}
+    </section>
+  {% endif %}
   {% if managed_family_members %}
     <section class="card" aria-labelledby="managed-profiles-title">
       <h2 id="managed-profiles-title">Familienprofile</h2>
