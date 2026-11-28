@@ -1756,6 +1756,28 @@ def participant_subsidy_rate(participant, subsidy_rate):
     return min(rate(raw_rate), Decimal("1.0000"))
 
 
+@dataclass(frozen=True)
+class ParticipantProfileSubsidy:
+    """The effective participant subsidy for one applicable, current price rule."""
+
+    price_rule: PriceRule
+    effective_rate: Decimal
+
+
+def participant_profile_subsidies(participant: Participant) -> list[ParticipantProfileSubsidy]:
+    """Return current, applicable price-rule subsidies for a youth-group participant."""
+    if not participant.is_youth_group:
+        return []
+    return [
+        ParticipantProfileSubsidy(
+            price_rule=rule,
+            effective_rate=participant_subsidy_rate(participant, rule.foerdersatz),
+        )
+        for rule in participant.camp.price_rules.filter(is_archived=False)
+        if _rule_applies(rule, participant)
+    ]
+
+
 def family_member_subsidy_rate(
     guardian: Participant,
     family_member: ParticipantFamilyMember | None,

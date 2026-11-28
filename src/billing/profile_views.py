@@ -11,7 +11,7 @@ from django.shortcuts import redirect, render
 from .kiosk_access import KIOSK_FAMILY_MEMBER_SESSION_KEY, clear_kiosk_identity_session
 from .models import KioskActionAuditLog, Participant, ParticipantFamilyMember
 from .profile_forms import ParticipantFamilyMemberProfileForm, ParticipantProfileForm
-from .services import create_kiosk_action_audit_log
+from .services import create_kiosk_action_audit_log, participant_profile_subsidies
 from .views import _activate_kiosk_mode, _kiosk_context, _kiosk_family_member, _kiosk_participant, _kiosk_route
 
 
@@ -21,6 +21,7 @@ def _profile_context(
     form: Any,
     kiosk_mode: str,
     managed_family_members: list[ParticipantFamilyMember],
+    subsidy_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the minimal presentational context shared by profile endpoints."""
     return {
@@ -28,6 +29,7 @@ def _profile_context(
         "participant": participant,
         "form": form,
         "managed_family_members": managed_family_members,
+        "subsidy_profile": subsidy_profile,
     }
 
 
@@ -109,6 +111,15 @@ def kiosk_profile(request: HttpRequest, participant_id: int, kiosk_mode: str = "
             participant=actor,
             form=form,
             kiosk_mode=kiosk_mode,
+            subsidy_profile=(
+                {
+                    "hilfssatz": actor.hilfssatz,
+                    "berufssatz": actor.berufssatz,
+                    "price_rules": participant_profile_subsidies(actor),
+                }
+                if actor.is_youth_group
+                else None
+            ),
             managed_family_members=list(
                 actor.family_members.filter(
                     is_active=True,
